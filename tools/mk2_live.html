@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MK2 Live</title>
+<style>
+  :root {
+    --bg: #101113; --panel: #1c1d20; --panel-edge: #2a2b2f; --btn: #3b3d42; --btn-text: #d8d9dc;
+    --btn-on: #f4f4f4; --label: #9a9ca3; --screen: #0b0d18; --screen-text: #c9d4ff;
+    --seen: #3ddc84; --learn: #ff9d2e; --missing: #e5484d; --knob: #26272b;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--btn-text);
+         font: 13px/1.4 "Segoe UI", system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 16px; padding: 12px 20px; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; letter-spacing: .5px; }
+  .pill { padding: 3px 10px; border-radius: 99px; background: #26272b; font-size: 12px; }
+  .pill.ok { background: #143d27; color: #7ff0b0; } .pill.bad { background: #4a1719; color: #ffb3b5; }
+  .progress { flex: 1; min-width: 160px; height: 8px; background: #26272b; border-radius: 4px; overflow: hidden; }
+  .progress > div { height: 100%; background: var(--seen); width: 0; transition: width .2s; }
+  .tools button { background: #2c2e33; color: var(--btn-text); border: 1px solid #3a3c42; border-radius: 6px;
+                  padding: 5px 10px; cursor: pointer; font: inherit; }
+  .tools button:hover { background: #383a40; }
+  #wrap { padding: 0 20px; }
+  #stage { position: relative; transform-origin: 0 0; }
+  #panel { position: absolute; left: 0; top: 0; width: 720px; height: 620px; background: var(--panel);
+           border: 1px solid var(--panel-edge); border-radius: 10px; box-shadow: 0 20px 60px #0008; }
+  .brand { position: absolute; left: 22px; top: 5px; font-weight: 800; font-size: 15px; letter-spacing: 1px; }
+  .sec { position: absolute; font-size: 9px; font-weight: 700; color: var(--label); letter-spacing: .5px; }
+  .rule { position: absolute; height: 1px; background: #44464c; }
+  .c { position: absolute; cursor: pointer; user-select: none; }
+  .b { background: var(--btn); border-radius: 3px; color: var(--btn-text); font-size: 7.5px; font-weight: 700;
+       display: flex; align-items: center; justify-content: center; text-align: center; line-height: 1.05;
+       box-shadow: inset 0 -2px 0 #0006; transition: background .05s; }
+  .b.on { background: var(--btn-on); color: #111; box-shadow: 0 0 12px #fff8; }
+  .grp.on { color: #111; }
+  .c.seen::after { content: ""; position: absolute; right: -3px; top: -3px; width: 7px; height: 7px;
+                   border-radius: 50%; background: var(--seen); box-shadow: 0 0 0 2px var(--panel); }
+  .c.missing { outline: 1.5px dashed var(--missing); outline-offset: 2px; }
+  .c.learn { outline: 2px solid var(--learn); outline-offset: 3px; animation: pulse .7s infinite alternate; }
+  @keyframes pulse { from { outline-color: var(--learn); } to { outline-color: transparent; } }
+  .knob { border-radius: 50%; background: radial-gradient(circle at 40% 35%, #4a4c52, var(--knob) 70%);
+          border: 2px solid #c9cbd1; }
+  .knob .ind { position: absolute; left: 50%; top: 8%; width: 2px; height: 40%; margin-left: -1px;
+               background: #fff; transform-origin: 50% 105%; border-radius: 1px; }
+  .knob.on { box-shadow: 0 0 14px #fff9; }
+  .kval { position: absolute; width: 60px; text-align: center; font-size: 8px; color: var(--label); }
+  .pad { border-radius: 4px; display: flex; align-items: flex-end; justify-content: flex-start; padding: 3px 4px;
+         font-size: 8px; font-weight: 700; color: #fffc; }
+  .pad .pn { position: absolute; left: 0; top: -11px; font-size: 7px; color: var(--label); }
+  .pad .pv { margin-left: auto; font-weight: 400; opacity: .85; }
+  .screen { position: absolute; background: var(--screen); border: 2px solid #000; border-radius: 3px;
+            color: var(--screen-text); font: 9px/1.35 Consolas, monospace; padding: 5px 7px; overflow: hidden;
+            white-space: pre; }
+  #below { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 12px 20px 30px; max-width: 1100px; }
+  .card { background: #17181b; border: 1px solid #26272b; border-radius: 8px; padding: 10px 12px; }
+  .card h2 { font-size: 12px; margin: 0 0 6px; color: var(--label); font-weight: 600; }
+  .mono { font: 12px/1.5 Consolas, monospace; word-break: break-all; }
+  #missingList span { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 7px; border-radius: 99px;
+                      background: #26272b; font-size: 11px; cursor: pointer; }
+  #missingList span:hover { background: #3a3c42; }
+  .help { color: var(--label); font-size: 12px; }
+  @media (max-width: 760px) { #below { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>MK2 Live</h1>
+  <span id="conn" class="pill">connecting…</span>
+  <span id="count" class="pill">0 / 0 seen</span>
+  <div class="progress"><div id="bar"></div></div>
+  <span class="tools">
+    <button data-led="pads">Pad LEDs</button>
+    <button data-led="groups">Group LEDs</button>
+    <button data-led="buttons">Button LEDs</button>
+    <button data-led="chase" id="chaseBtn">LED chase</button>
+    <button data-led="off">LEDs off</button>
+    <button id="reset">Reset seen</button>
+  </span>
+</header>
+<div id="wrap"><div id="stage"><div id="panel"></div></div></div>
+<div id="below">
+  <div class="card">
+    <h2>How to check the map</h2>
+    <div class="help">
+      Press, turn or hit every control on the MK2. The matching control on screen should light up, and
+      the LED on the device should sit on the button you hold. A green dot means "seen".<br>
+      Wrong control lights up? <b>Click the right one on screen, then press the real one</b> - the map is
+      updated and saved. Esc cancels. A dashed red outline means the control is not in the map yet.
+    </div>
+  </div>
+  <div class="card">
+    <h2>Not seen yet</h2>
+    <div id="missingList"></div>
+  </div>
+  <div class="card">
+    <h2>Raw controls report (0x01, without id)</h2>
+    <div id="raw" class="mono">-</div>
+  </div>
+  <div class="card">
+    <h2>Unmapped bits pressed</h2>
+    <div id="unmapped" class="mono">-</div>
+  </div>
+</div>
+
+<script>
+// Positions follow the real MK2 front panel (units = px in a 720x620 panel).
+const B = (name, x, y, label, w = 40, h = 17, cls = "") => ({ kind: "button", name, x, y, label, w, h, cls });
+const CONTROLS = [
+  B("Control", 42, 30, "CONTROL"), B("Step", 97, 30, "STEP"),
+  ...[1, 2, 3, 4, 5, 6, 7, 8].map((i, k) => B("Top " + i, 165 + k * 64, 30, "", 42, 17)),
+  B("Browse", 42, 78, "BROWSE"), B("Sampling", 97, 78, "SAMPLING"),
+  B("Page <", 42, 118, "◀"), B("Page >", 97, 118, "▶"),
+  B("All", 42, 170, "ALL"), B("Auto Write", 97, 170, "AUTO"),
+  ...[1, 2, 3, 4, 5, 6, 7, 8].map((i, k) => ({ kind: "knob", name: "Knob " + i, x: 166 + k * 64, y: 160, r: 18 })),
+  B("Volume", 42, 245, "VOLUME"), B("Swing", 42, 275, "SWING"), B("Tempo", 42, 305, "TEMPO"),
+  { kind: "knob", name: "Master encoder (turn)", x: 116, y: 238, r: 30, enc: true },
+  B("Master encoder (push)", 127, 290, "PUSH", 18, 10),
+  B("Note Repeat", 207, 245, "NOTE<br>REPEAT", 40, 28),
+  B("Master <", 97, 305, "◀"), B("Master >", 152, 305, "▶"), B("Enter", 207, 305, "ENTER"),
+  ...["A", "B", "C", "D"].map((g, k) => B("Group " + g, 42 + k * 55, 368, g, 42, 26, "grp")),
+  ...["E", "F", "G", "H"].map((g, k) => B("Group " + g, 42 + k * 55, 408, g, 42, 26, "grp")),
+  B("Restart", 42, 487, "RESTART"), B("Transport <", 97, 487, "◀"), B("Transport >", 152, 487, "▶"), B("Grid", 207, 487, "GRID"),
+  B("Play", 42, 522, "PLAY", 40, 20, "play"), B("Rec", 97, 522, "REC", 40, 20, "rec"),
+  B("Erase", 152, 522, "ERASE", 40, 20), B("Shift", 207, 522, "SHIFT", 40, 20),
+  ...["Scene", "Pattern", "Pad Mode", "Navigate", "Duplicate", "Select", "Solo", "Mute"]
+     .map((n, k) => B(n, 280, 248 + k * 39, n.toUpperCase(), 42, 20)),
+];
+// Pads: 13-16 on top, 1-4 at the bottom, like the device.
+const PAD_COLORS = ["#e8413c", "#e9d23c", "#3cb8e8", "#3cb8e8", "#e9d23c", "#e9d23c", "#3ce8b0", "#3c9be8",
+                    "#e89a3c", "#e89a3c", "#e89a3c", "#e89a3c", "#3ce8c8", "#3ce8c8", "#3ce8c8", "#3ce8c8"];
+for (let n = 1; n <= 16; n++) {
+  const row = 3 - Math.floor((n - 1) / 4), col = (n - 1) % 4;
+  CONTROLS.push({ kind: "pad", name: "Pad " + n, n, x: 355 + col * 77, y: 245 + row * 77, w: 63, h: 63 });
+}
+const GROUP_COLORS = { A: "#d98a2b", B: "#2b8fd9", C: "#2bb0d9", D: "#2b9fd9", E: "#2bb5d9", F: "#7b3fd9", G: "#2bb0d9", H: "#d93f9a" };
+
+const panel = document.getElementById("panel");
+const els = {};
+function add(html, cls, style) { const d = document.createElement("div"); d.className = cls; Object.assign(d.style, style); d.innerHTML = html; panel.appendChild(d); return d; }
+add("◎ MASCHINE", "brand", {});
+add("MASTER", "sec", { left: "42px", top: "222px" }); add("", "rule", { left: "42px", top: "234px", width: "205px" });
+add("GROUPS", "sec", { left: "42px", top: "348px" }); add("", "rule", { left: "42px", top: "360px", width: "205px" });
+add("TRANSPORT", "sec", { left: "42px", top: "462px" }); add("", "rule", { left: "42px", top: "474px", width: "205px" });
+add("PADS", "sec", { left: "280px", top: "222px" }); add("", "rule", { left: "280px", top: "234px", width: "400px" });
+const scrL = add("", "screen", { left: "162px", top: "70px", width: "228px", height: "74px" });
+const scrR = add("", "screen", { left: "430px", top: "70px", width: "228px", height: "74px" });
+
+for (const c of CONTROLS) {
+  let d;
+  if (c.kind === "button") {
+    d = add(c.label, "c b " + c.cls, { left: c.x + "px", top: c.y + "px", width: c.w + "px", height: c.h + "px" });
+  } else if (c.kind === "knob") {
+    d = add('<div class="ind"></div>', "c knob", { left: (c.x - c.r) + "px", top: (c.y - c.r) + "px", width: 2 * c.r + "px", height: 2 * c.r + "px" });
+    c.val = add("", "kval", { left: (c.x - 30) + "px", top: (c.y + c.r + 3) + "px" });
+    panel.appendChild(d);
+  } else {
+    d = add('<span class="pn">' + c.n + '</span><span class="pv"></span>', "c pad", { left: c.x + "px", top: c.y + "px", width: c.w + "px", height: c.h + "px" });
+  }
+  d.title = c.name + " (click, then press the real control to learn it)";
+  d.addEventListener("click", () => post({ learn: c.name }));
+  c.el = d; els[c.name] = c;
+}
+
+function post(o) { fetch("/cmd", { method: "POST", body: JSON.stringify(o) }).catch(() => {}); }
+document.addEventListener("keydown", e => { if (e.key === "Escape") post({ learn: "" }); });
+document.querySelectorAll("[data-led]").forEach(b => b.onclick = () => post({ led: b.dataset.led }));
+document.getElementById("reset").onclick = () => { if (confirm("Clear all 'seen' marks?")) post({ reset_seen: true }); };
+
+function fit() {
+  const s = Math.min((window.innerWidth - 40) / 722, 1.6);
+  const st = document.getElementById("stage");
+  st.style.transform = `scale(${s})`; st.style.width = "722px"; st.style.height = "622px";
+  document.getElementById("wrap").style.height = (622 * s + 8) + "px";
+}
+window.addEventListener("resize", fit); fit();
+
+function hexToRgba(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${n >> 8 & 255},${n & 255},${a})`; }
+
+let lastKnob = {}, knobFlash = {};
+function render(s) {
+  const conn = document.getElementById("conn");
+  conn.textContent = s.connected ? "MK2 connected" : "MK2 not connected";
+  conn.className = "pill " + (s.connected ? "ok" : "bad");
+  const seen = new Set(s.seen), held = new Set(s.held), mapped = new Set(s.mapped);
+  document.getElementById("count").textContent = `${seen.size} / ${s.total} seen` + (s.verified ? " ✓ verified" : "");
+  document.getElementById("bar").style.width = (100 * seen.size / s.total) + "%";
+  const now = performance.now();
+  for (const c of Object.values(els)) {
+    const cl = c.el.classList;
+    cl.toggle("seen", seen.has(c.name));
+    cl.toggle("missing", !mapped.has(c.name));
+    cl.toggle("learn", !!(s.learn && s.learn.name === c.name));
+    if (c.kind === "button") {
+      const on = held.has(c.name);
+      cl.toggle("on", on);
+      const g = c.name.startsWith("Group ") ? c.name.slice(6) : null;
+      c.el.style.background = on && g ? GROUP_COLORS[g] : on && c.cls === "play" ? "#3ddc84" : on && c.cls === "rec" ? "#e5484d" : "";
+    } else if (c.kind === "knob") {
+      const v = s.knobs[c.name];
+      if (v !== undefined && lastKnob[c.name] !== undefined && v !== lastKnob[c.name]) knobFlash[c.name] = now;
+      lastKnob[c.name] = v;
+      const ang = v === undefined ? 0 : (c.enc ? v / 16 : v / 1000) * 360;
+      c.el.firstChild.style.transform = `rotate(${ang}deg)`;
+      cl.toggle("on", now - (knobFlash[c.name] || 0) < 300);
+      c.val.textContent = v === undefined ? "-" : v;
+    } else {
+      const p = s.pads[c.n - 1] || 0, k = Math.min(1, p / 2048);
+      const col = PAD_COLORS[c.n - 1];
+      c.el.style.background = `linear-gradient(${hexToRgba(col, 0.18 + 0.82 * k)}, ${hexToRgba(col, 0.10 + 0.6 * k)})`;
+      c.el.style.boxShadow = k > 0.2 ? `0 0 ${8 + 18 * k}px ${hexToRgba(col, 0.8)}` : "none";
+      c.el.querySelector(".pv").textContent = p > 0 ? p : "";
+    }
+  }
+  const r = s.reports || {};
+  scrL.textContent = [
+    s.connected ? "MK2 CONNECTED" : "MK2 NOT CONNECTED",
+    (s.notes || []).join(" / ").slice(0, 40),
+    `controls ${r["0x01"] || 0}  pads ${r["0x20"] || 0}  other ${r.other || 0}`,
+    (s.errors || []).length ? "ERR " + s.errors[s.errors.length - 1].slice(0, 34) : "",
+  ].join("\n");
+  scrR.textContent = [
+    s.learn ? ">> LEARN: " + s.learn.name.toUpperCase() : "LAST PRESSED",
+    s.learn ? (s.learn.kind === "knob" ? "turn it on the MK2" : s.learn.kind === "pad" ? "hit it on the MK2" : "press it on the MK2") : (s.last || []).slice(0, 3).join(", "),
+    "",
+    (s.message || "").replace("LED chase: ", "").replace(" - check that this one is lit", " is lit?").slice(0, 40),
+  ].join("\n");
+  const cb = document.getElementById("chaseBtn");
+  cb.textContent = s.chase ? "■ Stop chase" : "LED chase";
+  cb.style.background = s.chase ? "#7a4a12" : "";
+  document.getElementById("raw").textContent = s.raw || "(no controls report yet - press a button)";
+  document.getElementById("unmapped").textContent = (s.unmapped || []).join(", ") || "-";
+  const miss = Object.keys(els).filter(n => !seen.has(n));
+  const ml = document.getElementById("missingList");
+  const key = miss.join("|");
+  if (ml.dataset.key !== key) {
+    ml.dataset.key = key;
+    ml.innerHTML = miss.length ? "" : "All controls seen ✓";
+    for (const n of miss) { const sp = document.createElement("span"); sp.textContent = n; sp.onclick = () => post({ learn: n }); ml.appendChild(sp); }
+  }
+}
+
+function connect() {
+  const es = new EventSource("/events");
+  es.onmessage = e => render(JSON.parse(e.data));
+  es.onerror = () => {
+    const c = document.getElementById("conn"); c.textContent = "server not running"; c.className = "pill bad";
+  };
+}
+connect();
+</script>
+</body>
+</html>

@@ -1,0 +1,432 @@
+{
+  "source": "Prefilled from github.com/abique/ni-mk2 (ni-mk2.h), checked by hand on this device 2026-11-09 (pad rows flipped).",
+  "verified": true,
+  "buttons": {
+    "Top 1": {
+      "byte": 0,
+      "bit": 0
+    },
+    "Top 2": {
+      "byte": 0,
+      "bit": 1
+    },
+    "Top 3": {
+      "byte": 0,
+      "bit": 2
+    },
+    "Top 4": {
+      "byte": 0,
+      "bit": 3
+    },
+    "Top 5": {
+      "byte": 0,
+      "bit": 4
+    },
+    "Top 6": {
+      "byte": 0,
+      "bit": 5
+    },
+    "Top 7": {
+      "byte": 0,
+      "bit": 6
+    },
+    "Top 8": {
+      "byte": 0,
+      "bit": 7
+    },
+    "Control": {
+      "byte": 1,
+      "bit": 0
+    },
+    "Step": {
+      "byte": 1,
+      "bit": 1
+    },
+    "Browse": {
+      "byte": 1,
+      "bit": 2
+    },
+    "Sampling": {
+      "byte": 1,
+      "bit": 3
+    },
+    "Page <": {
+      "byte": 1,
+      "bit": 4
+    },
+    "Page >": {
+      "byte": 1,
+      "bit": 5
+    },
+    "All": {
+      "byte": 1,
+      "bit": 6
+    },
+    "Auto Write": {
+      "byte": 1,
+      "bit": 7
+    },
+    "Volume": {
+      "byte": 2,
+      "bit": 0
+    },
+    "Swing": {
+      "byte": 2,
+      "bit": 1
+    },
+    "Tempo": {
+      "byte": 2,
+      "bit": 2
+    },
+    "Master <": {
+      "byte": 2,
+      "bit": 3
+    },
+    "Master >": {
+      "byte": 2,
+      "bit": 4
+    },
+    "Enter": {
+      "byte": 2,
+      "bit": 5
+    },
+    "Note Repeat": {
+      "byte": 2,
+      "bit": 6
+    },
+    "Master encoder (push)": {
+      "byte": 2,
+      "bit": 7
+    },
+    "Group A": {
+      "byte": 3,
+      "bit": 0
+    },
+    "Group B": {
+      "byte": 3,
+      "bit": 1
+    },
+    "Group C": {
+      "byte": 3,
+      "bit": 2
+    },
+    "Group D": {
+      "byte": 3,
+      "bit": 3
+    },
+    "Group E": {
+      "byte": 3,
+      "bit": 4
+    },
+    "Group F": {
+      "byte": 3,
+      "bit": 5
+    },
+    "Group G": {
+      "byte": 3,
+      "bit": 6
+    },
+    "Group H": {
+      "byte": 3,
+      "bit": 7
+    },
+    "Restart": {
+      "byte": 4,
+      "bit": 0
+    },
+    "Transport <": {
+      "byte": 4,
+      "bit": 1
+    },
+    "Transport >": {
+      "byte": 4,
+      "bit": 2
+    },
+    "Grid": {
+      "byte": 4,
+      "bit": 3
+    },
+    "Play": {
+      "byte": 4,
+      "bit": 4
+    },
+    "Rec": {
+      "byte": 4,
+      "bit": 5
+    },
+    "Erase": {
+      "byte": 4,
+      "bit": 6
+    },
+    "Shift": {
+      "byte": 4,
+      "bit": 7
+    },
+    "Scene": {
+      "byte": 5,
+      "bit": 0
+    },
+    "Pattern": {
+      "byte": 5,
+      "bit": 1
+    },
+    "Pad Mode": {
+      "byte": 5,
+      "bit": 2
+    },
+    "Navigate": {
+      "byte": 5,
+      "bit": 3
+    },
+    "Duplicate": {
+      "byte": 5,
+      "bit": 4
+    },
+    "Select": {
+      "byte": 5,
+      "bit": 5
+    },
+    "Solo": {
+      "byte": 5,
+      "bit": 6
+    },
+    "Mute": {
+      "byte": 5,
+      "bit": 7
+    }
+  },
+  "knobs": {
+    "Knob 1": {
+      "byte": 8,
+      "nibble": "both",
+      "next_byte_moves": true
+    },
+    "Knob 2": {
+      "byte": 10,
+      "nibble": "both",
+      "next_byte_moves": true
+    },
+    "Knob 3": {
+      "byte": 12,
+      "nibble": "both",
+      "next_byte_moves": true
+    },
+    "Knob 4": {
+      "byte": 14,
+      "nibble": "both",
+      "next_byte_moves": true
+    },
+    "Knob 5": {
+      "byte": 16,
+      "nibble": "both",
+      "next_byte_moves": true
+    },
+    "Knob 6": {
+      "byte": 18,
+      "nibble": "both",
+      "next_byte_moves": true
+    },
+    "Knob 7": {
+      "byte": 20,
+      "nibble": "both",
+      "next_byte_moves": true
+    },
+    "Knob 8": {
+      "byte": 22,
+      "nibble": "both",
+      "next_byte_moves": true
+    },
+    "Master encoder (turn)": {
+      "byte": 7,
+      "nibble": "low",
+      "next_byte_moves": false
+    }
+  },
+  "pads": {
+    "Pad 1": {
+      "id": 12
+    },
+    "Pad 2": {
+      "id": 13
+    },
+    "Pad 3": {
+      "id": 14
+    },
+    "Pad 4": {
+      "id": 15
+    },
+    "Pad 5": {
+      "id": 8
+    },
+    "Pad 6": {
+      "id": 9
+    },
+    "Pad 7": {
+      "id": 10
+    },
+    "Pad 8": {
+      "id": 11
+    },
+    "Pad 9": {
+      "id": 4
+    },
+    "Pad 10": {
+      "id": 5
+    },
+    "Pad 11": {
+      "id": 6
+    },
+    "Pad 14": {
+      "id": 1
+    },
+    "Pad 15": {
+      "id": 2
+    },
+    "Pad 16": {
+      "id": 3
+    },
+    "_id_to_slot": {
+      "12": 0,
+      "13": 1,
+      "14": 2,
+      "15": 3,
+      "8": 4,
+      "9": 5,
+      "10": 6,
+      "11": 7,
+      "4": 8,
+      "5": 9,
+      "6": 10,
+      "1": 13,
+      "2": 14,
+      "3": 15,
+      "7": 11,
+      "0": 12
+    },
+    "Pad 12": {
+      "id": 7
+    },
+    "Pad 13": {
+      "id": 0
+    }
+  },
+  "skipped": [],
+  "device": "Maschine MK2 (17cc:1140)",
+  "noise_bytes": [],
+  "pad_max": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "time": "2026-11-09 19:22:18",
+  "seen": [
+    "All",
+    "Auto Write",
+    "Browse",
+    "Control",
+    "Duplicate",
+    "Enter",
+    "Erase",
+    "Grid",
+    "Group A",
+    "Group B",
+    "Group C",
+    "Group D",
+    "Group E",
+    "Group F",
+    "Group G",
+    "Group H",
+    "Knob 1",
+    "Knob 2",
+    "Knob 3",
+    "Knob 4",
+    "Knob 5",
+    "Knob 6",
+    "Knob 7",
+    "Knob 8",
+    "Master <",
+    "Master >",
+    "Master encoder (push)",
+    "Master encoder (turn)",
+    "Mute",
+    "Navigate",
+    "Note Repeat",
+    "Pad 1",
+    "Pad 10",
+    "Pad 11",
+    "Pad 12",
+    "Pad 13",
+    "Pad 14",
+    "Pad 15",
+    "Pad 16",
+    "Pad 2",
+    "Pad 3",
+    "Pad 4",
+    "Pad 5",
+    "Pad 6",
+    "Pad 7",
+    "Pad 8",
+    "Pad 9",
+    "Pad Mode",
+    "Page <",
+    "Page >",
+    "Pattern",
+    "Play",
+    "Rec",
+    "Restart",
+    "Sampling",
+    "Scene",
+    "Select",
+    "Shift",
+    "Solo",
+    "Step",
+    "Swing",
+    "Tempo",
+    "Top 1",
+    "Top 2",
+    "Top 3",
+    "Top 4",
+    "Top 5",
+    "Top 6",
+    "Top 7",
+    "Top 8",
+    "Transport <",
+    "Transport >",
+    "Volume"
+  ],
+  "pad_noise_floor": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    136,
+    0,
+    0,
+    0,
+    0
+  ],
+  "hardware_notes": [
+    "2026-11-09: Pad 12 (hardware id 7) is worn and reads ~120-136 of 4095 when untouched. Other pads rest at 0. The controller module must use a per-pad dead zone (pad_noise_floor + margin) so Pad 12 never fires or holds aftertouch on its own.",
+    "2026-11-09: Pad hardware ids run top-left = 0; Pad 1 (bottom-left) is id 12. Pad LED order assumed to follow the ids."
+  ]
+}

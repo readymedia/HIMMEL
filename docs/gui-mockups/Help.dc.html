@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Himmel – Help</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}a:hover{opacity:.85}
+button{font:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="min-height: 900px; width: 100%; box-sizing: border-box; background: {{c.bg}}; color: {{c.text}}; font-family: Inter, system-ui, sans-serif; font-size: 14px; display: flex; flex-direction: column">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 10px 16px; background: {{c.panel}}; border-bottom: 1px solid {{c.border}}">
+<div style="display: flex; align-items: baseline; gap: 10px">
+<span style="font-size: 16px; font-weight: 700; letter-spacing: 0.08em">HIMMEL</span>
+<span style="font-size: 13px; color: {{c.text2}}">Help</span>
+</div>
+<label style="flex: 1 1 320px; max-width: 520px; display: flex">
+<span style="position: absolute; left: -9999px">Search help</span>
+<input type="search" placeholder="Search help: edge blend, timecode, keying" style="width: 100%; min-height: 40px; padding: 0 12px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.panel2}}; color: {{c.text}}; font: inherit">
+</label>
+<span style="flex: 1 1 auto"></span>
+<span style="padding: 5px 10px; border-radius: 6px; border: 1px solid {{c.border}}; color: {{c.text2}}">Theme: {{theme}}</span>
+<a href="Main.dc.html" style="padding: 6px 12px; border-radius: 6px; border: 1px solid {{c.border}}; font-weight: 600">Back to show</a>
+</header>
+<main style="display: flex; flex-wrap: wrap; gap: 16px; padding: 16px; flex: 1 1 auto; align-items: flex-start">
+<nav aria-label="Help topics" style="flex: 1 1 240px; max-width: 280px; background: {{c.panel}}; border: 1px solid {{c.border}}; border-radius: 10px; padding: 8px; display: flex; flex-direction: column; gap: 2px">
+<sc-for list="{{topics}}" as="t" hint-placeholder-count="12">
+<button type="button" onClick="{{t.pick}}" aria-current="{{t.current}}" style="min-height: 40px; text-align: left; padding: 0 12px; border-radius: 8px; border: none; color: {{c.text}}; {{t.style}}">{{t.name}}</button>
+</sc-for>
+</nav>
+<article style="flex: 999 1 560px; min-width: 0; max-width: 820px; background: {{c.panel}}; border: 1px solid {{c.border}}; border-radius: 10px; padding: 28px 32px; display: flex; flex-direction: column; gap: 16px">
+<span style="font-size: 13px; color: {{c.text2}}">Help › {{page.name}}</span>
+<h1 style="margin: 0; font-size: 28px; font-weight: 700">{{page.title}}</h1>
+<p style="margin: 0; font-size: 16px; line-height: 1.55; color: {{c.text2}}">{{page.lead}}</p>
+<h2 style="margin: 8px 0 0; font-size: 17px; font-weight: 700">{{page.stepsTitle}}</h2>
+<ol style="margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 10px; line-height: 1.5">
+<sc-for list="{{page.steps}}" as="s" hint-placeholder-count="4">
+<li>{{s.text}}</li>
+</sc-for>
+</ol>
+<div style="padding: 14px 16px; border-radius: 8px; background: {{c.soft}}; border: 1px solid {{c.accent}}; display: flex; flex-direction: column; gap: 4px">
+<span style="font-weight: 700">On the controller</span>
+<span style="line-height: 1.5">{{page.controller}}</span>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<a href="{{page.href}}" style="min-height: 44px; display: flex; align-items: center; padding: 0 16px; border-radius: 8px; background: {{c.accent}}; color: {{c.onAccent}}; font-weight: 700">{{page.action}}</a>
+<button type="button" style="min-height: 44px; padding: 0 16px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.panel2}}; color: {{c.text}}; font-weight: 600">Copy link to this page</button>
+</div>
+</article>
+<aside style="flex: 1 1 260px; max-width: 300px; display: flex; flex-direction: column; gap: 12px">
+<section style="background: {{c.panel}}; border: 1px solid {{c.border}}; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 8px">
+<h2 style="margin: 0; font-size: 15px; font-weight: 700">Explain Mode</h2>
+<p style="margin: 0; line-height: 1.5; color: {{c.text2}}">Press Shift + Browse on the Maschine. The next button you press is explained on the displays instead of being used. Press Shift + Browse again to leave.</p>
+</section>
+<section style="background: {{c.panel}}; border: 1px solid {{c.border}}; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 8px">
+<h2 style="margin: 0; font-size: 15px; font-weight: 700">Help everywhere</h2>
+<span>F1 · help for what is under the mouse</span>
+<span>Click a status light · its troubleshooting page</span>
+<span>Tooltips · on every control</span>
+</section>
+<section style="background: {{c.panel}}; border: 1px solid {{c.border}}; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 8px">
+<h2 style="margin: 0; font-size: 15px; font-weight: 700">Logs</h2>
+<span style="color: {{c.text2}}">Version 0.1 · build 2026-11-09</span>
+<button type="button" style="min-height: 44px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.panel2}}; color: {{c.text}}; font-weight: 600">Create bug report package</button>
+</section>
+</aside>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["Dark","Light","Night"],"default":"Light"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { page: 9 }; }
+  pal(t) {
+    const P = {
+      Dark: { bg: '#0E0F12', panel: '#16181D', panel2: '#1E2128', border: '#2C313A', text: '#ECEDEF', text2: '#A3AAB5', accent: '#6E9BFF', onAccent: '#0A1430', soft: 'rgba(110,155,255,0.16)', good: '#3DD68C', warn: '#F2B33D', bad: '#FF6B6B' },
+      Light: { bg: '#F3F4F6', panel: '#FFFFFF', panel2: '#ECEEF2', border: '#D5DAE1', text: '#15171B', text2: '#535A65', accent: '#2F5FD8', onAccent: '#FFFFFF', soft: 'rgba(47,95,216,0.10)', good: '#1E8449', warn: '#A15C00', bad: '#C0392B' },
+      Night: { bg: '#050506', panel: '#0C0D10', panel2: '#121318', border: '#1F2229', text: '#C4C7CD', text2: '#8A9099', accent: '#D9704F', onAccent: '#1A0A04', soft: 'rgba(217,112,79,0.16)', good: '#3BAF6E', warn: '#CC9533', bad: '#E0574F' }
+    };
+    return P[t] || P.Dark;
+  }
+  renderVals() {
+    const theme = this.props.theme ?? 'Light';
+    const c = this.pal(theme);
+    const st = this.state;
+    const pages = [
+      { name: 'Getting Started', title: 'From an empty PC to your first show', lead: 'Himmel is set up once in the Setup wizard, prepared in Prepare, and played from the Maschine in Perform.', stepsTitle: 'Steps', steps: ['Connect the Maschine, your screens and the audio.', 'Open Setup and press Next through the seven steps.', 'Drag a folder of clips into Prepare › Library.', 'Switch to Perform, pick a theme with Shift + Pattern and play the pads.'], controller: 'Scene + pad changes scene. The bottom row is calm, the top row is peak.', action: 'Open the Setup wizard', href: 'SetupOutputs.dc.html' },
+      { name: 'Setup Guide', title: 'The seven setup steps', lead: 'Each step has a Test button and can be revisited at any time.', stepsTitle: 'Steps', steps: ['Outputs: how many, and span or separate.', 'Projection mapping: keystone, mesh and edge blend.', 'Cameras and capture, then Audio and sync.', 'Media, Controller check, then Save and start.'], controller: 'Every step can also be confirmed with the master encoder push.', action: 'Open Setup', href: 'SetupOutputs.dc.html' },
+      { name: 'Controller Map', title: 'What every button does', lead: 'Hover a button on the picture to see its function in each mode.', stepsTitle: 'Most used', steps: ['Pads: scenes, sequencer steps or clips, depending on Pad Mode.', 'Knobs: Macro page first; Page buttons move to FX, Color and Motion.', 'Transport ▶ is GO, ◀ goes to the previous cue.', 'Shift + Mute always goes to the Safe Scene.'], controller: 'Shift + Browse turns on Explain Mode.', action: 'Back to Perform', href: 'Main.dc.html' },
+      { name: 'Themes, Scenes and Macros', title: 'How a look is built', lead: 'A theme is a whole style. Each theme has 16 scenes sorted by energy and 8 macros.', stepsTitle: 'Make your own', steps: ['Duplicate a theme you like.', 'Change its palette and clip filter.', 'Play the scenes and save changes with Shift + Scene + pad.', 'Hold Shift and touch a macro knob to see what it controls.'], controller: 'Shift + Pattern picks a theme.', action: 'Open Themes and effects', href: 'EffectBrowser.dc.html' },
+      { name: 'Effects Reference', title: 'All effects and generators', lead: 'Every effect has the same knob layout: 1–4 are its own, 5–8 are Mix, Audio, Sync and Variation.', stepsTitle: 'Using an effect', steps: ['Go to an FX page and push the master encoder.', 'Pick a category with the buttons above the displays.', 'Press a pad to preview, press again to go live.', 'Shift + Duplicate gives a Smart Random setup.'], controller: 'Duplicate + ◀ ▶ steps through presets.', action: 'Open the effect browser', href: 'EffectBrowser.dc.html' },
+      { name: 'Keying and Cameras', title: 'Keying without the fiddling', lead: 'Keys set themselves from clip analysis or the camera image. Adjust one Tightness knob if needed.', stepsTitle: 'Quick start', steps: ['Pick a combo such as Neon Person in the Camera category.', 'For difference key, step out of the picture and press Learn background.', 'Use Shift + Select to route any camera to any output.'], controller: 'Camera combos live in the Camera category of the effect browser.', action: 'Open the effect browser', href: 'EffectBrowser.dc.html' },
+      { name: 'Sync and Timecode', title: 'Staying on the beat', lead: 'Himmel picks the most reliable clock: Pro DJ Link, Ableton Link, MIDI clock, timecode, then audio analysis.', stepsTitle: 'If the beat drifts', steps: ['Check the Sync light and its source.', 'Tap tempo on the top-right button, or nudge with Tempo + ◀ ▶.', 'Set the AV offset once per venue with the click test.'], controller: 'Shift + Tempo changes the clock source.', action: 'Back to Perform', href: 'Main.dc.html' },
+      { name: 'Projection Mapping', title: 'Keystone, mesh and edge blend', lead: 'Projector outputs get corner correction, a mesh for curved surfaces and soft edges between projectors.', stepsTitle: 'Steps', steps: ['Show the grid test pattern.', 'Move the four corners until the grid is straight.', 'Set the overlap in pixels and adjust curve and gamma until the seam disappears.', 'Turn on Lock mapping before the show.'], controller: 'Pads 1–4 pick a corner, knobs 1 and 2 move it.', action: 'Open Projection mapping', href: 'SetupMapping.dc.html' },
+      { name: 'Show Day Checklist', title: 'Before the doors open', lead: 'Run Prepare Show, then turn on Show Mode.', stepsTitle: 'Checklist', steps: ['Prepare Show is green.', 'Show Mode is on: no updates, no sleep, no notifications.', 'AV offset tested in the room.', 'Backup copy of the show folder on a USB disk.'], controller: 'Shift + All opens Admin for brightness caps and safe limits.', action: 'Back to Perform', href: 'Main.dc.html' },
+      { name: 'Troubleshooting', title: 'Cameras light is yellow', lead: 'One or more cameras are missing or slow. The show continues: affected outputs show the theme generator instead.', stepsTitle: 'What to do', steps: ['Check the USB cable of the camera named in the status bar.', 'Move the camera to a USB port on another controller if two share one.', 'Wait 2 seconds: Himmel reconnects automatically.', 'Still yellow: open Setup › Cameras and press Measure latency.'], controller: 'Cameras that come back are routed to the same output as before.', action: 'Open camera setup', href: 'SetupOutputs.dc.html' },
+      { name: 'Keyboard Shortcuts', title: 'Keyboard shortcuts', lead: 'Everything can be played from the Maschine; the keyboard is a backup.', stepsTitle: 'Most used', steps: ['Space · GO', 'F1 · Help for what is under the mouse', 'Ctrl+Shift+T · Switch theme', 'Ctrl+Z · Undo'], controller: 'Shift + Erase is undo on the controller.', action: 'Back to Perform', href: 'Main.dc.html' },
+      { name: 'About and Logs', title: 'About Himmel', lead: 'Version, logs and a bug report package with the logs from tonight.', stepsTitle: 'Bug report', steps: ['Press Create bug report package.', 'Send the file that appears on the desktop.'], controller: 'Not on the controller.', action: 'Back to Perform', href: 'Main.dc.html' }
+    ];
+    const topics = pages.map((p, i) => ({ name: p.name, current: st.page === i ? 'page' : 'false',
+      style: st.page === i ? 'background: ' + c.soft + '; font-weight: 700' : 'background: transparent; color: ' + c.text2,
+      pick: () => this.setState({ page: i }) }));
+    const pg = pages[st.page];
+    const page = { ...pg, steps: pg.steps.map((text) => ({ text })) };
+    return { c, theme, topics, page };
+  }
+}
+</script>
+</body>
+</html>

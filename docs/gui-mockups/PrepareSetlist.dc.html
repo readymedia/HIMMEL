@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Himmel – Prepare: Setlist and cues</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}a:hover{opacity:.85}
+button{font:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="min-height: 900px; width: 100%; box-sizing: border-box; background: {{c.bg}}; color: {{c.text}}; font-family: Inter, system-ui, sans-serif; font-size: 13px; display: flex; flex-direction: column">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 10px 16px; background: {{c.panel}}; border-bottom: 1px solid {{c.border}}">
+<div style="display: flex; align-items: baseline; gap: 10px">
+<span style="font-size: 16px; font-weight: 700; letter-spacing: 0.08em">HIMMEL</span>
+<span style="font-size: 12px; color: {{c.text2}}">Saturday Club Night</span>
+</div>
+<nav aria-label="Modes" style="display: flex; gap: 4px; background: {{c.panel2}}; padding: 3px; border-radius: 8px">
+<a href="SetupOutputs.dc.html" style="padding: 7px 14px; border-radius: 6px; color: {{c.text2}}">Setup</a>
+<a href="PrepareLibrary.dc.html" aria-current="page" style="padding: 7px 14px; border-radius: 6px; background: {{c.accent}}; color: {{c.onAccent}}; font-weight: 600">Prepare</a>
+<a href="Main.dc.html" style="padding: 7px 14px; border-radius: 6px; color: {{c.text2}}">Perform</a>
+</nav>
+<nav aria-label="Prepare sections" style="display: flex; gap: 4px; flex: 1 1 auto">
+<a href="PrepareLibrary.dc.html" style="padding: 7px 12px; border-radius: 6px; border: 1px solid {{c.border}}; color: {{c.text2}}">Library</a>
+<a href="PrepareSetlist.dc.html" aria-current="page" style="padding: 7px 12px; border-radius: 6px; border: 1px solid {{c.accent}}; font-weight: 600">Setlist and cues</a>
+<a href="EffectBrowser.dc.html" style="padding: 7px 12px; border-radius: 6px; border: 1px solid {{c.border}}; color: {{c.text2}}">Themes and effects</a>
+</nav>
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="padding: 5px 10px; border-radius: 6px; border: 1px solid {{c.border}}; color: {{c.text2}}">Theme: {{theme}}</span>
+<a href="Help.dc.html" style="padding: 6px 12px; border-radius: 6px; border: 1px solid {{c.border}}; font-weight: 600">Help</a>
+</div>
+</header>
+<main style="display: flex; flex-wrap: wrap; gap: 12px; padding: 12px; flex: 1 1 auto; align-items: flex-start">
+<aside aria-label="Setlist" style="flex: 1 1 240px; max-width: 280px; background: {{c.panel}}; border: 1px solid {{c.border}}; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex; justify-content: space-between; align-items: center">
+<h2 style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: {{c.text2}}">Setlist</h2>
+<button type="button" style="min-height: 32px; padding: 0 10px; border-radius: 6px; border: 1px solid {{c.border}}; background: {{c.panel2}}; color: {{c.text}}">Add track</button>
+</div>
+<sc-for list="{{songs}}" as="x" hint-placeholder-count="6">
+<button type="button" onClick="{{x.pick}}" aria-pressed="{{x.active}}" style="text-align: left; padding: 8px; border-radius: 8px; color: {{c.text}}; display: flex; flex-direction: column; gap: 2px; {{x.style}}">
+<span style="font-weight: 600">{{x.n}} · {{x.title}}</span>
+<span style="font-size: 12px; color: {{c.text2}}">{{x.theme}} · {{x.bpm}} BPM · Bank {{x.bank}}</span>
+</button>
+</sc-for>
+<span style="margin-top: 8px; font-size: 12px; color: {{c.text2}}">When the DJ loads a track with the same name over Pro DJ Link, Himmel selects it here.</span>
+</aside>
+<section style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: baseline">
+<h1 style="margin: 0; font-size: 22px; font-weight: 700">{{songTitle}}</h1>
+<span style="color: {{c.text2}}">64 bars · 124 BPM · Synthwave Neon</span>
+</div>
+<section aria-label="Timeline" style="background: {{c.panel}}; border: 1px solid {{c.border}}; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; overflow-x: auto">
+<div style="min-width: 720px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 8px; align-items: end">
+<span style="font-size: 11px; color: {{c.text2}}">Bars / TC</span>
+<div style="position: relative; height: 34px; border-bottom: 1px solid {{c.border}}">
+<sc-for list="{{ticks}}" as="t" hint-placeholder-count="9">
+<span style="position: absolute; left: {{t.left}}; bottom: 0; transform: translateX(-1px); display: flex; flex-direction: column; font-size: 11px; color: {{c.text2}}; border-left: 1px solid {{c.border}}; padding-left: 4px; height: 34px; justify-content: flex-end">
+<span style="font-weight: 600; color: {{c.text}}">{{t.bar}}</span>
+<span style="font-family: 'JetBrains Mono', monospace">{{t.tc}}</span>
+</span>
+</sc-for>
+</div>
+</div>
+<div style="display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 8px; align-items: center">
+<span style="font-size: 12px; font-weight: 600">Cues</span>
+<div style="position: relative; height: 56px">
+<sc-for list="{{cueBlocks}}" as="q" hint-placeholder-count="5">
+<button type="button" onClick="{{q.pick}}" aria-pressed="{{q.active}}" style="position: absolute; top: 0; height: 56px; left: {{q.left}}; width: {{q.width}}; border-radius: 6px; text-align: left; padding: 6px 8px; box-sizing: border-box; color: #0B0B0B; background: {{q.col}}; {{q.style}}">
+<span style="display: block; font-weight: 700">{{q.n}} · {{q.name}}</span>
+<span style="display: block; font-size: 11px">{{q.trigger}}</span>
+</button>
+</sc-for>
+</div>
+</div>
+<div style="display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 8px; align-items: center">
+<span style="font-size: 12px; font-weight: 600">Scenes</span>
+<div style="position: relative; height: 34px">
+<sc-for list="{{sceneMarks}}" as="m" hint-placeholder-count="8">
+<span style="position: absolute; left: {{m.left}}; top: 0; height: 34px; border-left: 2px solid {{c.accent}}; padding-left: 4px; font-size: 11px; white-space: nowrap; display: flex; align-items: center">{{m.name}}</span>
+</sc-for>
+</div>
+</div>
+<div style="display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 8px; align-items: end">
+<span style="font-size: 12px; font-weight: 600">Energy</span>
+<div style="height: 48px; display: grid; grid-template-columns: repeat(32, minmax(0, 1fr)); gap: 2px; align-items: end">
+<sc-for list="{{energy}}" as="e" hint-placeholder-count="32">
+<span style="height: {{e.h}}; background: {{e.col}}; border-radius: 2px 2px 0 0"></span>
+</sc-for>
+</div>
+</div>
+<div style="display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 8px">
+<span></span>
+<div style="position: relative; height: 18px">
+<span style="position: absolute; left: 56.25%; top: 0; font-size: 11px; font-weight: 700; color: {{c.bad}}">▲ Playhead · bar 36 · 01:11:21:12</span>
+</div>
+</div>
+</div>
+</section>
+<section style="background: {{c.panel}}; border: 1px solid {{c.border}}; border-radius: 10px; padding: 12px; display: flex; flex-wrap: wrap; gap: 24px; align-items: center">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<span style="font-size: 12px; color: {{c.text2}}">Timecode source</span>
+<span style="font-weight: 600">LTC from DJ mixer · input 3</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<span style="font-size: 12px; color: {{c.text2}}">Current</span>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 600">01:11:21:12</span>
+</div>
+<div style="display: flex; align-items: center; gap: 8px">
+<span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 50%; background: {{c.good}}"></span>
+<span style="font-weight: 600">Locked · 25 fps</span>
+</div>
+<span style="color: {{c.text2}}; flex: 1 1 240px">Without timecode, the song timer starts on the first beat or on GO, and can be nudged in bars from the controller.</span>
+</section>
+</section>
+<aside aria-label="Cue inspector" style="flex: 1 1 300px; max-width: 360px; background: {{c.panel}}; border: 1px solid {{c.border}}; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 12px">
+<h2 style="margin: 0; font-size: 18px; font-weight: 700">Cue {{cur.n}} · {{cur.name}}</h2>
+<fieldset style="border: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px">
+<legend style="font-size: 12px; font-weight: 600; color: {{c.text2}}; margin-bottom: 6px">Trigger</legend>
+<sc-for list="{{triggers}}" as="t" hint-placeholder-count="6">
+<label style="display: flex; align-items: center; gap: 8px; min-height: 32px">
+<input type="radio" name="trigger" checked="{{t.on}}" onChange="{{t.pick}}" style="width: 18px; height: 18px">
+<span>{{t.name}}</span>
+</label>
+</sc-for>
+</fieldset>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 12px; font-weight: 600; color: {{c.text2}}">Transition</span>
+<div role="radiogroup" aria-label="Transition" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px">
+<sc-for list="{{transitions}}" as="t" hint-placeholder-count="4">
+<button type="button" role="radio" aria-checked="{{t.active}}" onClick="{{t.pick}}" style="min-height: 40px; border-radius: 6px; font-size: 12px; font-weight: 600; {{t.style}}">{{t.name}}</button>
+</sc-for>
+</div>
+</div>
+<sc-for list="{{facts}}" as="f" hint-placeholder-count="4">
+<div style="display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid {{c.border}}">
+<span style="color: {{c.text2}}">{{f.k}}</span>
+<span style="font-weight: 600; text-align: right">{{f.v}}</span>
+</div>
+</sc-for>
+<button type="button" style="min-height: 44px; border-radius: 8px; border: none; background: {{c.accent}}; color: {{c.onAccent}}; font-weight: 700">Record look into this cue</button>
+<span style="font-size: 12px; color: {{c.text2}}">Shortcut on the controller: build the look live, then Shift + GO.</span>
+</aside>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["Dark","Light","Night"],"default":"Light"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { song: 2, cue: 2, trig: [0, 1, 2, 3, 4], trans: [0, 1, 2, 3, 1] }; }
+  pal(t) {
+    const P = {
+      Dark: { bg: '#0E0F12', panel: '#16181D', panel2: '#1E2128', border: '#2C313A', text: '#ECEDEF', text2: '#A3AAB5', accent: '#6E9BFF', onAccent: '#0A1430', soft: 'rgba(110,155,255,0.16)', good: '#3DD68C', warn: '#F2B33D', bad: '#FF6B6B' },
+      Light: { bg: '#F3F4F6', panel: '#FFFFFF', panel2: '#ECEEF2', border: '#D5DAE1', text: '#15171B', text2: '#535A65', accent: '#2F5FD8', onAccent: '#FFFFFF', soft: 'rgba(47,95,216,0.10)', good: '#1E8449', warn: '#A15C00', bad: '#C0392B' },
+      Night: { bg: '#050506', panel: '#0C0D10', panel2: '#121318', border: '#1F2229', text: '#C4C7CD', text2: '#8A9099', accent: '#D9704F', onAccent: '#1A0A04', soft: 'rgba(217,112,79,0.16)', good: '#3BAF6E', warn: '#CC9533', bad: '#E0574F' }
+    };
+    return P[t] || P.Dark;
+  }
+  tc(sec) {
+    const base = 1 * 3600 + 10 * 60 + 12;
+    const t = base + sec;
+    const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = Math.floor(t % 60);
+    const p = (n) => String(n).padStart(2, '0');
+    return p(h) + ':' + p(m) + ':' + p(s);
+  }
+  renderVals() {
+    const theme = this.props.theme ?? 'Light';
+    const c = this.pal(theme);
+    const st = this.state;
+    const sel = (on) => on ? 'border: 2px solid ' + c.accent + '; background: ' + c.soft : 'border: 1px solid transparent; background: transparent';
+    const songsDef = [['01', 'Doors open', 'Lounge Drift', 112, 1], ['02', 'Warm-up', 'Deep House Glow', 122, 2], ['03', 'Build', 'Synthwave Neon', 124, 3], ['04', 'Peak time', 'Techno Bunker', 132, 4], ['05', 'Breakdown', 'Ocean Ambient', 90, 5], ['06', 'Closing', 'Rave Chaos', 150, 6]];
+    const songs = songsDef.map(([n, title, th, bpm, bank], i) => ({ n, title, theme: th, bpm: String(bpm), bank: String(bank),
+      active: st.song === i ? 'true' : 'false', style: sel(st.song === i), pick: () => this.setState({ song: i }) }));
+    const secPerBar = 4 * 60 / 124;
+    const ticks = [0, 8, 16, 24, 32, 40, 48, 56].map((b) => ({ bar: String(b + 1), tc: this.tc(b * secPerBar), left: (b / 64 * 100).toFixed(2) + '%' }));
+    const cuesDef = [
+      { name: 'Intro', from: 0, to: 16, col: '#9FB4FF' },
+      { name: 'Groove', from: 16, to: 32, col: '#8FE3C8' },
+      { name: 'Build', from: 32, to: 40, col: '#FFD08A' },
+      { name: 'Drop', from: 40, to: 56, col: '#FF9DC4' },
+      { name: 'Outro', from: 56, to: 64, col: '#C7B6FF' }
+    ];
+    const trigNames = ['On GO', 'After 16 bars', 'On next 8-bar phrase', 'On drop detector', 'On timecode', 'When the DJ loads the track'];
+    const transNames = ['Cut', '1 bar', '4 bars', '8 bars'];
+    const cueBlocks = cuesDef.map((q, i) => ({ ...q, n: String(i + 1), trigger: trigNames[st.trig[i]],
+      left: (q.from / 64 * 100).toFixed(2) + '%', width: 'calc(' + ((q.to - q.from) / 64 * 100).toFixed(2) + '% - 4px)',
+      active: st.cue === i ? 'true' : 'false',
+      style: st.cue === i ? 'border: 3px solid ' + c.text : 'border: 1px solid rgba(0,0,0,0.2)',
+      pick: () => this.setState({ cue: i }) }));
+    const sceneMarks = [[0, '1 Slow Clips'], [8, '2 Drift'], [16, '6 Kick Rings'], [24, '5 Clips on Beat'], [32, '9 Accelerate'], [36, '12 Riser'], [40, '16 Drop'], [48, '13 Cut Storm'], [56, '4 Pause Glow']]
+      .map(([b, name]) => ({ name, left: (b / 64 * 100).toFixed(2) + '%' }));
+    const ev = [0.2, 0.22, 0.25, 0.25, 0.3, 0.32, 0.35, 0.38, 0.45, 0.5, 0.52, 0.55, 0.55, 0.58, 0.6, 0.6, 0.65, 0.7, 0.75, 0.82, 0.95, 1, 0.98, 0.96, 0.95, 0.94, 0.9, 0.88, 0.6, 0.4, 0.3, 0.2];
+    const energy = ev.map((v, i) => ({ h: Math.round(v * 100) + '%', col: i === 18 ? c.bad : c.accent }));
+    const k = st.cue;
+    const cur = { n: String(k + 1), name: cuesDef[k].name };
+    const triggers = trigNames.map((name, i) => ({ name, on: st.trig[k] === i, pick: () => { const t = st.trig.slice(); t[k] = i; this.setState({ trig: t }); } }));
+    const transitions = transNames.map((name, i) => ({ name, active: st.trans[k] === i ? 'true' : 'false',
+      style: st.trans[k] === i ? 'border: none; background: ' + c.accent + '; color: ' + c.onAccent : 'border: 1px solid ' + c.border + '; background: ' + c.panel2 + '; color: ' + c.text2,
+      pick: () => { const t = st.trans.slice(); t[k] = i; this.setState({ trans: t }); } }));
+    const facts = [
+      { k: 'Bars', v: (cuesDef[k].from + 1) + '–' + cuesDef[k].to },
+      { k: 'Theme', v: 'Synthwave Neon' },
+      { k: 'Start scene', v: k === 3 ? '16 · Drop' : (k === 2 ? '9 · Accelerate' : '5 · Clips on Beat') },
+      { k: 'Cameras', v: 'Cam 1 → Left · Cam 2 → Centre · Cam 3 → Right' }
+    ];
+    return { c, theme, songs, ticks, cueBlocks, sceneMarks, energy, cur, triggers, transitions, facts, songTitle: songsDef[st.song][0] + ' · ' + songsDef[st.song][1] };
+  }
+}
+</script>
+</body>
+</html>

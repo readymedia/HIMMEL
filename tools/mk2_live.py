@@ -1,0 +1,383 @@
+#!/usr/bin/env python3
+"""
+Maschine MK2 live view and map editor (browser UI)
+==================================================
+
+Shows the MK2 front panel in a browser and lights up every control you touch,
+using maschine_mk2_map.json. Click a control on screen and then press / turn /
+hit the real one to (re)learn it. Every control you touch is ticked off as
+"seen"; when all are seen the map is marked verified.
+
+Run:   python tools/mk2_live.py      then open http://127.0.0.1:8765
+Needs: pip install hidapi  (same as maschine_mk2_test.py). Standard library otherwise.
+The device is reopened automatically if the USB cable is pulled.
+"""
+
+import json
+import os
+import shutil
+import sys
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import maschine_mk2_test as mk  # noqa: E402
+
+PORT = 8765
+HTML = os.path.join(HERE, "mk2_live.html")
+BUTTONS = list(mk.BUTTON_STEPS) + ["Master <", "Master >", "Enter"]
+KNOBS = list(mk.KNOB_STEPS)
+PADS = list(mk.PAD_STEPS)
+ALL = BUTTONS + KNOBS + PADS
+BUTTON_AREA = 8          # bytes 0..7 of report 0x01 hold buttons + encoder nibble
+KNOB_LEARN_CHANGES = 4
+
+
+class Live:
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.saved = self.load()
+        self.t = None
+        self.m = None
+        self.notes = []
+        self.prev = None
+        self.held = set()
+        self.seen = set(self.saved.get("seen", []))
+        self.last = []
+        self.unmapped = []
+        self.learn = None
+        self.message = ""
+        self.save_due = 0.0
+        self.backed_up = False
+        self.err_check = (time.time(), 0)
+
+    # ---------- map file ----------
+    def load(self):
+        try:
+            with open(mk.MAP_PATH, encoding="utf-8") as f:
+                d = json.load(f)
+        except (OSError, ValueError):
+            d = {}
+        for k in ("buttons", "knobs", "pads"):
+            d.setdefault(k, {})
+        d.setdefault("skipped", [])
+        d["pads"].setdefault("_id_to_slot", {})
+        return d
+
+    def save(self):
+        d = self.saved
+        d["seen"] = sorted(self.seen)
+        d["verified"] = all(n in self.seen for n in ALL)
+        d["time"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        if os.path.exists(mk.MAP_PATH) and not self.backed_up:
+            shutil.copyfile(mk.MAP_PATH, mk.MAP_PATH.replace(".json", ".bak.json"))
+            self.backed_up = True
+        tmp = mk.MAP_PATH + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(d, f, indent=2)
+        os.replace(tmp, mk.MAP_PATH)
+
+    # ---------- device ----------
+    def device_loop(self):
+        while True:
+            if self.m is None:
+                t = mk.Transport()
+                if not t.open():
+                    self.notes = t.notes or ["MK2 not found"]
+                    time.sleep(1.0)
+                    continue
+                m = mk.Mapper(t)
+                m.result = {"buttons": self.saved["buttons"], "knobs": self.saved["knobs"],
+                            "pads": self.saved["pads"], "skipped": self.saved["skipped"]}
+                m.step = len(mk.STEPS) - 1  # "done": no step-learning inside Mapper
+                threading.Thread(target=m.reader, daemon=True).start()
+                threading.Thread(target=m.led_writer, daemon=True).start()
+                with self.lock:
+                    self.t, self.m, self.prev = t, m, None
+                    self.notes = t.notes
+                    self.err_check = (time.time(), 0)
+            try:
+                with self.lock:
+                    self.tick()
+            except Exception as e:  # never let a bug in tick kill the device thread
+                self.message = "tick error: %s" % e
+            self.check_errors()
+            if self.save_due and time.time() > self.save_due:
+                self.save_due = 0.0
+                try:
+                    with self.lock:
+                        self.save()
+                except OSError as e:
+                    self.message = "save failed: %s" % e
+            time.sleep(0.004)
+
+    def check_errors(self):
+        t0, n0 = self.err_check
+        if time.time() - t0 < 1.0:
+            return
+        n = len(self.m.errors)
+        self.err_check = (time.time(), n)
+        if n - n0 >= 4:  # reader keeps failing: device gone, reopen
+            m, t = self.m, self.t
+            m.running = False
+            time.sleep(0.25)
+            t.close()
+            with self.lock:
+                self.m = self.t = None
+                self.notes = ["Lost the MK2 (%s) - reconnecting" % (m.errors[-1] if m.errors else "?")]
+
+    # ---------- per-tick logic (under lock) ----------
+    def tick(self):
+        m = self.m
+        st = m.state
+        if st is None:
+            return
+        prev = self.prev or st
+        self.prev = st
+        rising = {}
+        for i in range(min(len(st), len(prev), BUTTON_AREA)):
+            r = st[i] & ~prev[i] & 0xFF
+            if r:
+                rising[i] = r
+        changed = {i for i in range(min(len(st), len(prev))) if st[i] != prev[i]}
+
+        if self.learn:
+            self.learn_tick(st, rising, changed)
+            return
+
+        # held buttons, seen marks, unmapped bits
+        held = set()
+        for name, v in self.saved["buttons"].items():
+            if v["byte"] < len(st) and st[v["byte"]] >> v["bit"] & 1:
+                held.add(name)
+        for name in held - self.held:
+            self.mark_seen(name)
+            self.last = ([name] + self.last)[:6]
+        if held != self.held:
+            self.mirror_leds(held)
+            self.held = held
+        masks = m.knob_masks()
+        used = m.used_bits()
+        for i, r in rising.items():
+            for bit in range(8):
+                if r >> bit & 1 and (i, bit) not in used and not (masks.get(i, 0) >> bit & 1):
+                    tag = "byte %d bit %d" % (i, bit)
+                    if tag not in self.unmapped:
+                        self.unmapped = (self.unmapped + [tag])[-8:]
+        for name, v in self.saved["knobs"].items():
+            if v["byte"] in changed:
+                self.mark_seen(name)
+        for name, slot_pid in self.pad_ids().items():
+            if m.pads[slot_pid] > mk.PAD_HIT:
+                self.mark_seen(name)
+
+    def pad_ids(self):
+        return {n: v["id"] for n, v in self.saved["pads"].items() if not n.startswith("_")}
+
+    def mark_seen(self, name):
+        if name not in self.seen:
+            self.seen.add(name)
+            self.save_due = time.time() + 1.0
+
+    def mirror_leds(self, held):
+        m = self.m
+        m.leds81 = [0] * 56
+        m.leds82 = [0] * 31
+        for name in held:
+            m.light_button(name)
+        m.dirty = True
+
+    def learn_tick(self, st, rising, changed):
+        L = self.learn
+        kind, name = L["kind"], L["name"]
+        if time.time() - L["started"] > 30:
+            self.learn, self.message = None, "Learn timed out for %s" % name
+            return
+        if kind == "button":
+            masks = self.m.knob_masks()
+            for i, r in sorted(rising.items()):
+                r &= ~masks.get(i, 0)
+                for bit in range(8):
+                    if r >> bit & 1:
+                        btns = self.saved["buttons"]
+                        for other in [n for n, v in btns.items() if (v["byte"], v["bit"]) == (i, bit) and n != name]:
+                            del btns[other]
+                            self.seen.discard(other)
+                        btns[name] = {"byte": i, "bit": bit}
+                        return self.learned(name, "byte %d bit %d" % (i, bit))
+        elif kind == "knob":
+            for i in changed:
+                L["counts"][i] = L["counts"].get(i, 0) + 1
+                if (st[i] ^ L["base"][i]) & 0xF0:
+                    L["hi"].add(i)
+            hits = [i for i, c in L["counts"].items() if c >= KNOB_LEARN_CHANGES]
+            if hits:
+                i = max(hits, key=lambda b: L["counts"][b])
+                if i < BUTTON_AREA:
+                    entry = {"byte": i, "nibble": "both" if i in L["hi"] else "low", "next_byte_moves": False}
+                else:
+                    i &= ~1  # knobs are 16-bit little-endian words starting at byte 8
+                    entry = {"byte": i, "nibble": "both", "next_byte_moves": True}
+                knobs = self.saved["knobs"]
+                for other in [n for n, v in knobs.items() if v["byte"] == i and n != name]:
+                    del knobs[other]
+                    self.seen.discard(other)
+                knobs[name] = entry
+                return self.learned(name, "byte %d (%s)" % (i, entry["nibble"]))
+        elif kind == "pad":
+            p = self.m.pads
+            pid = max(range(16), key=lambda k: p[k])
+            if p[pid] > mk.PAD_HIT:
+                pads = self.saved["pads"]
+                slot = int(name.split()[1]) - 1
+                for other in [n for n, v in self.pad_ids().items() if v == pid and n != name]:
+                    del pads[other]
+                    self.seen.discard(other)
+                pads[name] = {"id": pid}
+                ids = {str(v): int(n.split()[1]) - 1 for n, v in self.pad_ids().items()}
+                pads["_id_to_slot"] = ids
+                self.m.all_off()
+                return self.learned(name, "pad id %d -> slot %d" % (pid, slot + 1))
+
+    def learned(self, name, what):
+        self.learn = None
+        self.seen.add(name)
+        self.message = "Learned %s = %s" % (name, what)
+        self.save_due = time.time() + 0.2
+
+    # ---------- state for the browser ----------
+    def snapshot(self):
+        with self.lock:
+            m = self.m
+            st = m.state if m else None
+            knobs = {}
+            if st is not None:
+                for name, v in self.saved["knobs"].items():
+                    b = v["byte"]
+                    if b >= len(st):
+                        continue
+                    if v["nibble"] == "both":
+                        hi = st[b + 1] if b + 1 < len(st) and b >= BUTTON_AREA else 0
+                        knobs[name] = st[b] | hi << 8
+                    else:
+                        knobs[name] = st[b] & 0x0F if v["nibble"] == "low" else st[b] >> 4
+            pads = [0] * 16
+            if m:
+                for name, pid in self.pad_ids().items():
+                    pads[int(name.split()[1]) - 1] = m.pads[pid]
+            return {
+                "connected": m is not None,
+                "notes": self.notes[-2:],
+                "reports": dict(m.reports) if m else {},
+                "errors": (m.errors[-2:] if m else []),
+                "raw": st.hex(" ") if st is not None else "",
+                "held": sorted(self.held),
+                "knobs": knobs,
+                "pads": pads,
+                "mapped": sorted(set(self.saved["buttons"]) | set(self.saved["knobs"]) | set(self.pad_ids())),
+                "seen": sorted(self.seen),
+                "total": len(ALL),
+                "verified": all(n in self.seen for n in ALL),
+                "last": self.last,
+                "unmapped": self.unmapped,
+                "learn": {"kind": self.learn["kind"], "name": self.learn["name"]} if self.learn else None,
+                "message": (m.message if m and m.chase_running() else self.message),
+                "chase": bool(m and m.chase_running()),
+            }
+
+    def command(self, d):
+        with self.lock:
+            m = self.m
+            if "learn" in d:
+                name = d["learn"]
+                if not name:
+                    self.learn, self.message = None, "Learn cancelled"
+                    return
+                kind = "button" if name in BUTTONS else "knob" if name in KNOBS else "pad" if name in PADS else None
+                if kind is None:
+                    return
+                base = bytes(m.state) if m and m.state is not None else bytes(32)
+                self.learn = {"kind": kind, "name": name, "started": time.time(),
+                              "counts": {}, "base": base, "hi": set()}
+                verb = {"button": "Press", "knob": "Turn", "pad": "Hit"}[kind]
+                self.message = "%s %s on the MK2 now (Esc cancels)" % (verb, name)
+            elif d.get("led") and m:
+                act = d["led"]
+                if act == "chase":
+                    m.toggle_chase()
+                else:
+                    {"pads": m.test_pads, "groups": m.test_groups, "buttons": m.test_buttons,
+                     "off": m.leds_off}.get(act, lambda: None)()
+            elif d.get("reset_seen"):
+                self.seen.clear()
+                self.unmapped = []
+                self.save_due = time.time() + 0.2
+                self.message = "Seen marks cleared"
+
+
+LIVE = Live()
+
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+
+    def do_GET(self):
+        if self.path in ("/", "/index.html"):
+            with open(HTML, "rb") as f:
+                body = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+        elif self.path == "/events":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            try:
+                while True:
+                    self.wfile.write(("data: %s\n\n" % json.dumps(LIVE.snapshot())).encode())
+                    self.wfile.flush()
+                    time.sleep(1 / 30)
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+                return
+        else:
+            self.send_error(404)
+
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        try:
+            LIVE.command(json.loads(self.rfile.read(n) or b"{}"))
+        except ValueError:
+            self.send_error(400)
+            return
+        self.send_response(204)
+        self.end_headers()
+
+
+def main():
+    threading.Thread(target=LIVE.device_loop, daemon=True).start()
+    srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    srv.daemon_threads = True
+    print("MK2 live view on http://127.0.0.1:%d  (Ctrl-C to stop)" % PORT)
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        with LIVE.lock:
+            if LIVE.save_due:
+                LIVE.save()
+            if LIVE.m:
+                LIVE.m.running = False
+        time.sleep(0.15)
+        if LIVE.t:
+            mk.leds_off_and_close(LIVE.t)
+
+
+if __name__ == "__main__":
+    main()

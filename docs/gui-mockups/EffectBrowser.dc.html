@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Himmel – Effect browser</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}a:hover{opacity:.85}
+button{font:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="min-height: 900px; width: 100%; box-sizing: border-box; background: {{c.bg}}; color: {{c.text}}; font-family: Inter, system-ui, sans-serif; font-size: 13px; display: flex; flex-direction: column">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 10px 16px; background: {{c.panel}}; border-bottom: 1px solid {{c.border}}">
+<div style="display: flex; align-items: baseline; gap: 10px">
+<span style="font-size: 16px; font-weight: 700; letter-spacing: 0.08em">HIMMEL</span>
+<span style="font-size: 12px; color: {{c.text2}}">Saturday Club Night</span>
+</div>
+<nav aria-label="Modes" style="display: flex; gap: 4px; background: {{c.panel2}}; padding: 3px; border-radius: 8px">
+<a href="SetupOutputs.dc.html" style="padding: 7px 14px; border-radius: 6px; color: {{c.text2}}">Setup</a>
+<a href="PrepareLibrary.dc.html" style="padding: 7px 14px; border-radius: 6px; color: {{c.text2}}">Prepare</a>
+<a href="Main.dc.html" aria-current="page" style="padding: 7px 14px; border-radius: 6px; background: {{c.accent}}; color: {{c.onAccent}}; font-weight: 600">Perform</a>
+</nav>
+<span style="flex: 1 1 auto; color: {{c.text2}}">Layer C · Rings · FX slot 2 · browser open</span>
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="padding: 5px 10px; border-radius: 6px; border: 1px solid {{c.border}}; color: {{c.text2}}">Theme: {{theme}}</span>
+<a href="Main.dc.html" style="padding: 6px 12px; border-radius: 6px; border: 1px solid {{c.border}}; font-weight: 600">Close browser</a>
+<a href="Help.dc.html" style="padding: 6px 12px; border-radius: 6px; border: 1px solid {{c.border}}; font-weight: 600">Help</a>
+</div>
+</header>
+<main style="display: flex; flex-wrap: wrap; gap: 12px; padding: 12px; flex: 1 1 auto; align-items: flex-start">
+<section style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+<div role="tablist" aria-label="Effect categories, same as the 8 buttons above the controller displays" style="display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px">
+<sc-for list="{{cats}}" as="k" hint-placeholder-count="8">
+<button type="button" role="tab" aria-selected="{{k.active}}" onClick="{{k.pick}}" style="min-height: 44px; border-radius: 8px; font-weight: 600; {{k.style}}">{{k.name}}</button>
+</sc-for>
+</div>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px">
+<sc-for list="{{fx}}" as="f" hint-placeholder-count="8">
+<button type="button" onClick="{{f.pick}}" aria-pressed="{{f.active}}" style="min-height: 76px; text-align: left; padding: 10px; border-radius: 10px; color: {{c.text}}; background: {{c.panel}}; display: flex; flex-direction: column; justify-content: space-between; gap: 6px; {{f.style}}">
+<span aria-hidden="true" style="height: 4px; width: 100%; border-radius: 2px; background: {{catColor}}; opacity: {{f.op}}"></span>
+<span style="font-weight: 600">{{f.n}} · {{f.name}}</span>
+<span style="font-size: 11px; color: {{c.text2}}">GPU {{f.cost}}</span>
+</button>
+</sc-for>
+</div>
+<span style="font-size: 12px; color: {{c.text2}}">One press previews on the Next view only. Press again, or push the master encoder, to put it live on the next beat.</span>
+<section aria-label="Effect chain" style="background: {{c.panel}}; border: 1px solid {{c.border}}; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px">
+<span style="font-weight: 600">Effect chain</span>
+<div style="display: grid; grid-template-columns: 90px repeat(4, minmax(0, 1fr)); gap: 6px; align-items: center">
+<span style="color: {{c.text2}}">Layer C</span>
+<sc-for list="{{chain}}" as="s" hint-placeholder-count="4">
+<span style="padding: 10px; border-radius: 8px; font-weight: 600; {{s.style}}">{{s.label}}</span>
+</sc-for>
+<span style="color: {{c.text2}}">Master</span>
+<sc-for list="{{master}}" as="s" hint-placeholder-count="4">
+<span style="padding: 10px; border-radius: 8px; font-weight: 600; {{s.style}}">{{s.label}}</span>
+</sc-for>
+</div>
+</section>
+<section aria-label="One-press keying combos" style="background: {{c.panel}}; border: 1px solid {{c.border}}; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px">
+<span style="font-weight: 600">Camera combos · one press, keying set up automatically</span>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px">
+<sc-for list="{{combos}}" as="m" hint-placeholder-count="6">
+<button type="button" style="min-height: 52px; text-align: left; padding: 8px 10px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.panel2}}; color: {{c.text}}; display: flex; flex-direction: column; gap: 2px">
+<span style="font-weight: 600">{{m.name}}</span>
+<span style="font-size: 11px; color: {{c.text2}}">{{m.info}}</span>
+</button>
+</sc-for>
+</div>
+</section>
+</section>
+<aside aria-label="Effect details" style="flex: 1 1 320px; max-width: 400px; display: flex; flex-direction: column; gap: 12px">
+<section style="background: {{c.panel}}; border: 1px solid {{c.border}}; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+<div style="aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden; background: #071A24">
+<svg viewBox="0 0 160 90" preserveAspectRatio="xMidYMid slice" style="width: 100%; height: 100%; display: block" role="img" aria-label="Next view preview of the selected effect">
+<rect width="160" height="90" fill="#071A24"></rect>
+<path d="M80 45L80 5L104 25ZM80 45L120 45L104 25ZM80 45L120 45L104 65ZM80 45L80 85L104 65ZM80 45L80 85L56 65ZM80 45L40 45L56 65ZM80 45L40 45L56 25ZM80 45L80 5L56 25Z" fill="#2BC7D9" style="opacity: 0.55"></path>
+<path d="M80 45L96 15L110 45L96 75L64 75L50 45L64 15Z" fill="none" stroke="#FF4FD8" style="stroke-width: 1.2px"></path>
+<text x="6" y="12" fill="#FFFFFF" style="font-size: 7px; font-family: Inter, sans-serif; font-weight: 700">NEXT</text>
+</svg>
+</div>
+<h2 style="margin: 0; font-size: 18px; font-weight: 700">{{selName}}</h2>
+<span style="color: {{c.text2}}">{{selDesc}}</span>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px">
+<sc-for list="{{knobs}}" as="k" hint-placeholder-count="8">
+<button type="button" onClick="{{k.toggle}}" aria-pressed="{{k.locked}}" aria-label="{{k.aria}}" style="padding: 6px 2px; border-radius: 8px; background: transparent; color: {{c.text}}; display: flex; flex-direction: column; align-items: center; gap: 2px; {{k.style}}">
+<svg width="52" height="52" viewBox="0 0 56 56" aria-hidden="true">
+<path d="{{k.track}}" fill="none" stroke="{{c.border}}" style="stroke-width: 4px; stroke-linecap: round"></path>
+<path d="{{k.val}}" fill="none" stroke="{{k.col}}" style="stroke-width: 4px; stroke-linecap: round"></path>
+</svg>
+<span style="font-size: 11px; font-weight: 600">{{k.name}}</span>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: {{c.text2}}">{{k.label}}</span>
+</button>
+</sc-for>
+</div>
+<span style="font-size: 11px; color: {{c.text2}}">Click a knob to lock it. Locked values are kept by Smart Random. Knobs 5–8 are the same on every effect.</span>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px">
+<button type="button" onClick="{{prev}}" style="min-height: 44px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.panel2}}; color: {{c.text}}; font-weight: 600">◀ Preset</button>
+<button type="button" onClick="{{next}}" style="min-height: 44px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.panel2}}; color: {{c.text}}; font-weight: 600">Preset ▶</button>
+<button type="button" onClick="{{random}}" style="min-height: 44px; border-radius: 8px; border: none; background: {{c.accent}}; color: {{c.onAccent}}; font-weight: 700">Smart Random</button>
+</div>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: {{c.text2}}">{{presetLabel}}</span>
+<span style="font-size: 11px; color: {{c.text2}}">Controller: Duplicate + ◀ ▶ = presets · Shift + Duplicate = Smart Random · Shift + touch knob = lock</span>
+</section>
+</aside>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["Dark","Light","Night"],"default":"Dark"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { cat: 1, fx: 0, vals: [0.5, 0.35, 0.6, 0.5, 0.8, 0.45, 0.25, 0.3], locks: [false, false, false, false, true, false, false, false], preset: 0, seed: 1 };
+  }
+  pal(t) {
+    const P = {
+      Dark: { bg: '#0E0F12', panel: '#16181D', panel2: '#1E2128', border: '#2C313A', text: '#ECEDEF', text2: '#A3AAB5', accent: '#6E9BFF', onAccent: '#0A1430', soft: 'rgba(110,155,255,0.16)', good: '#3DD68C', warn: '#F2B33D', bad: '#FF6B6B' },
+      Light: { bg: '#F3F4F6', panel: '#FFFFFF', panel2: '#ECEEF2', border: '#D5DAE1', text: '#15171B', text2: '#535A65', accent: '#2F5FD8', onAccent: '#FFFFFF', soft: 'rgba(47,95,216,0.10)', good: '#1E8449', warn: '#A15C00', bad: '#C0392B' },
+      Night: { bg: '#050506', panel: '#0C0D10', panel2: '#121318', border: '#1F2229', text: '#C4C7CD', text2: '#8A9099', accent: '#D9704F', onAccent: '#1A0A04', soft: 'rgba(217,112,79,0.16)', good: '#3BAF6E', warn: '#CC9533', bad: '#E0574F' }
+    };
+    return P[t] || P.Dark;
+  }
+  arc(v) {
+    const r = 22, cx = 28, cy = 28;
+    const pt = (deg) => { const a = deg * Math.PI / 180; return [cx + r * Math.sin(a), cy - r * Math.cos(a)]; };
+    const p0 = pt(-135), p1 = pt(-135 + 270 * Math.max(0.001, v));
+    return 'M' + p0[0].toFixed(1) + ' ' + p0[1].toFixed(1) + ' A' + r + ' ' + r + ' 0 ' + (270 * v > 180 ? 1 : 0) + ' 1 ' + p1[0].toFixed(1) + ' ' + p1[1].toFixed(1);
+  }
+  rand(seed, i) { const x = Math.sin(seed * 97.13 + i * 13.7) * 43758.5453; return x - Math.floor(x); }
+  renderVals() {
+    const theme = this.props.theme ?? 'Dark';
+    const c = this.pal(theme);
+    const st = this.state;
+    const catDefs = [
+      ['Time', '#4F8BFF', [['Feedback', 'Low'], ['Echo', 'Medium'], ['Stutter', 'Low'], ['Slit-scan', 'Medium'], ['Time Displace', 'Medium'], ['Freeze on Beat', 'Low'], ['Beat Slicer', 'Low'], ['Reverse on Snare', 'Low']]],
+      ['Space', '#2EC4B6', [['Kaleidoscope', 'Low'], ['Tunnel', 'Low'], ['Mirror', 'Low'], ['Zoom Pulse', 'Low'], ['Displace', 'Low'], ['Tiles', 'Low'], ['Lens', 'Low'], ['Bend Kaleido', 'Low'], ['Melt', 'Low'], ['Sphere', 'Low'], ['Radar', 'Low'], ['Infinite Zoom', 'Low']]],
+      ['Color', '#E6C84A', [['Palette Map', 'Low'], ['Hue and Saturation', 'Low'], ['Duotone', 'Low'], ['Posterize', 'Low'], ['Invert', 'Low'], ['Film Look', 'Low'], ['RGB Split', 'Low']]],
+      ['Glitch', '#FF5FA2', [['Block Glitch', 'Low'], ['Pixel Sort', 'High'], ['Datamosh', 'Medium'], ['VHS', 'Low'], ['CRT', 'Low'], ['Digital Noise', 'Low'], ['Strips', 'Low'], ['Shake', 'Low']]],
+      ['Light', '#FF9A3D', [['Glow', 'Medium'], ['Strobe', 'Low'], ['Flash', 'Low'], ['Light Rays', 'Medium'], ['Spot', 'Low'], ['Sparkle', 'Medium']]],
+      ['Shape', '#A06BFF', [['Edge Lines', 'Low'], ['Silhouette', 'Low'], ['Pixels', 'Low'], ['Halftone', 'Low'], ['ASCII', 'Low'], ['Mask', 'Low']]],
+      ['Camera', '#5BBF6A', [['Motion Trigger', 'Low'], ['Cut-out', 'Medium'], ['Camera Echo', 'Low'], ['Camera Mosaic', 'Low'], ['Face Blur', 'Medium'], ['Luma Key', 'Low'], ['Chroma Key', 'Low'], ['Difference Key', 'Low']]],
+      ['Favorites', '#FF5C5C', [['Feedback', 'Low'], ['Kaleidoscope', 'Low'], ['RGB Split', 'Low'], ['Glow', 'Medium'], ['Tunnel', 'Low']]]
+    ];
+    const cats = catDefs.map(([name], i) => ({ name, active: st.cat === i ? 'true' : 'false',
+      style: st.cat === i ? 'border: none; background: ' + c.accent + '; color: ' + c.onAccent : 'border: 1px solid ' + c.border + '; background: ' + c.panel + '; color: ' + c.text2,
+      pick: () => this.setState({ cat: i, fx: 0 }) }));
+    const cur = catDefs[st.cat];
+    const fx = cur[2].map(([name, cost], i) => ({ name, cost, n: String(i + 1), op: cost === 'High' ? '0.35' : (cost === 'Medium' ? '0.65' : '1'), active: st.fx === i ? 'true' : 'false',
+      style: st.fx === i ? 'border: 2px solid ' + c.accent + '; box-shadow: 0 0 0 3px ' + c.soft : 'border: 1px solid ' + c.border,
+      pick: () => this.setState({ fx: i }) }));
+    const selName = cur[2][Math.min(st.fx, cur[2].length - 1)][0];
+    const descs = {
+      Kaleidoscope: 'Mirrors the image into segments around a center. Rotation follows the mid band by default.',
+      Feedback: 'The image leaves trails that zoom and rotate. Kick pushes the zoom.',
+      Tunnel: 'Pulls the image into a tunnel that speeds up on the kick.',
+      'Pixel Sort': 'Sorts pixels by brightness into streaks. Heavy on the GPU: one at a time.',
+      'Cut-out': 'Separates people from the background with a small local model. No green screen needed.'
+    };
+    const params = {
+      Kaleidoscope: ['Segments', 'Rotation', 'Center X', 'Center Y'], Feedback: ['Amount', 'Zoom', 'Rotation', 'Offset'], Tunnel: ['Depth', 'Speed', 'Twist', 'Shape'],
+      'Pixel Sort': ['Threshold', 'Direction', 'Length', 'Speed'], 'Cut-out': ['Threshold', 'Softness', 'Background', 'Color']
+    };
+    const p4 = params[selName] || ['Amount', 'Size', 'Speed', 'Shape'];
+    const names = p4.concat(['Mix', 'Audio', 'Sync', 'Variation']);
+    const syncLabels = ['Free', '1/16', '1/8', '1/4', '1 bar', '2 bars', '4 bars'];
+    const knobs = names.map((name, i) => {
+      const v = st.vals[i];
+      const locked = st.locks[i];
+      let label = Math.round(v * 100) + '%';
+      if (i === 0 && name === 'Segments') label = String(2 + Math.round(v * 14));
+      if (i === 6) label = syncLabels[Math.min(6, Math.floor(v * 7))];
+      return { name, label: (locked ? 'LOCK ' : '') + label, locked: locked ? 'true' : 'false', aria: name + (locked ? ', locked' : ''),
+        track: this.arc(1), val: this.arc(v), col: i < 4 ? c.accent : c.text2,
+        style: locked ? 'border: 1px solid ' + c.warn : 'border: 1px solid transparent',
+        toggle: () => { const l = st.locks.slice(); l[i] = !l[i]; this.setState({ locks: l }); } };
+    });
+    const randomize = () => {
+      const seed = st.seed + 1;
+      const vals = st.vals.map((v, i) => st.locks[i] ? v : Math.round((0.15 + this.rand(seed, i) * 0.75) * 100) / 100);
+      this.setState({ seed, vals, preset: -1 });
+    };
+    const presetNames = ['Factory · Soft 6', 'Factory · Hard 8 on kick', 'Theme · Synthwave Neon', 'User · Saturday drop'];
+    const loadPreset = (d) => {
+      const n = st.preset < 0 ? 0 : (st.preset + d + presetNames.length) % presetNames.length;
+      const vals = st.vals.map((v, i) => st.locks[i] ? v : Math.round((0.2 + this.rand(n + 50, i) * 0.6) * 100) / 100);
+      this.setState({ preset: n, vals });
+    };
+    const slot = (label, kind) => ({ label, style: kind === 'live' ? 'background: ' + c.panel2 + '; border: 1px solid ' + c.border
+      : (kind === 'preview' ? 'background: ' + c.soft + '; border: 2px dashed ' + c.accent : 'background: transparent; border: 1px dashed ' + c.border + '; color: ' + c.text2 + '; font-weight: 400') });
+    return {
+      c, theme, cats, fx, knobs, selName, catColor: cur[1],
+      selDesc: descs[selName] || 'Every effect has the same knob layout: 1–4 are its main parameters, 5–8 are Mix, Audio, Sync and Variation.',
+      chain: [slot('1 · Feedback', 'live'), slot('2 · ' + selName + ' (preview)', 'preview'), slot('3 · RGB Split', 'live'), slot('4 · empty', 'empty')],
+      master: [slot('1 · Palette Map', 'live'), slot('2 · Glow', 'live'), slot('3 · empty', 'empty'), slot('4 · empty', 'empty')],
+      combos: [
+        { name: 'Neon Person', info: 'Cut-out + edge lines + glow' }, { name: 'Clip in Silhouette', info: 'Person shape shows a clip' }, { name: 'Audience in Clip', info: 'Cut-out over the playing clip' },
+        { name: 'Text Window', info: 'Clip through pulsing letters' }, { name: 'Ghosts', info: 'Cut-out + camera echo' }, { name: 'Three-Camera Collage', info: 'All cameras cut out side by side' }
+      ],
+      presetLabel: st.preset < 0 ? 'Smart Random #' + st.seed + ' · fits Synthwave Neon, energy 3, GPU low' : 'Preset ' + (st.preset + 1) + '/4 · ' + presetNames[st.preset],
+      prev: () => loadPreset(-1), next: () => loadPreset(1), random: randomize
+    };
+  }
+}
+</script>
+</body>
+</html>

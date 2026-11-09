@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Himmel – Setup: Outputs</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}a:hover{opacity:.85}
+button{font:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="min-height: 900px; width: 100%; box-sizing: border-box; background: {{c.bg}}; color: {{c.text}}; font-family: Inter, system-ui, sans-serif; font-size: 13px; display: flex; flex-direction: column">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 10px 16px; background: {{c.panel}}; border-bottom: 1px solid {{c.border}}">
+<div style="display: flex; align-items: baseline; gap: 10px">
+<span style="font-size: 16px; font-weight: 700; letter-spacing: 0.08em">HIMMEL</span>
+<span style="font-size: 12px; color: {{c.text2}}">Saturday Club Night</span>
+</div>
+<nav aria-label="Modes" style="display: flex; gap: 4px; background: {{c.panel2}}; padding: 3px; border-radius: 8px">
+<a href="SetupOutputs.dc.html" aria-current="page" style="padding: 7px 14px; border-radius: 6px; background: {{c.accent}}; color: {{c.onAccent}}; font-weight: 600">Setup</a>
+<a href="PrepareLibrary.dc.html" style="padding: 7px 14px; border-radius: 6px; color: {{c.text2}}">Prepare</a>
+<a href="Main.dc.html" style="padding: 7px 14px; border-radius: 6px; color: {{c.text2}}">Perform</a>
+</nav>
+<div role="list" aria-label="System status" style="display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 420px">
+<sc-for list="{{status}}" as="s" hint-placeholder-count="6">
+<div role="listitem" style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; border: 1px solid {{c.border}}; background: {{c.panel2}}">
+<span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 50%; background: {{s.col}}"></span>
+<span style="color: {{c.text2}}">{{s.label}}</span>
+<span style="font-family: 'JetBrains Mono', monospace; font-weight: 600">{{s.value}}</span>
+</div>
+</sc-for>
+</div>
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="padding: 5px 10px; border-radius: 6px; border: 1px solid {{c.border}}; color: {{c.text2}}">Theme: {{theme}}</span>
+<a href="Help.dc.html" style="padding: 6px 12px; border-radius: 6px; border: 1px solid {{c.border}}; font-weight: 600">Help</a>
+</div>
+</header>
+<main style="display: flex; flex-wrap: wrap; gap: 16px; padding: 16px; flex: 1 1 auto; align-items: flex-start">
+<nav aria-label="Setup steps" style="flex: 1 1 220px; max-width: 260px; background: {{c.panel}}; border: 1px solid {{c.border}}; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 4px">
+<span style="font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: {{c.text2}}; padding: 4px 8px">Setup wizard</span>
+<sc-for list="{{steps}}" as="s" hint-placeholder-count="7">
+<a href="{{s.href}}" style="display: flex; align-items: center; gap: 10px; padding: 10px 8px; border-radius: 8px; min-height: 24px; {{s.style}}">
+<span style="width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; {{s.badge}}">{{s.n}}</span>
+<span style="font-weight: 500">{{s.name}}</span>
+</a>
+</sc-for>
+<span style="margin-top: 12px; font-size: 12px; color: {{c.text2}}; padding: 0 8px">Press Next through every step to get a working show with one screen, the microphone and the built-in generators.</span>
+</nav>
+<section style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<span style="font-size: 12px; color: {{c.text2}}">Step 1 of 7</span>
+<h1 style="margin: 0; font-size: 26px; font-weight: 700">Outputs</h1>
+<p style="margin: 0; color: {{c.text2}}; max-width: 720px">Himmel found 4 displays. Choose how many are show outputs and whether they form one big canvas or show separate pictures. Every output shows a large number while you set it up.</p>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center">
+<div role="radiogroup" aria-label="Output mode" style="display: flex; flex-wrap: wrap; gap: 4px; background: {{c.panel2}}; padding: 3px; border-radius: 8px">
+<sc-for list="{{modes}}" as="m" hint-placeholder-count="5">
+<button type="button" role="radio" aria-checked="{{m.active}}" onClick="{{m.pick}}" style="min-height: 44px; padding: 0 14px; border: none; border-radius: 6px; font-weight: 600; {{m.style}}">{{m.name}}</button>
+</sc-for>
+</div>
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="color: {{c.text2}}">Outputs</span>
+<button type="button" aria-label="Fewer outputs" onClick="{{dec}}" style="width: 44px; height: 44px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.panel}}; color: {{c.text}}; font-size: 18px">−</button>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 600; min-width: 24px; text-align: center">{{count}}</span>
+<button type="button" aria-label="More outputs" onClick="{{inc}}" style="width: 44px; height: 44px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.panel}}; color: {{c.text}}; font-size: 18px">+</button>
+</div>
+</div>
+<section aria-label="Output layout" style="background: {{c.panel}}; border: 1px solid {{c.border}}; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px">
+<span style="font-weight: 600">Layout · drag outputs into place</span>
+<span style="font-family: 'JetBrains Mono', monospace; color: {{c.text2}}">{{canvasInfo}}</span>
+</div>
+<div style="display: flex; gap: 0; padding: 24px; border-radius: 8px; background: {{c.panel2}}; overflow-x: auto">
+<sc-for list="{{outs}}" as="o" hint-placeholder-count="3">
+<div style="flex: 0 0 180px; height: 104px; border-radius: 6px; border: 2px solid {{c.accent}}; background: {{o.bg}}; color: #FFFFFF; display: flex; flex-direction: column; justify-content: space-between; padding: 8px; box-sizing: border-box; {{o.margin}}">
+<span style="font-size: 30px; font-weight: 700; line-height: 1">{{o.n}}</span>
+<span style="font-size: 11px">{{o.type}}</span>
+</div>
+</sc-for>
+<div style="flex: 0 0 140px; height: 84px; margin-left: 40px; align-self: flex-end; border-radius: 6px; border: 1px dashed {{c.border}}; color: {{c.text2}}; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 12px; padding: 6px; box-sizing: border-box">Operator screen (this GUI)</div>
+</div>
+<span style="font-size: 12px; color: {{c.text2}}">{{overlapNote}}</span>
+</section>
+<sc-if value="{{tooMany}}" hint-placeholder-val="{{ false }}">
+<div role="alert" style="border: 2px solid {{c.warn}}; border-radius: 10px; padding: 12px 16px; background: {{c.panel}}; display: flex; flex-direction: column; gap: 4px">
+<span style="font-weight: 700; color: {{c.warn}}">More than 4 outputs</span>
+<span>An RTX 50-series card drives up to 4 displays. Outputs 5–6 need a display splitter on one port (recommended) or a second graphics card.</span>
+</div>
+</sc-if>
+<div style="overflow-x: auto; background: {{c.panel}}; border: 1px solid {{c.border}}; border-radius: 10px">
+<table style="width: 100%; border-collapse: collapse; min-width: 720px">
+<thead>
+<tr style="text-align: left; color: {{c.text2}}; font-size: 12px">
+<th style="padding: 10px 12px; font-weight: 600">Output</th>
+<th style="padding: 10px 12px; font-weight: 600">Display</th>
+<th style="padding: 10px 12px; font-weight: 600">Resolution</th>
+<th style="padding: 10px 12px; font-weight: 600">Refresh</th>
+<th style="padding: 10px 12px; font-weight: 600">Type</th>
+<th style="padding: 10px 12px; font-weight: 600">Role</th>
+<th style="padding: 10px 12px; font-weight: 600"><span style="position: absolute; left: -9999px">Test</span></th>
+</tr>
+</thead>
+<tbody>
+<sc-for list="{{outs}}" as="o" hint-placeholder-count="3">
+<tr style="border-top: 1px solid {{c.border}}">
+<td style="padding: 10px 12px; font-weight: 700">{{o.n}}</td>
+<td style="padding: 10px 12px">{{o.display}}</td>
+<td style="padding: 10px 12px; font-family: 'JetBrains Mono', monospace">1920 × 1080</td>
+<td style="padding: 10px 12px; font-family: 'JetBrains Mono', monospace">60 Hz</td>
+<td style="padding: 10px 12px">{{o.type}}</td>
+<td style="padding: 10px 12px">{{roleLabel}}</td>
+<td style="padding: 10px 12px; text-align: right"><button type="button" style="min-height: 36px; padding: 0 12px; border-radius: 6px; border: 1px solid {{c.border}}; background: {{c.panel2}}; color: {{c.text}}">Show number</button></td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px">
+<button type="button" style="min-height: 44px; padding: 0 18px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.panel}}; color: {{c.text}}; font-weight: 600">Back</button>
+<div style="display: flex; gap: 8px">
+<button type="button" style="min-height: 44px; padding: 0 18px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.panel}}; color: {{c.text}}; font-weight: 600">Test all outputs</button>
+<a href="SetupMapping.dc.html" style="min-height: 44px; display: flex; align-items: center; padding: 0 18px; border-radius: 8px; background: {{c.accent}}; color: {{c.onAccent}}; font-weight: 700">Next: Projection mapping</a>
+</div>
+</div>
+</section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["Dark","Light","Night"],"default":"Light"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { mode: 0, count: 3 }; }
+  pal(t) {
+    const P = {
+      Dark: { bg: '#0E0F12', panel: '#16181D', panel2: '#1E2128', border: '#2C313A', text: '#ECEDEF', text2: '#A3AAB5', accent: '#6E9BFF', onAccent: '#0A1430', soft: 'rgba(110,155,255,0.16)', good: '#3DD68C', warn: '#F2B33D', bad: '#FF6B6B' },
+      Light: { bg: '#F3F4F6', panel: '#FFFFFF', panel2: '#ECEEF2', border: '#D5DAE1', text: '#15171B', text2: '#535A65', accent: '#2F5FD8', onAccent: '#FFFFFF', soft: 'rgba(47,95,216,0.10)', good: '#1E8449', warn: '#A15C00', bad: '#C0392B' },
+      Night: { bg: '#050506', panel: '#0C0D10', panel2: '#121318', border: '#1F2229', text: '#C4C7CD', text2: '#8A9099', accent: '#D9704F', onAccent: '#1A0A04', soft: 'rgba(217,112,79,0.16)', good: '#3BAF6E', warn: '#CC9533', bad: '#E0574F' }
+    };
+    return P[t] || P.Dark;
+  }
+  renderVals() {
+    const theme = this.props.theme ?? 'Light';
+    const c = this.pal(theme);
+    const st = this.state;
+    const status = [
+      { label: 'Sync', value: 'Not set', col: c.warn },
+      { label: 'Audio', value: 'Mic', col: c.good },
+      { label: 'Cameras', value: '3/3', col: c.good },
+      { label: 'Outputs', value: st.count + ' found', col: c.good },
+      { label: 'GPU', value: '6%', col: c.good },
+      { label: 'Disk', value: 'OK', col: c.good }
+    ];
+    const names = ['Outputs', 'Projection mapping', 'Cameras and capture', 'Audio and sync', 'Media', 'Controller', 'Save and start'];
+    const hrefs = ['SetupOutputs.dc.html', 'SetupMapping.dc.html', 'SetupOutputs.dc.html', 'SetupOutputs.dc.html', 'PrepareLibrary.dc.html', 'SetupOutputs.dc.html', 'Main.dc.html'];
+    const steps = names.map((name, i) => ({
+      n: String(i + 1), name, href: hrefs[i],
+      style: i === 0 ? 'background: ' + c.soft + '; color: ' + c.text : 'color: ' + c.text2,
+      badge: i === 0 ? 'background: ' + c.accent + '; color: ' + c.onAccent : 'border: 1px solid ' + c.border + '; color: ' + c.text2
+    }));
+    const modeNames = ['Span', 'Separate', 'Mirror', 'Chase', 'Mixed'];
+    const modes = modeNames.map((name, i) => ({
+      name, active: st.mode === i ? 'true' : 'false',
+      style: st.mode === i ? 'background: ' + c.accent + '; color: ' + c.onAccent : 'background: transparent; color: ' + c.text2,
+      pick: () => this.setState({ mode: i })
+    }));
+    const span = st.mode === 0;
+    const types = ['Projector', 'Projector', 'Projector', 'LED wall', 'TV', 'TV'];
+    const displays = ['DP 1 · Epson', 'DP 2 · Epson', 'DP 3 · Epson', 'HDMI · LED processor', 'Splitter A', 'Splitter B'];
+    const bgs = ['#2A1250', '#3A1450', '#14284A', '#103B33', '#3B2A10', '#3B1020'];
+    const outs = [];
+    for (let i = 0; i < st.count; i++) {
+      outs.push({ n: String(i + 1), type: types[i], display: displays[i], bg: bgs[i],
+        margin: span && i > 0 ? 'margin-left: -24px; box-shadow: -6px 0 0 0 rgba(255,255,255,0.35)' : (i > 0 ? 'margin-left: 16px' : '') });
+    }
+    const w = span ? st.count * 1920 - (st.count - 1) * 192 : 1920;
+    return {
+      c, theme, status, steps, modes, outs, count: String(st.count),
+      roleLabel: span ? 'Canvas' : modeNames[st.mode],
+      canvasInfo: span ? 'Canvas ' + w + ' × 1080 · overlap 192 px' : st.count + ' × 1920 × 1080',
+      overlapNote: span ? 'Overlapping edges are blended in step 2. Same resolution and refresh rate on every output keeps them in sync.' : 'Each output gets its own scene and layers.',
+      tooMany: st.count > 4,
+      inc: () => this.setState({ count: Math.min(6, st.count + 1) }),
+      dec: () => this.setState({ count: Math.max(1, st.count - 1) })
+    };
+  }
+}
+</script>
+</body>
+</html>

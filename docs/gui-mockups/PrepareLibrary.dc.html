@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Himmel – Prepare: Library</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}a:hover{opacity:.85}
+button{font:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="min-height: 900px; width: 100%; box-sizing: border-box; background: {{c.bg}}; color: {{c.text}}; font-family: Inter, system-ui, sans-serif; font-size: 13px; display: flex; flex-direction: column">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 10px 16px; background: {{c.panel}}; border-bottom: 1px solid {{c.border}}">
+<div style="display: flex; align-items: baseline; gap: 10px">
+<span style="font-size: 16px; font-weight: 700; letter-spacing: 0.08em">HIMMEL</span>
+<span style="font-size: 12px; color: {{c.text2}}">Saturday Club Night</span>
+</div>
+<nav aria-label="Modes" style="display: flex; gap: 4px; background: {{c.panel2}}; padding: 3px; border-radius: 8px">
+<a href="SetupOutputs.dc.html" style="padding: 7px 14px; border-radius: 6px; color: {{c.text2}}">Setup</a>
+<a href="PrepareLibrary.dc.html" aria-current="page" style="padding: 7px 14px; border-radius: 6px; background: {{c.accent}}; color: {{c.onAccent}}; font-weight: 600">Prepare</a>
+<a href="Main.dc.html" style="padding: 7px 14px; border-radius: 6px; color: {{c.text2}}">Perform</a>
+</nav>
+<nav aria-label="Prepare sections" style="display: flex; gap: 4px; flex: 1 1 auto">
+<a href="PrepareLibrary.dc.html" aria-current="page" style="padding: 7px 12px; border-radius: 6px; border: 1px solid {{c.accent}}; font-weight: 600">Library</a>
+<a href="PrepareSetlist.dc.html" style="padding: 7px 12px; border-radius: 6px; border: 1px solid {{c.border}}; color: {{c.text2}}">Setlist and cues</a>
+<a href="EffectBrowser.dc.html" style="padding: 7px 12px; border-radius: 6px; border: 1px solid {{c.border}}; color: {{c.text2}}">Themes and effects</a>
+</nav>
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="padding: 5px 10px; border-radius: 6px; border: 1px solid {{c.border}}; color: {{c.text2}}">Theme: {{theme}}</span>
+<a href="Help.dc.html" style="padding: 6px 12px; border-radius: 6px; border: 1px solid {{c.border}}; font-weight: 600">Help</a>
+</div>
+</header>
+<main style="display: flex; flex-wrap: wrap; gap: 12px; padding: 12px; flex: 1 1 auto; align-items: flex-start">
+<aside aria-label="Filters" style="flex: 1 1 240px; max-width: 280px; background: {{c.panel}}; border: 1px solid {{c.border}}; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 14px">
+<label style="display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 12px; font-weight: 600; color: {{c.text2}}">Search</span>
+<input type="search" placeholder="neon, water, dance" style="min-height: 40px; padding: 0 10px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.panel2}}; color: {{c.text}}; font: inherit">
+</label>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 12px; font-weight: 600; color: {{c.text2}}">Color · sorts by closest palette</span>
+<div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px">
+<sc-for list="{{swatches}}" as="s" hint-placeholder-count="12">
+<button type="button" aria-label="{{s.name}}" aria-pressed="{{s.active}}" onClick="{{s.pick}}" style="height: 30px; border-radius: 6px; background: {{s.hex}}; {{s.style}}"></button>
+</sc-for>
+</div>
+<button type="button" onClick="{{clearColor}}" style="min-height: 36px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.panel2}}; color: {{c.text}}">Use theme palette: Synthwave Neon</button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 12px; font-weight: 600; color: {{c.text2}}">Energy at least</span>
+<div role="radiogroup" aria-label="Minimum energy" style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px">
+<sc-for list="{{energy}}" as="e" hint-placeholder-count="5">
+<button type="button" role="radio" aria-checked="{{e.active}}" onClick="{{e.pick}}" style="min-height: 40px; border-radius: 6px; font-weight: 600; {{e.style}}">{{e.n}}</button>
+</sc-for>
+</div>
+<span style="font-size: 12px; color: {{c.text2}}">1 = calm lounge · 5 = full techno</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 12px; font-weight: 600; color: {{c.text2}}">Type</span>
+<div style="display: flex; flex-wrap: wrap; gap: 6px">
+<sc-for list="{{tags}}" as="t" hint-placeholder-count="10">
+<button type="button" aria-pressed="{{t.active}}" onClick="{{t.pick}}" style="min-height: 32px; padding: 0 10px; border-radius: 999px; {{t.style}}">{{t.name}}</button>
+</sc-for>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 12px; font-weight: 600; color: {{c.text2}}">Smart bins</span>
+<span style="padding: 8px; border-radius: 8px; background: {{c.panel2}}">Warm calm nature</span>
+<span style="padding: 8px; border-radius: 8px; background: {{c.panel2}}">Cold fast machines</span>
+<span style="padding: 8px; border-radius: 8px; background: {{c.panel2}}">Black background · luma ready</span>
+</div>
+</aside>
+<section style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: baseline">
+<h1 style="margin: 0; font-size: 22px; font-weight: 700">Library</h1>
+<span style="color: {{c.text2}}">{{countLabel}}</span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px">
+<sc-for list="{{visible}}" as="k" hint-placeholder-count="12">
+<button type="button" onClick="{{k.pick}}" aria-pressed="{{k.active}}" style="text-align: left; padding: 0; border-radius: 10px; overflow: hidden; background: {{c.panel}}; color: {{c.text}}; display: flex; flex-direction: column; {{k.style}}">
+<span aria-hidden="true" style="display: flex; height: 96px; width: 100%">
+<span style="flex: 4 1 0; background: {{k.p0}}"></span>
+<span style="flex: 2 1 0; background: {{k.p1}}"></span>
+<span style="flex: 1 1 0; background: {{k.p2}}"></span>
+<span style="flex: 1 1 0; background: {{k.p3}}"></span>
+<span style="flex: 1 1 0; background: {{k.p4}}"></span>
+</span>
+<span style="padding: 8px 10px; display: flex; flex-direction: column; gap: 4px">
+<span style="font-weight: 600">{{k.name}}</span>
+<span style="font-size: 12px; color: {{c.text2}}">{{k.meta}}</span>
+<span style="font-size: 12px; color: {{c.text2}}">{{k.tagText}}</span>
+</span>
+</button>
+</sc-for>
+</div>
+<section aria-label="Import queue" style="background: {{c.panel}}; border: 1px solid {{c.border}}; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px">
+<span style="font-weight: 600">Import queue · converting to HAP and analysing</span>
+<sc-for list="{{queue}}" as="q" hint-placeholder-count="3">
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 200px 96px; gap: 10px; align-items: center">
+<span>{{q.name}}</span>
+<span style="height: 6px; border-radius: 3px; background: {{c.panel2}}; display: block; overflow: hidden"><span style="display: block; height: 100%; width: {{q.w}}; background: {{c.accent}}"></span></span>
+<span style="font-size: 12px; color: {{c.text2}}">{{q.state}}</span>
+</div>
+</sc-for>
+</section>
+</section>
+<aside aria-label="Clip details" style="flex: 1 1 300px; max-width: 360px; background: {{c.panel}}; border: 1px solid {{c.border}}; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+<span aria-hidden="true" style="display: flex; height: 160px; border-radius: 8px; overflow: hidden">
+<span style="flex: 4 1 0; background: {{sel.p0}}"></span>
+<span style="flex: 2 1 0; background: {{sel.p1}}"></span>
+<span style="flex: 1 1 0; background: {{sel.p2}}"></span>
+<span style="flex: 1 1 0; background: {{sel.p3}}"></span>
+<span style="flex: 1 1 0; background: {{sel.p4}}"></span>
+</span>
+<h2 style="margin: 0; font-size: 18px; font-weight: 700">{{sel.name}}</h2>
+<span style="color: {{c.text2}}">{{sel.meta}}</span>
+<div style="display: flex; gap: 6px" aria-label="Palette">
+<span style="width: 28px; height: 28px; border-radius: 6px; background: {{sel.p0}}; border: 1px solid {{c.border}}"></span>
+<span style="width: 28px; height: 28px; border-radius: 6px; background: {{sel.p1}}; border: 1px solid {{c.border}}"></span>
+<span style="width: 28px; height: 28px; border-radius: 6px; background: {{sel.p2}}; border: 1px solid {{c.border}}"></span>
+<span style="width: 28px; height: 28px; border-radius: 6px; background: {{sel.p3}}; border: 1px solid {{c.border}}"></span>
+<span style="width: 28px; height: 28px; border-radius: 6px; background: {{sel.p4}}; border: 1px solid {{c.border}}"></span>
+</div>
+<sc-for list="{{sel.facts}}" as="f" hint-placeholder-count="7">
+<div style="display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid {{c.border}}">
+<span style="color: {{c.text2}}">{{f.k}}</span>
+<span style="font-weight: 600; text-align: right">{{f.v}}</span>
+</div>
+</sc-for>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<button type="button" style="min-height: 44px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.panel2}}; color: {{c.text}}; font-weight: 600">Find similar</button>
+<button type="button" style="min-height: 44px; border-radius: 8px; border: none; background: {{c.accent}}; color: {{c.onAccent}}; font-weight: 700">Add to bank</button>
+</div>
+<span style="font-size: 12px; color: {{c.text2}}">3 suggested effect chains are ready. Next Preset cycles through them.</span>
+</aside>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["Dark","Light","Night"],"default":"Dark"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { color: -1, minE: 1, tags: [], sel: 2 }; }
+  pal(t) {
+    const P = {
+      Dark: { bg: '#0E0F12', panel: '#16181D', panel2: '#1E2128', border: '#2C313A', text: '#ECEDEF', text2: '#A3AAB5', accent: '#6E9BFF', onAccent: '#0A1430', soft: 'rgba(110,155,255,0.16)', good: '#3DD68C', warn: '#F2B33D', bad: '#FF6B6B' },
+      Light: { bg: '#F3F4F6', panel: '#FFFFFF', panel2: '#ECEEF2', border: '#D5DAE1', text: '#15171B', text2: '#535A65', accent: '#2F5FD8', onAccent: '#FFFFFF', soft: 'rgba(47,95,216,0.10)', good: '#1E8449', warn: '#A15C00', bad: '#C0392B' },
+      Night: { bg: '#050506', panel: '#0C0D10', panel2: '#121318', border: '#1F2229', text: '#C4C7CD', text2: '#8A9099', accent: '#D9704F', onAccent: '#1A0A04', soft: 'rgba(217,112,79,0.16)', good: '#3BAF6E', warn: '#CC9533', bad: '#E0574F' }
+    };
+    return P[t] || P.Dark;
+  }
+  renderVals() {
+    const theme = this.props.theme ?? 'Dark';
+    const c = this.pal(theme);
+    const st = this.state;
+    const sw = [['Red', '#E53935', 0], ['Orange', '#FB8C00', 30], ['Amber', '#FDD835', 55], ['Green', '#43A047', 120], ['Teal', '#00ACC1', 185], ['Blue', '#1E5BD8', 220], ['Violet', '#7E57C2', 265], ['Magenta', '#D81B9A', 315], ['Pink', '#F48FB1', 340], ['White', '#F5F5F5', -1], ['Grey', '#8A8F98', -1], ['Black', '#0B0B0B', -1]];
+    const swatches = sw.map(([name, hex], i) => ({ name, hex, active: st.color === i ? 'true' : 'false',
+      style: st.color === i ? 'border: 3px solid ' + c.text : 'border: 1px solid ' + c.border, pick: () => this.setState({ color: i }) }));
+    const clips = [
+      { name: 'Neon Grid Run', pal: ['#120A2A', '#FF4FD8', '#3DE3FF', '#FF6A3D', '#1B0F3D'], e: 4, hue: 315, bars: 4, len: '0:07', tags: ['Retro', 'Geometry'], motion: 'High, forward', cuts: '0 per min', warm: 'Cool' },
+      { name: 'Ocean Haze', pal: ['#0B2A3C', '#1B6A88', '#7EC8D8', '#E3F4F6', '#05141D'], e: 1, hue: 195, bars: 8, len: '0:15', tags: ['Water', 'Nature'], motion: 'Low, drifting', cuts: '0 per min', warm: 'Cool' },
+      { name: 'Sunset Dancers', pal: ['#3A1440', '#FF7A3D', '#FFB86B', '#C2185B', '#1A0A1F'], e: 3, hue: 20, bars: 4, len: '0:08', tags: ['People', 'Dance'], motion: 'Medium', cuts: '12 per min', warm: 'Warm' },
+      { name: 'Steel Press', pal: ['#111214', '#E8E8E8', '#C62828', '#5A5F66', '#2A2D33'], e: 5, hue: 0, bars: 2, len: '0:04', tags: ['Machines', 'City'], motion: 'High, hits', cuts: '30 per min', warm: 'Cool' },
+      { name: 'Ember Particles', pal: ['#0A0604', '#FF6A00', '#FFC266', '#7A1E00', '#1C0F08'], e: 2, hue: 25, bars: 8, len: '0:16', tags: ['Particles', 'Fire'], motion: 'Low, rising', cuts: '0 per min', warm: 'Warm' },
+      { name: 'Forest Macro', pal: ['#0F2410', '#4CAF50', '#C5E1A5', '#795548', '#08140A'], e: 1, hue: 110, bars: 8, len: '0:16', tags: ['Nature'], motion: 'Low', cuts: '0 per min', warm: 'Warm' },
+      { name: 'Data Rain', pal: ['#020A04', '#39FF14', '#0B3D12', '#A8FFA0', '#000000'], e: 4, hue: 110, bars: 4, len: '0:08', tags: ['Text', 'Abstract'], motion: 'High, down', cuts: '0 per min', warm: 'Cool' },
+      { name: 'Prism Glitter', pal: ['#1A1033', '#FFD54F', '#80DEEA', '#F48FB1', '#B39DDB'], e: 3, hue: 50, bars: 4, len: '0:08', tags: ['Abstract', 'Retro'], motion: 'Medium, spinning', cuts: '0 per min', warm: 'Warm' },
+      { name: 'City Night Drive', pal: ['#0A0F1E', '#FFB300', '#E53935', '#3949AB', '#161C2E'], e: 3, hue: 230, bars: 8, len: '0:16', tags: ['City'], motion: 'Medium, forward', cuts: '4 per min', warm: 'Cool' },
+      { name: 'Laser Tunnel', pal: ['#000000', '#00E5FF', '#D500F9', '#1A1A1A', '#2962FF'], e: 5, hue: 190, bars: 2, len: '0:04', tags: ['Geometry', 'Abstract'], motion: 'High, forward', cuts: '0 per min', warm: 'Cool' },
+      { name: 'Ink in Water', pal: ['#F2EEE8', '#1A237E', '#5C6BC0', '#C5CAE9', '#0D0D0D'], e: 2, hue: 235, bars: 8, len: '0:14', tags: ['Water', 'Abstract'], motion: 'Low, swirling', cuts: '0 per min', warm: 'Cool' },
+      { name: 'Crowd Hands', pal: ['#140A1E', '#7C4DFF', '#FF4081', '#FFFFFF', '#2A1538'], e: 4, hue: 270, bars: 4, len: '0:06', tags: ['People', 'Dance'], motion: 'High', cuts: '20 per min', warm: 'Cool' }
+    ];
+    const tagNames = ['Abstract', 'Nature', 'Water', 'City', 'People', 'Dance', 'Text', 'Particles', 'Geometry', 'Fire', 'Retro', 'Machines'];
+    const tags = tagNames.map((name) => {
+      const on = st.tags.indexOf(name) >= 0;
+      return { name, active: on ? 'true' : 'false',
+        style: on ? 'border: 1px solid ' + c.accent + '; background: ' + c.soft + '; color: ' + c.text : 'border: 1px solid ' + c.border + '; background: ' + c.panel2 + '; color: ' + c.text2,
+        pick: () => this.setState({ tags: on ? st.tags.filter((x) => x !== name) : st.tags.concat([name]) }) };
+    });
+    const energy = [1, 2, 3, 4, 5].map((n) => ({ n: String(n), active: st.minE === n ? 'true' : 'false',
+      style: st.minE === n ? 'border: none; background: ' + c.accent + '; color: ' + c.onAccent : 'border: 1px solid ' + c.border + '; background: ' + c.panel2 + '; color: ' + c.text2,
+      pick: () => this.setState({ minE: n }) }));
+    const hueDist = (a, b) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
+    let list = clips.map((k, i) => ({ ...k, i })).filter((k) => k.e >= st.minE && (st.tags.length === 0 || k.tags.some((t) => st.tags.indexOf(t) >= 0)));
+    if (st.color >= 0 && sw[st.color][2] >= 0) { const h = sw[st.color][2]; list = list.slice().sort((a, b) => hueDist(a.hue, h) - hueDist(b.hue, h)); }
+    const dots = (e) => '●●●●●'.slice(0, e) + '○○○○○'.slice(0, 5 - e);
+    const decorate = (k) => ({ ...k, p0: k.pal[0], p1: k.pal[1], p2: k.pal[2], p3: k.pal[3], p4: k.pal[4],
+      meta: k.len + ' · ' + k.bars + ' bars · energy ' + dots(k.e), tagText: k.tags.join(' · ') });
+    const visible = list.map((k) => ({ ...decorate(k), active: st.sel === k.i ? 'true' : 'false',
+      style: st.sel === k.i ? 'border: 2px solid ' + c.accent : 'border: 1px solid ' + c.border, pick: () => this.setState({ sel: k.i }) }));
+    const s = decorate(clips[st.sel]);
+    s.facts = [
+      { k: 'Format', v: 'HAP Q · 1920 × 1080 · 30 fps' },
+      { k: 'Warm or cool', v: s.warm },
+      { k: 'Motion', v: s.motion },
+      { k: 'Cut rate', v: s.cuts },
+      { k: 'Energy', v: dots(s.e) + ' (' + s.e + ')' },
+      { k: 'Loop', v: 'Seamless' },
+      { k: 'Flicker check', v: 'OK' }
+    ];
+    return {
+      c, theme, swatches, tags, energy, visible, sel: s,
+      countLabel: 'Showing ' + visible.length + ' of ' + clips.length + ' clips',
+      clearColor: () => this.setState({ color: -1 }),
+      queue: [{ name: 'festival_crowd_04.mp4', w: '72%', state: 'Converting' }, { name: 'aurora_loop.mov', w: '35%', state: 'Analysing' }, { name: 'logo_alpha.mov', w: '0%', state: 'Waiting' }]
+    };
+  }
+}
+</script>
+</body>
+</html>

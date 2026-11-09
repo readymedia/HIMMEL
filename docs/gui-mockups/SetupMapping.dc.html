@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Himmel – Setup: Projection mapping</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}a:hover{opacity:.85}
+button{font:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="min-height: 900px; width: 100%; box-sizing: border-box; background: {{c.bg}}; color: {{c.text}}; font-family: Inter, system-ui, sans-serif; font-size: 13px; display: flex; flex-direction: column">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 10px 16px; background: {{c.panel}}; border-bottom: 1px solid {{c.border}}">
+<div style="display: flex; align-items: baseline; gap: 10px">
+<span style="font-size: 16px; font-weight: 700; letter-spacing: 0.08em">HIMMEL</span>
+<span style="font-size: 12px; color: {{c.text2}}">Saturday Club Night</span>
+</div>
+<nav aria-label="Modes" style="display: flex; gap: 4px; background: {{c.panel2}}; padding: 3px; border-radius: 8px">
+<a href="SetupOutputs.dc.html" aria-current="page" style="padding: 7px 14px; border-radius: 6px; background: {{c.accent}}; color: {{c.onAccent}}; font-weight: 600">Setup</a>
+<a href="PrepareLibrary.dc.html" style="padding: 7px 14px; border-radius: 6px; color: {{c.text2}}">Prepare</a>
+<a href="Main.dc.html" style="padding: 7px 14px; border-radius: 6px; color: {{c.text2}}">Perform</a>
+</nav>
+<span style="flex: 1 1 auto; color: {{c.text2}}">Step 2 of 7 · Projection mapping</span>
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="padding: 5px 10px; border-radius: 6px; border: 1px solid {{c.border}}; color: {{c.text2}}">Theme: {{theme}}</span>
+<a href="Help.dc.html" style="padding: 6px 12px; border-radius: 6px; border: 1px solid {{c.border}}; font-weight: 600">Help</a>
+</div>
+</header>
+<main style="display: flex; flex-wrap: wrap; gap: 12px; padding: 12px; flex: 1 1 auto; align-items: flex-start">
+<aside style="flex: 1 1 220px; max-width: 260px; display: flex; flex-direction: column; gap: 12px">
+<section style="background: {{c.panel}}; border: 1px solid {{c.border}}; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 6px">
+<h2 style="margin: 0 0 4px; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: {{c.text2}}">Projectors</h2>
+<sc-for list="{{projectors}}" as="p" hint-placeholder-count="3">
+<button type="button" onClick="{{p.pick}}" aria-pressed="{{p.active}}" style="min-height: 52px; text-align: left; padding: 8px 10px; border-radius: 8px; color: {{c.text}}; display: flex; flex-direction: column; gap: 2px; {{p.style}}">
+<span style="font-weight: 600">{{p.name}}</span>
+<span style="font-size: 12px; color: {{c.text2}}">{{p.info}}</span>
+</button>
+</sc-for>
+</section>
+<section style="background: {{c.panel}}; border: 1px solid {{c.border}}; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 6px">
+<h2 style="margin: 0 0 4px; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: {{c.text2}}">Tools</h2>
+<sc-for list="{{tools}}" as="t" hint-placeholder-count="4">
+<button type="button" onClick="{{t.pick}}" aria-pressed="{{t.active}}" style="min-height: 44px; text-align: left; padding: 0 10px; border-radius: 8px; color: {{c.text}}; font-weight: 600; {{t.style}}">{{t.name}}</button>
+</sc-for>
+</section>
+<section style="background: {{c.panel}}; border: 1px solid {{c.border}}; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 6px">
+<h2 style="margin: 0 0 4px; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: {{c.text2}}">On the controller</h2>
+<span>Pads 1–4 select a corner</span>
+<span>Knob 1 / 2 move X / Y</span>
+<span>Hold Shift for fine steps</span>
+<span>Shift + All opens mapping from Admin</span>
+</section>
+</aside>
+<section style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px">
+<h1 style="margin: 0; font-size: 24px; font-weight: 700">{{toolTitle}} · Out 2 · Centre</h1>
+<span style="color: {{c.text2}}">Drag a corner, or select one and nudge it with the arrows</span>
+</div>
+<div style="background: #000000; border: 1px solid {{c.border}}; border-radius: 10px; overflow: hidden">
+<svg viewBox="0 0 640 360" style="width: 100%; display: block" role="img" aria-label="Projection test grid warped by four keystone corners, with the right edge blend zone">
+<rect width="640" height="360" fill="#000000"></rect>
+<rect x="8" y="8" width="624" height="344" fill="none" stroke="#3A3F48" style="stroke-dasharray: 6 6"></rect>
+<polygon points="{{quad}}" fill="#10131A" stroke="#FFFFFF" style="stroke-width: 2px"></polygon>
+<path d="{{grid}}" fill="none" stroke="#4E5562" style="stroke-width: 1px"></path>
+<polygon points="{{blend}}" fill="#FFFFFF" style="opacity: 0.12"></polygon>
+<text x="{{cx}}" y="{{cy}}" fill="#FFFFFF" text-anchor="middle" style="font-size: 64px; font-weight: 700; font-family: Inter, sans-serif">2</text>
+<circle cx="{{h0.x}}" cy="{{h0.y}}" r="{{h0.r}}" fill="{{h0.fill}}" stroke="#FFFFFF" style="stroke-width: 2px"></circle>
+<circle cx="{{h1.x}}" cy="{{h1.y}}" r="{{h1.r}}" fill="{{h1.fill}}" stroke="#FFFFFF" style="stroke-width: 2px"></circle>
+<circle cx="{{h2.x}}" cy="{{h2.y}}" r="{{h2.r}}" fill="{{h2.fill}}" stroke="#FFFFFF" style="stroke-width: 2px"></circle>
+<circle cx="{{h3.x}}" cy="{{h3.y}}" r="{{h3.r}}" fill="{{h3.fill}}" stroke="#FFFFFF" style="stroke-width: 2px"></circle>
+</svg>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center">
+<div role="radiogroup" aria-label="Corner" style="display: flex; gap: 4px; background: {{c.panel2}}; padding: 3px; border-radius: 8px">
+<sc-for list="{{corners}}" as="k" hint-placeholder-count="4">
+<button type="button" role="radio" aria-checked="{{k.active}}" onClick="{{k.pick}}" style="min-height: 44px; padding: 0 12px; border: none; border-radius: 6px; font-weight: 600; {{k.style}}">{{k.name}}</button>
+</sc-for>
+</div>
+<div style="display: flex; gap: 4px">
+<button type="button" aria-label="Nudge left" onClick="{{left}}" style="width: 44px; height: 44px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.panel}}; color: {{c.text}}">←</button>
+<button type="button" aria-label="Nudge up" onClick="{{up}}" style="width: 44px; height: 44px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.panel}}; color: {{c.text}}">↑</button>
+<button type="button" aria-label="Nudge down" onClick="{{down}}" style="width: 44px; height: 44px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.panel}}; color: {{c.text}}">↓</button>
+<button type="button" aria-label="Nudge right" onClick="{{right}}" style="width: 44px; height: 44px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.panel}}; color: {{c.text}}">→</button>
+</div>
+<span style="font-family: 'JetBrains Mono', monospace; color: {{c.text2}}">{{cornerInfo}}</span>
+<button type="button" onClick="{{reset}}" style="min-height: 44px; padding: 0 14px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.panel}}; color: {{c.text}}">Reset corners</button>
+</div>
+</section>
+<aside style="flex: 1 1 280px; max-width: 340px; display: flex; flex-direction: column; gap: 12px">
+<section style="background: {{c.panel}}; border: 1px solid {{c.border}}; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+<h2 style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: {{c.text2}}">Edge blend</h2>
+<sc-for list="{{blendRows}}" as="b" hint-placeholder-count="5">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<div style="display: flex; justify-content: space-between"><span>{{b.name}}</span><span style="font-family: 'JetBrains Mono', monospace">{{b.v}}</span></div>
+<span style="height: 6px; border-radius: 3px; background: {{c.panel2}}; display: block; overflow: hidden"><span style="display: block; height: 100%; width: {{b.w}}; background: {{c.accent}}"></span></span>
+</div>
+</sc-for>
+<span style="font-size: 12px; color: {{c.text2}}">Preset: Epson laser · Matched with Out 1 and Out 3</span>
+</section>
+<section style="background: {{c.panel}}; border: 1px solid {{c.border}}; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+<h2 style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: {{c.text2}}">Test pattern</h2>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px">
+<sc-for list="{{patterns}}" as="p" hint-placeholder-count="6">
+<button type="button" onClick="{{p.pick}}" aria-pressed="{{p.active}}" style="min-height: 44px; border-radius: 8px; color: {{c.text}}; font-weight: 600; {{p.style}}">{{p.name}}</button>
+</sc-for>
+</div>
+</section>
+<section style="background: {{c.panel}}; border: 1px solid {{c.border}}; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+<label style="display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px">
+<span style="display: flex; flex-direction: column"><span style="font-weight: 600">Lock mapping</span><span style="font-size: 12px; color: {{c.text2}}">Prevents accidental changes during the show</span></span>
+<input type="checkbox" checked="{{locked}}" onChange="{{toggleLock}}" style="width: 22px; height: 22px">
+</label>
+<div style="display: flex; justify-content: space-between; gap: 8px">
+<a href="SetupOutputs.dc.html" style="min-height: 44px; display: flex; align-items: center; padding: 0 16px; border-radius: 8px; border: 1px solid {{c.border}}; font-weight: 600">Back</a>
+<a href="PrepareLibrary.dc.html" style="min-height: 44px; display: flex; align-items: center; padding: 0 16px; border-radius: 8px; background: {{c.accent}}; color: {{c.onAccent}}; font-weight: 700">Next: Cameras</a>
+</div>
+</section>
+</aside>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["Dark","Light","Night"],"default":"Dark"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { proj: 1, tool: 0, corner: 1, pattern: 0, locked: false, pts: this.defaults() };
+  }
+  defaults() { return [[86, 44], [560, 30], [574, 326], [72, 312]]; }
+  pal(t) {
+    const P = {
+      Dark: { bg: '#0E0F12', panel: '#16181D', panel2: '#1E2128', border: '#2C313A', text: '#ECEDEF', text2: '#A3AAB5', accent: '#6E9BFF', onAccent: '#0A1430', soft: 'rgba(110,155,255,0.16)', good: '#3DD68C', warn: '#F2B33D', bad: '#FF6B6B' },
+      Light: { bg: '#F3F4F6', panel: '#FFFFFF', panel2: '#ECEEF2', border: '#D5DAE1', text: '#15171B', text2: '#535A65', accent: '#2F5FD8', onAccent: '#FFFFFF', soft: 'rgba(47,95,216,0.10)', good: '#1E8449', warn: '#A15C00', bad: '#C0392B' },
+      Night: { bg: '#050506', panel: '#0C0D10', panel2: '#121318', border: '#1F2229', text: '#C4C7CD', text2: '#8A9099', accent: '#D9704F', onAccent: '#1A0A04', soft: 'rgba(217,112,79,0.16)', good: '#3BAF6E', warn: '#CC9533', bad: '#E0574F' }
+    };
+    return P[t] || P.Dark;
+  }
+  lerp(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]; }
+  quadPt(p, u, v) {
+    const top = this.lerp(p[0], p[1], u), bot = this.lerp(p[3], p[2], u);
+    return this.lerp(top, bot, v);
+  }
+  nudge(dx, dy) {
+    const pts = this.state.pts.map((q) => q.slice());
+    const k = this.state.corner;
+    pts[k][0] = Math.max(8, Math.min(632, pts[k][0] + dx));
+    pts[k][1] = Math.max(8, Math.min(352, pts[k][1] + dy));
+    this.setState({ pts });
+  }
+  renderVals() {
+    const theme = this.props.theme ?? 'Dark';
+    const c = this.pal(theme);
+    const st = this.state;
+    const p = st.pts;
+    const sel = (on) => on ? 'border: 2px solid ' + c.accent + '; background: ' + c.soft : 'border: 1px solid ' + c.border + '; background: ' + c.panel2;
+    const projectors = [['Out 1 · Left', 'Blend right 192 px'], ['Out 2 · Centre', 'Blend left and right 192 px'], ['Out 3 · Right', 'Blend left 192 px']]
+      .map(([name, info], i) => ({ name, info, active: st.proj === i ? 'true' : 'false', style: sel(st.proj === i), pick: () => this.setState({ proj: i }) }));
+    const toolNames = ['Keystone', 'Mesh warp', 'Edge blend', 'Masks'];
+    const tools = toolNames.map((name, i) => ({ name, active: st.tool === i ? 'true' : 'false', style: sel(st.tool === i), pick: () => this.setState({ tool: i }) }));
+    let grid = '';
+    for (let i = 1; i < 8; i++) {
+      const u = i / 8;
+      const a = this.quadPt(p, u, 0), b = this.quadPt(p, u, 1);
+      grid += 'M' + a[0].toFixed(1) + ' ' + a[1].toFixed(1) + 'L' + b[0].toFixed(1) + ' ' + b[1].toFixed(1);
+    }
+    for (let j = 1; j < 6; j++) {
+      const v = j / 6;
+      const a = this.quadPt(p, 0, v), b = this.quadPt(p, 1, v);
+      grid += 'M' + a[0].toFixed(1) + ' ' + a[1].toFixed(1) + 'L' + b[0].toFixed(1) + ' ' + b[1].toFixed(1);
+    }
+    const bl = [this.quadPt(p, 0.9, 0), p[1], p[2], this.quadPt(p, 0.9, 1)];
+    const blend = bl.map((q) => q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' ');
+    const ctr = this.quadPt(p, 0.5, 0.5);
+    const handle = (i) => ({ x: p[i][0].toFixed(1), y: p[i][1].toFixed(1), r: st.corner === i ? 11 : 8, fill: st.corner === i ? c.accent : '#000000' });
+    const cornerNames = ['Top left', 'Top right', 'Bottom right', 'Bottom left'];
+    const corners = cornerNames.map((name, i) => ({
+      name, active: st.corner === i ? 'true' : 'false',
+      style: st.corner === i ? 'background: ' + c.accent + '; color: ' + c.onAccent : 'background: transparent; color: ' + c.text2,
+      pick: () => this.setState({ corner: i })
+    }));
+    const blendRows = [['Left overlap', '192 px', 0.5], ['Right overlap', '192 px', 0.5], ['Curve', '0.55', 0.55], ['Gamma', '2.2', 0.73], ['Black level lift', '6%', 0.3]]
+      .map(([name, v, w]) => ({ name, v, w: Math.round(w * 100) + '%' }));
+    const patterns = ['Grid', 'Numbers', 'Colors', 'White', 'Black', 'Off'].map((name, i) => ({
+      name, active: st.pattern === i ? 'true' : 'false', style: sel(st.pattern === i), pick: () => this.setState({ pattern: i })
+    }));
+    const k = st.corner;
+    return {
+      c, theme, projectors, tools, grid, blend, corners, blendRows, patterns,
+      toolTitle: toolNames[st.tool],
+      quad: p.map((q) => q[0] + ',' + q[1]).join(' '),
+      cx: ctr[0].toFixed(1), cy: (ctr[1] + 22).toFixed(1),
+      h0: handle(0), h1: handle(1), h2: handle(2), h3: handle(3),
+      cornerInfo: cornerNames[k] + ': X ' + Math.round((p[k][0] - 8) * 3.077) + ' · Y ' + Math.round((p[k][1] - 8) * 3.14),
+      locked: st.locked,
+      toggleLock: () => this.setState({ locked: !st.locked }),
+      left: () => this.nudge(-4, 0), right: () => this.nudge(4, 0), up: () => this.nudge(0, -4), down: () => this.nudge(0, 4),
+      reset: () => this.setState({ pts: this.defaults() })
+    };
+  }
+}
+</script>
+</body>
+</html>
