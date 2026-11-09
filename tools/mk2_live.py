@@ -24,6 +24,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import maschine_mk2_test as mk  # noqa: E402
+import mk2_screens as scr  # noqa: E402
+import base64  # noqa: E402
 
 PORT = 8765
 HTML = os.path.join(HERE, "mk2_live.html")
@@ -52,6 +54,15 @@ class Live:
         self.save_due = 0.0
         self.backed_up = False
         self.err_check = (time.time(), 0)
+        # screens: mode = status | test | knobs; format switches are saved in the map
+        sc = self.saved.setdefault("screen", {})
+        sc.setdefault("msb_left", True)
+        sc.setdefault("invert", False)
+        sc.setdefault("checked", False)
+        self.screen_mode = "status"
+        self.screen_bits = {"left": bytes(2048), "right": bytes(2048)}
+        self.sender = scr.ScreenSender()
+        self.knob_touched = None   # last knob turned, highlighted on the knob page
 
     # ---------- map file ----------
     def load(self):
@@ -98,6 +109,7 @@ class Live:
                     self.t, self.m, self.prev = t, m, None
                     self.notes = t.notes
                     self.err_check = (time.time(), 0)
+                    self.sender.reset()  # new connection: resend every strip
             try:
                 with self.lock:
                     self.tick()
@@ -112,6 +124,64 @@ class Live:
                 except OSError as e:
                     self.message = "save failed: %s" % e
             time.sleep(0.004)
+
+    # ---------- screens ----------
+    def screen_loop(self):
+        """Draws both screens at ~30 Hz and sends only changed strips. Never touches input."""
+        c = scr.Canvas()
+        while True:
+            t0 = time.perf_counter()
+            try:
+                with self.lock:
+                    pages = {side: self.draw_screen(c, side) for side in ("left", "right")}
+                    t, sc = self.t, self.saved["screen"]
+                for side, buf in pages.items():
+                    self.screen_bits[side] = buf
+                    if t is not None:
+                        self.sender.send(t, side, scr.pack_buf(buf, sc["msb_left"], sc["invert"]))
+            except Exception as e:  # a screen problem must never stop the device thread
+                self.message = "screen: %s" % e
+                time.sleep(0.5)
+            time.sleep(max(0.0, 1 / 30 - (time.perf_counter() - t0)))
+
+    def draw_screen(self, c, side):
+        m = self.m
+        if self.screen_mode == "test":
+            scr.test_pattern(c, side)
+        elif self.screen_mode == "knobs":
+            scr.knob_page(c, side, self.knob_values(), "HIMMEL  KNOBS" if side == "left" else "PAGE 1/1",
+                          self.knob_touched)
+        else:
+            if side == "left":
+                r = m.reports if m else {}
+                lines = ["MK2 CONNECTED" if m else "MK2 NOT CONNECTED",
+                         "CONTROLS %d  PADS %d" % (r.get("0x01", 0), r.get("0x20", 0)),
+                         "SEEN %d / %d" % (len(self.seen), len(ALL)),
+                         "SCREEN WRITE %.2f MS" % self.sender.write_ms]
+                scr.status_page(c, side, lines, "HIMMEL  MK2 LIVE")
+            else:
+                if self.learn:
+                    lines = ["LEARN: " + self.learn["name"], "%s IT ON THE MK2" % {"button": "PRESS", "knob": "TURN", "pad": "HIT"}[self.learn["kind"]]]
+                else:
+                    lines = ["LAST PRESSED:"] + self.last[:4]
+                scr.status_page(c, side, lines, "INPUT")
+        return bytes(c.buf)
+
+    def knob_values(self):
+        st = self.m.state if self.m else None
+        out = {}
+        if st is None:
+            return out
+        for name, v in self.saved["knobs"].items():
+            b = v["byte"]
+            if b >= len(st):
+                continue
+            if v["nibble"] == "both":
+                hi = st[b + 1] if b + 1 < len(st) and b >= BUTTON_AREA else 0
+                out[name] = st[b] | hi << 8
+            else:
+                out[name] = st[b] & 0x0F if v["nibble"] == "low" else st[b] >> 4
+        return out
 
     def check_errors(self):
         t0, n0 = self.err_check
@@ -169,6 +239,8 @@ class Live:
         for name, v in self.saved["knobs"].items():
             if v["byte"] in changed:
                 self.mark_seen(name)
+                if name.startswith("Knob "):
+                    self.knob_touched = int(name.split()[1])
         for name, slot_pid in self.pad_ids().items():
             if m.pads[slot_pid] > mk.PAD_HIT:
                 self.mark_seen(name)
@@ -285,6 +357,10 @@ class Live:
                 "learn": {"kind": self.learn["kind"], "name": self.learn["name"]} if self.learn else None,
                 "message": (m.message if m and m.chase_running() else self.message),
                 "chase": bool(m and m.chase_running()),
+                "screen": dict(self.saved["screen"], mode=self.screen_mode,
+                               write_ms=round(self.sender.write_ms, 2), writes=self.sender.writes,
+                               left=base64.b64encode(self.screen_bits["left"]).decode(),
+                               right=base64.b64encode(self.screen_bits["right"]).decode()),
             }
 
     def command(self, d):
@@ -310,6 +386,18 @@ class Live:
                 else:
                     {"pads": m.test_pads, "groups": m.test_groups, "buttons": m.test_buttons,
                      "off": m.leds_off}.get(act, lambda: None)()
+            elif d.get("screen_mode") in ("status", "test", "knobs"):
+                self.screen_mode = d["screen_mode"]
+            elif "screen_set" in d:  # {"screen_set": {"msb_left": bool} | {"invert": bool} | {"checked": bool}}
+                sc = self.saved["screen"]
+                for k in ("msb_left", "invert", "checked"):
+                    if k in d["screen_set"]:
+                        sc[k] = bool(d["screen_set"][k])
+                self.sender.reset()
+                self.save_due = time.time() + 0.2
+                self.message = "Screen format: %s, %s%s" % (
+                    "MSB left" if sc["msb_left"] else "LSB left", "inverted" if sc["invert"] else "normal",
+                    ", checked" if sc["checked"] else "")
             elif d.get("reset_seen"):
                 self.seen.clear()
                 self.unmapped = []
@@ -361,6 +449,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     threading.Thread(target=LIVE.device_loop, daemon=True).start()
+    threading.Thread(target=LIVE.screen_loop, daemon=True).start()
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     srv.daemon_threads = True
     print("MK2 live view on http://127.0.0.1:%d  (Ctrl-C to stop)" % PORT)
@@ -376,6 +465,14 @@ def main():
                 LIVE.m.running = False
         time.sleep(0.15)
         if LIVE.t:
+            try:  # blank both screens on exit
+                sc = LIVE.saved["screen"]
+                blank = scr.pack_buf(bytes(2048), sc["msb_left"], sc["invert"])
+                for side in ("left", "right"):
+                    for i in range(scr.STRIPS):
+                        LIVE.t.write(scr.report(side, i, blank[i]))
+            except Exception:
+                pass
             mk.leds_off_and_close(LIVE.t)
 
 

@@ -96,6 +96,31 @@ The details are in the mockup (`docs/vj-mockup.html`).
     It ticks off every control as "seen" and has LED tests and an on/off chase.
   - Later the operator GUI should have the same idea: a picture of the
     controller, live feedback, and click-then-press learning (MIDI-learn style).
+  - The two screens on the page are a 1:1 mirror of what is sent to the MK2
+    screens. Modes: Status, Test pattern, Knob page.
+- **MK2 screens work (checked on the device 2026-11-09)**, prototype driver in
+  `tools/mk2_screens.py`:
+  - Two screens, 256 × 64 each, 1 bit per pixel, white-on-blue backlight.
+    Report `0xE0` = left, `0xE1` = right.
+  - One report draws an 8-row strip: `[id] 00 00 Y 00 20 00 08 00` + 256 bytes
+    (8 rows × 32 bytes, row-major), 265 bytes in all. Y = 0, 8 … 56. A full
+    screen is 8 strips.
+  - Format confirmed with the test pattern: **bit 7 = leftmost pixel, bit set =
+    lit pixel, no inversion**, strips in top-to-bottom order. Saved in the map as
+    `"screen": {"msb_left": true, "invert": false, "checked": true}`.
+  - Speed: one strip write takes ~0.7–0.8 ms over hidapi, so a full frame of both
+    screens is ~12 ms. Send only changed strips; ~30 Hz is plenty.
+  - Physical fit: the 8 knobs sit under the screens, 4 per screen, but they are
+    spaced **wider than 64 px**. From a photo, knob centres are roughly at
+    x ≈ 10, 87, 163, 240 on each screen (knob 1 near the left edge, knob 4 near
+    the right edge). Place knob labels over those x positions, not in the middle
+    of even 64-px columns. Re-measure with a test pattern before final layout.
+  - Recommendations: a 5×7 or 6×8 bitmap font (about 42 × 8 characters per
+    screen); a top line for the page name; invert the active knob or selected
+    item; VU meters as simple bars. Screen drawing belongs in the controller
+    module (never the render loop) and must never block reading buttons/pads.
+    Use one write lock for LEDs and screens (hidapi on Windows is not safe for
+    parallel writes on one handle).
 - `tools/maschine_mk2_test.py`: the first terminal mapper (step-by-step learn,
   `--verify`, `--list`). `mk2_live.py` imports its `Transport` and `Mapper`.
   - Known protocol facts:
@@ -107,7 +132,7 @@ The details are in the mockup (`docs/vj-mockup.html`).
       transport LEDs.
     - LED report `0x82` sets 31 single-color buttons.
     - LED values are 0–127.
-    - The screens use reports `0xE0` / `0xE1`, 1-bit (see github.com/abique/ni-mk2).
+    - The screens use reports `0xE0` / `0xE1`, 1-bit (details above).
   - The LED tables follow ni-mk2 and were checked with the LED tests; names
     marked `*` in the script are kept from before but behaved as expected.
 - `tools/maschine_test.py`: an old MK1 test. **Not relevant** (wrong model);
@@ -133,8 +158,9 @@ The details are in the mockup (`docs/vj-mockup.html`).
      lock-free queue or shared memory;
    - accept LED and screen commands;
    - reconnect on its own if the USB cable is pulled.
-3. **Screen driver for the 1-bit displays**: render text and meters, dither
-   images, invert highlighted areas.
+3. **Screen driver for the 1-bit displays**: the protocol and format are proven
+   (`tools/mk2_screens.py`). Still to do: the real page layouts (aligned to the
+   knob positions), meters, dithered images, and the C++ port in the controller.
 4. **Engine skeleton**:
    - the supervisor starts the render process;
    - the render process opens 1–N outputs;

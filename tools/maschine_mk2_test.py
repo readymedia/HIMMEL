@@ -92,6 +92,7 @@ class Transport:
         self.ep_out = None
         self.intf = None
         self.notes = []
+        self.wlock = threading.Lock()  # LED and screen writers run in different threads
 
     def open(self):
         try:
@@ -167,7 +168,10 @@ class Transport:
         return data
 
     def write(self, report):
-        report = bytes(report)
+        with self.wlock:
+            self._write(bytes(report))
+
+    def _write(self, report):
         if self.kind == "hidapi":
             self.h.write(report)
         elif self.ep_out is not None:

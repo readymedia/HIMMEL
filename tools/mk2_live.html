@@ -51,8 +51,12 @@
   .pad .pn { position: absolute; left: 0; top: -11px; font-size: 7px; color: var(--label); }
   .pad .pv { margin-left: auto; font-weight: 400; opacity: .85; }
   .screen { position: absolute; background: var(--screen); border: 2px solid #000; border-radius: 3px;
-            color: var(--screen-text); font: 9px/1.35 Consolas, monospace; padding: 5px 7px; overflow: hidden;
-            white-space: pre; }
+            padding: 3px; }
+  .screen canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+  .seg button.on { background: #3b5bdb; border-color: #4c6ef5; color: #fff; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 4px 0; }
+  .row label { display: flex; gap: 5px; align-items: center; font-size: 12px; }
+  #scrBig { width: 100%; image-rendering: pixelated; background: var(--screen); border-radius: 4px; margin-top: 6px; }
   #below { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 12px 20px 30px; max-width: 1100px; }
   .card { background: #17181b; border: 1px solid #26272b; border-radius: 8px; padding: 10px 12px; }
   .card h2 { font-size: 12px; margin: 0 0 6px; color: var(--label); font-weight: 600; }
@@ -81,6 +85,24 @@
 </header>
 <div id="wrap"><div id="stage"><div id="panel"></div></div></div>
 <div id="below">
+  <div class="card">
+    <h2>Screens (the panel shows exactly what is sent to the MK2)</h2>
+    <div class="row seg" id="scrMode">
+      <button data-mode="status">Status</button>
+      <button data-mode="test">Test pattern</button>
+      <button data-mode="knobs">Knob page</button>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="scrFlip"> Flip bit order</label>
+      <label><input type="checkbox" id="scrInv"> Invert</label>
+      <button id="scrOk">Looks right on the MK2 ✓</button>
+    </div>
+    <div class="help" id="scrInfo">-</div>
+  </div>
+  <div class="card">
+    <h2>Status</h2>
+    <div id="status" class="mono">-</div>
+  </div>
   <div class="card">
     <h2>How to check the map</h2>
     <div class="help">
@@ -144,8 +166,29 @@ add("MASTER", "sec", { left: "42px", top: "222px" }); add("", "rule", { left: "4
 add("GROUPS", "sec", { left: "42px", top: "348px" }); add("", "rule", { left: "42px", top: "360px", width: "205px" });
 add("TRANSPORT", "sec", { left: "42px", top: "462px" }); add("", "rule", { left: "42px", top: "474px", width: "205px" });
 add("PADS", "sec", { left: "280px", top: "222px" }); add("", "rule", { left: "280px", top: "234px", width: "400px" });
-const scrL = add("", "screen", { left: "162px", top: "70px", width: "228px", height: "74px" });
-const scrR = add("", "screen", { left: "430px", top: "70px", width: "228px", height: "74px" });
+// 256x64 screens drawn at 1:1 device pixels, scaled to the panel (aspect 4:1)
+const scrL = add('<canvas width="256" height="64"></canvas>', "screen", { left: "150px", top: "72px", width: "240px", height: "66px" });
+const scrR = add('<canvas width="256" height="64"></canvas>', "screen", { left: "418px", top: "72px", width: "240px", height: "66px" });
+const ctxs = { left: scrL.firstChild.getContext("2d"), right: scrR.firstChild.getContext("2d") };
+const imgs = { left: ctxs.left.createImageData(256, 64), right: ctxs.right.createImageData(256, 64) };
+let lastScr = {};
+function drawScreen(side, b64) {
+  if (lastScr[side] === b64) return;
+  lastScr[side] = b64;
+  const bin = atob(b64), d = imgs[side].data;
+  for (let i = 0; i < 2048; i++) {
+    const byte = bin.charCodeAt(i);
+    for (let bit = 0; bit < 8; bit++) {
+      const p = (i * 8 + bit) * 4, on = byte & (0x80 >> bit);
+      d[p] = on ? 205 : 11; d[p + 1] = on ? 216 : 13; d[p + 2] = on ? 255 : 24; d[p + 3] = 255;
+    }
+  }
+  ctxs[side].putImageData(imgs[side], 0, 0);
+}
+document.querySelectorAll("#scrMode button").forEach(b => b.onclick = () => post({ screen_mode: b.dataset.mode }));
+document.getElementById("scrFlip").onchange = e => post({ screen_set: { msb_left: !e.target.checked } });
+document.getElementById("scrInv").onchange = e => post({ screen_set: { invert: e.target.checked } });
+document.getElementById("scrOk").onclick = () => post({ screen_set: { checked: true } });
 
 for (const c of CONTROLS) {
   let d;
@@ -214,18 +257,21 @@ function render(s) {
     }
   }
   const r = s.reports || {};
-  scrL.textContent = [
-    s.connected ? "MK2 CONNECTED" : "MK2 NOT CONNECTED",
-    (s.notes || []).join(" / ").slice(0, 40),
-    `controls ${r["0x01"] || 0}  pads ${r["0x20"] || 0}  other ${r.other || 0}`,
-    (s.errors || []).length ? "ERR " + s.errors[s.errors.length - 1].slice(0, 34) : "",
-  ].join("\n");
-  scrR.textContent = [
-    s.learn ? ">> LEARN: " + s.learn.name.toUpperCase() : "LAST PRESSED",
-    s.learn ? (s.learn.kind === "knob" ? "turn it on the MK2" : s.learn.kind === "pad" ? "hit it on the MK2" : "press it on the MK2") : (s.last || []).slice(0, 3).join(", "),
-    "",
-    (s.message || "").replace("LED chase: ", "").replace(" - check that this one is lit", " is lit?").slice(0, 40),
-  ].join("\n");
+  document.getElementById("status").textContent = [
+    (s.notes || []).join(" / "),
+    `reports: controls ${r["0x01"] || 0}, pads ${r["0x20"] || 0}, other ${r.other || 0}`,
+    s.learn ? `LEARN: ${s.learn.name} - ${s.learn.kind === "knob" ? "turn" : s.learn.kind === "pad" ? "hit" : "press"} it on the MK2` : "last pressed: " + ((s.last || []).join(", ") || "-"),
+    (s.message || "").replace("LED chase: ", "chase: ").replace(" - check that this one is lit", " should be lit"),
+    (s.errors || []).length ? "error: " + s.errors[s.errors.length - 1] : "",
+  ].filter(Boolean).join("\n");
+  const sc = s.screen || {};
+  if (sc.left) { drawScreen("left", sc.left); drawScreen("right", sc.right); }
+  document.querySelectorAll("#scrMode button").forEach(b => b.classList.toggle("on", b.dataset.mode === sc.mode));
+  document.getElementById("scrFlip").checked = sc.msb_left === false;
+  document.getElementById("scrInv").checked = !!sc.invert;
+  document.getElementById("scrInfo").textContent =
+    `${sc.checked ? "✓ Format checked on the device." : "Format not checked yet."} ` +
+    `Strip writes: ${sc.writes || 0}, avg ${sc.write_ms ?? "-"} ms per 265-byte strip.`;
   const cb = document.getElementById("chaseBtn");
   cb.textContent = s.chase ? "■ Stop chase" : "LED chase";
   cb.style.background = s.chase ? "#7a4a12" : "";

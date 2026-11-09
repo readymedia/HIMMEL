@@ -331,7 +331,7 @@
     0,
     0
   ],
-  "time": "2026-11-09 19:22:18",
+  "time": "2026-11-09 19:42:02",
   "seen": [
     "All",
     "Auto Write",
@@ -428,5 +428,10 @@
   "hardware_notes": [
     "2026-11-09: Pad 12 (hardware id 7) is worn and reads ~120-136 of 4095 when untouched. Other pads rest at 0. The controller module must use a per-pad dead zone (pad_noise_floor + margin) so Pad 12 never fires or holds aftertouch on its own.",
     "2026-11-09: Pad hardware ids run top-left = 0; Pad 1 (bottom-left) is id 12. Pad LED order assumed to follow the ids."
-  ]
+  ],
+  "screen": {
+    "msb_left": true,
+    "invert": false,
+    "checked": true
+  }
 }
