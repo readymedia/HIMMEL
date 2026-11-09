@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 *.tmp
 maschine_mk2_map.bak.json
+tools/_screens/

@@ -92,6 +92,17 @@
       <button data-mode="test">Test pattern</button>
       <button data-mode="knobs">Knob page</button>
     </div>
+    <div class="row seg" id="scrFun">
+      <button data-mode="demo">★ Demo</button>
+      <button data-mode="snake">Snake</button>
+      <button data-mode="maze">3D maze</button>
+      <button data-mode="swarm">Star Swarm</button>
+      <button data-mode="munch">Munch Maze</button>
+      <button data-mode="shield">Sky Shield</button>
+      <button data-mode="splash">✦ ReadyMedia</button>
+    </div>
+    <div class="help">Demo: hit pads for rings, Knob 1 = speed. Snake and maze: pads 10 / 5 / 6 / 7 =
+      up / left / down / right (they light blue), Play restarts. In the 3D maze, pad pressure = speed. Star Swarm: d-pad (10 / 5 / 6 / 7) or Knob 1 / Knob 2 fly over the left screen, right-column pads fire (red). Munch Maze: eat all dots, big dots scare the hunters. Sky Shield: each knob aims the turret under it, pads 1-8 fire turret 1-8, pads 13-16 fire the last aimed one; Shift + knob sets how far it shoots (see the crosshair).<br><b>On the MK2:</b> turn the master encoder to open the mode menu, push it to start.</div>
     <div class="row">
       <label><input type="checkbox" id="scrFlip"> Flip bit order</label>
       <label><input type="checkbox" id="scrInv"> Invert</label>
@@ -185,7 +196,7 @@ function drawScreen(side, b64) {
   }
   ctxs[side].putImageData(imgs[side], 0, 0);
 }
-document.querySelectorAll("#scrMode button").forEach(b => b.onclick = () => post({ screen_mode: b.dataset.mode }));
+document.querySelectorAll("#scrMode button, #scrFun button").forEach(b => b.onclick = () => post({ screen_mode: b.dataset.mode }));
 document.getElementById("scrFlip").onchange = e => post({ screen_set: { msb_left: !e.target.checked } });
 document.getElementById("scrInv").onchange = e => post({ screen_set: { invert: e.target.checked } });
 document.getElementById("scrOk").onclick = () => post({ screen_set: { checked: true } });
@@ -266,12 +277,12 @@ function render(s) {
   ].filter(Boolean).join("\n");
   const sc = s.screen || {};
   if (sc.left) { drawScreen("left", sc.left); drawScreen("right", sc.right); }
-  document.querySelectorAll("#scrMode button").forEach(b => b.classList.toggle("on", b.dataset.mode === sc.mode));
+  document.querySelectorAll("#scrMode button, #scrFun button").forEach(b => b.classList.toggle("on", b.dataset.mode === sc.mode));
   document.getElementById("scrFlip").checked = sc.msb_left === false;
   document.getElementById("scrInv").checked = !!sc.invert;
   document.getElementById("scrInfo").textContent =
     `${sc.checked ? "✓ Format checked on the device." : "Format not checked yet."} ` +
-    `Strip writes: ${sc.writes || 0}, avg ${sc.write_ms ?? "-"} ms per 265-byte strip.`;
+    `Strip writes: ${sc.writes || 0}, avg ${sc.write_ms ?? "-"} ms per 265-byte strip, ${sc.fps ?? "-"} fps.`;
   const cb = document.getElementById("chaseBtn");
   cb.textContent = s.chase ? "■ Stop chase" : "LED chase";
   cb.style.background = s.chase ? "#7a4a12" : "";

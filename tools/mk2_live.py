@@ -25,6 +25,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import maschine_mk2_test as mk  # noqa: E402
 import mk2_screens as scr  # noqa: E402
+import mk2_fun as fun  # noqa: E402
 import base64  # noqa: E402
 
 PORT = 8765
@@ -59,10 +60,18 @@ class Live:
         sc.setdefault("msb_left", True)
         sc.setdefault("invert", False)
         sc.setdefault("checked", False)
-        self.screen_mode = "status"
+        self.screen_mode = "splash"           # boot splash, then status
+        self.boot_until = time.time() + 14.0  # one full logo animation
         self.screen_bits = {"left": bytes(2048), "right": bytes(2048)}
         self.sender = scr.ScreenSender()
         self.knob_touched = None   # last knob turned, highlighted on the knob page
+        self.press_q = set()       # button/pad names that went down, drained by the screen loop
+        self.pads_down = set()
+        self.games = {}            # fun modes, created on first use
+        self.fps = 0.0
+        self.enc_last = None       # master encoder menu
+        self.menu_idx = 0
+        self.menu_until = 0.0
 
     # ---------- map file ----------
     def load(self):
@@ -127,14 +136,47 @@ class Live:
 
     # ---------- screens ----------
     def screen_loop(self):
-        """Draws both screens at ~30 Hz and sends only changed strips. Never touches input."""
+        """Draws both screens at ~30 Hz and sends only changed strips. Never touches input.
+
+        Fun modes (demo/snake/maze) draw one 512x64 image outside the lock, so a slow
+        frame can never hold up the device thread.
+        """
         c = scr.Canvas()
+        wide = scr.Canvas(fun.WW, fun.HH)
+        last = time.perf_counter()
         while True:
             t0 = time.perf_counter()
+            dt, last = min(0.1, t0 - last), t0
             try:
                 with self.lock:
-                    pages = {side: self.draw_screen(c, side) for side in ("left", "right")}
-                    t, sc = self.t, self.saved["screen"]
+                    if self.boot_until and time.time() > self.boot_until:
+                        self.boot_until = 0.0
+                        if self.screen_mode == "splash":
+                            self.screen_mode = "status"
+                    menu = self.menu_tick()
+                    mode, t, sc = self.screen_mode, self.t, self.saved["screen"]
+                    if mode in fun.MODES:
+                        pads = [0] * 16
+                        if self.m:
+                            for name, pid in self.pad_ids().items():
+                                pads[int(name.split()[1]) - 1] = self.m.pads[pid]
+                        inp = fun.Input(self.held | self.pads_down, self.press_q, pads, self.knob_values())
+                        self.press_q = set()
+                    else:
+                        self.press_q = set()
+                        pages = {side: self.draw_screen(c, side) for side in ("left", "right")}
+                if mode in fun.MODES:
+                    game = self.games.get(mode) or self.games.setdefault(mode, fun.MODES[mode]())
+                    game.update(dt, inp)
+                    game.draw(wide)
+                    left, right = wide.split()
+                    pages = {"left": left, "right": right}
+                if menu is not None:  # master encoder menu on top of any mode
+                    wide.buf[:] = scr.join(pages["left"], pages["right"])
+                    fun.menu_overlay(wide, menu)
+                    left, right = wide.split()
+                    pages = {"left": left, "right": right}
+                self.fps = 0.9 * self.fps + 0.1 / max(dt, 1e-3)
                 for side, buf in pages.items():
                     self.screen_bits[side] = buf
                     if t is not None:
@@ -143,6 +185,50 @@ class Live:
                 self.message = "screen: %s" % e
                 time.sleep(0.5)
             time.sleep(max(0.0, 1 / 30 - (time.perf_counter() - t0)))
+
+    def set_mode(self, mode):
+        """Switch screen mode (from the page or the encoder menu). Under lock."""
+        m = self.m
+        self.screen_mode = mode
+        self.boot_until = 0.0
+        self.press_q = set()
+        if mode == "splash" and "splash" in self.games:
+            self.games["splash"].t = 0.0  # restart the logo animation
+        if m:  # modes that use pads as controls light those pads
+            m.leds_off()
+            if mode in fun.MODES:
+                game = self.games.get(mode) or self.games.setdefault(mode, fun.MODES[mode]())
+                leds = game.pad_leds()
+                if leds:
+                    m.pad_feedback = False
+                    ids = self.pad_ids()
+                    for n, rgb in leds.items():
+                        if "Pad %d" % n in ids:
+                            m.set80(ids["Pad %d" % n], *rgb)
+
+    def menu_tick(self):
+        """Master encoder = mode menu on the device: turn to choose, push to start.
+        Returns the highlighted menu index while the menu is open, else None. Under lock."""
+        now = time.time()
+        enc = self.knob_values().get("Master encoder (turn)")
+        if enc is not None:
+            if self.enc_last is not None and enc != self.enc_last:
+                d = enc - self.enc_last
+                d = d - 16 if d > 8 else d + 16 if d < -8 else d
+                if now > self.menu_until:  # opening: start on the current mode
+                    self.menu_idx = fun.MENU.index(self.screen_mode) if self.screen_mode in fun.MENU else 0
+                else:
+                    self.menu_idx = (self.menu_idx + (1 if d > 0 else -1)) % len(fun.MENU)
+                self.menu_until = now + 4.0
+            self.enc_last = enc
+        if now > self.menu_until:
+            return None
+        if "Master encoder (push)" in self.press_q:
+            self.press_q.discard("Master encoder (push)")
+            self.menu_until = 0.0
+            self.set_mode(fun.MENU[self.menu_idx])
+            return None
+        return self.menu_idx
 
     def draw_screen(self, c, side):
         m = self.m
@@ -201,6 +287,8 @@ class Live:
     # ---------- per-tick logic (under lock) ----------
     def tick(self):
         m = self.m
+        if not self.learn:
+            self.pad_tick(m)
         st = m.state
         if st is None:
             return
@@ -225,6 +313,7 @@ class Live:
         for name in held - self.held:
             self.mark_seen(name)
             self.last = ([name] + self.last)[:6]
+            self.press_q.add(name)
         if held != self.held:
             self.mirror_leds(held)
             self.held = held
@@ -241,9 +330,17 @@ class Live:
                 self.mark_seen(name)
                 if name.startswith("Knob "):
                     self.knob_touched = int(name.split()[1])
-        for name, slot_pid in self.pad_ids().items():
-            if m.pads[slot_pid] > mk.PAD_HIT:
+
+    def pad_tick(self, m):
+        """Pad hit edges and seen marks. Runs even before the first controls report arrives."""
+        for name, pid in self.pad_ids().items():
+            down = m.pads[pid] > mk.PAD_HIT
+            if down and name not in self.pads_down:
+                self.pads_down.add(name)
+                self.press_q.add(name)
                 self.mark_seen(name)
+            elif not down and m.pads[pid] < mk.PAD_HIT // 2:  # hysteresis
+                self.pads_down.discard(name)
 
     def pad_ids(self):
         return {n: v["id"] for n, v in self.saved["pads"].items() if not n.startswith("_")}
@@ -359,6 +456,7 @@ class Live:
                 "chase": bool(m and m.chase_running()),
                 "screen": dict(self.saved["screen"], mode=self.screen_mode,
                                write_ms=round(self.sender.write_ms, 2), writes=self.sender.writes,
+                               fps=round(self.fps, 1),
                                left=base64.b64encode(self.screen_bits["left"]).decode(),
                                right=base64.b64encode(self.screen_bits["right"]).decode()),
             }
@@ -386,8 +484,8 @@ class Live:
                 else:
                     {"pads": m.test_pads, "groups": m.test_groups, "buttons": m.test_buttons,
                      "off": m.leds_off}.get(act, lambda: None)()
-            elif d.get("screen_mode") in ("status", "test", "knobs"):
-                self.screen_mode = d["screen_mode"]
+            elif d.get("screen_mode") in fun.MENU:
+                self.set_mode(d["screen_mode"])
             elif "screen_set" in d:  # {"screen_set": {"msb_left": bool} | {"invert": bool} | {"checked": bool}}
                 sc = self.saved["screen"]
                 for k in ("msb_left", "invert", "checked"):

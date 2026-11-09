@@ -97,7 +97,16 @@ The details are in the mockup (`docs/vj-mockup.html`).
   - Later the operator GUI should have the same idea: a picture of the
     controller, live feedback, and click-then-press learning (MIDI-learn style).
   - The two screens on the page are a 1:1 mirror of what is sent to the MK2
-    screens. Modes: Status, Test pattern, Knob page.
+    screens. Modes: Status, Test pattern, Knob page, and the fun modes Demo,
+    Snake, 3D maze, Star Swarm (shooter), Munch Maze (maze chase), Sky Shield
+    (missile defence: each knob aims the turret under it, Shift + knob = range)
+    and the animated "Made by ReadyMedia.no" splash (played at start-up).
+    On the device: **turn the master encoder to open the mode menu, push to
+    start** — the master encoder is reserved for this; the 8 knobs belong to the
+    current mode. Code: `tools/mk2_fun.py`,
+    one 512 × 64 image across both screens at ~30 fps. How they work and a
+    step-by-step recipe for new modes: `docs/mk2-screen-fun.md`. Check modes
+    without hardware with `python tools/mk2_fun_check.py --png`.
 - **MK2 screens work (checked on the device 2026-11-09)**, prototype driver in
   `tools/mk2_screens.py`:
   - Two screens, 256 × 64 each, 1 bit per pixel, white-on-blue backlight.
