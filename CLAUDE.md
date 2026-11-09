@@ -101,8 +101,9 @@ The details are in the mockup (`docs/vj-mockup.html`).
     Snake, 3D maze, Star Swarm (shooter), Munch Maze (maze chase), Sky Shield
     (missile defence: each knob aims the turret under it, Shift + knob = range)
     and the animated "Made by ReadyMedia.no" splash (played at start-up).
-    On the device: **turn the master encoder to open the mode menu, push to
-    start** — the master encoder is reserved for this; the 8 knobs belong to the
+    On the device: **Shift + turn the master encoder opens the mode menu, turn
+    to choose, push to start.** Without Shift the master encoder is the
+    browse/select wheel (owner's decision 2026-11-09); the 8 knobs belong to the
     current mode. Code: `tools/mk2_fun.py`,
     one 512 × 64 image across both screens at ~30 fps. How they work and a
     step-by-step recipe for new modes: `docs/mk2-screen-fun.md`. Check modes
@@ -132,8 +133,9 @@ The details are in the mockup (`docs/vj-mockup.html`).
     parallel writes on one handle).
 - **Measured 2026-11-09** (MK2 Live → Measure card): pads stream every 1.33 ms,
   knob reports ~10 ms apart, one knob turn ≈ 1008 units, USB high speed. Velocity =
-  max pressure in the first 4 ms after onset (the peak does not work). Still open:
-  encoder steps per turn, reconnect time, the master encoder's job in Himmel.
+  max pressure in the first 4 ms after onset (the peak does not work). Master
+  encoder: 30 detents per turn. Reconnect after a cable pull works. Decided: the master encoder is the
+  browse/select wheel in Himmel; Shift + encoder = system menu.
 - `tools/maschine_mk2_test.py`: the first terminal mapper (step-by-step learn,
   `--verify`, `--list`). `mk2_live.py` imports its `Transport` and `Mapper`.
   - Known protocol facts:

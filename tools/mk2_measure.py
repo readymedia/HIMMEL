@@ -218,6 +218,21 @@ class Measure:
                      "of HID input reports (hidapi, Windows). Pad pressure 0..4095.")
         s.pop("armed", None)
         s.pop("knob", None)
+        s.pop("saved_at", None)
+        # merge with what is already saved, so a later session never wipes earlier results
+        try:
+            with open(OUT, encoding="utf-8") as f:
+                old = json.load(f)
+        except (OSError, ValueError):
+            old = {}
+        if not s["hits"]:
+            s["hits"] = old.get("hits", [])
+        s["knob_results"] = {**old.get("knob_results", {}), **s["knob_results"]}
+        s["conn"] = (old.get("conn", []) + [c for c in s["conn"] if c not in old.get("conn", [])])[-40:]
+        for k in ("pad_interval", "controls_interval"):
+            if old.get(k) and (not s.get(k) or s[k]["n"] < old[k]["n"]):
+                s[k] = old[k]  # keep the bigger sample
+        s["sessions"] = (old.get("sessions") or ([old["date"]] if old.get("date") else [])) + [s["date"]]
         tmp = OUT + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(s, f, indent=1)

@@ -140,7 +140,7 @@ enum : uint8_t { ButtonDown, ButtonUp, KnobDelta, EncoderDelta,
 
 ### 5.3 Knobs and encoder
 Knobs: `d = v − last; if d > 500 d −= 1000; if d < −500 d += 1000`. Encoder: the
-same with 16 / 8. **One full knob turn = ~1008 units** [measured], so the
+same with 16 / 8; one turn = 30 detents [measured]. **One full knob turn = ~1008 units** [measured], so the
 raw range 0..~1000 is exactly one turn. Default mapping: one turn = the full
 parameter range (delta / 1000). While a knob turns, a report arrives every
 ~10 ms with ~6 units per report.
@@ -168,14 +168,16 @@ Written into the shared state block, not sent as messages:
 `group_rgb[8][2][3]`, `transport[8]`, `buttons[31]`, `screen[2][2048]`
 (canvas format: MSB-left rows, 1 = lit). The module diffs and sends.
 
-### 5.6 Who owns what [proposal – needs the owner's decision on 5.6.3]
+### 5.6 Who owns what [decided 2026-11-09]
 1. The **8 knobs** belong to the current page/mode (they sit under the screen
    labels for that page).
 2. **Shift** is a modifier layer: Shift + knob = a second function for that knob,
    Shift + button = the alternative action printed on the device.
-3. The **master encoder**: in the prototype tools it opens a mode menu. In
-   Himmel it will likely be the browse/select wheel (clips, presets, themes).
-   **Decision needed.**
+3. The **master encoder is the browse/select wheel** in Himmel (owner's decision
+   2026-11-09): turn = move through lists (clips, presets, themes, cues), push =
+   select / load. **Shift + master encoder** opens the system menu (in the
+   prototype tools: the screen-mode menu). The module reports the encoder as
+   plain `EncoderDelta` / button events; the app decides what they do.
 4. Screens: the module draws only system overlays itself (e.g. "MK2 reconnecting",
    a menu); everything else comes from the app as screen buffers.
 
@@ -193,7 +195,7 @@ Written into the shared state block, not sent as messages:
 ## 7. Measurements
 Filled in from `docs/mk2-measurements.json`.
 
-Measured 2026-11-09 on the owner's MK2 (Pad 13, one player, Python host).
+Measured 2026-11-09 on the owner's MK2 (Pad 13, one player, Python host), in two sessions.
 
 | What | Result |
 |---|---|
@@ -201,10 +203,10 @@ Measured 2026-11-09 on the owner's MK2 (Pad 13, one player, Python host).
 | Controls report interval while turning a knob | p50 10.7 ms, mean 14.5 ms (the device seems to send knob changes at ~100 Hz). Button-press latency on its own is not measured yet. |
 | USB | high speed; interrupt IN `0x82` / OUT `0x02`, bInterval 1 (125 µs) |
 | Knob units per full turn | **~1008** (Knob 1, 175 reports for one turn) |
-| Master encoder steps per turn | _not measured yet_ |
+| Master encoder steps per turn | **30 detents**, ±1 per detent on the 0..15 counter (wraps twice per turn) |
 | Pad hit curves | see the table below |
 | Velocity formula | max pressure in the first 4 ms after onset, `^0.8` curve (§5.4) |
-| Reconnect after cable pull | _not measured yet_ |
+| Reconnect after cable pull | **works**: the prototype noticed the loss, kept retrying, and reopened ~1 s after it logged the loss (the cable was out part of that time). The prototype detects loss by read errors, which can take up to ~2 s; the C++ module should use the 250 ms pad-report heartbeat (§5.1). |
 
 Pad hit curves (pressure 0..4095, from the recorded samples) and the velocity the §5.4 formula gives:
 
@@ -229,7 +231,6 @@ Only one pad was measured; check a few other pads (and Pad 12) when the C++
 module exists, and tune `full` / `gamma` by feel.
 
 ## 8. Open items
-- Decide the master encoder's job in Himmel (§5.6.3).
 - Re-measure the knob x positions with a test pattern before the final page layout.
 - Glass-to-glass latency (button → LED / screen) needs a camera test once the
   C++ module exists; the host-side numbers above are the input half.

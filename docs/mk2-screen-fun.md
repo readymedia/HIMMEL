@@ -192,10 +192,11 @@ Toolbox (all in `mk2_screens.Canvas` unless noted):
           self.speed += d * 0.01
   ```
 
-- **The master encoder belongs to the system**: turning it opens the mode
-  menu on the MK2 screens (on top of any mode), pushing it starts the
-  highlighted mode. The menu closes by itself after 4 s. Modes should not use
-  the master encoder. The order of the menu is `MENU` in `mk2_fun.py`, the
+- **The master encoder belongs to the system**: **Shift + turn** opens the
+  mode menu on the MK2 screens (on top of any mode), turning chooses, pushing
+  starts the highlighted mode. The menu closes by itself after 4 s. Without
+  Shift the encoder is free; in Himmel it is the browse/select wheel. Modes
+  should not use the master encoder. The order of the menu is `MENU` in `mk2_fun.py`, the
   names are in `LABELS`; a new mode needs an entry in both.
 
 Conventions that keep the modes consistent:

@@ -1691,15 +1691,36 @@
   "Knob 1": {
    "units_per_turn": 1008,
    "changes": 175
+  },
+  "Master encoder (turn)": {
+   "units_per_turn": 30,
+   "changes": 30
   }
  },
  "conn": [
   {
    "time": "23:00:12",
    "event": "connected"
+  },
+  {
+   "time": "23:06:48",
+   "event": "connected"
+  },
+  {
+   "time": "23:10:03",
+   "event": "disconnected"
+  },
+  {
+   "time": "23:10:04",
+   "event": "connected",
+   "after_s": 1.05
   }
  ],
  "saved_at": "23:03:12",
- "date": "2026-11-09 23:04:03",
- "note": "Measured with tools/mk2_live.py (Measure card). Intervals are host-side arrival times of HID input reports (hidapi, Windows). Pad pressure 0..4095."
+ "date": "2026-11-09 23:10:10",
+ "note": "Measured with tools/mk2_live.py (Measure card). Intervals are host-side arrival times of HID input reports (hidapi, Windows). Pad pressure 0..4095.",
+ "sessions": [
+  "2026-11-09 23:04:03",
+  "2026-11-09 23:10:10"
+ ]
 }

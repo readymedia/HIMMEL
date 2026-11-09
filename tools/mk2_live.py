@@ -211,7 +211,8 @@ class Live:
                             m.set80(ids["Pad %d" % n], *rgb)
 
     def menu_tick(self):
-        """Master encoder = mode menu on the device: turn to choose, push to start.
+        """Shift + master encoder = mode menu on the device: Shift + turn opens it, turn to choose,
+        push to start. Without Shift the encoder is free (in Himmel it is the browse/select wheel).
         Returns the highlighted menu index while the menu is open, else None. Under lock."""
         now = time.time()
         enc = self.knob_values().get("Master encoder (turn)")
@@ -219,6 +220,9 @@ class Live:
             if self.enc_last is not None and enc != self.enc_last:
                 d = enc - self.enc_last
                 d = d - 16 if d > 8 else d + 16 if d < -8 else d
+                if now > self.menu_until and "Shift" not in self.held:
+                    self.enc_last = enc  # menu closed and no Shift: not ours
+                    return None
                 if now > self.menu_until:  # opening: start on the current mode
                     self.menu_idx = fun.MENU.index(self.screen_mode) if self.screen_mode in fun.MENU else 0
                 else:

@@ -1085,7 +1085,7 @@ def menu_overlay(c, idx):
     c.fill(x0, 8, w, 48, False)
     c.rect(x0, 8, w, 48)
     c.rect(x0 + 2, 10, w - 4, 44)
-    c.text(x0 + 8, 13, "TURN: CHOOSE   PUSH: START")
+    c.text(x0 + 8, 13, "SHIFT+TURN: MENU  TURN: CHOOSE  PUSH: START")
     tw = scr.text_width(cur, 2)
     c.text(256 - tw // 2, 26, cur, scale=2)
     c.invert(256 - tw // 2 - 4, 24, tw + 8, 18)
