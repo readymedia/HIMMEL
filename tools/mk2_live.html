@@ -56,6 +56,12 @@
   .seg button.on { background: #3b5bdb; border-color: #4c6ef5; color: #fff; }
   .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 4px 0; }
   .row label { display: flex; gap: 5px; align-items: center; font-size: 12px; }
+  .mgrid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 18px; }
+  @media (max-width: 900px) { .mgrid { grid-template-columns: 1fr; } }
+  .card h3 { font-size: 12px; margin: 10px 0 4px; color: var(--btn-text); }
+  .small { font-size: 11px; white-space: pre-wrap; }
+  #mPlot { width: 100%; max-width: 600px; background: #0d0e10; border-radius: 4px; margin-top: 6px; }
+  select { background: #2c2e33; color: var(--btn-text); border: 1px solid #3a3c42; border-radius: 6px; padding: 4px; }
   #scrBig { width: 100%; image-rendering: pixelated; background: var(--screen); border-radius: 4px; margin-top: 6px; }
   #below { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 12px 20px 30px; max-width: 1100px; }
   .card { background: #17181b; border: 1px solid #26272b; border-radius: 8px; padding: 10px 12px; }
@@ -85,6 +91,39 @@
 </header>
 <div id="wrap"><div id="stage"><div id="panel"></div></div></div>
 <div id="below">
+  <div class="card" id="measure" style="grid-column: 1 / -1">
+    <h2>Measure (numbers for the controller spec) — saved to docs/mk2-measurements.json</h2>
+    <div class="mgrid">
+      <div>
+        <h3>1 · Pad hits → velocity</h3>
+        <div class="help">Press <b>Record 10 hits</b>, then hit one pad 10 times: 3 soft, 4 medium, 3 hard
+          (not Pad 12). Each curve is one hit, pressure over the first 150 ms.</div>
+        <div class="row"><button id="mArm">Record 10 hits</button><button id="mClear">Clear</button>
+          <span id="mArmed" class="mono"></span></div>
+        <canvas id="mPlot" width="600" height="200"></canvas>
+        <div id="mHits" class="mono small"></div>
+      </div>
+      <div>
+        <h3>2 · Knob resolution</h3>
+        <div class="help">Pick a knob, press <b>Start</b>, turn it exactly <b>one full turn clockwise</b>
+          (use a mark on the knob), press <b>Stop</b>. Do Knob 1 and the master encoder.</div>
+        <div class="row">
+          <select id="mKnob"><option>Knob 1</option><option>Knob 2</option><option>Knob 8</option>
+            <option>Master encoder (turn)</option></select>
+          <button id="mKStart">Start</button><button id="mKStop">Stop</button>
+        </div>
+        <div id="mKnobOut" class="mono small"></div>
+        <h3>3 · USB timing</h3>
+        <div class="help">Just runs. For the controls report, turn a knob for a few seconds.</div>
+        <div id="mTiming" class="mono small"></div>
+        <button id="mResetT">Reset timing</button>
+        <h3>4 · Reconnect</h3>
+        <div class="help">Pull the USB cable, wait 3 s, plug it back. The log shows how long reopening took.</div>
+        <div id="mConn" class="mono small"></div>
+        <div class="row"><button id="mSave"><b>Save results</b></button><span id="mSaved" class="mono"></span></div>
+      </div>
+    </div>
+  </div>
   <div class="card">
     <h2>Screens (the panel shows exactly what is sent to the MK2)</h2>
     <div class="row seg" id="scrMode">
@@ -199,6 +238,46 @@ function drawScreen(side, b64) {
 document.querySelectorAll("#scrMode button, #scrFun button").forEach(b => b.onclick = () => post({ screen_mode: b.dataset.mode }));
 document.getElementById("scrFlip").onchange = e => post({ screen_set: { msb_left: !e.target.checked } });
 document.getElementById("scrInv").onchange = e => post({ screen_set: { invert: e.target.checked } });
+// ---- Measure card ----
+const M = id => document.getElementById(id);
+M("mArm").onclick = () => post({ measure: "arm_hits", n: 10 });
+M("mClear").onclick = () => post({ measure: "clear_hits" });
+M("mKStart").onclick = () => post({ measure: "knob_start", knob: M("mKnob").value });
+M("mKStop").onclick = () => post({ measure: "knob_stop" });
+M("mResetT").onclick = () => post({ measure: "reset_timing" });
+M("mSave").onclick = () => post({ measure: "save" });
+let lastHitsKey = null;
+function renderMeasure(ms) {
+  if (!ms) return;
+  M("mArmed").textContent = ms.armed ? `recording… ${ms.armed} hits left` : "";
+  const key = ms.hits.map(h => h.peak + ":" + h.t_peak_ms).join("|");
+  if (key !== lastHitsKey) {
+    lastHitsKey = key;
+    const cv = M("mPlot"), g = cv.getContext("2d");
+    g.clearRect(0, 0, cv.width, cv.height);
+    g.strokeStyle = "#2a2c31"; g.fillStyle = "#6b6e76"; g.font = "10px Consolas";
+    for (let ms_ = 0; ms_ <= 150; ms_ += 25) { const x = 30 + ms_ * 3.7; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 185); g.stroke(); g.fillText(ms_ + "ms", x - 8, 198); }
+    for (let p = 0; p <= 4096; p += 1024) { const y = 185 - p / 4096 * 180; g.beginPath(); g.moveTo(30, y); g.lineTo(600, y); g.stroke(); g.fillText(p, 0, y + 3); }
+    ms.hits.forEach((h, i) => {
+      g.strokeStyle = `hsl(${(i * 47) % 360} 80% 65%)`; g.lineWidth = 1.5; g.beginPath();
+      h.samples.forEach(([t, p], k) => { const x = 30 + t * 3.7, y = 185 - p / 4096 * 180; k ? g.lineTo(x, y) : g.moveTo(x, y); });
+      g.stroke();
+    });
+    M("mHits").textContent = ms.hits.length
+      ? "pad  peak  t_peak  p@2ms  p@4ms  p@8ms  dur\n" + ms.hits.map(h =>
+          `${String(h.pad).padStart(3)} ${String(h.peak).padStart(5)} ${h.t_peak_ms.toFixed(1).padStart(6)}ms ${String(h.p_2ms).padStart(5)} ${String(h.p_4ms).padStart(6)} ${String(h.p_8ms).padStart(6)} ${h.duration_ms.toFixed(0).padStart(4)}ms`).join("\n")
+      : "no hits yet";
+  }
+  const k = ms.knob, kr = ms.knob_results || {};
+  M("mKnobOut").textContent = (k ? `turning ${k.name}: ${k.sum} units, ${k.changes} reports so far\n` : "") +
+    (Object.entries(kr).map(([n, r]) => `${n}: ${r.units_per_turn} units per turn (${r.changes} reports)`).join("\n") || "no results yet");
+  const f = s => s ? `mean ${s.mean_ms} ms, p50 ${s.p50_ms}, p99 ${s.p99_ms}, max ${s.max_ms} (n=${s.n})` : "-";
+  M("mTiming").textContent = `pads (0x20):     ${f(ms.pad_interval)}\ncontrols (0x01): ${f(ms.controls_interval)}\n` +
+    (ms.endpoints || []).map(e => e.error ? "endpoints: " + e.error :
+      `ep ${e.endpoint} if${e.interface} ${e.type} bInterval ${e.bInterval} max ${e.max_packet} (${e.usb_speed} speed)`).join("\n");
+  M("mConn").textContent = (ms.conn || []).map(c => `${c.time} ${c.event}${c.after_s !== undefined ? " (after " + c.after_s + " s)" : ""}`).join("\n") || "-";
+  M("mSaved").textContent = ms.saved_at ? "saved " + ms.saved_at : "";
+}
 document.getElementById("scrOk").onclick = () => post({ screen_set: { checked: true } });
 
 for (const c of CONTROLS) {
@@ -275,6 +354,7 @@ function render(s) {
     (s.message || "").replace("LED chase: ", "chase: ").replace(" - check that this one is lit", " should be lit"),
     (s.errors || []).length ? "error: " + s.errors[s.errors.length - 1] : "",
   ].filter(Boolean).join("\n");
+  renderMeasure(s.measure);
   const sc = s.screen || {};
   if (sc.left) { drawScreen("left", sc.left); drawScreen("right", sc.right); }
   document.querySelectorAll("#scrMode button, #scrFun button").forEach(b => b.classList.toggle("on", b.dataset.mode === sc.mode));

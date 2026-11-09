@@ -26,6 +26,7 @@ sys.path.insert(0, HERE)
 import maschine_mk2_test as mk  # noqa: E402
 import mk2_screens as scr  # noqa: E402
 import mk2_fun as fun  # noqa: E402
+import mk2_measure  # noqa: E402
 import base64  # noqa: E402
 
 PORT = 8765
@@ -69,6 +70,7 @@ class Live:
         self.pads_down = set()
         self.games = {}            # fun modes, created on first use
         self.fps = 0.0
+        self.meas = mk2_measure.Measure()   # Measure card (controller spec numbers)
         self.enc_last = None       # master encoder menu
         self.menu_idx = 0
         self.menu_until = 0.0
@@ -112,6 +114,8 @@ class Live:
                 m.result = {"buttons": self.saved["buttons"], "knobs": self.saved["knobs"],
                             "pads": self.saved["pads"], "skipped": self.saved["skipped"]}
                 m.step = len(mk.STEPS) - 1  # "done": no step-learning inside Mapper
+                self.meas.attach(m, {pid: int(n.split()[1]) for n, pid in self.pad_ids().items()})
+                self.meas.event("connected")
                 threading.Thread(target=m.reader, daemon=True).start()
                 threading.Thread(target=m.led_writer, daemon=True).start()
                 with self.lock:
@@ -282,6 +286,7 @@ class Live:
             t.close()
             with self.lock:
                 self.m = self.t = None
+                self.meas.event("disconnected")
                 self.notes = ["Lost the MK2 (%s) - reconnecting" % (m.errors[-1] if m.errors else "?")]
 
     # ---------- per-tick logic (under lock) ----------
@@ -292,6 +297,7 @@ class Live:
         st = m.state
         if st is None:
             return
+        self.meas.knob_tick(self.knob_values())
         prev = self.prev or st
         self.prev = st
         rising = {}
@@ -454,6 +460,7 @@ class Live:
                 "learn": {"kind": self.learn["kind"], "name": self.learn["name"]} if self.learn else None,
                 "message": (m.message if m and m.chase_running() else self.message),
                 "chase": bool(m and m.chase_running()),
+                "measure": self.meas.snapshot(),
                 "screen": dict(self.saved["screen"], mode=self.screen_mode,
                                write_ms=round(self.sender.write_ms, 2), writes=self.sender.writes,
                                fps=round(self.fps, 1),
@@ -484,6 +491,8 @@ class Live:
                 else:
                     {"pads": m.test_pads, "groups": m.test_groups, "buttons": m.test_buttons,
                      "off": m.leds_off}.get(act, lambda: None)()
+            elif "measure" in d:
+                self.meas.command(d)
             elif d.get("screen_mode") in fun.MENU:
                 self.set_mode(d["screen_mode"])
             elif "screen_set" in d:  # {"screen_set": {"msb_left": bool} | {"invert": bool} | {"checked": bool}}

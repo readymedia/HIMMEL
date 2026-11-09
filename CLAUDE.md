@@ -130,6 +130,10 @@ The details are in the mockup (`docs/vj-mockup.html`).
     module (never the render loop) and must never block reading buttons/pads.
     Use one write lock for LEDs and screens (hidapi on Windows is not safe for
     parallel writes on one handle).
+- **Measured 2026-11-09** (MK2 Live → Measure card): pads stream every 1.33 ms,
+  knob reports ~10 ms apart, one knob turn ≈ 1008 units, USB high speed. Velocity =
+  max pressure in the first 4 ms after onset (the peak does not work). Still open:
+  encoder steps per turn, reconnect time, the master encoder's job in Himmel.
 - `tools/maschine_mk2_test.py`: the first terminal mapper (step-by-step learn,
   `--verify`, `--list`). `mk2_live.py` imports its `Transport` and `Mapper`.
   - Known protocol facts:
@@ -159,7 +163,9 @@ The details are in the mockup (`docs/vj-mockup.html`).
 ## Next steps
 1. ~~Run the MK2 mapper with the owner.~~ **Done 2026-11-09**: map verified and
    committed.
-2. **Write the `controller` module** (its own process or thread):
+2. **Write the `controller` module** — **the spec is `docs/mk2-controller-spec.md`**
+   (reports byte by byte, map schema, events/commands, threads, reconnect, velocity
+   formula, measured timings in `docs/mk2-measurements.json`). In short:
    - load `maschine_mk2_map.json` (names → byte/bit, knob words, pad ids,
      per-pad noise floor) instead of hard-coding the layout;
    - read the MK2 at ≥ 500 Hz;
