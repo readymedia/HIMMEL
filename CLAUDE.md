@@ -68,10 +68,36 @@ inside the app (UI, help, logs, code comments) is in **English**.
 The details are in the mockup (`docs/vj-mockup.html`).
 
 ## Status right now
-- `tools/maschine_mk2_test.py`: a hardware test and **mapper**. It learns the
-  byte and bit of every button, knob and pad, tests all LEDs, and saves the
-  result to `maschine_mk2_map.json`.
-  - It has **not been run against the real device yet**. That is step 1.
+- **`maschine_mk2_map.json` is verified on the owner's MK2 (2026-11-09).** All
+  73 controls (48 buttons, 8 knobs, master encoder turn + push, 16 pads) were
+  touched and checked, and all LED groups were checked. This file is the source
+  of truth for the controller module. Do not regenerate it; fix single entries
+  with the live view below.
+  - Device access: hidapi opens HID interface 2 directly on Windows. No Zadig
+    needed. Close NI software first.
+  - Report `0x01` payload (after the id): bytes 0–5 are buttons, bit 0 first
+    (0 Top 1–8, 1 Control…Auto Write, 2 Volume/Swing/Tempo/Master </Master >/
+    Enter/Note Repeat/encoder push, 3 Groups A–H, 4 transport, 5 Scene…Mute),
+    byte 7 low nibble = master encoder (0–15), bytes 8–23 = 8 knobs as 16-bit
+    little-endian values (about 0–1000 per ni-mk2). Knobs and encoder are absolute and wrap: the
+    controller must turn them into deltas.
+  - **Pads are flipped**: hardware pad id 0 is top-left, so Pad 1 (bottom-left)
+    is id 12 and Pad 16 is id 3. Pad LEDs (report `0x80`) follow the hardware id
+    order. The pad report streams all the time (~750 Hz).
+  - **Pad 12 is worn**: it reads ~120–136 of 4095 when untouched. The map has
+    `pad_noise_floor` per pad; the controller must use a per-pad dead zone.
+- **Visual mapping is the way to work with the controller. Keep it and build on
+  it** (the owner wants graphical tools, not terminal tables):
+  - `tools/mk2_live.py` + `tools/mk2_live.html`: a browser live view of the MK2
+    front panel (stdlib HTTP server + Server-Sent Events, `.claude/launch.json`
+    config `mk2-live`, http://127.0.0.1:8765). Controls light up when touched,
+    knobs turn, pads glow by pressure. Click a control on screen and then press
+    the real one to relearn it; the map is saved (with a `.bak.json` backup).
+    It ticks off every control as "seen" and has LED tests and an on/off chase.
+  - Later the operator GUI should have the same idea: a picture of the
+    controller, live feedback, and click-then-press learning (MIDI-learn style).
+- `tools/maschine_mk2_test.py`: the first terminal mapper (step-by-step learn,
+  `--verify`, `--list`). `mk2_live.py` imports its `Transport` and `Mapper`.
   - Known protocol facts:
     - Input report `0x01` carries buttons and knobs (25 bytes).
     - Input report `0x20` carries the pads (65 bytes, 16-bit words: 4-bit id +
@@ -82,8 +108,8 @@ The details are in the mockup (`docs/vj-mockup.html`).
     - LED report `0x82` sets 31 single-color buttons.
     - LED values are 0–127.
     - The screens use reports `0xE0` / `0xE1`, 1-bit (see github.com/abique/ni-mk2).
-  - LED names marked `*` in the script are guesses. The chase test (key 4) shows
-    the truth.
+  - The LED tables follow ni-mk2 and were checked with the LED tests; names
+    marked `*` in the script are kept from before but behaved as expected.
 - `tools/maschine_test.py`: an old MK1 test. **Not relevant** (wrong model);
   kept only for reference.
 - `docs/vj-mockup.html`: an interactive mockup of the MK2 and the 3-screen wall.
@@ -97,11 +123,11 @@ The details are in the mockup (`docs/vj-mockup.html`).
   - Ask the owner for an export if you need it.
 
 ## Next steps
-1. **Run `python tools/maschine_mk2_test.py`** together with the owner.
-   - Fix any device-access problem (hidapi → Zadig/WinUSB).
-   - Go through all the steps, then check the LED chase.
-   - Commit `maschine_mk2_map.json` and correct the LED tables.
+1. ~~Run the MK2 mapper with the owner.~~ **Done 2026-11-09**: map verified and
+   committed.
 2. **Write the `controller` module** (its own process or thread):
+   - load `maschine_mk2_map.json` (names → byte/bit, knob words, pad ids,
+     per-pad noise floor) instead of hard-coding the layout;
    - read the MK2 at ≥ 500 Hz;
    - publish events (button, knob delta, pad velocity / aftertouch) over a
      lock-free queue or shared memory;
