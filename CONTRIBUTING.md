@@ -9,6 +9,8 @@ Thank you! Issues, ideas, hardware reports and pull requests are all welcome.
   are valuable: open an issue with the re-learned control.
 - **Measure.** Latency, frame times, decode times on your GPU. The renderer
   logs them every 5 s.
+- **No MK2?** Press **Simulate** in the live view and play the drawn panel.
+- **A new weapon** (controller): the recipe is in [weapons/README.md](weapons/README.md).
 - **A new screen mode** for the MK2 screens: the recipe is in
   [docs/mk2-screen-fun.md](docs/mk2-screen-fun.md).
 - **Docs**: anything that confused you in the getting-started guide.

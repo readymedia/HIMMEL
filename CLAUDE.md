@@ -86,6 +86,20 @@ The details are in the mockup (`docs/vj-mockup.html`).
     order. The pad report streams all the time (~750 Hz).
   - **Pad 12 is worn**: it reads ~120–136 of 4095 when untouched. The map has
     `pad_noise_floor` per pad; the controller must use a per-pad dead zone.
+- **Weapons (decided 2026-11-10):** a controller is a "weapon". Himmel will
+  support several, and ones you do not own can be simulated. Recipe and format:
+  `weapons/README.md`.
+  - Weapon = profile (`weapons/<id>.weapon.json`: controls, layout, labels,
+    colours) + map (wire bytes, learned on hardware) + driver + simulator.
+  - MK2 is weapon no. 1: `weapons/mk2.weapon.json`. The live view draws the
+    panel from it; the drawing says "HIMMEL · MK2", never the maker's brand.
+  - `tools/mk2_sim.py`: a simulated MK2 at the USB-report level (same interface
+    as `Transport`). Live view: **Simulate** button or `--sim`; mouse plays the
+    panel, keyboard Shift = Shift. Simulated input never marks "seen", never
+    changes the map, never measured. Checked in the browser 2026-11-10
+    (knobs, encoder, buttons, pads, Snake with lit d-pad, switch back to HW).
+  - Next: a generic MIDI weapon; a simulated weapon feeding `Local\HimmelMk2`
+    so the C++ engine runs with no hardware.
 - **Visual mapping is the way to work with the controller. Keep it and build on
   it** (the owner wants graphical tools, not terminal tables):
   - `tools/mk2_live.py` + `tools/mk2_live.html`: a browser live view of the MK2

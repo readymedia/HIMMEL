@@ -10,7 +10,15 @@ using maschine_mk2_map.json. Click a control on screen and then press / turn /
 hit the real one to (re)learn it. Every control you touch is ticked off as
 "seen"; when all are seen the map is marked verified.
 
-Run:   python tools/mk2_live.py      then open http://127.0.0.1:8765
+The panel is drawn from the weapon profile weapons/mk2.weapon.json (layout,
+labels, colours); the byte/bit map stays in maschine_mk2_map.json.
+
+No MK2? Press "Simulate" on the page (or start with --sim): a virtual MK2
+(tools/mk2_sim.py) takes the place of the hardware and you play the drawn panel
+with the mouse. Simulated input never marks controls as seen and never changes
+the map or the measurements.
+
+Run:   python tools/mk2_live.py [--sim]     then open http://127.0.0.1:8765
 Needs: pip install hidapi  (same as maschine_mk2_test.py). Standard library otherwise.
 The device is reopened automatically if the USB cable is pulled.
 """
@@ -29,10 +37,12 @@ import maschine_mk2_test as mk  # noqa: E402
 import mk2_screens as scr  # noqa: E402
 import mk2_fun as fun  # noqa: E402
 import mk2_measure  # noqa: E402
+import mk2_sim  # noqa: E402
 import base64  # noqa: E402
 
 PORT = 8765
 HTML = os.path.join(HERE, "mk2_live.html")
+WEAPON = os.path.join(os.path.dirname(HERE), "weapons", "mk2.weapon.json")
 BUTTONS = list(mk.BUTTON_STEPS) + ["Master <", "Master >", "Enter"]
 KNOBS = list(mk.KNOB_STEPS)
 PADS = list(mk.PAD_STEPS)
@@ -76,6 +86,11 @@ class Live:
         self.enc_last = None       # master encoder menu
         self.menu_idx = 0
         self.menu_until = 0.0
+        self.sim = False           # True: use the simulated MK2 instead of the hardware
+        self.swap = False          # set when sim is toggled: device loop drops the current device
+
+    def simulated(self):
+        return isinstance(self.t, mk2_sim.SimMk2)
 
     # ---------- map file ----------
     def load(self):
@@ -106,18 +121,26 @@ class Live:
     # ---------- device ----------
     def device_loop(self):
         while True:
+            if self.swap:
+                self.swap = False
+                if self.m is not None:
+                    self.drop_device(["Switched to the simulated MK2" if self.sim else "Switched to the hardware"])
             if self.m is None:
-                t = mk.Transport()
+                t = mk2_sim.SimMk2(self.saved) if self.sim else mk.Transport()
                 if not t.open():
-                    self.notes = t.notes or ["MK2 not found"]
-                    time.sleep(1.0)
+                    self.notes = (t.notes or ["MK2 not found"]) + ["No MK2? Press Simulate to play the panel with the mouse."]
+                    for _ in range(10):  # wait 1 s, but react to Simulate at once
+                        if self.swap:
+                            break
+                        time.sleep(0.1)
                     continue
                 m = mk.Mapper(t)
                 m.result = {"buttons": self.saved["buttons"], "knobs": self.saved["knobs"],
                             "pads": self.saved["pads"], "skipped": self.saved["skipped"]}
                 m.step = len(mk.STEPS) - 1  # "done": no step-learning inside Mapper
-                self.meas.attach(m, {pid: int(n.split()[1]) for n, pid in self.pad_ids().items()})
-                self.meas.event("connected")
+                if not self.sim:  # never measure the simulator
+                    self.meas.attach(m, {pid: int(n.split()[1]) for n, pid in self.pad_ids().items()})
+                    self.meas.event("connected")
                 threading.Thread(target=m.reader, daemon=True).start()
                 threading.Thread(target=m.led_writer, daemon=True).start()
                 with self.lock:
@@ -250,7 +273,7 @@ class Live:
         else:
             if side == "left":
                 r = m.reports if m else {}
-                lines = ["MK2 CONNECTED" if m else "MK2 NOT CONNECTED",
+                lines = [("MK2 SIMULATED" if self.simulated() else "MK2 CONNECTED") if m else "MK2 NOT CONNECTED",
                          "CONTROLS %d  PADS %d" % (r.get("0x01", 0), r.get("0x20", 0)),
                          "SEEN %d / %d" % (len(self.seen), len(ALL)),
                          "SCREEN WRITE %.2f MS" % self.sender.write_ms]
@@ -286,14 +309,23 @@ class Live:
         n = len(self.m.errors)
         self.err_check = (time.time(), n)
         if n - n0 >= 4:  # reader keeps failing: device gone, reopen
-            m, t = self.m, self.t
-            m.running = False
-            time.sleep(0.25)
-            t.close()
-            with self.lock:
-                self.m = self.t = None
+            m = self.m
+            self.drop_device(["Lost the MK2 (%s) - reconnecting" % (m.errors[-1] if m.errors else "?")])
+
+    def drop_device(self, notes):
+        """Stop and close the current device (real or simulated). Called from the device thread."""
+        m, t = self.m, self.t
+        was_sim = self.simulated()
+        m.running = False
+        m.chase_stop.set()
+        time.sleep(0.25)
+        t.close()
+        with self.lock:
+            self.m = self.t = None
+            self.held, self.pads_down, self.prev = set(), set(), None
+            if not was_sim:
                 self.meas.event("disconnected")
-                self.notes = ["Lost the MK2 (%s) - reconnecting" % (m.errors[-1] if m.errors else "?")]
+            self.notes = notes
 
     # ---------- per-tick logic (under lock) ----------
     def tick(self):
@@ -358,6 +390,8 @@ class Live:
         return {n: v["id"] for n, v in self.saved["pads"].items() if not n.startswith("_")}
 
     def mark_seen(self, name):
+        if self.simulated():  # "seen" means checked on the real device
+            return
         if name not in self.seen:
             self.seen.add(name)
             self.save_due = time.time() + 1.0
@@ -450,6 +484,9 @@ class Live:
                     pads[int(name.split()[1]) - 1] = m.pads[pid]
             return {
                 "connected": m is not None,
+                "sim": self.sim,
+                "simulated": self.simulated(),
+                "leds": self.led_state(),
                 "notes": self.notes[-2:],
                 "reports": dict(m.reports) if m else {},
                 "errors": (m.errors[-2:] if m else []),
@@ -474,9 +511,59 @@ class Live:
                                right=base64.b64encode(self.screen_bits["right"]).decode()),
             }
 
+    def led_state(self):
+        """What the LEDs show right now (what was last sent), by control name: [r, g, b] 0..127.
+        Lets the drawn panel glow like the device, real or simulated. Under lock."""
+        m = self.m
+        if m is None:
+            return {}
+        out = {}
+        for i, name in enumerate(mk.LED_82):
+            v = m.leds82[i]
+            if v:
+                out[name.rstrip("*")] = [v, v, v]
+        for g, name in enumerate(mk.GROUPS):
+            rgb = m.leds81[g * 6:g * 6 + 3]
+            if any(rgb):
+                out[name] = list(rgb)
+        for i, name in enumerate(mk.LED_81_TRANSPORT):
+            v = m.leds81[48 + i]
+            if v:
+                out[name.rstrip("*")] = [v, v, v]
+        for name, pid in self.pad_ids().items():
+            rgb = m.leds80[pid * 3:pid * 3 + 3]
+            if any(rgb):
+                out[name] = list(rgb)
+        return out
+
+    def sim_input(self, d):
+        """Mouse/keyboard input for the simulated MK2. Not under lock (the sim has its own)."""
+        t = self.t
+        if not isinstance(t, mk2_sim.SimMk2):
+            return
+        name = d.get("name", "")
+        if "down" in d:
+            t.press(name, bool(d["down"]))
+        elif "delta" in d:
+            t.turn(name, d["delta"])
+        elif "pressure" in d:
+            t.pad(name, d["pressure"])
+        elif d.get("release_all"):
+            t.release_all()
+
     def command(self, d):
+        if "sim_input" in d:
+            return self.sim_input(d["sim_input"])
         with self.lock:
             m = self.m
+            if "sim" in d:
+                self.sim = bool(d["sim"])
+                self.learn = None
+                self.swap = True
+                return
+            if "learn" in d and self.simulated():
+                self.message = "Learning needs the real MK2 (turn Simulate off)"
+                return
             if "learn" in d:
                 name = d["learn"]
                 if not name:
@@ -534,6 +621,18 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(body)
+        elif self.path == "/weapon":
+            try:
+                with open(WEAPON, "rb") as f:
+                    body = f.read()
+            except OSError:
+                self.send_error(404, "weapon profile missing")
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
         elif self.path == "/events":
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
@@ -561,6 +660,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    LIVE.sim = "--sim" in sys.argv[1:]
     threading.Thread(target=LIVE.device_loop, daemon=True).start()
     threading.Thread(target=LIVE.screen_loop, daemon=True).start()
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)

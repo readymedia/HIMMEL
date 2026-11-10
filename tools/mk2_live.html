@@ -17,6 +17,11 @@
   header h1 { font-size: 16px; margin: 0; letter-spacing: .5px; }
   .pill { padding: 3px 10px; border-radius: 99px; background: #26272b; font-size: 12px; }
   .pill.ok { background: #143d27; color: #7ff0b0; } .pill.bad { background: #4a1719; color: #ffb3b5; }
+  .pill.sim { background: #2b2350; color: #c8b8ff; }
+  .tools button.simon { background: #4b3a99; border-color: #6b55d6; color: #fff; }
+  body.sim #panel { border-color: #6b55d6; box-shadow: 0 0 0 2px #6b55d633, 0 20px 60px #0008; }
+  body.sim .c { cursor: grab; touch-action: none; }
+  body.sim .c.missing { outline: none; }
   .progress { flex: 1; min-width: 160px; height: 8px; background: #26272b; border-radius: 4px; overflow: hidden; }
   .progress > div { height: 100%; background: var(--seen); width: 0; transition: width .2s; }
   .tools button { background: #2c2e33; color: var(--btn-text); border: 1px solid #3a3c42; border-radius: 6px;
@@ -76,11 +81,12 @@
 </head>
 <body>
 <header>
-  <h1>MK2 Live</h1>
+  <h1 id="title">Live</h1>
   <span id="conn" class="pill">connecting…</span>
   <span id="count" class="pill">0 / 0 seen</span>
   <div class="progress"><div id="bar"></div></div>
   <span class="tools">
+    <button id="simBtn" title="No MK2 here? Play the drawn panel with the mouse">Simulate</button>
     <button data-led="pads">Pad LEDs</button>
     <button data-led="groups">Group LEDs</button>
     <button data-led="buttons">Button LEDs</button>
@@ -177,50 +183,15 @@
 </div>
 
 <script>
-// Positions follow the real MK2 front panel (units = px in a 720x620 panel).
-const B = (name, x, y, label, w = 40, h = 17, cls = "") => ({ kind: "button", name, x, y, label, w, h, cls });
-const CONTROLS = [
-  B("Control", 42, 30, "CONTROL"), B("Step", 97, 30, "STEP"),
-  ...[1, 2, 3, 4, 5, 6, 7, 8].map((i, k) => B("Top " + i, 165 + k * 64, 30, "", 42, 17)),
-  B("Browse", 42, 78, "BROWSE"), B("Sampling", 97, 78, "SAMPLING"),
-  B("Page <", 42, 118, "◀"), B("Page >", 97, 118, "▶"),
-  B("All", 42, 170, "ALL"), B("Auto Write", 97, 170, "AUTO"),
-  ...[1, 2, 3, 4, 5, 6, 7, 8].map((i, k) => ({ kind: "knob", name: "Knob " + i, x: 166 + k * 64, y: 160, r: 18 })),
-  B("Volume", 42, 245, "VOLUME"), B("Swing", 42, 275, "SWING"), B("Tempo", 42, 305, "TEMPO"),
-  { kind: "knob", name: "Master encoder (turn)", x: 116, y: 238, r: 30, enc: true },
-  B("Master encoder (push)", 127, 290, "PUSH", 18, 10),
-  B("Note Repeat", 207, 245, "NOTE<br>REPEAT", 40, 28),
-  B("Master <", 97, 305, "◀"), B("Master >", 152, 305, "▶"), B("Enter", 207, 305, "ENTER"),
-  ...["A", "B", "C", "D"].map((g, k) => B("Group " + g, 42 + k * 55, 368, g, 42, 26, "grp")),
-  ...["E", "F", "G", "H"].map((g, k) => B("Group " + g, 42 + k * 55, 408, g, 42, 26, "grp")),
-  B("Restart", 42, 487, "RESTART"), B("Transport <", 97, 487, "◀"), B("Transport >", 152, 487, "▶"), B("Grid", 207, 487, "GRID"),
-  B("Play", 42, 522, "PLAY", 40, 20, "play"), B("Rec", 97, 522, "REC", 40, 20, "rec"),
-  B("Erase", 152, 522, "ERASE", 40, 20), B("Shift", 207, 522, "SHIFT", 40, 20),
-  ...["Scene", "Pattern", "Pad Mode", "Navigate", "Duplicate", "Select", "Solo", "Mute"]
-     .map((n, k) => B(n, 280, 248 + k * 39, n.toUpperCase(), 42, 20)),
-];
-// Pads: 13-16 on top, 1-4 at the bottom, like the device.
-const PAD_COLORS = ["#e8413c", "#e9d23c", "#3cb8e8", "#3cb8e8", "#e9d23c", "#e9d23c", "#3ce8b0", "#3c9be8",
-                    "#e89a3c", "#e89a3c", "#e89a3c", "#e89a3c", "#3ce8c8", "#3ce8c8", "#3ce8c8", "#3ce8c8"];
-for (let n = 1; n <= 16; n++) {
-  const row = 3 - Math.floor((n - 1) / 4), col = (n - 1) % 4;
-  CONTROLS.push({ kind: "pad", name: "Pad " + n, n, x: 355 + col * 77, y: 245 + row * 77, w: 63, h: 63 });
-}
-const GROUP_COLORS = { A: "#d98a2b", B: "#2b8fd9", C: "#2bb0d9", D: "#2b9fd9", E: "#2bb5d9", F: "#7b3fd9", G: "#2bb0d9", H: "#d93f9a" };
-
+// The panel is drawn from the weapon profile (weapons/mk2.weapon.json, served at /weapon):
+// every control's kind, place, size, label and colour. Nothing about the layout lives here.
+let W = null;            // the weapon profile
+const els = {};          // control name -> control (with .el)
 const panel = document.getElementById("panel");
-const els = {};
 function add(html, cls, style) { const d = document.createElement("div"); d.className = cls; Object.assign(d.style, style); d.innerHTML = html; panel.appendChild(d); return d; }
-add("◎ MASCHINE", "brand", {});
-add("MASTER", "sec", { left: "42px", top: "222px" }); add("", "rule", { left: "42px", top: "234px", width: "205px" });
-add("GROUPS", "sec", { left: "42px", top: "348px" }); add("", "rule", { left: "42px", top: "360px", width: "205px" });
-add("TRANSPORT", "sec", { left: "42px", top: "462px" }); add("", "rule", { left: "42px", top: "474px", width: "205px" });
-add("PADS", "sec", { left: "280px", top: "222px" }); add("", "rule", { left: "280px", top: "234px", width: "400px" });
+const esc = t => String(t).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+const ctxs = {}, imgs = {};
 // 256x64 screens drawn at 1:1 device pixels, scaled to the panel (aspect 4:1)
-const scrL = add('<canvas width="256" height="64"></canvas>', "screen", { left: "150px", top: "72px", width: "240px", height: "66px" });
-const scrR = add('<canvas width="256" height="64"></canvas>', "screen", { left: "418px", top: "72px", width: "240px", height: "66px" });
-const ctxs = { left: scrL.firstChild.getContext("2d"), right: scrR.firstChild.getContext("2d") };
-const imgs = { left: ctxs.left.createImageData(256, 64), right: ctxs.right.createImageData(256, 64) };
 let lastScr = {};
 function drawScreen(side, b64) {
   if (lastScr[side] === b64) return;
@@ -280,21 +251,91 @@ function renderMeasure(ms) {
 }
 document.getElementById("scrOk").onclick = () => post({ screen_set: { checked: true } });
 
-for (const c of CONTROLS) {
-  let d;
-  if (c.kind === "button") {
-    d = add(c.label, "c b " + c.cls, { left: c.x + "px", top: c.y + "px", width: c.w + "px", height: c.h + "px" });
-  } else if (c.kind === "knob") {
-    d = add('<div class="ind"></div>', "c knob", { left: (c.x - c.r) + "px", top: (c.y - c.r) + "px", width: 2 * c.r + "px", height: 2 * c.r + "px" });
-    c.val = add("", "kval", { left: (c.x - 30) + "px", top: (c.y + c.r + 3) + "px" });
-    panel.appendChild(d);
-  } else {
-    d = add('<span class="pn">' + c.n + '</span><span class="pv"></span>', "c pad", { left: c.x + "px", top: c.y + "px", width: c.w + "px", height: c.h + "px" });
+function buildPanel(w) {
+  W = w;
+  document.title = w.name + " Live";
+  document.getElementById("title").textContent = w.name + " Live";
+  panel.style.width = w.panel.w + "px"; panel.style.height = w.panel.h + "px";
+  add(esc(w.badge || w.name), "brand", {});
+  for (const s of w.sections || []) {
+    add(esc(s.label), "sec", { left: s.x + "px", top: s.y + "px" });
+    add("", "rule", { left: s.x + "px", top: (s.y + 12) + "px", width: s.w + "px" });
   }
-  d.title = c.name + " (click, then press the real control to learn it)";
-  d.addEventListener("click", () => post({ learn: c.name }));
-  c.el = d; els[c.name] = c;
+  for (const s of w.screens || []) {  // drawn at 1:1 device pixels, scaled to the panel
+    const d = add(`<canvas width="${s.px_w}" height="${s.px_h}"></canvas>`, "screen",
+                  { left: s.x + "px", top: s.y + "px", width: s.w + "px", height: s.h + "px" });
+    ctxs[s.id] = d.firstChild.getContext("2d");
+    imgs[s.id] = ctxs[s.id].createImageData(s.px_w, s.px_h);
+  }
+  for (const c of w.controls) {
+    let d;
+    if (c.kind === "button") {
+      d = add(esc(c.label || "").replace(/\n/g, "<br>"), "c b", { left: c.x + "px", top: c.y + "px", width: c.w + "px", height: c.h + "px" });
+    } else if (c.kind === "knob" || c.kind === "encoder") {
+      d = add('<div class="ind"></div>', "c knob", { left: (c.x - c.r) + "px", top: (c.y - c.r) + "px", width: 2 * c.r + "px", height: 2 * c.r + "px" });
+      c.val = add("", "kval", { left: (c.x - 30) + "px", top: (c.y + c.r + 3) + "px" });
+      panel.appendChild(d);
+    } else if (c.kind === "pad") {
+      d = add('<span class="pn">' + c.n + '</span><span class="pv"></span>', "c pad", { left: c.x + "px", top: c.y + "px", width: c.w + "px", height: c.h + "px" });
+    } else continue;
+    c.el = d; els[c.name] = c;
+    wire(c);
+  }
+  fit();
 }
+
+// ---- input on the drawn panel ----
+// Hardware mode: click a control, then press the real one to learn it.
+// Simulate mode: the panel IS the controller. Buttons: hold the mouse. Knobs: drag up/down or scroll.
+// Pads: press; higher up on the pad = harder hit, move while holding = aftertouch.
+// Keyboard Shift = the Shift button (so you can do Shift + knob / Shift + encoder).
+let simOn = false;
+const simIn = o => post({ sim_input: o });
+function wire(c) {
+  const el = c.el;
+  el.addEventListener("click", () => { if (!simOn) post({ learn: c.name }); });
+  el.addEventListener("pointerdown", e => {
+    if (!simOn) return;
+    e.preventDefault();
+    el.setPointerCapture(e.pointerId);
+    if (c.kind === "button") simIn({ name: c.name, down: true });
+    else if (c.kind === "pad") simIn({ name: c.name, pressure: padPressure(c, e) });
+    else c.dragY = e.clientY;
+  });
+  el.addEventListener("pointermove", e => {
+    if (!simOn || !el.hasPointerCapture(e.pointerId)) return;
+    if (c.kind === "pad") {
+      const now = performance.now();
+      if (now - (c.lastMove || 0) > 25) { c.lastMove = now; simIn({ name: c.name, pressure: padPressure(c, e) }); }
+    } else if (c.kind === "knob" || c.kind === "encoder") {
+      const step = c.kind === "encoder" ? 8 : 1;   // px per step: encoder detents, knob units
+      const n = Math.trunc((c.dragY - e.clientY) / step);
+      if (n) { c.dragY -= n * step; simIn({ name: c.name, delta: c.kind === "encoder" ? n : n * 4 }); }
+    }
+  });
+  const up = e => {
+    if (!simOn) return;
+    if (c.kind === "button") simIn({ name: c.name, down: false });
+    else if (c.kind === "pad") simIn({ name: c.name, pressure: 0 });
+  };
+  el.addEventListener("pointerup", up);
+  el.addEventListener("pointercancel", up);
+  el.addEventListener("wheel", e => {
+    if (!simOn || (c.kind !== "knob" && c.kind !== "encoder")) return;
+    e.preventDefault();
+    const n = (e.deltaY < 0 ? 1 : -1) * Math.max(1, Math.round(Math.abs(e.deltaY) / 100));  // one notch = 100
+    simIn({ name: c.name, delta: c.kind === "encoder" ? n : n * 20 });
+  }, { passive: false });
+}
+function padPressure(c, e) {
+  const r = c.el.getBoundingClientRect();
+  const k = 1 - Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+  return Math.round(600 + 3400 * k);   // bottom edge = soft, top edge = hard
+}
+let shiftDown = false;
+document.addEventListener("keydown", e => { if (simOn && e.key === "Shift" && !shiftDown) { shiftDown = true; simIn({ name: "Shift", down: true }); } });
+document.addEventListener("keyup", e => { if (e.key === "Shift" && shiftDown) { shiftDown = false; simIn({ name: "Shift", down: false }); } });
+window.addEventListener("blur", () => { if (simOn) { shiftDown = false; simIn({ release_all: true }); } });
 
 function post(o) { fetch("/cmd", { method: "POST", body: JSON.stringify(o) }).catch(() => {}); }
 document.addEventListener("keydown", e => { if (e.key === "Escape") post({ learn: "" }); });
@@ -302,20 +343,31 @@ document.querySelectorAll("[data-led]").forEach(b => b.onclick = () => post({ le
 document.getElementById("reset").onclick = () => { if (confirm("Clear all 'seen' marks?")) post({ reset_seen: true }); };
 
 function fit() {
-  const s = Math.min((window.innerWidth - 40) / 722, 1.6);
+  if (!W) return;
+  const pw = W.panel.w + 2, ph = W.panel.h + 2;
+  const s = Math.min((window.innerWidth - 40) / pw, 1.6);
   const st = document.getElementById("stage");
-  st.style.transform = `scale(${s})`; st.style.width = "722px"; st.style.height = "622px";
-  document.getElementById("wrap").style.height = (622 * s + 8) + "px";
+  st.style.transform = `scale(${s})`; st.style.width = pw + "px"; st.style.height = ph + "px";
+  document.getElementById("wrap").style.height = (ph * s + 8) + "px";
 }
-window.addEventListener("resize", fit); fit();
+window.addEventListener("resize", fit);
+document.getElementById("simBtn").onclick = () => post({ sim: !simOn });
 
+const ledCss = (rgb, a) => `rgba(${rgb[0] * 2},${rgb[1] * 2},${rgb[2] * 2},${a})`;
 function hexToRgba(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${n >> 8 & 255},${n & 255},${a})`; }
 
 let lastKnob = {}, knobFlash = {};
 function render(s) {
   const conn = document.getElementById("conn");
-  conn.textContent = s.connected ? "MK2 connected" : "MK2 not connected";
-  conn.className = "pill " + (s.connected ? "ok" : "bad");
+  simOn = !!s.sim;
+  document.body.classList.toggle("sim", simOn);
+  const sb = document.getElementById("simBtn");
+  sb.textContent = simOn ? "■ Stop simulating" : "Simulate";
+  sb.classList.toggle("simon", simOn);
+  const nm = W ? W.name : "";
+  conn.textContent = s.simulated ? nm + " simulated" : s.connected ? nm + " connected" : nm + " not connected";
+  conn.className = "pill " + (s.simulated ? "sim" : s.connected ? "ok" : "bad");
+  const leds = s.leds || {};
   const seen = new Set(s.seen), held = new Set(s.held), mapped = new Set(s.mapped);
   document.getElementById("count").textContent = `${seen.size} / ${s.total} seen` + (s.verified ? " ✓ verified" : "");
   document.getElementById("bar").style.width = (100 * seen.size / s.total) + "%";
@@ -328,21 +380,28 @@ function render(s) {
     if (c.kind === "button") {
       const on = held.has(c.name);
       cl.toggle("on", on);
-      const g = c.name.startsWith("Group ") ? c.name.slice(6) : null;
-      c.el.style.background = on && g ? GROUP_COLORS[g] : on && c.cls === "play" ? "#3ddc84" : on && c.cls === "rec" ? "#e5484d" : "";
-    } else if (c.kind === "knob") {
+      const led = leds[c.name];
+      c.el.style.background = on && c.on_color ? c.on_color : !on && led ? ledCss(led, 0.55) : "";
+      c.el.style.color = !on && led ? "#111" : "";
+    } else if (c.kind === "knob" || c.kind === "encoder") {
       const v = s.knobs[c.name];
       if (v !== undefined && lastKnob[c.name] !== undefined && v !== lastKnob[c.name]) knobFlash[c.name] = now;
       lastKnob[c.name] = v;
-      const ang = v === undefined ? 0 : (c.enc ? v / 16 : v / 1000) * 360;
+      const ang = v === undefined ? 0 : v / (c.range || 1000) * 360;
       c.el.firstChild.style.transform = `rotate(${ang}deg)`;
       cl.toggle("on", now - (knobFlash[c.name] || 0) < 300);
       c.val.textContent = v === undefined ? "-" : v;
     } else {
       const p = s.pads[c.n - 1] || 0, k = Math.min(1, p / 2048);
-      const col = PAD_COLORS[c.n - 1];
-      c.el.style.background = `linear-gradient(${hexToRgba(col, 0.18 + 0.82 * k)}, ${hexToRgba(col, 0.10 + 0.6 * k)})`;
-      c.el.style.boxShadow = k > 0.2 ? `0 0 ${8 + 18 * k}px ${hexToRgba(col, 0.8)}` : "none";
+      const led = leds[c.name];
+      const col = c.color || "#888888";
+      if (p === 0 && led) {  // not pressed but lit by the program (e.g. a game's d-pad)
+        c.el.style.background = ledCss(led, 0.75);
+        c.el.style.boxShadow = `0 0 10px ${ledCss(led, 0.6)}`;
+      } else {
+        c.el.style.background = `linear-gradient(${hexToRgba(col, 0.18 + 0.82 * k)}, ${hexToRgba(col, 0.10 + 0.6 * k)})`;
+        c.el.style.boxShadow = k > 0.2 ? `0 0 ${8 + 18 * k}px ${hexToRgba(col, 0.8)}` : "none";
+      }
       c.el.querySelector(".pv").textContent = p > 0 ? p : "";
     }
   }
@@ -350,7 +409,7 @@ function render(s) {
   document.getElementById("status").textContent = [
     (s.notes || []).join(" / "),
     `reports: controls ${r["0x01"] || 0}, pads ${r["0x20"] || 0}, other ${r.other || 0}`,
-    s.learn ? `LEARN: ${s.learn.name} - ${s.learn.kind === "knob" ? "turn" : s.learn.kind === "pad" ? "hit" : "press"} it on the MK2` : "last pressed: " + ((s.last || []).join(", ") || "-"),
+    s.learn ? `LEARN: ${s.learn.name} - ${s.learn.kind === "knob" ? "turn" : s.learn.kind === "pad" ? "hit" : "press"} it on the MK2` : (s.simulated ? "simulated input (not counted as seen) - last: " : "last pressed: ") + ((s.last || []).join(", ") || "-"),
     (s.message || "").replace("LED chase: ", "chase: ").replace(" - check that this one is lit", " should be lit"),
     (s.errors || []).length ? "error: " + s.errors[s.errors.length - 1] : "",
   ].filter(Boolean).join("\n");
@@ -385,7 +444,8 @@ function connect() {
     const c = document.getElementById("conn"); c.textContent = "server not running"; c.className = "pill bad";
   };
 }
-connect();
+fetch("/weapon").then(r => r.json()).then(w => { buildPanel(w); connect(); })
+  .catch(e => { document.getElementById("status").textContent = "Could not load the weapon profile: " + e; });
 </script>
 </body>
 </html>

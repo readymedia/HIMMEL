@@ -82,6 +82,11 @@ Everything lands in `build\bin\Release\`:
    Sky Shield, ...); push to start.
 6. Close the live view before you start the C++ programs: they want the device too.
 
+**No MK2?** Press **Simulate** on the page (or run `python tools/mk2_live.py --sim`).
+The drawn panel becomes the controller: hold buttons with the mouse, drag or
+scroll knobs, press pads (higher up = harder), keyboard Shift = Shift. The
+screen modes and games run as on the device. See [weapons/README.md](../weapons/README.md).
+
 ## 5. The C++ controller on its own
 
 ```

@@ -53,6 +53,7 @@ Close Native Instruments software first (it holds the MK2). Clips: every
 | [Architecture](docs/architecture.md) | Processes, shared memory, threads, frame-loop rules, measurements |
 | [MK2 controller spec](docs/mk2-controller-spec.md) | The MK2 USB protocol byte by byte, events, timings, velocity |
 | [MK2 screen fun](docs/mk2-screen-fun.md) | How the screen modes work and how to make your own |
+| [Weapons](weapons/README.md) | Controllers as "weapons": profile format, simulator (play with no hardware), adding a new one |
 | [AI-assisted development](docs/ai-assisted-development.md) | Who did what, and how we keep it honest |
 | [Third-party notices](THIRD_PARTY_NOTICES.md) | Every library, spec, tool and font, with its license |
 | [Contributing](CONTRIBUTING.md) | How to help |
@@ -67,6 +68,7 @@ src/engine       supervisor (himmel.exe), renderer, clip player, camera capture
 src/media        MOV reader + HAP decoder, hap_probe
 tests/           unit tests (no hardware needed)
 tools/           Python MK2 tools: live view / mapper, screen modes, measurements
+weapons/         controller profiles ("weapons"): layout for the live view + simulator
 docs/            guides, spec, measurements, mockups
 licenses/        license texts of the libraries we compile in
 media/           your clips (not in git)
