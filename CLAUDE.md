@@ -162,15 +162,14 @@ The details are in the mockup (`docs/vj-mockup.html`).
     - Next: the generic weapon driver/shared block (plan in
       `weapons/README.md`).
   - **Weapon no. 5 = the owner's Numark NuVJ (2008, USB-MIDI), started 2026-11-10.**
-    Profile `weapons/nuvj.weapon.json` (kinds `fader`, `wheel`, `switch`, LCD screen),
-    `tools/nuvj_sim.py` (starting MIDI table from a public forum post, simulator,
-    WinMM link, click-then-move map learning into `nuvj_map.json`, LED host + probe),
-    own page `tools/nuvj_live.html` (`mk2_live.py --port 8777 --weapon nuvj`,
-    launch config `nuvj-live`). Simulator checked in the browser; **not yet checked
-    on the owner's unit** (map, LEDs). The LCD is a segment display (9 dot chars,
-    7-segment numbers, bar, icons), drawn from Himmel's LCD model; its protocol is
-    unknown and not public, so the device LCD is left alone. LED hunt for LED notes
-    that differ from button notes. Details: `weapons/README.md`.
+    Profile `weapons/nuvj.weapon.json`, `tools/nuvj_sim.py`, own page
+    `tools/nuvj_live.html` (`mk2_live.py --port 8777 --weapon nuvj`, launch config
+    `nuvj-live`). **Protocol in `docs/nuvj-protocol.md`**, read from the owner's NuVJ
+    1.0 software (static analysis, never run): feedback SysEx `F0 00 01 3F 7F 20 cmd 00 len
+    data F7`. It covers init `60`, LCD text `01` (8 chars), segments `02` (64 bytes), LEDs `03`
+    (8 bytes, 31 bits) and contrast `7A`. Never send `7B` (stored). Simulator checked in
+    the browser. **Not yet checked on the owner's unit.** Map learning and the LCD segment
+    hunt (click the lit part of the drawn LCD) are ready for it.
 - **Visual mapping is the way to work with the controller. Keep it and build on
   it** (the owner wants graphical tools, not terminal tables):
   - `tools/mk2_live.py` + `tools/mk2_live.html`: a browser live view of the MK2

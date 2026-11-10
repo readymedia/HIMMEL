@@ -10,15 +10,20 @@ It is a class-compliant USB-MIDI device.
 
 Everything here speaks the device's real MIDI bytes:
 
-- ``SOURCE_TABLE``: the starting note / CC table, from a public forum post by a
-  NuVJ owner (see THIRD_PARTY_NOTICES.md). It is only a guess until checked:
-  the verified map lives in ``nuvj_map.json`` (repo root), learned with the
-  live view (click a control, then move the real one).
+- ``SOURCE_TABLE``: the note / CC table. A NuVJ owner's public forum post,
+  confirmed and completed by the ``mappings.xml`` inside the owner's NuVJ 1.0
+  software (see THIRD_PARTY_NOTICES.md). The map verified on the owner's unit
+  lives in ``nuvj_map.json`` (repo root), learned with the live view (click a
+  control, then move the real one).
+- The **feedback protocol** (LEDs, LCD text, LCD segments, contrast), read
+  from the owner's NuVJ 1.0 software by static analysis (never run, no code
+  copied): ``F0 00 01 3F 7F 20 <cmd> 00 <len> <data> F7``. See ``CMD_*``.
 - ``SimNuVJ``: a pretend device. The drawn panel drives it; it sends the same
-  MIDI the map says the real one sends, and lights its LEDs from the host's
-  note-on messages.
+  MIDI the map says the real one sends, and decodes the host's feedback SysEx
+  into LEDs and LCD contents.
 - ``HwNuVJ``: the real device over WinMM (ctypes, no new dependency), with
-  the same interface. Read-only until the host sends LED notes.
+  the same interface. It sends only feedback SysEx with the NuVJ header and the
+  MIDI standard identity request.
 - ``NuvjHost``: the live view standing in for Himmel. It turns MIDI into
   Himmel events (button, knob value, relative delta, fader, switch) and keeps
   a small VJ state (decks, latch / auto / sync, master FX, insta black, tap
@@ -45,11 +50,11 @@ MAP_FILE = os.path.join(ROOT, "nuvj_map.json")
 PORT_HINTS = ("nuvj", "numark")
 
 # ---------------------------------------------------------------------------
-# The starting table (public forum post, unverified). type: note | cc | pb.
+# The input table: a public forum post, confirmed by mappings.xml in the NuVJ
+# software ("note+" = a toggle in software, "cc*" = endless/relative). type: note | cc | pb.
 # enc: "abs" (0..127), "rel" (endless: small numbers one way, 127.. the other),
 # "switch" (fixed values per position), "toggle" (note with on/off values).
-# Pad 9 of deck B is listed as note 16 in the post (the same as deck A); the
-# pattern (A even, B odd) says 17.
+# Pad 9 of deck B is note 17 (mappings.xml; the forum post had a typo).
 # ---------------------------------------------------------------------------
 SOURCE_TABLE = {
     "A Bank": ("cc", 14, "rel"), "B Bank": ("cc", 15, "rel"),
@@ -60,10 +65,12 @@ SOURCE_TABLE = {
     "A Sync": ("note", 6), "B Sync": ("note", 7),
     "A Jog": ("cc", 17, "rel"), "B Jog": ("cc", 16, "rel"),
     "A Scratch": ("note", 0), "B Scratch": ("note", 1),
+    "A Bank Push": ("note", 2), "B Bank Push": ("note", 3),   # ID_DECKx_ENTER in mappings.xml
     "Insta A": ("note", 10), "Insta B": ("note", 11),
     "A Speed": ("pb", 0), "B Speed": ("pb", 1), "Crossfader": ("pb", 2),
     "FX Level": ("cc", 8, "abs"), "Master PMTR1": ("cc", 4, "abs"), "Master PMTR2": ("cc", 5, "abs"),
-    "Master FX Select": ("cc", 9, "abs"), "Contrast": ("cc", 6, "abs"), "Bright": ("cc", 7, "abs"),
+    "Master FX Select": ("cc", 9, "rel"),                 # "cc*" in mappings.xml: endless
+    "Contrast": ("cc", 6, "abs"), "Bright": ("cc", 7, "abs"),
     "Master FX": ("note", 30), "Insta Black": ("note", 31), "BPM Tap": ("note", 32),
     "Fader Mode": ("cc", 18, "switch", [1, 2, 0]),        # positions A, B, C
     "Auto Fade Speed": ("cc", 13, "abs"),
@@ -92,14 +99,6 @@ def entry_from_source(t):
     return e
 
 
-def led_key(e):
-    """(channel, note) that lights this control's LED: a learned "led" entry, else the button's own note
-    (the first guess; on Numark's Total Control the LED notes differ from the button notes)."""
-    if e.get("led"):
-        return e["led"]["ch"], e["led"]["num"]
-    return e["ch"], e["num"]
-
-
 def load_profile():
     with open(PROFILE, encoding="utf-8") as f:
         return json.load(f)
@@ -109,7 +108,7 @@ def default_map():
     return {"format": "himmel-map/1", "weapon": "nuvj", "verified": False,
             "source": "starting table from a public forum post (unverified); entries change when learned on hardware",
             "controls": {n: dict(entry_from_source(t), learned=False, seen=False) for n, t in SOURCE_TABLE.items()},
-            "leds": {"how": "unknown", "checked": False}}
+            "leds": {"checked": False}, "lcd_segments": {}}
 
 
 def load_map():
@@ -119,7 +118,9 @@ def load_map():
         base = default_map()
         for n, e in base["controls"].items():   # a control added later to the profile keeps the forum guess
             m["controls"].setdefault(n, e)
-        m.setdefault("leds", base["leds"])
+        if not isinstance(m.get("leds"), dict) or "how" in m["leds"]:
+            m["leds"] = base["leds"]
+        m.setdefault("lcd_segments", {})
         return m
     except (OSError, ValueError):
         return default_map()
@@ -174,12 +175,117 @@ def split_midi(data):
     return out
 
 
+# ---------------------------------------------------------------------------
+# The NuVJ feedback protocol (host -> device), from the NuVJ 1.0 software.
+# Every message: F0 00 01 3F 7F 20 <cmd> 00 <len> <data...> F7
+#   00 01 3F = Numark's manufacturer id, 7F = all devices, 20 = the NuVJ.
+# ---------------------------------------------------------------------------
+NUMARK_HEADER = bytes([0x00, 0x01, 0x3F, 0x7F, 0x20])
+CMD_TEXT = 0x01            # 8 ASCII characters on the LCD's dot-matrix row (longer: 7 + ".")
+CMD_SEGMENTS = 0x02        # 64 bytes: the LCD's segment memory (digits, bar, icons)
+CMD_LEDS = 0x03            # 8 bytes: one bit per LED
+CMD_INIT = 0x60            # sent once when the software opens the controller: data 01 01 01 00
+CMD_CONTRAST = 0x7A        # 1 byte 0..99: LCD contrast, not stored (the software's slider preview)
+CMD_CONTRAST_STORE = 0x7B  # the same, stored in the controller (the software's OK button). Himmel never sends it.
+INIT_DATA = bytes([0x01, 0x01, 0x01, 0x00])
+CMD_NAMES = {CMD_TEXT: "LCD text", CMD_SEGMENTS: "LCD segments", CMD_LEDS: "LEDs", CMD_INIT: "init",
+             CMD_CONTRAST: "LCD contrast", CMD_CONTRAST_STORE: "LCD contrast (stored)",
+             0x50: "challenge?", 0x51: "challenge reply?"}
+
+# LED bits: control -> (byte 0..7, bit mask). Deck A uses bytes 0-3, deck B bytes 4-7.
+LED_BITS = {
+    "A Latch": (0, 0x01), "A Auto": (0, 0x02), "A Sync": (0, 0x04),
+    "B Latch": (4, 0x01), "B Auto": (4, 0x02), "B Sync": (4, 0x04),
+    "A Scratch": (3, 0x01), "Insta A": (3, 0x02), "Master FX": (3, 0x04), "Insta Black": (3, 0x08),
+    "B Scratch": (7, 0x01), "Insta B": (7, 0x02), "BPM Tap": (7, 0x04),
+}
+# The software's cell 1..9 is the top-left pad first (cell 1 = PAD 7, note 12).
+PAD_OF_CELL = (7, 8, 9, 4, 5, 6, 1, 2, 3)
+for _i, (_byte, _bit) in enumerate(zip((0, 1, 1, 1, 1, 2, 2, 2, 2), (3, 0, 1, 2, 3, 0, 1, 2, 3))):
+    LED_BITS["A Pad %d" % PAD_OF_CELL[_i]] = (_byte, 1 << _bit)
+    LED_BITS["B Pad %d" % PAD_OF_CELL[_i]] = (_byte + 4, 1 << _bit)
+LED_ALWAYS = (7, 0x08)     # the software always sets this bit; what it lights is not known yet
+
+# LCD segments the software uses: a 2-digit number (0..99) and two fixed marks.
+# A digit is two bytes: the first holds b (0x02) and c (0x08), the second a (0x01),
+# f (0x02), g (0x04), e (0x08), d (0x10).
+SEG_BITS = {"a": (1, 0x01), "b": (0, 0x02), "c": (0, 0x08), "d": (1, 0x10), "e": (1, 0x08), "f": (1, 0x02), "g": (1, 0x04)}
+DIGIT_SEGMENTS = {"0": "abcdef", "1": "bc", "2": "abged", "3": "abgcd", "4": "fgbc", "5": "afgcd",
+                  "6": "afgedc", "7": "abc", "8": "abcdefg", "9": "abcdfg", "-": "g", " ": ""}
+NUMBER_DIGITS = ((0x3D, 0x3E), (0x3B, 0x3C))   # the 2-digit number: tens, units (first byte, second byte)
+SEG_ALWAYS = (0x2E, 0x36)                      # set to 1 by the software on every update
+
+
+def feedback(cmd, data=b""):
+    """One NuVJ feedback SysEx."""
+    data = bytes(data)
+    return bytes([0xF0]) + NUMARK_HEADER + bytes([cmd, 0x00, len(data)]) + data + bytes([0xF7])
+
+
+def parse_feedback(msg):
+    """(cmd, data) for a NuVJ feedback SysEx, else None."""
+    if len(msg) >= 10 and msg[0] == 0xF0 and msg[-1] == 0xF7 and bytes(msg[1:6]) == NUMARK_HEADER:
+        return msg[6], bytes(msg[9:-1])
+    return None
+
+
+def led_bytes(names):
+    b = bytearray(8)
+    b[LED_ALWAYS[0]] |= LED_ALWAYS[1]
+    for n in names:
+        if n in LED_BITS:
+            i, m = LED_BITS[n]
+            b[i] |= m
+    return bytes(b)
+
+
+def leds_from_bytes(b):
+    return {n for n, (i, m) in LED_BITS.items() if i < len(b) and b[i] & m}
+
+
+def text_bytes(text):
+    t = str(text)
+    if len(t) > 8:
+        t = t[:7] + "."
+    return t.ljust(8)[:8].encode("ascii", "replace")
+
+
+def number_into(seg, value):
+    """Write a 2-digit number (int, or a 2-char string; "" = blank) into a 64-byte segment buffer."""
+    t = ("%02d" % value) if isinstance(value, int) else str(value).rjust(2)[-2:]
+    for (b0, b1), ch in zip(NUMBER_DIGITS, t):
+        seg[b0] &= ~0x0A & 0x7F
+        seg[b1] &= ~0x1F & 0x7F
+        for sname in DIGIT_SEGMENTS.get(ch, ""):
+            half, mask = SEG_BITS[sname]
+            seg[b1 if half else b0] |= mask
+
+
+def number_from(seg):
+    out = ""
+    for b0, b1 in NUMBER_DIGITS:
+        lit = "".join(k for k, (half, mask) in SEG_BITS.items() if seg[b1 if half else b0] & mask)
+        out += next((ch for ch, ss in DIGIT_SEGMENTS.items() if sorted(ss) == sorted(lit)), "?")
+    return out
+
+
 def describe(msg):
     if not msg:
         return ""
     st = msg[0]
     hi, ch = st & 0xF0, (st & 15) + 1
     if st == 0xF0:
+        fb = parse_feedback(msg)
+        if fb:
+            cmd, data = fb
+            name = CMD_NAMES.get(cmd, "command %02X" % cmd)
+            if cmd == CMD_TEXT:
+                return 'NuVJ %s "%s"' % (name, data.decode("ascii", "replace"))
+            if cmd == CMD_LEDS:
+                return "NuVJ %s: %s" % (name, ", ".join(sorted(leds_from_bytes(data))) or "all off")
+            if cmd == CMD_SEGMENTS:
+                return "NuVJ %s: number %s, %d bits lit" % (name, number_from(data), sum(bin(x).count("1") for x in data))
+            return "NuVJ %s %s" % (name, data.hex(" "))
         if len(msg) >= 6 and msg[1] == 0x7E and msg[3] == 0x06 and msg[4] == 0x01:
             return "SysEx: universal identity request"
         if len(msg) >= 10 and msg[1] == 0x7E and msg[3] == 0x06 and msg[4] == 0x02:
@@ -256,7 +362,11 @@ class DeviceBase:
         self.listeners = []          # f(msg) for MIDI from the device
         self.log = []
         self.counts = {"to_host": 0, "to_device": 0}
-        self.led_raw = {}            # (ch, note) -> velocity last sent by the host
+        self.led_state = bytes(8)    # the last LED bytes the host sent (CMD_LEDS)
+        self.lcd_text = ""           # the last LCD text (CMD_TEXT)
+        self.lcd_segs = bytes(64)    # the last segment memory (CMD_SEGMENTS)
+        self.contrast = None
+        self.inited = False
         self.connected = True
         self.notes = []
 
@@ -275,11 +385,22 @@ class DeviceBase:
                 except Exception:
                     pass
 
-    def note_led(self, msg):
-        """Remember what the host asked the LEDs to show (the guess: note on = LED)."""
-        hi, ch = msg[0] & 0xF0, msg[0] & 15
-        if hi in (0x80, 0x90) and len(msg) > 2:
-            self.led_raw[(ch, msg[1])] = msg[2] if hi == 0x90 else 0
+    def note_out(self, msg):
+        """Remember what the host's feedback asked the device to show (both the sim and the real one)."""
+        fb = parse_feedback(msg)
+        if not fb:
+            return
+        cmd, data = fb
+        if cmd == CMD_LEDS and len(data) == 8:
+            self.led_state = data
+        elif cmd == CMD_TEXT:
+            self.lcd_text = data.decode("ascii", "replace")
+        elif cmd == CMD_SEGMENTS and len(data) == 64:
+            self.lcd_segs = data
+        elif cmd in (CMD_CONTRAST, CMD_CONTRAST_STORE) and data:
+            self.contrast = data[0]
+        elif cmd == CMD_INIT:
+            self.inited = True
 
     def close(self):
         pass
@@ -293,7 +414,7 @@ class SimNuVJ(DeviceBase):
     def __init__(self, live):
         super().__init__()
         self.live = live
-        self.notes = ["Simulated NuVJ: the drawing is the controller. LEDs follow the note-on messages the host sends."]
+        self.notes = ["Simulated NuVJ: the drawing is the controller. Its LEDs and LCD show the feedback SysEx the host sends."]
 
     def receive(self, msg):
         """MIDI from the host to the device."""
@@ -301,17 +422,7 @@ class SimNuVJ(DeviceBase):
         with self.lock:
             self.counts["to_device"] += 1
             self._log("host → device", msg, noisy=True)
-            self.note_led(msg)
-
-    def leds_for(self, m):
-        """LED level per control name, read back from what the host sent (same guess as for the real one)."""
-        out = {}
-        for name, e in m["controls"].items():
-            if e.get("type") == "note":
-                v = self.led_raw.get(led_key(e), 0)
-                if v:
-                    out[name] = v
-        return out
+            self.note_out(msg)
 
 
 # ---------------------------------------------------------------------------
@@ -383,6 +494,7 @@ class HwNuVJ(DeviceBase):
         mm.midiInStart(self.hin)
         self.port_names = (dict(ins)[i], dict(outs).get(o, "-") if o is not None else "-")
         self.connected = True
+        self.inited = False          # a (re)opened port: the host sends init and a full refresh
         self.notes = ["Real NuVJ on MIDI in %d (%s), out %s. Touch every control: the drawing follows." % (
             i, self.port_names[0], "%d" % o if o is not None else "not opened")]
         with self.lock:
@@ -441,12 +553,15 @@ class HwNuVJ(DeviceBase):
     IDENTITY_REQUEST = bytes([0xF0, 0x7E, 0x7F, 0x06, 0x01, 0xF7])
 
     def identity(self):
-        """Send the MIDI standard's Universal Identity Request (the only SysEx sent to the NuVJ).
+        """Send the MIDI standard's Universal Identity Request (the NuVJ software sends it too).
         A device that supports it answers F0 7E <id> 06 02 <manufacturer> <family> <model> <version> F7."""
+        self._long(self.IDENTITY_REQUEST)
+
+    def _long(self, msg, noisy=False):
+        """Send one SysEx with midiOutLongMsg."""
         if not self.connected or not self.has_out:
             return
         W, mm = self.W, self.mm
-        msg = self.IDENTITY_REQUEST
         with self.out_lock:
             b = ctypes.create_string_buffer(msg, len(msg))
             h = W.MIDIHDR()
@@ -460,12 +575,21 @@ class HwNuVJ(DeviceBase):
             mm.midiOutUnprepareHeader(self.hout, ctypes.byref(h), ctypes.sizeof(h))
         with self.lock:
             self.counts["to_device"] += 1
-            self._log("host → device", msg)
+            self._log("host → device", msg, noisy=noisy)
+            self.note_out(msg)
+        if r:
+            self.connected = False
 
     def receive(self, msg):
-        """Short MIDI from the host to the real device (LED notes). SysEx is never sent from here."""
+        """MIDI from the host to the real device. Only NuVJ feedback SysEx (our header) and short
+        messages go out; any other SysEx is refused, so nothing unknown can reach the controller."""
         msg = bytes(msg)
-        if not self.connected or not self.has_out or not msg or msg[0] == 0xF0:
+        if not self.connected or not self.has_out or not msg:
+            return
+        if msg[0] == 0xF0:
+            fb = parse_feedback(msg)
+            if fb and fb[0] != CMD_CONTRAST_STORE:   # never store settings in the controller
+                self._long(msg, noisy=fb[0] in (CMD_LEDS, CMD_SEGMENTS, CMD_TEXT))
             return
         w = msg[0] | (msg[1] << 8 if len(msg) > 1 else 0) | (msg[2] << 16 if len(msg) > 2 else 0)
         with self.out_lock:
@@ -473,7 +597,6 @@ class HwNuVJ(DeviceBase):
         with self.lock:
             self.counts["to_device"] += 1
             self._log("host → device", msg, noisy=True)
-            self.note_led(msg)
         if r:
             self.connected = False
 
@@ -512,7 +635,6 @@ class HwNuVJ(DeviceBase):
 # ---------------------------------------------------------------------------
 # The host: Himmel's side. Events -> a small VJ state -> LEDs (+ LCD text in the sim)
 # ---------------------------------------------------------------------------
-LED_ON, LED_DIM = 127, 0
 FX_NAMES = ("BLUR", "INVERT", "MIRROR", "KALEIDO", "STROBE", "RGB SPLIT", "PIXELATE", "FEEDBACK",
             "EDGES", "HUE SPIN", "ZOOM", "TUNNEL")
 TOGGLES = ("A Latch", "B Latch", "A Auto", "B Auto", "A Sync", "B Sync", "Master FX", "Insta Black")
@@ -530,31 +652,32 @@ class NuvjHost:
         for n in ("A Latch", "B Latch"):
             self.state["toggles"][n] = True
         self.events = []           # the last Himmel events, newest last
-        self.sent = {}             # (ch, note) -> velocity we last sent
+        self.sent = {}             # "leds" / "text" / "segs" -> the bytes we last sent
+        self.sent_t = 0.0          # when we last sent everything (a full refresh every 2 s)
         self.t0 = time.time()
         self.flash = None          # (until, text, bar 0..1 or None): a value shown for a moment
-        self.led_probe = None      # {"ch": c, "vel": v} lights every mapped note on that channel
-        self.hunt = None           # LED hunt: {"ch", "note", "auto", "t"} lights one note at a time
+        self.seg_hunt = None       # segment hunt: {"byte", "bit", "auto", "t"} lights one LCD segment bit
+        self.contrast = None       # a contrast value (0..99) to send once (not stored in the controller)
 
     # ---- the LCD: Himmel's page for the NuVJ's segment display ----
     def show(self, text, bar=None, secs=1.5):
         self.flash = (time.time() + secs, text, bar)
 
     def lcd(self):
-        """The LCD as a model the drawing (and, once the protocol is known, the driver) renders:
-        text = 9 dot-matrix cells, big / small = 2 seven-segment digits each, bar = 0..12 segments,
+        """The LCD as a model that the drawing renders and segments() turns into the device's bytes:
+        text = 8 dot-matrix characters, big / small = 2 seven-segment digits each, bar = 0..12 blocks,
         icons on/off. This is the interface between Himmel and the device, like the MK2 pages."""
         st, now = self.state, time.time()
         f = st["focus"]
         if self.flash and now < self.flash[0]:
             text, bar = self.flash[1], self.flash[2]
         elif now - self.t0 < 3.0:
-            text, bar = "HIMMEL VJ", (now - self.t0) / 3.0          # start-up: name + a filling bar
+            text, bar = " HIMMEL ", (now - self.t0) / 3.0            # start-up: name + a filling bar
         else:
-            text, bar = "%5.1f BPM" % st["bpm"] if st["bpm"] < 1000 else "BPM", st["xf"] / 16383
+            text, bar = "%5.1fBPM" % st["bpm"] if st["bpm"] < 1000 else "BPM", st["xf"] / 16383
         beat = ((now - self.t0) * st["bpm"] / 60.0) % 1.0
         return {
-            "text": text[:9],
+            "text": text[:8],
             "big": "%02d" % (st[f]["bank"] + 1),
             "small": "%02d" % (st["fx"] + 1) if st["toggles"]["Master FX"] else "",
             "bar": None if bar is None else max(0, min(12, round(bar * 12))),
@@ -607,13 +730,16 @@ class NuvjHost:
             if name in ("Insta A", "Insta B"):
                 st["insta"] = None
         elif k == "delta":
-            if name.endswith("Bank"):
+            if name == "Master FX Select":
+                st["fx"] = (st["fx"] + (1 if ev["delta"] > 0 else -1)) % len(FX_NAMES)
+                self.show(FX_NAMES[st["fx"]], st["fx"] / (len(FX_NAMES) - 1))
+            elif name.endswith("Bank"):
                 st[side]["bank"] = (st[side]["bank"] + (1 if ev["delta"] > 0 else -1)) % 16
-                self.show("BANK %s %02d" % (side, st[side]["bank"] + 1), st[side]["bank"] / 15)
+                self.show("BANK %s%3d" % (side, st[side]["bank"] + 1), st[side]["bank"] / 15)
             elif name.endswith("Jog"):
                 st[side]["jog"] += ev["delta"]
                 scr = self.live.held_now(side + " Scratch")
-                self.show(("SCR %+5d" if scr else "NUDGE %+3d") % (st[side]["jog"] if scr else max(-99, min(99, ev["delta"] * 10))),
+                self.show(("SCR%+5d" if scr else "NUDG%+4d") % (st[side]["jog"] if scr else max(-99, min(99, ev["delta"] * 10))),
                           (st[side]["jog"] % 128) / 127)
         elif k == "value":
             v = ev["value"] / 127
@@ -630,69 +756,118 @@ class NuvjHost:
                 st["xf"] = ev["value"]
                 self.show("XF %3d%%" % round(v * 100), v, secs=0.8)
             else:
-                self.show("SPD%s %+.1f" % (name[0], (v - 0.5) * 4), v)
+                self.show("SPD%s%+.1f" % (name[0], (v - 0.5) * 4), v)
         elif k == "switch":
             c = self.live.control(name)
             pos = ev["pos"]
             p = c["positions"][pos] if c and 0 <= pos < len(c["positions"]) else "?"
             self.show(("MODE " if name == "Fader Mode" else "FSTART ") + p)
+        if name.endswith("Bank Push") and k == "down":
+            self.show("LOAD %s%02d" % (side, st[side]["bank"] + 1))
 
-    # ---- LEDs ----
-    def wanted(self, m, held):
-        """(ch, note) -> velocity for every mapped note control."""
+    # ---- LEDs and LCD out: feedback SysEx ----
+    def wanted(self, held):
+        """The controls whose LED should be on now."""
         st = self.state
-        out = {}
-        notes = [(n, e) for n, e in m["controls"].items() if e.get("type") == "note" and e.get("enc") != "toggle"]
+        names = sorted(LED_BITS)
         t = time.time() - self.t0
         beat = (t * st["bpm"] / 60.0) % 1.0
-        if self.hunt is not None:   # one note lit on the hunt channel, every other note on it dark
-            h = self.hunt
-            if h["auto"] and time.time() - h["t"] > 1.2:
-                h["note"], h["t"] = (h["note"] + 1) % 128, time.time()
-            return {(h["ch"], n): (LED_ON if n == h["note"] else 0) for n in range(128)}
-        for i, (n, e) in enumerate(notes):
-            key = led_key(e)
-            if self.led_probe is not None:
-                out[(self.led_probe["ch"], e["num"])] = self.led_probe["vel"]
-                continue
-            if self.mode == "off":
-                v = 0
-            elif self.mode == "all":
-                v = LED_ON
-            elif self.mode == "chase":
-                v = LED_ON if int(t * 6) % len(notes) == i else 0
-            elif self.mode == "follow":
-                v = LED_ON if n in held else 0
-            else:  # himmel: what Himmel would show
-                if n in held:
-                    v = LED_ON
-                elif n in st["toggles"]:
-                    v = LED_ON if st["toggles"][n] else 0
-                elif " Pad " in n:
-                    v = LED_ON if st[n[0]]["pad"] == int(n.split()[-1]) else 0
-                elif n == "BPM Tap":
-                    v = LED_ON if beat < 0.2 else 0
-                elif n in ("Insta A", "Insta B"):
-                    v = LED_ON if st["insta"] == n[-1] else 0
-                else:
-                    v = 0
-            out[key] = v
-        return out
+        if self.mode == "off":
+            return set()
+        if self.mode == "all":
+            return set(names)
+        if self.mode == "chase":
+            return {names[int(t * 6) % len(names)]}
+        if self.mode == "follow":
+            return {n for n in names if n in held}
+        on = {n for n in names if n in held}                 # himmel: what Himmel would show
+        on |= {n for n, v in st["toggles"].items() if v and n in LED_BITS}
+        for d in ("A", "B"):
+            if st[d]["pad"]:
+                on.add("%s Pad %d" % (d, st[d]["pad"]))
+        if beat < 0.2:
+            on.add("BPM Tap")
+        if st["insta"]:
+            on.add("Insta " + st["insta"])
+        return on
+
+    @staticmethod
+    def lit_keys(model):
+        """Every LCD element the model lights, by the keys the segment hunt learns:
+        <digits id>.<i>.<a..g>, bar.<i>, icon ids, <id>_label."""
+        keys = set()
+        for did in ("big", "small"):
+            t = str(model.get(did, "")).rjust(2)[-2:]
+            for i, ch in enumerate(t):
+                keys |= {"%s.%d.%s" % (did, i, sg) for sg in DIGIT_SEGMENTS.get(ch, "")}
+            if model.get(did):
+                keys.add(did + "_label")
+        n = model.get("bar")
+        if n is not None:
+            keys |= {"bar.%d" % i for i in range(n)}
+            keys.add("bar_label")
+        for k, v in (model.get("icons") or {}).items():
+            if v:
+                keys |= {k, k + "_label"}
+        return keys
+
+    def segments(self, model, m):
+        """64 bytes of segment memory for the model: the 2-digit number where the software puts it
+        (shown as "big"), the software's two fixed marks, and every element learned by the segment hunt."""
+        seg = bytearray(64)
+        if self.seg_hunt is not None:
+            h = self.seg_hunt
+            seg[h["byte"]] = 1 << h["bit"]
+            return bytes(seg)
+        for b in SEG_ALWAYS:
+            seg[b] = 1
+        number_into(seg, model.get("big") or "")
+        learned = m.get("lcd_segments") or {}
+        lit = self.lit_keys(model)
+        for key, (b, mask) in learned.items():
+            if key.startswith("big.") and key[4:5] in "01":
+                continue            # the number is written above; learned big.* keys only confirm it
+            if key in lit:
+                seg[b] |= mask
+        return bytes(seg)
 
     def tick(self, dev, m, held, force=False):
+        """Send what changed: LEDs (8 bytes), LCD text, LCD segments. Everything again every 2 s."""
         if not getattr(dev, "connected", True):
             self.sent.clear()
             return
-        want = self.wanted(m, held)
-        n = 0
-        for key, v in want.items():
-            if force or self.sent.get(key) != v:
-                ch, note = key
-                dev.receive(bytes([0x90 | ch, note, v]))
-                self.sent[key] = v
-                n += 1
-                if n >= 24:              # at most 24 LED messages per tick; the rest next tick
-                    break
+        now = time.time()
+        if not dev.inited:
+            dev.receive(feedback(CMD_INIT, INIT_DATA))
+            self.sent.clear()
+        if force or now - self.sent_t > 2.0:
+            self.sent.clear()
+            self.sent_t = now
+        if self.seg_hunt is not None and self.seg_hunt["auto"] and now - self.seg_hunt["t"] > 1.2:
+            h = self.seg_hunt
+            h["bit"] += 1
+            if h["bit"] > 6:
+                h["bit"], h["byte"] = 0, (h["byte"] + 1) % 64
+            h["t"] = now
+        model = self.lcd()
+        if self.seg_hunt is not None:
+            model = dict(model, text="SEG%02d.%d" % (self.seg_hunt["byte"], self.seg_hunt["bit"]))
+        out = {"leds": led_bytes(self.wanted(held)), "text": text_bytes(model["text"]), "segs": self.segments(model, m)}
+        cmds = {"leds": CMD_LEDS, "text": CMD_TEXT, "segs": CMD_SEGMENTS}
+        for k, data in out.items():
+            if self.sent.get(k) != data:
+                dev.receive(feedback(cmds[k], data))
+                self.sent[k] = data
+        if self.contrast is not None:
+            dev.receive(feedback(CMD_CONTRAST, [max(0, min(99, int(self.contrast)))]))
+            self.contrast = None
+
+    def let_go(self, dev):
+        """LEDs off, the LCD back to the device's own start-up look (as far as we can)."""
+        if getattr(dev, "connected", False):
+            dev.receive(feedback(CMD_LEDS, bytes(8)))
+            dev.receive(feedback(CMD_SEGMENTS, bytes(64)))
+            dev.receive(feedback(CMD_TEXT, text_bytes("  NuVJ")))
 
 
 # ---------------------------------------------------------------------------
@@ -744,6 +919,10 @@ class NuvjLive:
         self.host.sent.clear()
         if old is not None:
             old.listeners.clear()
+            try:
+                self.host.let_go(old)
+            except Exception:
+                pass
             old.close()
 
     def _from_device(self, msg):
@@ -791,7 +970,7 @@ class NuvjLive:
         name = self.learn
         c = self.controls[name]
         e = None
-        if hi == 0x90 and msg[2] > 0 and c["kind"] in ("button", "pad"):
+        if hi == 0x90 and msg[2] > 0 and c["kind"] in ("button", "pad", "push"):
             e = {"type": "note", "ch": ch, "num": msg[1]}
         elif c["kind"] == "switch" and hi in (0x80, 0x90, 0xB0):
             e = self._learn_switch(name, c, msg)
@@ -875,12 +1054,7 @@ class NuvjLive:
             mapped = [n for n, e in mc.items() if e.get("type")]
             seen = [n for n, e in mc.items() if e.get("seen")]
             log = [e[:4] for e in dev.log if self.show_noise or not e[4]][-22:]
-            leds = {}
-            for name, e in mc.items():
-                if e.get("type") == "note" and e.get("enc") != "toggle":
-                    v = dev.led_raw.get(led_key(e), 0)
-                    if v:
-                        leds[name] = v
+            leds = {n: 127 for n in leds_from_bytes(dev.led_state)}   # what was really sent
             st = self.host.state
             return {
                 "weapon": "nuvj",
@@ -895,9 +1069,13 @@ class NuvjLive:
                 "leds": leds,
                 "led_preview": hw,
                 "lcd": self.host.lcd(),
+                "lcd_wire": {"text": dev.lcd_text, "number": number_from(dev.lcd_segs), "segs": dev.lcd_segs.hex(),
+                             "contrast": dev.contrast, "inited": dev.inited},
+                "seg_hunt": self.host.seg_hunt,
+                "lcd_segments": dict(self.m.get("lcd_segments") or {}),
                 "host": {"mode": self.host.mode, "modes": list(NuvjHost.MODES), "bpm": st["bpm"],
                          "A": dict(st["A"]), "B": dict(st["B"]), "toggles": dict(st["toggles"]),
-                         "xf": st["xf"], "probe": self.host.led_probe, "hunt": self.host.hunt},
+                         "xf": st["xf"]},
                 "events": [(t, n, ev) for t, n, ev in self.host.events[-14:]],
                 "map": {"mapped": mapped, "seen": seen, "total": len(self.controls), "verified": self.m.get("verified", False),
                         "learned": [n for n, e in mc.items() if e.get("learned")],
@@ -913,7 +1091,7 @@ class NuvjLive:
     def _wire(e):
         t = e.get("type")
         if t == "note":
-            return "note %d ch%d" % (e["num"], e["ch"] + 1) + (" (%s)" % "/".join(map(str, e["values"])) if e.get("values") else "") +                 ("  LED note %d ch%d" % (e["led"]["num"], e["led"]["ch"] + 1) if e.get("led") else "")
+            return "note %d ch%d" % (e["num"], e["ch"] + 1) + (" (%s)" % "/".join(map(str, e["values"])) if e.get("values") else "")
         if t == "cc":
             return "CC %d ch%d %s" % (e["num"], e["ch"] + 1, e.get("enc", "abs") +
                                      (" cw=" + e.get("cw", "pos") if e.get("enc") == "rel" else "") +
@@ -944,7 +1122,7 @@ class NuvjLive:
         if not c or not e or not e.get("type") or self.dev.kind != "sim":
             return
         k = c["kind"]
-        if k in ("button", "pad") and "down" in i:
+        if k in ("button", "pad", "push") and "down" in i:
             if bool(i["down"]) != (name in self.held):
                 self.dev.emit(encode(e, down=bool(i["down"])))
         elif k == "knob":
@@ -965,37 +1143,41 @@ class NuvjLive:
                 self.sim_input(d["sim_input"])
             elif d.get("led_mode") in NuvjHost.MODES:
                 self.host.mode = d["led_mode"]
-                self.host.led_probe = None
-                self.host.hunt = None
-            elif "hunt" in d:
-                h = d["hunt"]
+            elif "seg_hunt" in d:      # light one LCD segment bit at a time
+                h = d["seg_hunt"]
                 if h is None:
-                    self.host.hunt = None
+                    self.host.seg_hunt = None
                 else:
-                    old = self.host.hunt or {"ch": 0, "note": 0, "auto": False}
-                    self.host.hunt = {"ch": int(h.get("ch", old["ch"])) & 15,
-                                      "note": (int(h["note"]) if "note" in h else old["note"] + int(h.get("step", 0))) % 128,
-                                      "auto": bool(h.get("auto", old["auto"])), "t": time.time()}
-                    self.host.led_probe = None
-            elif "led_assign" in d:   # LED hunt: the control the owner sees lit gets this note as its LED
-                n, h = d["led_assign"], self.host.hunt
-                if h and n in self.m["controls"] and self.dev.kind != "hw":
-                    self.learn_msg = "LED hunt on the simulator: nothing is saved (only the real NuVJ teaches LED notes)"
-                elif h and n in self.m["controls"]:
-                    for other, oe in self.m["controls"].items():
-                        if oe.get("led") == {"ch": h["ch"], "num": h["note"]}:
-                            oe.pop("led")
-                    self.m["controls"][n]["led"] = {"ch": h["ch"], "num": h["note"]}
-                    self.learn_msg = "LED of %s = note %d ch%d" % (n, h["note"], h["ch"] + 1)
+                    old = self.host.seg_hunt or {"byte": 0, "bit": 0, "auto": False}
+                    pos = old["byte"] * 7 + old["bit"]
+                    if "byte" in h:
+                        pos = int(h["byte"]) * 7 + int(h.get("bit", 0))
+                    pos = (pos + int(h.get("step", 0))) % (64 * 7)
+                    self.host.seg_hunt = {"byte": pos // 7, "bit": pos % 7, "auto": bool(h.get("auto", old["auto"])),
+                                          "t": time.time()}
+            elif "seg_assign" in d:    # the owner clicked the element that lit: learn its bit
+                key, h = str(d["seg_assign"])[:40], self.host.seg_hunt
+                if not h:
+                    pass
+                elif self.dev.kind != "hw":
+                    self.learn_msg = "segment hunt on the simulator: nothing is saved (only the real NuVJ teaches segments)"
+                else:
+                    segs = self.m.setdefault("lcd_segments", {})
+                    for k2 in [k for k, v in segs.items() if v == [h["byte"], 1 << h["bit"]]]:
+                        del segs[k2]
+                    segs[key] = [h["byte"], 1 << h["bit"]]
                     h["auto"] = False
+                    self.learn_msg = "LCD segment %s = byte %d bit %d" % (key, h["byte"], h["bit"])
                     save_map(self.m)
+            elif "contrast" in d:      # LCD contrast 0..99, not stored in the controller
+                self.host.contrast = max(0, min(99, int(d["contrast"])))
             elif d.get("identity"):
                 if hasattr(self.dev, "identity"):
                     self.dev.identity()
                     self.learn_msg = "identity request sent; an answer shows in the MIDI monitor (SysEx)"
-            elif "led_probe" in d:
-                p = d["led_probe"]
-                self.host.led_probe = None if p is None else {"ch": int(p.get("ch", 0)) & 15, "vel": int(p.get("vel", 127)) & 127}
+            elif d.get("leds_ok"):
+                self.m["leds"] = {"checked": time.strftime("%Y-%m-%d")}
+                save_map(self.m)
             elif "show_noise" in d:
                 self.show_noise = bool(d["show_noise"])
             elif "hardware" in d:
@@ -1018,17 +1200,12 @@ class NuvjLive:
                 if all(e.get("seen") for e in self.m["controls"].values()):
                     self.m["verified"] = time.strftime("%Y-%m-%d")
                     save_map(self.m)
-            elif "led_result" in d:
-                self.m["leds"] = {"how": str(d["led_result"])[:200], "checked": time.strftime("%Y-%m-%d")}
-                save_map(self.m)
 
     def close(self):
         with self.lock:
             try:
-                self.host.mode = "off"
-                self.host.led_probe = None
-                self.host.hunt = None
-                self.host.tick(self.dev, self.m, set(), force=True)
+                self.host.seg_hunt = None
+                self.host.let_go(self.dev)
             except Exception:
                 pass
             if self._save_due:
@@ -1051,7 +1228,7 @@ def selftest():
     for n, e in m["controls"].items():
         c = next(c for c in prof["controls"] if c["name"] == n)
         k = c["kind"]
-        if k in ("button", "pad"):
+        if k in ("button", "pad", "push"):
             assert dec.decode(encode(e, down=True)) == (n, {"kind": "down", "vel": 127}), n
             assert dec.decode(encode(e, down=False))[1]["kind"] == "up", n
         elif k == "knob":
@@ -1078,7 +1255,28 @@ def selftest():
     live.command({"sim_input": {"name": "A Pad 5", "down": False}})
     time.sleep(0.15)
     assert "A Pad 5" not in live.snapshot()["leds"]
-    print("nuvj selftest ok: %d controls, every message round-trips, LEDs follow the host" % len(names))
+    # the feedback protocol: the exact bytes the NuVJ software sends, and round trips
+    assert feedback(CMD_INIT, INIT_DATA).hex(" ") == "f0 00 01 3f 7f 20 60 00 04 01 01 01 00 f7"
+    assert parse_feedback(feedback(CMD_TEXT, text_bytes("HELLO"))) == (CMD_TEXT, b"HELLO   ")
+    assert text_bytes("BRIGHTNESS") == b"BRIGHTN."
+    assert len(LED_BITS) == 31 and len(set(LED_BITS.values())) == 31
+    assert leds_from_bytes(led_bytes({"A Pad 7", "B Sync", "Insta Black"})) == {"A Pad 7", "B Sync", "Insta Black"}
+    assert led_bytes({"A Pad 7"})[0] == 0x08 and led_bytes({"B Pad 3"})[6] == 0x08
+    for v in range(100):
+        seg = bytearray(64)
+        number_into(seg, v)
+        assert number_from(seg) == "%02d" % v, v
+    seg = bytearray(64)
+    number_into(seg, 7)        # the software's own bytes for 07: tens 0 = 0a 1b, units 7 = 0a 01
+    assert (seg[0x3D], seg[0x3E], seg[0x3B], seg[0x3C]) == (0x0A, 0x1B, 0x0A, 0x01)
+    # the simulated device decodes what the host sends: LEDs and LCD
+    s = live.snapshot()
+    assert s["lcd_wire"]["inited"] and s["lcd_wire"]["text"] == text_bytes(s["lcd"]["text"]).decode()
+    live.command({"led_mode": "all"})
+    time.sleep(0.15)
+    assert len(live.snapshot()["leds"]) == 31
+    live.close()
+    print("nuvj selftest ok: %d controls, every message round-trips, feedback SysEx (LEDs, LCD) matches the NuVJ software" % len(names))
 
 
 def main():

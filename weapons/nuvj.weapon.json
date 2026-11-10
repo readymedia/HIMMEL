@@ -13,12 +13,12 @@
  "page": "nuvj_live.html",
  "protocol": {
   "transport": "USB-MIDI (WinMM on Windows; ports are exclusive, close the NuVJ / GrandVJ software)",
-  "input": "buttons and pads = note on/off, knobs = CC (absolute), BANK and jog wheels = CC (relative), speed faders and crossfader = pitch bend on three channels, front switches = CC 18 / note 33. Starting table from a public forum post (see THIRD_PARTY_NOTICES.md); every entry is checked on the owner's unit and saved in nuvj_map.json.",
-  "leds": "not documented; first guess: note on with the button's own note number lights its LED (velocity = brightness or on/off). Checked with the LED probe in the live view.",
-  "lcd": "blue backlit LCD; the NuVJ software writes values to it. Protocol not documented; not known yet."
+  "input": "buttons and pads = note on/off, knobs = CC (absolute), BANK, MASTER FX and jog wheels = CC (relative), BANK push = notes 2/3, speed faders and crossfader = pitch bend on channels 1-3, front switches = CC 18 / note 33. From a public forum post, confirmed by the mappings.xml inside the owner's NuVJ 1.0 software; checked on the owner's unit into nuvj_map.json.",
+  "feedback": "SysEx F0 00 01 3F 7F 20 <cmd> 00 <len> <data> F7 (00 01 3F = Numark). cmd 60 init (01 01 01 00), 01 LCD text (8 ASCII), 02 LCD segments (64 bytes), 03 LEDs (8 bytes, one bit per LED), 7A contrast 0..99 (7B = stored; Himmel never sends it). Read from the owner's NuVJ 1.0 software by static analysis; not yet checked on the unit.",
+  "lcd": "custom segment LCD: 8 dot-matrix characters (cmd 01) plus segment memory (cmd 02): the software's 2-digit number is known; the other segments are learned with the segment hunt."
  },
  "map": "nuvj_map.json",
- "status": "simulated from the public note table; hardware probe ready, not yet checked on the owner's unit",
+ "status": "simulated with the real feedback protocol; hardware probe, map learning and segment hunt ready; not yet checked on the owner's unit",
  "panel": {
   "w": 940,
   "h": 930
@@ -42,8 +42,8 @@
      "kind": "dots",
      "x": 9,
      "y": 12,
-     "cells": 9,
-     "cw": 13.4,
+     "cells": 8,
+     "cw": 15.0,
      "ch": 20
     },
     {
@@ -724,7 +724,7 @@
   },
   {
    "name": "Master FX Select",
-   "kind": "knob",
+   "kind": "encoder",
    "x": 545,
    "y": 282,
    "r": 17,
@@ -850,6 +850,24 @@
     "ON"
    ],
    "label": "FADER START"
+  },
+  {
+   "name": "A Bank Push",
+   "kind": "push",
+   "of": "A Bank",
+   "x": 114,
+   "y": 143,
+   "r": 17,
+   "label": "push"
+  },
+  {
+   "name": "B Bank Push",
+   "kind": "push",
+   "of": "B Bank",
+   "x": 658,
+   "y": 143,
+   "r": 17,
+   "label": "push"
   }
  ]
 }

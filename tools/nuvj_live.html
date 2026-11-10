@@ -68,6 +68,8 @@
                transform-origin: 50% 105%; border-radius: 1px; }
   .knob.enc { background: repeating-conic-gradient(#2a2b30 0 6deg, #1a1b1f 6deg 12deg); }
   .knob.flash { box-shadow: 0 0 0 1px #50525a, 0 0 12px #fff8; }
+  .knob.pushed { box-shadow: 0 0 0 3px #4aa8ff, 0 0 14px #4aa8ff; transform: scale(0.93); }
+  .lcd.hunting { cursor: crosshair; box-shadow: 0 0 0 2px #ff9d2e, 0 0 24px #ff9d2e55; }
   .val { position: absolute; font-size: 8px; color: var(--label); transform: translateX(-50%); white-space: nowrap; pointer-events: none; }
   .wheel { border-radius: 50%; background: #070708; box-shadow: 0 6px 14px #000c, 0 0 0 2px #050506; }
   .wheel .rot { position: absolute; inset: 0; border-radius: 50%;
@@ -134,15 +136,16 @@
     <div class="row" id="ledModes"></div>
     <div class="help">
       <b>Himmel</b>: what Himmel would light: latch / auto / sync / master FX / insta black as toggles, the playing pad per
-      deck, BPM Tap blinking on the beat. <b>Follow</b>: a LED lights while you hold its button. The LEDs are driven
-      with note-on messages (the button's own note); this is the first guess for the real NuVJ, checked with the LED
-      probe below.</div>
+      deck, BPM Tap blinking on the beat. <b>Follow</b>: a LED lights while you hold its button. LEDs and LCD are sent
+      as the NuVJ's own feedback SysEx (<code>F0 00 01 3F 7F 20 …</code>, read from the NuVJ 1.0 software); the drawing
+      shows what the device was sent.</div>
     <div id="hostInfo" class="mono"></div>
   </div>
   <div class="card full" id="hwCard">
     <h2>Real NuVJ: probe, map and LEDs</h2>
     <div class="help">Plug the NuVJ in with USB and close the NuVJ / GrandVJ software (Windows lets one program use a MIDI
-      port). Press <b>Use the real NuVJ</b>. The probe only listens until the host sends LED notes.</div>
+      port). Press <b>Use the real NuVJ</b>. Himmel then sends the same init, LED and LCD messages as the NuVJ
+      software (never the stored-contrast command).</div>
     <div class="row"><label>MIDI port <select id="portPick"><option value="">auto (name has NuVJ / Numark)</option></select></label>
       <button id="portGo">Open this port</button></div>
     <div id="hwInfo" class="mono"></div>
@@ -156,36 +159,25 @@
     <div class="row"><b>MIDI not in the map:</b> <span id="unmapped" class="mono">-</span></div>
     <div class="row"><button id="verifyBtn">All seen: mark the map verified ✓</button><button id="resetSeen">Reset seen</button></div>
     <h3>2 · LEDs</h3>
-    <div class="help">Pick an LED mode above and watch the device, or use the probe: every button note on channel / velocity below.</div>
-    <div class="row">
-      <label>channel <select id="lpCh"></select></label>
-      <label>velocity <input id="lpVel" type="number" min="0" max="127" value="127" style="width:64px"></label>
-      <button id="lpGo">Light all with this</button><button id="lpOff">Probe off</button>
-    </div>
-    <div class="row">What do you see? <button data-r="note on = LED on/off, any velocity">They light (on/off)</button>
-      <button data-r="note on velocity = brightness">Brightness follows velocity</button>
-      <button data-r="no LEDs with note on">Nothing lights</button>
-      <span id="ledResult" class="mono"></span></div>
-    <h3>2b · LED hunt (if a button's own note lights nothing)</h3>
-    <div class="help">On Numark's Total Control the LED notes differ from the button notes, so the NuVJ may do the
-      same. The hunt lights <b>one note at a time</b> on the chosen channel. When an LED lights on the NuVJ,
-      <b>click that control in the drawing</b>: its LED note is saved in the map. Auto steps every 1.2 s and stops
-      when you click.</div>
-    <div class="row">
-      <label>channel <select id="huCh"></select></label>
-      <button id="huGo">Start hunt</button><button data-step="-1">◀ note</button><button data-step="1">note ▶</button>
-      <label><input type="checkbox" id="huAuto"> Auto step</label><button id="huStop">Stop hunt</button>
-      <span id="huInfo" class="mono"></span>
-    </div>
+    <div class="help">Try <b>All on</b> and <b>Chase</b> above, and <b>Follow</b> while you press buttons and pads: the LED
+      under your finger must light (31 LEDs: 18 pads, LATCH / AUTO / SYNC ×2, SCRATCH ×2, INSTA A/B, MASTER FX,
+      INSTA BLACK, BPM TAP).</div>
+    <div class="row"><button id="ledsOk">Every LED is right ✓</button><span id="ledResult" class="mono"></span></div>
     <h3>3 · LCD</h3>
-    <div class="help">The LCD is a custom segment display (read from the owner's photo): 9 dot-matrix characters,
-      two 2-digit 7-segment numbers, a 12-step bar, SYNC / BLACK icons and A / B triangles. Himmel fills it from one small
-      model (below), the same way it fills the MK2 screens. The drawing renders that model now. The NuVJ software
-      drives the real LCD with messages nobody has published; once we see them (by watching the NuVJ / GrandVJ
-      software talk to it), the driver turns the same model into those bytes. Until then Himmel leaves the device
-      LCD alone.</div>
-    <div class="row"><button id="idBtn" title="F0 7E 7F 06 01 F7, from the MIDI standard; harmless">Ask the NuVJ who it is (identity request)</button>
-      <span class="help">the only SysEx Himmel sends; the answer (if any) shows in the MIDI monitor</span></div>
+    <div class="help">The LCD is a custom segment display: 8 dot-matrix characters (command <code>01</code>) and 64 bytes of
+      segment memory (command <code>02</code>). From the NuVJ software we know the text and where its 2-digit number
+      goes (drawn as the big digits). The rest (small digits, bar, icons) is learned with the <b>segment hunt</b>: it
+      lights one segment bit at a time and writes its number on the text row (e.g. <code>SEG23.4</code>). <b>Click the
+      part of the drawn LCD that lit up</b> (a digit segment, a bar block, an icon or a label) and it is saved in the
+      map. Nothing lit? Step on. Auto steps every 1.2 s.</div>
+    <div class="row">
+      <button id="shGo">Start segment hunt</button><button data-sstep="-1">◀ bit</button><button data-sstep="1">bit ▶</button>
+      <button data-sstep="7">byte ▶</button><label><input type="checkbox" id="shAuto"> Auto step</label>
+      <button id="shStop">Stop</button><span id="shInfo" class="mono"></span>
+    </div>
+    <div class="row"><label>LCD contrast (not stored) <input type="range" id="lcdC" min="0" max="99" value="50"></label>
+      <span id="lcdCV" class="mono"></span>
+      <button id="idBtn" title="F0 7E 7F 06 01 F7, from the MIDI standard; the NuVJ software sends it too">Ask the NuVJ who it is</button></div>
     <div id="lcdModel" class="mono"></div>
   </div>
   <div class="card">
@@ -245,10 +237,23 @@ function build(w) {
   for (const s of w.screens || []) {
     const [uw, uh] = s.units || [200, 108];
     const d = add(`<canvas width="${uw * 4}" height="${uh * 4}"></canvas>`, "lcd", { left: px(s.x), top: px(s.y), width: px(s.w), height: px(s.h) });
-    s.ctx = d.firstChild.getContext("2d"); W.lcd = s;
+    s.ctx = d.firstChild.getContext("2d"); W.lcd = s; s.el = d;
+    d.addEventListener("click", e => {
+      if (!S || !S.seg_hunt || !s.hits) return;
+      const r = d.firstChild.getBoundingClientRect();
+      const ux = (e.clientX - r.left) / r.width * uw, uy = (e.clientY - r.top) / r.height * uh;
+      let best = null, bd = 1e9;
+      for (const h of s.hits) {   // the smallest part under the click, else the nearest within 8 units
+        const inside = ux >= h.x - 1 && ux <= h.x + h.w + 1 && uy >= h.y - 1 && uy <= h.y + h.h + 1;
+        const dist = inside ? h.w * h.h * 1e-3 : Math.hypot(ux - (h.x + h.w / 2), uy - (h.y + h.h / 2)) + 100;
+        if (dist < bd) { bd = dist; best = h; }
+      }
+      if (best && bd < 108) post({ seg_assign: best.key });
+    });
   }
   for (const c of w.controls) {
     let d;
+    if (c.kind === "push") continue;     // wired onto its knob below
     if (c.kind === "button" || c.kind === "pad") {
       const st = c.style || (c.kind === "pad" ? "strip" : "");
       if (st) {   // the label is printed next to the button, as on the device
@@ -283,20 +288,32 @@ function build(w) {
     c.el = d; els[c.name] = c;
     wire(c);
   }
+  for (const c of w.controls) if (c.kind === "push") {   // push of an endless knob: right-click / Alt+click it
+    const k = els[c.of];
+    if (k) { k.push = c; els[c.name] = Object.assign(c, { el: k.el, pushOf: k }); }
+  }
   fit();
 }
 
 // ---------- input: simulator = the drawing is the controller; hardware = click to learn ----------
 function hw() { return S && S.hardware; }
-function hunting() { return !!(S && S.host && S.host.hunt); }
+
 function wire(c) {
   const el = c.el;
-  el.addEventListener("click", () => {
-    if (hunting()) { if (c.kind === "button" || c.kind === "pad") post({ led_assign: c.name }); }
-    else if (hw()) post({ learn: c.name });
+  el.addEventListener("click", e => {
+    if (!hw()) return;
+    const push = c.push && (e.altKey || e.button === 1);
+    post({ learn: push ? c.push.name : c.name });
   });
+  el.addEventListener("contextmenu", e => { if (c.push) { e.preventDefault(); if (hw()) post({ learn: c.push.name }); } });
   el.addEventListener("pointerdown", e => {
-    if (hw() || hunting()) return;
+    if (hw()) return;
+    if (c.push && (e.button === 2 || e.button === 1 || e.altKey)) {   // push the endless knob
+      e.preventDefault(); c.pushDown = true; simIn({ name: c.push.name, down: true });
+      const upFn = () => { if (c.pushDown) { c.pushDown = false; simIn({ name: c.push.name, down: false }); } window.removeEventListener("pointerup", upFn); };
+      window.addEventListener("pointerup", upFn);
+      return;
+    }
     e.preventDefault();
     try { el.setPointerCapture(e.pointerId); } catch (_) { /* synthetic or already released pointer */ }
     c.drag = { x: e.clientX, y: e.clientY, a: null };
@@ -378,12 +395,14 @@ function drawLcd(m, note) {
   g.fillStyle = grad; g.fillRect(0, 0, g.canvas.width, g.canvas.height);
   g.save(); g.scale(k, k);
   const on = b => b ? LCD_ON : LCD_GHOST;
+  const hits = s.hits = [];            // clickable parts (LCD units) for the segment hunt
   for (const e of s.elements || []) {
     if (e.kind === "dots") {           // a row of 5x7 dot-matrix cells
-      const t = (m.text || "").toUpperCase().padEnd(e.cells).slice(0, e.cells);
+      const t = (m.text || "").padEnd(e.cells).slice(0, e.cells);
+      hits.push({ key: "text", x: e.x, y: e.y, w: e.cells * e.cw, h: e.ch });
       const dw = e.cw / 6, dh = e.ch / 8;
       for (let i = 0; i < e.cells; i++) {
-        const cols = FONT[t[i]] || FONT["?"];
+        const cols = FONT[t[i]] || FONT[t[i].toUpperCase()] || FONT["?"];
         for (let cx = 0; cx < 5; cx++) {
           const bits = parseInt(cols.substr(cx * 2, 2), 16);
           for (let cy = 0; cy < 7; cy++) {
@@ -394,11 +413,16 @@ function drawLcd(m, note) {
       }
     } else if (e.kind === "digits") {  // 7-segment digits
       const t = (m[e.id] || "").padStart(e.n).slice(-e.n), lit = (m[e.id] || "") !== "";
-      for (let i = 0; i < e.n; i++) seg7(g, e.x + i * (e.w + 4), e.y, e.w, e.h, lit ? SEG7[t[i]] ?? "" : "", on);
+      for (let i = 0; i < e.n; i++) seg7(g, e.x + i * (e.w + 4), e.y, e.w, e.h, lit ? SEG7[t[i]] ?? "" : "", on, hits, `${e.id}.${i}.`);
     } else if (e.kind === "bar") {     // a bar graph of n blocks
       const n = m.bar ?? -1, bw = e.w / e.n;
-      for (let i = 0; i < e.n; i++) { g.fillStyle = on(i < n); g.fillRect(e.x + i * bw, e.y + (e.h * 0.35) * (1 - i / e.n), bw * 0.78, e.h - (e.h * 0.35) * (1 - i / e.n)); }
+      for (let i = 0; i < e.n; i++) {
+        const y0 = e.y + (e.h * 0.35) * (1 - i / e.n);
+        g.fillStyle = on(i < n); g.fillRect(e.x + i * bw, y0, bw * 0.78, e.y + e.h - y0);
+        hits.push({ key: `bar.${i}`, x: e.x + i * bw, y: y0, w: bw * 0.78, h: e.y + e.h - y0 });
+      }
     } else if (e.kind === "icon") {
+      hits.push({ key: e.id, x: e.x, y: e.y, w: e.w, h: e.h });
       g.fillStyle = on((m.icons || {})[e.id]);
       if (e.shape === "tri") { g.beginPath(); g.moveTo(e.x, e.y); g.lineTo(e.x + e.w, e.y); g.lineTo(e.x + e.w / 2, e.y + e.h); g.closePath(); g.fill(); }
       else if (e.shape === "square") { g.fillRect(e.x, e.y, e.w, e.h); }
@@ -406,12 +430,14 @@ function drawLcd(m, note) {
     } else if (e.kind === "label") {   // small printed-style segment words; lit when their element is in use
       const base = e.id.replace(/_label$/, ""), lit = base in (m.icons || {}) ? m.icons[base] : base === "bar" ? (m.bar ?? null) !== null : (m[base] || "") !== "";
       g.fillStyle = lit ? "#c9d6ff" : LCD_GHOST; g.font = "bold 7px Segoe UI, sans-serif"; g.textAlign = "center"; g.fillText(e.text, e.x, e.y);
+      const tw = g.measureText(e.text).width;
+      hits.push({ key: e.id, x: e.x - tw / 2, y: e.y - 7, w: tw, h: 8 });
     }
   }
   g.restore();
   s.ctx.canvas.title = note;
 }
-function seg7(g, x, y, w, h, segs, on) {
+function seg7(g, x, y, w, h, segs, on, hits, prefix) {
   const t = Math.max(1.6, w * 0.2), hh = h / 2, sk = w * 0.12;   // stroke, half height, italic skew
   const S = {
     a: [[x + t * 0.6 + sk, y], [x + w - t * 0.6 + sk, y], [x + w - t * 1.4 + sk, y + t], [x + t * 1.4 + sk, y + t]],
@@ -424,6 +450,10 @@ function seg7(g, x, y, w, h, segs, on) {
   };
   for (const [k, pts] of Object.entries(S)) {
     g.fillStyle = on(segs.includes(k)); g.beginPath(); pts.forEach(([px_, py], i) => i ? g.lineTo(px_, py) : g.moveTo(px_, py)); g.closePath(); g.fill();
+    if (hits) {
+      const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+      hits.push({ key: prefix + k, x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) });
+    }
   }
 }
 
@@ -444,7 +474,9 @@ function render(s) {
   $("bar").style.width = (100 * seen.size / mp.total) + "%";
   const now = performance.now();
   for (const c of Object.values(els)) {
+    if (c.kind === "push") continue;      // shown on its knob
     const cl = c.el.classList, v = s.values[c.name];
+    if (c.push) cl.toggle("pushed", held.has(c.push.name));
     cl.toggle("seen", seen.has(c.name));
     cl.toggle("missing", !mapped.has(c.name));
     cl.toggle("learn", s.learn === c.name);
@@ -475,7 +507,9 @@ function render(s) {
       c.el.firstChild.style.left = px(2 + 18 * (v || 0));
     }
   }
-  drawLcd(s.lcd || {}, s.hardware ? "drawing: what Himmel would write (device LCD protocol unknown)" : "simulated: what Himmel would write");
+  const lw0 = s.lcd_wire || {}, wired = Object.assign({}, s.lcd || {});   // text and number as really sent
+  if (lw0.inited) { wired.text = lw0.text; if (lw0.number && !lw0.number.includes("?")) wired.big = lw0.number.trim() ? lw0.number : ""; }
+  drawLcd(wired, s.hardware ? "drawing: what Himmel would write (device LCD protocol unknown)" : "simulated: what Himmel would write");
   // host card
   const h = s.host;
   const lm = $("ledModes");
@@ -504,10 +538,14 @@ function render(s) {
   $("learnMsg").textContent = s.learn_msg || "";
   $("lcdModel").textContent = "LCD model now: " + JSON.stringify(s.lcd);
   $("idBtn").disabled = !s.hardware;
-  const hu = h.hunt;
-  $("huInfo").textContent = hu ? `lighting note ${hu.note} on channel ${hu.ch + 1}${hu.auto ? " (auto)" : ""} - click the control that lights` : "";
-  if (hu && !$("huAuto").matches(":focus")) $("huAuto").checked = hu.auto;
-  document.body.classList.toggle("hunt", !!hu);
+  const sh = s.seg_hunt;
+  if (W && W.lcd && W.lcd.el) W.lcd.el.classList.toggle("hunting", !!sh);
+  $("shInfo").textContent = sh ? `lighting byte ${sh.byte} bit ${sh.bit}${sh.auto ? " (auto)" : ""} - click what lit on the LCD drawing` : "";
+  if (sh && !$("shAuto").matches(":focus")) $("shAuto").checked = sh.auto;
+  const lw = s.lcd_wire || {};
+  $("lcdModel").textContent = `Himmel's LCD model: ${JSON.stringify(s.lcd)}\nsent to the glass: text "${lw.text ?? ""}", number ${lw.number ?? "-"}` +
+    `${lw.contrast != null ? ", contrast " + lw.contrast : ""}${lw.inited ? "" : " (no init yet)"}\nlearned segments: ` +
+    (Object.entries(s.lcd_segments || {}).map(([k, v]) => `${k}=${v[0]}/${v[1]}`).join(" ") || "none yet");
   const miss = Object.keys(els).filter(n => !seen.has(n)), mk = miss.join("|");
   if (mk !== lastMissKey) {
     lastMissKey = mk;
@@ -516,7 +554,7 @@ function render(s) {
   }
   $("unmapped").textContent = (s.unmapped || []).join("  |  ") || "-";
   $("verifyBtn").disabled = miss.length > 0;
-  $("ledResult").textContent = mp.leds && mp.leds.checked ? `saved: ${mp.leds.how} (${mp.leds.checked})` : "";
+  $("ledResult").textContent = mp.leds && mp.leds.checked ? `checked on the NuVJ ${mp.leds.checked}` : "";
   // events
   $("events").innerHTML = "<tr><th>time</th><th>control</th><th>event</th></tr>" + (s.events || []).slice().reverse().map(([t, n, ev]) =>
     `<tr><td>${esc(t)}</td><td>${esc(n)}</td><td>${esc(evText(ev))}</td></tr>`).join("");
@@ -547,18 +585,16 @@ $("portGo").onclick = () => post({ hardware: true, port: $("portPick").value ===
 $("verifyBtn").onclick = () => post({ verify: true });
 $("resetSeen").onclick = () => { if (confirm("Clear all 'seen' marks?")) post({ reset_seen: true }); };
 $("noise").onchange = e => post({ show_noise: e.target.checked });
-for (let i = 1; i <= 16; i++) $("lpCh").insertAdjacentHTML("beforeend", `<option value="${i - 1}">${i}</option>`);
-$("lpGo").onclick = () => post({ led_probe: { ch: +$("lpCh").value, vel: +$("lpVel").value } });
-$("lpOff").onclick = () => post({ led_probe: null });
-for (let i = 1; i <= 16; i++) $("huCh").insertAdjacentHTML("beforeend", `<option value="${i - 1}">${i}</option>`);
-$("huGo").onclick = () => post({ hunt: { ch: +$("huCh").value, note: 0, auto: $("huAuto").checked } });
-$("huStop").onclick = () => post({ hunt: null });
+$("ledsOk").onclick = () => post({ leds_ok: true });
+$("shGo").onclick = () => post({ seg_hunt: { byte: 0, bit: 0, auto: $("shAuto").checked } });
+$("shStop").onclick = () => post({ seg_hunt: null });
+$("shAuto").onchange = e => { if (S && S.seg_hunt) post({ seg_hunt: { auto: e.target.checked } }); };
+document.querySelectorAll("[data-sstep]").forEach(b => b.onclick = () => post({ seg_hunt: { step: +b.dataset.sstep, auto: false } }));
+$("lcdC").oninput = () => { $("lcdCV").textContent = $("lcdC").value; post({ contrast: +$("lcdC").value }); };
 $("idBtn").onclick = () => post({ identity: true });
-$("huAuto").onchange = e => { if (hunting()) post({ hunt: { auto: e.target.checked } }); };
-document.querySelectorAll("[data-step]").forEach(b => b.onclick = () => post({ hunt: { step: +b.dataset.step, auto: false } }));
-document.querySelectorAll("[data-r]").forEach(b => b.onclick = () => post({ led_result: b.dataset.r }));
 $("help").innerHTML = "<b>Simulator:</b> the drawing is the NuVJ. <b>Buttons and pads:</b> hold the mouse. " +
-  "<b>Knobs:</b> drag up/down or scroll. <b>BANK:</b> endless, drag or scroll one step at a time. " +
+  "<b>Knobs:</b> drag up/down or scroll. <b>BANK and MASTER FX:</b> endless, drag or scroll one step at a time; " +
+  "<b>right-click (or Alt+click) BANK to push it</b>. " +
   "<b>Jog wheels:</b> drag around the wheel (hold SCRATCH for scratch). <b>Faders and crossfader:</b> drag the cap. " +
   "<b>Front switches:</b> click to step. Every move sends the NuVJ's own MIDI bytes (see the monitor).<br>" +
   "<b>Real NuVJ:</b> clicks on the drawing learn instead of play.";
