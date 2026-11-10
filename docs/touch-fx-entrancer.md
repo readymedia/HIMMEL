@@ -1,6 +1,9 @@
 # Touch FX: what Himmel can learn from the Korg Entrancer
 
-Status: **design note, nothing built yet** (2026-11-10). Written to answer one
+Status (2026-11-10): design note. **Step 1 is built**: a Touch FX slot over
+the whole canvas with the 8 tier-A effects + Trails, played from the MK2 (knob
+page 4, pads as X/Y surface) or the mouse; see [Built so far](#9-built-so-far).
+The Lightpad driver comes from the weapon-2 work. Written to answer one
 question from the owner: *should Himmel take the form and effects of the old
 Korg KAOSS PAD Entrancer and play them from the ROLI Lightpad Block (weapon
 no. 2)?*
@@ -418,3 +421,35 @@ Why:
 
 No code, images or text were copied from these; only facts (program names,
 parameter assignments, MIDI numbers) are cited, with credit.
+
+---
+
+## 9. Built so far
+
+Step 1 of the recommendation (2026-11-10):
+
+- `src/engine/include/himmel/engine/touch_fx.h` + `src/touch_fx.cpp`: the
+  gesture logic (touch down / move / up per source, Hold, depth, pressure →
+  amount with a 30 % floor, 20 ms fade in, 60 ms fade out, 8 ms smoothing,
+  Strobe as a "hit" with no fades, a lost source lifts its finger). Pure code,
+  tested by `touch_fx_tests.exe`.
+- `ps_touchfx` in `src/engine/render/shaders.h`: one pass over a copy of the
+  canvas, after the clip and camera layers; Trails keeps the last output in a
+  second texture. Both textures are made with the canvas (start-up / resize),
+  never in the frame loop. The latency test switches Touch FX off.
+- Effects (X / Y / pressure): Hue Turn (hue / saturation), Duotone (dark
+  colour / light colour), Grid (1–16 tiles / repeat → mirror), Kaleido (2–16
+  segments / turn), Bulge (centre X / Y / strength), Slide (shift X / Y,
+  wraps), Waves (frequency / height), Strobe (4 … 1/4 beats / flash black →
+  white), Trails (decay / drift).
+- Tempo: a fixed 120 BPM until Himmel has a tempo source (Strobe).
+- Input: MK2 knob page 4 (pads = 4×4 surface, encoder = effect), the mouse on
+  any output window (`1`–`9`, `H`). The Lightpad will call the same API with
+  `Source::Lightpad`.
+- `touch_fx_check.exe`: renders all nine to PNG with the real shader and
+  times them. GTX 1070, 1920×1080: 0.05–0.09 ms per pass, Grid 0.3–0.5 ms
+  (it shrinks the whole picture per tile without mipmaps; mipmaps or a
+  half-size copy would fix that if it ever matters).
+- Not done yet: the Lightpad, LED feedback on it, the MK2 page drawing with
+  the 15 × 15 mirror (section 8; the page now uses the standard knob layout),
+  motion loop, second finger, per-deck slots, tier C effects.

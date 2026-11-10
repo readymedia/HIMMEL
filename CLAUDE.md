@@ -249,6 +249,15 @@ The details are in the mockup (`docs/vj-mockup.html`).
      low-latency mode, lock-free triple buffer, retries every 2 s, skips IR
      cameras. Render args `--camera NAME`, `--camera-index N`, `--no-camera`.
      MK2 knob page 3 CAMERA: opacity, zoom, pos x/y, mirror, bright, contrast.
+   - **Touch FX (2026-11-10, checked in a window + PNGs; not yet on the MK2):**
+     one effect over the whole canvas played by one finger, inspired by the
+     Korg Entrancer (study + plan: `docs/touch-fx-entrancer.md`). Logic
+     `src/engine/src/touch_fx.cpp` (weapon-neutral, `touch_fx_tests.exe`),
+     shader `ps_touchfx`, 9 effects (Hue Turn, Duotone, Grid, Kaleido, Bulge,
+     Slide, Waves, Strobe, Trails). MK2 knob page 4 (pads = 4x4 X/Y surface,
+     pressure = amount), mouse drag on an output (keys 1-9, H = hold).
+     `touch_fx_check.exe` renders them to PNG and times them. Next: Lightpad
+     as the touch source + its LED feedback.
    - Latency test: **Sampling** on the MK2. The canvas flips black/white every
      0.7 s, the camera (pointed at an output) reports when it sees it; 16 runs,
      median/min/max on the MK2 screen and in the log ("LOOP" = Present() ->

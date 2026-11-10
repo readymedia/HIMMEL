@@ -146,24 +146,41 @@ The simulator sends the same USB reports as the hardware over UDP on
 
 ### Playing it from the MK2
 
-| Control | Page 1: TEST CARD | Page 2: CLIP | Page 3: CAMERA |
-|---|---|---|---|
-| **Page < / >** | switch page | switch page | switch page |
-| Knob 1 | hue | opacity | opacity |
-| Knob 2 | saturation | speed −2x..+2x (centre = stop) | zoom |
-| Knob 3 | bar speed | zoom | position X |
-| Knob 4 | grid size | position X | position Y |
-| Knob 5 | grid amount | position Y | mirror on/off |
-| Knob 6 | bar width | – | brightness |
-| Knob 7 | pad fade time | – | contrast |
-| Knob 8 | master brightness | master brightness | master brightness |
-| Pads | flash their part of the canvas | 16 jump points in the clip | flash |
-| Master encoder | next / previous clip | next / previous clip | next / previous clip |
-| Play / Restart | clip pause / to start | same | same |
-| Navigate | span ↔ mirror | span ↔ mirror | span ↔ mirror |
-| Sampling | – | – | start / stop the latency test |
+| Control | Page 1: TEST CARD | Page 2: CLIP | Page 3: CAMERA | Page 4: TOUCH FX |
+|---|---|---|---|---|
+| **Page < / >** | switch page | switch page | switch page | switch page |
+| Knob 1 | hue | opacity | opacity | effect (turn to step) |
+| Knob 2 | saturation | speed −2x..+2x (centre = stop) | zoom | depth |
+| Knob 3 | bar speed | zoom | position X | effect X |
+| Knob 4 | grid size | position X | position Y | effect Y |
+| Knob 5 | grid amount | position Y | mirror on/off | hold on/off |
+| Knob 6 | bar width | – | brightness | – |
+| Knob 7 | pad fade time | – | contrast | – |
+| Knob 8 | master brightness | master brightness | master brightness | master brightness |
+| Pads | flash their part of the canvas | 16 jump points in the clip | flash | a 4×4 X/Y surface: press = effect on, pressure = amount |
+| Master encoder | next / previous clip | next / previous clip | next / previous clip | next / previous effect |
+| Play / Restart | clip pause / to start | same | same | same |
+| Navigate | span ↔ mirror | span ↔ mirror | span ↔ mirror | span ↔ mirror |
+| Sampling | – | – | start / stop the latency test | – |
 
 The MK2 screens always show the current page, with each value right above its knob.
+
+### Touch FX
+
+One effect over the whole picture, played by one finger
+([design note](touch-fx-entrancer.md)). X and Y of the finger are the
+effect's two parameters, pressure is how much; lift and it fades out, unless
+**Hold** is on. Effects: 1 Hue Turn, 2 Duotone, 3 Grid, 4 Kaleido, 5 Bulge,
+6 Slide, 7 Waves, 8 Strobe, 9 Trails.
+
+- **MK2:** knob page 4. The pads are a coarse 4×4 surface; the pad under the
+  finger lights in the effect's colour.
+- **Mouse (no controller needed):** drag on any output window. Keys `1`–`9`
+  choose the effect, `H` toggles Hold.
+- **Lightpad Block:** planned (weapon no. 2).
+
+See all nine without starting the engine: `build\bin\Release\touch_fx_check.exe`
+writes PNGs to `tools/_screens/touchfx/` and prints the GPU time per effect.
 
 ## 7. Clips
 
