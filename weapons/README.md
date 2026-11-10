@@ -337,7 +337,7 @@ view. Its profile names it with `"page"`.
 
 ### The protocol
 
-The full protocol is in [`docs/nuvj-protocol.md`](../docs/nuvj-protocol.md).
+The full protocol is in [`docs/nuvj-protocol.md`](../docs/nuvj-protocol.md). The effects, generators and mixer of the original NuVJ software (and what Himmel can take from them) are in [`docs/nuvj-effects.md`](../docs/nuvj-effects.md).
 
 - **Controls → host:** notes, CCs and pitch bend.
   - Endless controls (BANK, MASTER FX, jog wheels) send relative CCs.
