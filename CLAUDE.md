@@ -190,11 +190,28 @@ The details are in the mockup (`docs/vj-mockup.html`).
      (stand-in for the engine; run `mk2_controller.exe` first).
    - The app renders pages and writes the screens via the shared block; the
      controller only sends strips that changed.
-4. **Engine skeleton**:
-   - the supervisor starts the render process;
-   - the render process opens 1–N outputs;
-   - one test clip (HAP) and one camera are mixed and controlled from the MK2;
-   - measure glass-to-glass latency.
+4. **Engine skeleton** (`src/engine/`):
+   - ~~the supervisor starts the render process~~ **done 2026-11-10**:
+     `himmel.exe [--no-controller] [-- render args]` starts `mk2_controller.exe`
+     and `himmel_render.exe` in a job object, restarts a dead child after
+     0.25 s (doubling to 10 s if it keeps dying), kills a child with no
+     heartbeat for 2 s, logs to `logs\himmel-YYYY-MM-DD.log`. Tested: kill,
+     freeze and Ctrl+C.
+   - ~~the render process opens 1–N outputs~~ **done 2026-11-10**:
+     `himmel_render.exe [--outputs N] [--fullscreen] [--size WxH] [--mode span|mirror]`.
+     D3D11, one flip-model swap chain per output (waitable, max latency 1), one
+     canvas spanned or mirrored, test card, status overlay per output, status
+     block `Local\HimmelEngine`. Exits with code 3 on GPU device loss.
+     MK2 on ring 0: knobs drive the test card (knob page on the MK2 screens),
+     pads flash their 4x4 cell, Navigate = span/mirror. Input->present ~8-12 ms.
+   - Decided 2026-11-10: **HAP playback uses our own small MOV reader +
+     Snappy (BSD)**, BC textures straight to the GPU. FFmpeg is not linked;
+     `ffmpeg.exe` is only an external tool for import/transcoding.
+   - Still to do: one test clip (HAP) and one camera mixed and controlled from
+     the MK2; measure glass-to-glass latency; black "curtain" windows held by
+     the supervisor so a renderer restart shows black, not the desktop.
+   - Dev PC note: the owner's dev laptop is a GTX 1070 with one screen, so
+     outputs are tested as windows there; the show PC is the RTX 5090.
 5. Then: the ffmpeg/HAP import pipeline, audio analysis, the cue system, Smart
    Random and the GUI.
 

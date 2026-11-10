@@ -228,16 +228,16 @@ void draw_audio(Screen& c, const AudioModel& m) {
 }
 
 // ---------------------------------------------------------------- message / calibration
-void draw_message(Screen& c, int side, std::string_view title, std::string_view big, std::string_view small) {
+void draw_message(Screen& c, int side, std::string_view title, std::string_view big, std::string_view subtitle) {
     clear_side(c, side);
     Header h;
     h.left.set(title);
     draw_header(c, side, h);
     const int x0 = side * kScreenW, x1 = x0 + kScreenW;
     const int scale = text_width(big, 3) <= kScreenW - 8 ? 3 : (text_width(big, 2) <= kScreenW - 8 ? 2 : 1);
-    const int y = small.empty() ? 36 - 7 * scale / 2 : 30 - 7 * scale / 2;
+    const int y = subtitle.empty() ? 36 - 7 * scale / 2 : 30 - 7 * scale / 2;
     text_in(c, x0 + 4, x1 - 4, y, big, Align::Center, true, scale);
-    if (!small.empty()) text_in(c, x0 + 2, x1 - 2, 54, small, Align::Center);
+    if (!subtitle.empty()) text_in(c, x0 + 2, x1 - 2, 54, subtitle, Align::Center);
 }
 
 void draw_knob_align(Screen& c, int highlight) {

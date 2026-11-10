@@ -158,7 +158,7 @@ struct AudioModel {
 void draw_audio(Screen& c, const AudioModel& m);
 
 // Big message on one screen (Tempo latch, "SCENE SAVED", errors).
-void draw_message(Screen& c, int side, std::string_view title, std::string_view big, std::string_view small = {});
+void draw_message(Screen& c, int side, std::string_view title, std::string_view big, std::string_view subtitle = {});
 
 // Calibration: a vertical line over each knob centre and the column bounds.
 // Turn a knob: if its line is not right above it, fix kKnobX.

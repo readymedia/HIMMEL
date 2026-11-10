@@ -24,3 +24,4 @@ FetchContent_MakeAvailable(hidapi json)
 
 enable_testing()
 add_subdirectory(src/controller)
+add_subdirectory(src/engine)
