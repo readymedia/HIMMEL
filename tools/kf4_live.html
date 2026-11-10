@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KF4 Live</title>
+<style>
+  :root {
+    --bg: #101113; --card: #17181b; --edge: #2a2b2f; --text: #d8d9dc; --dim: #8d9097;
+    --body: #1d1f24; --strip: #141518; --btn: #2a2c31; --red: #ff3b30; --sim: #6b55d6;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.4 "Segoe UI", system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 14px; padding: 12px 20px; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; letter-spacing: .5px; }
+  select, button { background: #2c2e33; color: var(--text); border: 1px solid #3a3c42; border-radius: 6px; padding: 4px 9px; font: inherit; cursor: pointer; }
+  .pill { padding: 3px 10px; border-radius: 99px; background: #26272b; font-size: 12px; }
+  .pill.sim { background: #2b2350; color: #c8b8ff; } .pill.bad { background: #4a1719; color: #ffb3b5; }
+  main { display: flex; gap: 20px; padding: 0 20px 20px; flex-wrap: wrap; align-items: flex-start; }
+  #stageWrap { flex: 0 0 auto; }
+  #stage { position: relative; transform-origin: 0 0; }
+  #panel { position: absolute; left: 0; top: 0; background: #0c0d0f; border-radius: 12px;
+           border: 1px solid var(--sim); box-shadow: 0 0 0 2px #6b55d633, 0 20px 60px #0008; touch-action: none; }
+  #panel > * { position: absolute; user-select: none; }
+  .body { background: linear-gradient(#22252b, #1a1c21); border: 1px solid #33363d; }
+  .strip { background: var(--strip); border: 1px dashed #34363c; border-radius: 6px; }
+  .strip > span { position: absolute; right: 8px; top: -15px; }
+  .strip.front > span { top: auto; bottom: -15px; }
+  .strip > span { font-size: 9px; color: #5d6068; letter-spacing: 1px; }
+  .brand { font-size: 13px; letter-spacing: 3px; color: #b9bdc8; width: 100%; text-align: center; left: 0; }
+  .sec { font-size: 10px; letter-spacing: 1.5px; color: var(--dim); }
+  .rule { height: 1px; background: #3a3d44; }
+  .jack { width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; background: #0a0a0b;
+          border: 4px solid #c9a23a; cursor: default; }
+  .jack.sv { border-color: #555; background: radial-gradient(#222 30%, #0a0a0b 32%); }
+  .jack.in { cursor: pointer; }
+  .jack.plugged::after { content: ""; position: absolute; inset: -9px; border-radius: 50%; border: 3px solid #4fb3ff;
+                         box-shadow: 0 0 8px #4fb3ff88; }
+  .jlabel { font-size: 8.5px; color: var(--dim); text-align: center; width: 70px; margin-left: -35px; line-height: 1.1; white-space: pre; }
+  .led { width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #3a1210; }
+  .led.on { background: var(--red); box-shadow: 0 0 10px var(--red); }
+  .b { background: var(--btn); border: 1px solid #3c3f46; border-radius: 6px; display: flex; align-items: center;
+       justify-content: center; font-weight: 600; font-size: 15px; color: #8c6f6d; cursor: pointer;
+       text-shadow: 0 0 4px #ff3b3033; transition: background .05s; }
+  .b.small { font-size: 12px; }
+  .b.on { background: #5a1410; color: #ffd9d6; border-color: var(--red); box-shadow: 0 0 14px #ff3b3088, inset 0 0 10px #ff3b3066; }
+  .b.held { transform: translateY(1px); filter: brightness(1.25); }
+  .fader { background: #0b0c0e; border-radius: 6px; border: 1px solid #33363d; cursor: ew-resize; }
+  .fader .slot { position: absolute; left: 14px; right: 14px; top: 50%; height: 4px; margin-top: -2px; background: #000; border-radius: 2px; }
+  .fader .cap { position: absolute; top: 3px; bottom: 3px; width: 22px; margin-left: -11px; border-radius: 3px;
+                background: linear-gradient(90deg, #8c9099, #e1e4ea 45%, #ff3b30 47%, #ff3b30 53%, #e1e4ea 55%, #8c9099); }
+  .fader .end { position: absolute; top: -16px; font-size: 10px; color: var(--dim); }
+  .sw { background: #0b0c0e; border: 1px solid #33363d; border-radius: 4px; display: flex; cursor: pointer; }
+  .sw > div { flex: 1; font-size: 8.5px; color: #6c7078; display: flex; align-items: center; justify-content: center; }
+  .sw > div.at { background: #c8ccd4; color: #111; border-radius: 3px; font-weight: 700; }
+  .swlabel { font-size: 8.5px; color: var(--dim); letter-spacing: 1px; }
+  .knob { border-radius: 50%; background: radial-gradient(#3a3d44, #1c1d21); border: 1px solid #50535b; cursor: ns-resize; }
+  .knob .ind { position: absolute; left: 50%; top: 3px; width: 2px; height: 40%; margin-left: -1px; background: #eee; transform-origin: 50% 100%; }
+  .side { flex: 1 1 520px; min-width: 340px; display: grid; gap: 14px; }
+  .card { background: var(--card); border: 1px solid var(--edge); border-radius: 10px; padding: 12px 14px; }
+  .card h2 { font-size: 11px; letter-spacing: 1.5px; color: var(--dim); margin: 0 0 8px; font-weight: 600; }
+  .screens { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
+  .scr { position: relative; background: #000; border-radius: 6px; overflow: hidden; aspect-ratio: 4 / 3; }
+  .scr canvas { width: 100%; height: 100%; display: block; }
+  .scr .cap { position: absolute; left: 6px; top: 4px; font-size: 10px; color: #fff; text-shadow: 0 0 3px #000; letter-spacing: 1px; }
+  .scr .nosig { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; color: #666; font-size: 12px; letter-spacing: 2px; }
+  .inputs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px; }
+  .facts { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 12px; }
+  .facts b { color: var(--dim); font-weight: 500; }
+  #curve { width: 100%; height: 90px; background: #0b0c0e; border-radius: 6px; display: block; }
+  #log { font: 11px/1.45 Consolas, monospace; color: #a9b4c8; max-height: 170px; overflow: auto; white-space: pre; margin: 0; }
+  .help { font-size: 12px; color: #b0b3ba; }
+  .help b { color: var(--text); }
+  @media (max-width: 700px) { main { padding: 0 16px 16px; } .screens { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">KF4 Live</h1>
+  <select id="weaponPick" title="Weapon"></select>
+  <span class="pill sim" id="conn">simulated</span>
+  <span class="pill" id="link">engine link: -</span>
+  <label style="font-size:12px">Sources are
+    <select id="srcStd"><option>PAL</option><option>NTSC</option></select></label>
+</header>
+<main>
+  <div id="stageWrap"><div id="stage"><div id="panel"></div></div></div>
+  <div class="side">
+    <div class="card">
+      <h2>OUTPUTS (WHAT THE MIXER WOULD SEND)</h2>
+      <div class="screens">
+        <div class="scr"><canvas id="pgm" width="192" height="144"></canvas><span class="cap">MAIN OUT</span><div class="nosig" id="pgmNo">STANDBY</div></div>
+        <div class="scr"><canvas id="mon" width="192" height="144"></canvas><span class="cap" id="monCap">MONITOR OUT</span><div class="nosig" id="monNo">STANDBY</div></div>
+      </div>
+      <div class="inputs" id="inputs"></div>
+    </div>
+    <div class="card">
+      <h2>MIX</h2>
+      <div class="facts" id="facts"></div>
+      <canvas id="curve" width="520" height="90" style="margin-top:8px"></canvas>
+    </div>
+    <div class="card">
+      <h2>HIMMEL EVENTS (SENT TO UDP 127.0.0.1:<span id="port">8771</span>)</h2>
+      <pre id="log"></pre>
+    </div>
+    <div class="card help">
+      <h2>HOW TO PLAY IT</h2>
+      <b>Keys:</b> click. INPUT A / B choose the input for each channel; press the lit key again and it blinks
+      (black or white background in BK / WH, input dropped in C-K / L-K). HOLD freezes a channel.
+      MONITOR SELECT picks what the monitor out shows.<br>
+      <b>Crossfader:</b> drag, or scroll over it. <b>FINE:</b> drag up/down or scroll.
+      <b>Switches:</b> click a position (FADER CURVE, MODE on the front; NTSC/PAL and POWER on the rear).
+      NTSC/PAL is read at power-on, as on the real unit.<br>
+      <b>Cables:</b> click an input jack to pull or plug its cable. An input without a signal shows blue.<br>
+      The real KF4 has no data port, so these are Himmel's own events, not device bytes.
+      Positions and a few behaviours are guesses until checked on the owner's unit (see <code>weapons/kf4.md</code>).
+    </div>
+  </div>
+</main>
+<script>
+"use strict";
+const WID = new URLSearchParams(location.search).get("weapon") || "kf4";
+const panel = document.getElementById("panel");
+const els = {};          // control name -> {c, el}
+const jacks = {};        // deco id -> element
+let W = null, S = null;  // profile, latest snapshot
+const post = o => fetch("/wcmd?id=" + encodeURIComponent(WID), { method: "POST", body: JSON.stringify(o) }).catch(() => {});
+const sim = o => post({ sim_input: o });
+const esc = s => String(s).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+
+function add(cls, style, html = "") {
+  const d = document.createElement("div"); d.className = cls; Object.assign(d.style, style); d.innerHTML = html;
+  panel.appendChild(d); return d;
+}
+const px = v => v + "px";
+
+// ---------------- the panel, drawn from the profile ----------------
+function build(w) {
+  W = w;
+  panel.style.width = px(w.panel.w); panel.style.height = px(w.panel.h);
+  for (const d of w.deco) {
+    if (d.kind === "body") add("body", { left: px(d.x), top: px(d.y), width: px(d.w), height: px(d.h), borderRadius: px(d.r) });
+    else if (d.kind === "rear" || d.kind === "front")
+      add("strip " + d.kind, { left: px(d.x), top: px(d.y), width: px(d.w), height: px(d.h) }, `<span>${esc(d.label)} EDGE</span>`);
+  }
+  add("brand", { top: "222px" }, esc(w.badge));
+  for (const s of w.sections) {
+    add("sec", { left: px(s.x), top: px(s.y) }, esc(s.label));
+    add("rule", { left: px(s.x), top: px(s.y + 16), width: px(s.w) });
+  }
+  for (const d of w.deco) {
+    if (d.kind === "jack") {
+      const j = add("jack" + (d.svideo ? " sv" : "") + (d.input ? " in" : ""), { left: px(d.x), top: px(d.y) });
+      add("jlabel", { left: px(d.x), top: px(d.y + 16) }, esc(d.label));
+      j.title = d.input ? `${d.label.replace("\n", " ")}: click to plug / pull the cable` : d.label.replace("\n", " ");
+      if (d.input) j.onclick = () => S && sim({ plug: d.id, on: !S.state.plugged[d.id] });
+      jacks[d.id] = j;
+    } else if (d.kind === "led") {
+      jacks[d.id] = add("led", { left: px(d.x), top: px(d.y) });
+      add("jlabel", { left: px(d.x), top: px(d.y + 9) }, esc(d.label));
+    }
+  }
+  for (const c of w.controls) {
+    let el;
+    if (c.kind === "button") {
+      el = add("b" + (c.label.length > 2 ? " small" : ""), { left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h) }, esc(c.label));
+      const up = () => { if (el.dataset.down) { delete el.dataset.down; sim({ name: c.name, down: false }); } };
+      el.onpointerdown = e => { e.preventDefault(); el.setPointerCapture(e.pointerId); el.dataset.down = 1; sim({ name: c.name, down: true }); };
+      el.onpointerup = up; el.onpointercancel = up;
+    } else if (c.kind === "fader") {
+      el = add("fader", { left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h) },
+        `<div class="slot"></div><div class="cap"></div><span class="end" style="left:2px">${c.ends[0]}</span><span class="end" style="right:2px">${c.ends[1]}</span>`);
+      const at = e => {
+        const r = el.getBoundingClientRect(), inner = 14 / c.w * r.width;
+        return Math.round(Math.max(0, Math.min(1, (e.clientX - r.left - inner) / (r.width - 2 * inner))) * c.range);
+      };
+      el.onpointerdown = e => { e.preventDefault(); el.setPointerCapture(e.pointerId); el.dataset.drag = 1; sim({ fader: at(e) }); };
+      el.onpointermove = e => { if (el.dataset.drag) sim({ fader: at(e) }); };
+      el.onpointerup = el.onpointercancel = () => delete el.dataset.drag;
+      el.onwheel = e => { e.preventDefault(); if (S) sim({ fader: S.state.fader + (e.deltaY < 0 ? 32 : -32) }); };
+    } else if (c.kind === "switch") {
+      el = add("sw", { left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h) },
+        c.positions.map((p, i) => `<div data-i="${i}" title="${esc((c.help || [])[i] || p)}">${esc(p)}</div>`).join(""));
+      add("swlabel", { left: px(c.x), top: px(c.y - 14) }, esc(c.label));
+      el.onclick = e => { const i = e.target.dataset.i; if (i !== undefined) sim({ switch: c.name, pos: +i }); };
+    } else if (c.kind === "knob") {
+      el = add("knob", { left: px(c.x - c.r), top: px(c.y - c.r), width: px(2 * c.r), height: px(2 * c.r) }, '<div class="ind"></div>');
+      add("swlabel", { left: px(c.x - 12), top: px(c.y - c.r - 14) }, esc(c.label));
+      let y0 = 0, v0 = 0;
+      el.onpointerdown = e => { e.preventDefault(); el.setPointerCapture(e.pointerId); el.dataset.drag = 1; y0 = e.clientY; v0 = S ? S.state.fine : 512; };
+      el.onpointermove = e => { if (el.dataset.drag) sim({ knob: c.name, value: v0 + (y0 - e.clientY) * 6 }); };
+      el.onpointerup = el.onpointercancel = () => delete el.dataset.drag;
+      el.onwheel = e => { e.preventDefault(); if (S) sim({ knob: c.name, value: S.state.fine + (e.deltaY < 0 ? 24 : -24) }); };
+    } else continue;
+    el.title = el.title || c.name;
+    els[c.name] = { c, el };
+  }
+  fit();
+}
+
+function fit() {
+  if (!W) return;
+  const avail = Math.min(window.innerWidth - 40, 600), s = Math.max(0.45, Math.min(1.1, avail / W.panel.w, (window.innerHeight - 80) / W.panel.h));
+  const st = document.getElementById("stage");
+  st.style.transform = `scale(${s})`;
+  st.style.width = px(W.panel.w); st.style.height = px(W.panel.h);
+  document.getElementById("stageWrap").style.width = px(W.panel.w * s);
+  document.getElementById("stageWrap").style.height = px(W.panel.h * s);
+}
+window.addEventListener("resize", fit);
+
+// ---------------- reflect the simulator ----------------
+const blinkOn = () => Math.floor(performance.now() / 250) % 2 === 0;   // ~2 Hz (GUESS)
+function renderPanel() {
+  if (!S) return;
+  const L = S.leds, held = new Set(S.held);
+  for (const [name, { c, el }] of Object.entries(els)) {
+    if (c.kind === "button") {
+      const st = L[name] || "off";
+      el.classList.toggle("on", st === "on" || (st === "blink" && blinkOn()));
+      el.classList.toggle("held", held.has(name));
+    } else if (c.kind === "fader") {
+      el.querySelector(".cap").style.left = px(14 + (c.w - 28) * S.state.fader / c.range);
+    } else if (c.kind === "switch") {
+      const pos = name === "Fader curve" ? "1234".indexOf(S.state.curve)
+        : name === "Mode" ? ["BK", "WH", "C-K", "L-K"].indexOf(S.state.mode)
+        : name === "NTSC/PAL" ? S.state.std_switch : S.state.power;
+      el.querySelectorAll("div").forEach((d, i) => d.classList.toggle("at", i === pos));
+    } else if (c.kind === "knob") {
+      el.querySelector(".ind").style.transform = `rotate(${-150 + 300 * S.state.fine / c.range}deg)`;
+    }
+  }
+  for (const [id, j] of Object.entries(jacks)) {
+    if (id === "power_led") j.classList.toggle("on", L.power_led === "on");
+    else if (id in S.state.plugged) j.classList.toggle("plugged", S.state.plugged[id]);
+  }
+}
+
+function renderInfo() {
+  const m = S.mix, st = S.state;
+  const curveName = { 1: "1 · Normal", 2: "2 · No mix", 3: "3 · Center mix", 4: "4 · Switcher" }[st.curve];
+  const srcName = s => s[0] === "input" ? "IN " + s[1] : s[0] === "solid" ? s[1] + " background" : "dropped";
+  document.getElementById("facts").innerHTML = [
+    ["Power", m.on ? `on · ${m.std}${m.garbled ? " · <span style='color:#ffb3b5'>sources are " + st.source_std + ": picture garbled</span>" : ""}` : "standby"],
+    ["Channel A", `${srcName(m.a.src)}${m.a.hold ? " · HOLD" : ""} · gain ${m.a.gain.toFixed(2)}`],
+    ["Channel B", `${srcName(m.b.src)}${m.b.hold ? " · HOLD" : ""} · gain ${m.b.gain.toFixed(2)}`],
+    ["Curve", curveName], ["Mode", st.mode + (m.key ? (m.key.kind === "chroma" ? ` · keys hue ${m.key.hue.toFixed(0)}°` : ` · keys brightness ${m.key.level.toFixed(2)}`) : "")],
+    ["Crossfader", `${st.fader} / 1023`], ["Monitor", st.monitor === "OUT" ? "main out" : "IN " + st.monitor],
+  ].map(([k, v]) => `<b>${k}</b><span>${v}</span>`).join("");
+  drawCurve(st.curve, st.fader / 1023, m.key !== null);
+  const lg = document.getElementById("log");
+  lg.textContent = S.log.slice().reverse().join("\n");
+  document.getElementById("port").textContent = S.engine_port;
+  document.getElementById("link").textContent = `engine link: ${S.sent} datagrams sent`;
+}
+
+function gains(curve, x) {  // same as kf4_sim.curve_gains
+  const c = v => Math.max(0, Math.min(1, v));
+  if (curve === "1") return [1 - x, x];
+  if (curve === "2") return x < 0.5 ? [c(1 - 2 * x), 0] : [0, c(2 * x - 1)];
+  if (curve === "3") { const t = c((x - 0.25) / 0.5); return [1 - t, t]; }
+  return x < 0.5 ? [1, 0] : [0, 1];
+}
+function drawCurve(curve, x, keying) {
+  const cv = document.getElementById("curve"), g = cv.getContext("2d"), w = cv.width, h = cv.height, p = 8;
+  g.clearRect(0, 0, w, h);
+  g.fillStyle = "#555"; g.font = "10px Segoe UI";
+  g.fillText("A", 2, h - 4); g.fillText("B", w - 9, h - 4);
+  for (const [i, col] of [[0, "#4fb3ff"], [1, "#ff9d2e"]]) {
+    if (keying && i === 0) continue;
+    g.strokeStyle = col; g.lineWidth = 2; g.beginPath();
+    for (let k = 0; k <= 200; k++) {
+      const xx = k / 200, v = gains(curve, xx)[i];
+      const X = p + xx * (w - 2 * p), Y = h - p - v * (h - 2 * p);
+      k ? g.lineTo(X, Y) : g.moveTo(X, Y);
+    }
+    g.stroke();
+  }
+  g.strokeStyle = "#ff3b30"; g.beginPath(); g.moveTo(p + x * (w - 2 * p), 2); g.lineTo(p + x * (w - 2 * p), h - 2); g.stroke();
+  g.fillStyle = "#4fb3ff"; g.fillText(keying ? "A (background, always full)" : "A gain", 14, 12);
+  g.fillStyle = "#ff9d2e"; g.fillText(keying ? "B overlay" : "B gain", w - 70, 12);
+}
+
+// ---------------- pictures: 4 simulated sources, the mixer, two outputs ----------------
+const VW = 192, VH = 144, N = VW * VH;
+const srcCv = [1, 2, 3, 4].map(() => { const c = document.createElement("canvas"); c.width = VW; c.height = VH; return c; });
+const srcNames = ["camera", "colour bars", "blue screen", "luma shapes"];
+const thumbs = [];
+(function makeThumbs() {
+  const box = document.getElementById("inputs");
+  for (let i = 0; i < 4; i++) {
+    const d = document.createElement("div"); d.className = "scr";
+    d.innerHTML = `<canvas width="${VW}" height="${VH}"></canvas><span class="cap">IN ${i + 1} · ${srcNames[i]}</span>`;
+    d.title = "Click to plug / pull this input's cable";
+    d.style.cursor = "pointer";
+    d.onclick = () => S && sim({ plug: "in" + (i + 1), on: !S.state.plugged["in" + (i + 1)] });
+    box.appendChild(d); thumbs.push(d.firstChild.getContext("2d"));
+  }
+})();
+
+function drawSources(t) {
+  // IN 1: a "camera": sky, ground, a bouncing red ball
+  let g = srcCv[0].getContext("2d");
+  let gr = g.createLinearGradient(0, 0, 0, VH); gr.addColorStop(0, "#5aa0e0"); gr.addColorStop(0.6, "#cfe6f7"); gr.addColorStop(0.61, "#3f7a35"); gr.addColorStop(1, "#24461f");
+  g.fillStyle = gr; g.fillRect(0, 0, VW, VH);
+  const bx = 96 + 70 * Math.sin(t * 1.3), by = 100 - Math.abs(Math.sin(t * 3)) * 60;
+  g.fillStyle = "#d8261b"; g.beginPath(); g.arc(bx, by, 14, 0, 7); g.fill();
+  g.fillStyle = "#fff8"; g.beginPath(); g.arc(bx - 4, by - 5, 4, 0, 7); g.fill();
+  // IN 2: colour bars with a moving title strip and a frame counter
+  g = srcCv[1].getContext("2d");
+  const bars = ["#c0c0c0", "#c0c000", "#00c0c0", "#00c000", "#c000c0", "#c00000", "#0000c0"];
+  bars.forEach((c, i) => { g.fillStyle = c; g.fillRect(i * VW / 7, 0, VW / 7 + 1, VH); });
+  g.fillStyle = "#000c"; g.fillRect(0, 96 + 10 * Math.sin(t), VW, 22);
+  g.fillStyle = "#fff"; g.font = "bold 12px monospace"; g.fillText("DVD  " + String(Math.floor(t * 25) % 100000).padStart(5, "0"), 8 + 30 * Math.sin(t * 0.7) + 30, 111 + 10 * Math.sin(t));
+  // IN 3: a dancer in front of a blue screen (for the chroma key)
+  g = srcCv[2].getContext("2d");
+  g.fillStyle = "#1030d8"; g.fillRect(0, 0, VW, VH);
+  const dx = 96 + 40 * Math.sin(t * 0.9), arm = Math.sin(t * 4) * 0.8;
+  g.strokeStyle = "#f0a040"; g.lineWidth = 10; g.lineCap = "round";
+  g.beginPath(); g.moveTo(dx, 60); g.lineTo(dx, 100); g.lineTo(dx - 16, 132); g.moveTo(dx, 100); g.lineTo(dx + 16, 132);
+  g.moveTo(dx, 70); g.lineTo(dx - 26 * Math.cos(arm), 70 - 26 * Math.sin(arm)); g.moveTo(dx, 70); g.lineTo(dx + 26 * Math.cos(arm), 70 - 26 * Math.sin(arm)); g.stroke();
+  g.fillStyle = "#f6c38a"; g.beginPath(); g.arc(dx, 44, 12, 0, 7); g.fill();
+  // IN 4: white and grey shapes on black (for the luma key)
+  g = srcCv[3].getContext("2d");
+  g.fillStyle = "#000"; g.fillRect(0, 0, VW, VH);
+  g.save(); g.translate(VW / 2, 62); g.rotate(t * 0.8); g.fillStyle = "#fff";
+  g.beginPath(); for (let i = 0; i < 10; i++) { const r = i % 2 ? 18 : 44, a = i * Math.PI / 5; g.lineTo(r * Math.cos(a), r * Math.sin(a)); } g.fill(); g.restore();
+  for (let i = 0; i < 8; i++) { g.fillStyle = `rgb(${i * 36},${i * 36},${i * 36})`; g.fillRect(i * VW / 8, 118, VW / 8 + 1, 26); }
+}
+
+const frozen = { a: null, b: null };   // HOLD keeps the channel's last picture
+const wasHold = { a: false, b: false };
+const pgmCtx = document.getElementById("pgm").getContext("2d"), monCtx = document.getElementById("mon").getContext("2d");
+const pgmImg = pgmCtx.createImageData(VW, VH), monImg = monCtx.createImageData(VW, VH);
+const SOLID = { black: [16, 16, 16], white: [235, 235, 235], blue: [20, 40, 200] };   // ITU-601 black / white levels
+
+function solid(rgb) { const d = new Uint8ClampedArray(N * 4); for (let i = 0; i < N; i++) { d.set(rgb, i * 4); d[i * 4 + 3] = 255; } return d; }
+const SOLIDS = Object.fromEntries(Object.entries(SOLID).map(([k, v]) => [k, solid(v)]));
+
+function inputPixels(n, live) { return S.mix.signal[n] ? live[n - 1] : SOLIDS.blue; }
+
+function channelPixels(ch, which, live) {
+  let px = null;
+  if (ch.src[0] === "input") px = inputPixels(ch.src[1], live);
+  else if (ch.src[0] === "solid") px = SOLIDS[ch.src[1]];
+  if (ch.hold && px) {
+    if (!wasHold[which] || !frozen[which]) frozen[which] = px.slice();
+    wasHold[which] = true;
+    return frozen[which];
+  }
+  wasHold[which] = false; frozen[which] = null;
+  return px;
+}
+
+function keyAlpha(r, g, b, key) {   // 1 = keep B, 0 = keyed out (A shows through)
+  if (key.kind === "luma") {
+    const y = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    const d = Math.abs(y - key.level);
+    return Math.max(0, Math.min(1, (d - key.width) / 0.08));
+  }
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), c = mx - mn;
+  if (mx < 40 || c / mx < 0.35) return 1;
+  let h = mx === r ? ((g - b) / c) % 6 : mx === g ? (b - r) / c + 2 : (r - g) / c + 4;
+  h = (h * 60 + 360) % 360;
+  const d = Math.abs(((h - key.hue + 540) % 360) - 180);
+  return Math.max(0, Math.min(1, (d - key.width) / 15));
+}
+
+function frame() {
+  requestAnimationFrame(frame);
+  renderPanel();
+  if (!S) return;
+  const t = performance.now() / 1000, m = S.mix;
+  drawSources(t);
+  const live = srcCv.map(c => c.getContext("2d").getImageData(0, 0, VW, VH).data);
+  live.forEach((d, i) => thumbs[i].putImageData(new ImageData(m.signal[i + 1] ? d : SOLIDS.blue, VW, VH), 0, 0));
+  document.getElementById("pgmNo").style.display = m.on ? "none" : "flex";
+  document.getElementById("monNo").style.display = m.on ? "none" : "flex";
+  if (!m.on) { pgmCtx.clearRect(0, 0, VW, VH); monCtx.clearRect(0, 0, VW, VH); wasHold.a = wasHold.b = false; return; }
+  const A = channelPixels(m.a, "a", live), B = channelPixels(m.b, "b", live);
+  const o = pgmImg.data, ga = A ? m.a.gain : 0, gb = B ? m.b.gain : 0, key = m.key;
+  for (let i = 0; i < N * 4; i += 4) {
+    let r = 0, g = 0, b = 0;
+    if (key) {   // A is the background, B is the keyed overlay faded in by the fader
+      const ar = A ? A[i] : 16, ag = A ? A[i + 1] : 16, ab = A ? A[i + 2] : 16;
+      const k = B ? keyAlpha(B[i], B[i + 1], B[i + 2], key) * gb : 0;
+      r = ar + (B ? (B[i] - ar) * k : 0); g = ag + (B ? (B[i + 1] - ag) * k : 0); b = ab + (B ? (B[i + 2] - ab) * k : 0);
+    } else {
+      if (A) { r += A[i] * ga; g += A[i + 1] * ga; b += A[i + 2] * ga; }
+      if (B) { r += B[i] * gb; g += B[i + 1] * gb; b += B[i + 2] * gb; }
+    }
+    o[i] = r; o[i + 1] = g; o[i + 2] = b; o[i + 3] = 255;
+  }
+  if (m.garbled) garble(o, t);
+  pgmCtx.putImageData(pgmImg, 0, 0);
+  const mon = S.state.monitor;
+  document.getElementById("monCap").textContent = "MONITOR OUT · " + (mon === "OUT" ? "MAIN" : "IN " + mon);
+  if (mon === "OUT") monImg.data.set(o); else { monImg.data.set(inputPixels(+mon, live)); if (m.garbled) garble(monImg.data, t); }
+  monCtx.putImageData(monImg, 0, 0);
+}
+
+function garble(o, t) {   // wrong NTSC/PAL setting: a rolling, tearing, colourless picture
+  const roll = Math.floor(t * 40) % VH, copy = o.slice();
+  for (let y = 0; y < VH; y++) {
+    const sy = (y + roll) % VH, shift = Math.floor(12 * Math.sin(y * 0.3 + t * 9));
+    for (let x = 0; x < VW; x++) {
+      const si = (sy * VW + ((x + shift + VW) % VW)) * 4, di = (y * VW + x) * 4;
+      const l = (copy[si] + copy[si + 1] + copy[si + 2]) / 3 * (y % 2 ? 0.7 : 1);
+      o[di] = o[di + 1] = o[di + 2] = (Math.abs(y - roll) < 6) ? 10 : l;
+    }
+  }
+}
+
+// ---------------- start ----------------
+fetch("/weapons").then(r => r.json()).then(list => {
+  const pick = document.getElementById("weaponPick");
+  for (const w of list.weapons) {
+    const o = document.createElement("option"); o.value = w.id; o.textContent = "⚔ " + w.name + (w.playable ? "" : " (drawing only)");
+    pick.appendChild(o);
+  }
+  pick.value = WID;
+  pick.onchange = () => { location.href = "/?weapon=" + encodeURIComponent(pick.value); };
+}).catch(() => {});
+fetch("/weapon?id=" + encodeURIComponent(WID)).then(r => r.json()).then(w => {
+  build(w);
+  document.title = w.name + " Live"; document.getElementById("title").textContent = w.name + " Live";
+  const es = new EventSource("/wevents?id=" + encodeURIComponent(WID));
+  es.onmessage = e => { S = JSON.parse(e.data); renderInfo(); document.getElementById("srcStd").value = S.state.source_std;
+                        const c = document.getElementById("conn"); c.textContent = "simulated"; c.className = "pill sim"; };
+  es.onerror = () => { const c = document.getElementById("conn"); c.textContent = "server not running"; c.className = "pill bad"; };
+  requestAnimationFrame(frame);
+});
+document.getElementById("srcStd").onchange = e => post({ source_std: e.target.value });
+window.addEventListener("blur", () => sim({ release_all: true }));
+sim({ release_all: true });
+</script>
+</body>
+</html>

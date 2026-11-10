@@ -21,6 +21,7 @@ A weapon has up to four parts:
 |---|---|---|---|---|---|
 | 1 | **MK2** (Maschine MK2) | USB HID: 16 pads, 8 knobs, encoder, 48 buttons, two 1-bit screens | [`mk2.weapon.json`](mk2.weapon.json) | [`tools/mk2_sim.py`](../tools/mk2_sim.py) | Map verified on hardware, C++ driver done |
 | 2 | **Lightpad** (ROLI Lightpad Block / Block M) | USB-MIDI: multi-touch surface (x, y, pressure per finger), 15 × 15 RGB LEDs, one Mode button | [`lightpad.weapon.json`](lightpad.weapon.json) | [`tools/lightpad_sim.py`](../tools/lightpad_sim.py) | Simulated, and played on the owner's Lightpad M (2026-11-10): touch, multi-touch, Mode button, orientation, factory note map, **and Himmel's own LED program** (~55 frames/s) |
+| 6 | **KF4** (Korg KF4 krossfour, 2005) | SD video mixer: 4 inputs onto A/B, crossfader with 4 curves, BK/WH/chroma/luma key, HOLD, monitor select. **No data port** | [`kf4.weapon.json`](kf4.weapon.json) | [`tools/kf4_sim.py`](../tools/kf4_sim.py) + [`tools/kf4_live.html`](../tools/kf4_live.html) | Simulated with picture outputs; the real unit cannot be a control surface directly. Details and options: [`kf4.md`](kf4.md) |
 
 ## The live view: one tool for every weapon
 
@@ -82,6 +83,10 @@ the device.
   outline (`r` = corner radius), `dna` is a connector dot at `x, y`, and `port`
   is a socket or switch the protocol cannot see, with a small label.
 - `protocol` (optional, free text): a transport and message summary for people.
+- `live_page` (optional): the weapon has its own page in `tools/` (e.g.
+  `kf4_live.html`); the picker opens it instead of the generic panel.
+- `kind: "fader"` (a linear fader, absolute 0..`range`) and `kind: "switch"`
+  (`positions`: a list of labels) were added for the KF4.
 - `map` is `null` until a map has been learned on real hardware.
 
 ## Adding a weapon (the same process as for the MK2)

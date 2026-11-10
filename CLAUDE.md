@@ -161,6 +161,20 @@ The details are in the mockup (`docs/vj-mockup.html`).
           renderer forwards them with sendMessageToHost (program event 0x28).
     - Next: the generic weapon driver/shared block (plan in
       `weapons/README.md`).
+  - **Weapon no. 6 = Korg KF4 krossfour video mixer (2005; the owner owns
+    one).** Details: `weapons/kf4.md`.
+    - **It has no data port** (no MIDI/USB/RS-232/remote): the real unit
+      cannot be read or controlled. Options for the owner: capture its
+      output as a Himmel camera, use it as an analog mixer after Himmel,
+      optical readback, or a microcontroller mod (not recommended).
+    - Simulated fully: `tools/kf4_sim.py` (state machine, curves, keys,
+      `--selftest`) + its own page `tools/kf4_live.html` with simulated
+      inputs, MAIN OUT and MONITOR OUT (profile field `live_page`).
+      Launch config `kf4-live` (port 8779). Checked in the browser
+      2026-11-10.
+    - Events go as JSON datagrams to UDP 127.0.0.1:8771 (not read by the
+      engine yet). Panel positions and a few behaviours are guesses until
+      checked on the owner's unit.
 - **Visual mapping is the way to work with the controller. Keep it and build on
   it** (the owner wants graphical tools, not terminal tables):
   - `tools/mk2_live.py` + `tools/mk2_live.html`: a browser live view of the MK2

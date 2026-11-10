@@ -576,6 +576,7 @@ function startGeneric(wid) {
   document.body.classList.add("generic", "sim");
   simOn = true;
   fetch("/weapon?id=" + encodeURIComponent(wid)).then(r => r.json()).then(w => {
+    if (w.live_page) { location.replace(w.live_page + "?weapon=" + encodeURIComponent(wid)); return; }  // a weapon with its own page
     buildPanel(w, wireGeneric);
     document.getElementById("genHelp").innerHTML = (w.controls.some(c => c.kind === "key")
       ? "<b>Keys:</b> click a key; lower on the key = harder strike. Hold for pressure (it grows, the scroll " +

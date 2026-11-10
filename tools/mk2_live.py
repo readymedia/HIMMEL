@@ -654,7 +654,12 @@ def _make_lumi(profile):
     return lumi_sim.LumiLive(profile)
 
 
-GENERIC = {"lightpad": _make_lightpad, "lumi": _make_lumi}
+def _make_kf4(profile):
+    import kf4_sim
+    return kf4_sim.KF4Live(profile)
+
+
+GENERIC = {"lightpad": _make_lightpad, "lumi": _make_lumi, "kf4": _make_kf4}
 _generic_live = {}
 _generic_lock = threading.Lock()
 
@@ -736,6 +741,19 @@ class Handler(BaseHTTPRequestHandler):
                     time.sleep(1 / 30)
             except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
                 return
+        elif u.path.endswith("_live.html") and u.path[1:-10].isalnum() and u.path != "/mk2_live.html":
+            # a weapon's own page (profile field "live_page"), e.g. /kf4_live.html
+            p = os.path.join(HERE, u.path[1:])
+            if not os.path.exists(p):
+                self.send_error(404)
+                return
+            with open(p, "rb") as f:
+                body = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
         else:  # the page itself and the MK2 routes, exactly as before
             self.path = u.path
             self.do_GET_mk2()

@@ -1,0 +1,80 @@
+{
+  "format": "himmel-weapon/1",
+  "id": "kf4",
+  "name": "KF4",
+  "badge": "◎ HIMMEL · KF4",
+  "hardware": {
+    "maker": "Korg",
+    "model": "KF4 krossfour 4-channel video mixer & switcher (announced NAMM, January 2005; discontinued)",
+    "usb": null,
+    "note": "Standalone SD video mixer: 4 inputs onto 2 channels (A/B), DJ-style crossfader with 4 curves, black/white background, chroma and luma key, HOLD (freeze) per channel, 2 frame synchronizers, NTSC/PAL. No MIDI, USB, RS-232 or any other control port (owner's manual, rear and front panel). Works with the hardware; not affiliated with Korg."
+  },
+  "driver": null,
+  "live_page": "kf4_live.html",
+  "protocol": {
+    "transport": "none: the unit has no data port. The simulator speaks Himmel events directly (JSON datagrams to UDP 127.0.0.1:8771), see weapons/kf4.md",
+    "video_in": "IN 1 S-Video or composite (S-Video wins), IN 2 / IN 3 composite (rear), IN 4 composite (front)",
+    "video_out": "OUTPUT S-Video + composite (same picture), MONITOR OUT composite (front; any input or OUT)",
+    "standard": "NTSC or PAL, ITU-601, 13.5 MHz 4:2:2 8-bit; the rear switch is read at power-on only"
+  },
+  "map": null,
+  "status": "simulated from the owner's manual; panel positions approximate until checked against the owner's unit",
+  "panel": { "w": 520, "h": 820 },
+  "screens": [],
+  "deco": [
+    { "kind": "body", "x": 30, "y": 120, "w": 460, "h": 600, "r": 14 },
+    { "kind": "rear", "x": 30, "y": 22, "w": 460, "h": 74, "label": "REAR" },
+    { "kind": "front", "x": 30, "y": 728, "w": 460, "h": 74, "label": "FRONT" },
+    { "kind": "jack", "id": "in1s", "x": 62, "y": 58, "label": "S-VIDEO\nIN 1", "svideo": true, "input": 1 },
+    { "kind": "jack", "id": "in1", "x": 116, "y": 58, "label": "IN 1", "input": 1 },
+    { "kind": "jack", "id": "in2", "x": 160, "y": 58, "label": "IN 2", "input": 2 },
+    { "kind": "jack", "id": "in3", "x": 204, "y": 58, "label": "IN 3", "input": 3 },
+    { "kind": "jack", "id": "outs", "x": 262, "y": 58, "label": "S-VIDEO\nOUT", "svideo": true },
+    { "kind": "jack", "id": "out", "x": 312, "y": 58, "label": "OUT" },
+    { "kind": "jack", "id": "dc", "x": 404, "y": 58, "label": "DC 7V" },
+    { "kind": "jack", "id": "in4", "x": 372, "y": 766, "label": "IN 4", "input": 4 },
+    { "kind": "jack", "id": "mon", "x": 432, "y": 766, "label": "MONITOR\nOUT" },
+    { "kind": "led", "id": "power_led", "x": 450, "y": 150, "label": "POWER", "color": "#ff3b30" }
+  ],
+  "sections": [
+    { "label": "MONITOR SELECT", "x": 70, "y": 146, "w": 340 },
+    { "label": "INPUT A", "x": 60, "y": 262, "w": 120 },
+    { "label": "INPUT B", "x": 340, "y": 262, "w": 120 },
+    { "label": "CROSSFADER", "x": 110, "y": 600, "w": 300 }
+  ],
+  "controls": [
+    { "name": "Monitor 1", "kind": "button", "x": 74, "y": 176, "w": 52, "h": 34, "label": "1", "on_color": "#ff3b30", "led": "red" },
+    { "name": "Monitor 2", "kind": "button", "x": 140, "y": 176, "w": 52, "h": 34, "label": "2", "on_color": "#ff3b30", "led": "red" },
+    { "name": "Monitor 3", "kind": "button", "x": 206, "y": 176, "w": 52, "h": 34, "label": "3", "on_color": "#ff3b30", "led": "red" },
+    { "name": "Monitor 4", "kind": "button", "x": 272, "y": 176, "w": 52, "h": 34, "label": "4", "on_color": "#ff3b30", "led": "red" },
+    { "name": "Monitor OUT", "kind": "button", "x": 346, "y": 176, "w": 64, "h": 34, "label": "OUT", "on_color": "#ff3b30", "led": "red" },
+
+    { "name": "A 1", "kind": "button", "x": 70, "y": 292, "w": 100, "h": 40, "label": "1", "on_color": "#ff3b30", "led": "red+blink" },
+    { "name": "A 2", "kind": "button", "x": 70, "y": 342, "w": 100, "h": 40, "label": "2", "on_color": "#ff3b30", "led": "red+blink" },
+    { "name": "A 3", "kind": "button", "x": 70, "y": 392, "w": 100, "h": 40, "label": "3", "on_color": "#ff3b30", "led": "red+blink" },
+    { "name": "A 4", "kind": "button", "x": 70, "y": 442, "w": 100, "h": 40, "label": "4", "on_color": "#ff3b30", "led": "red+blink" },
+    { "name": "Hold A", "kind": "button", "x": 70, "y": 510, "w": 100, "h": 40, "label": "HOLD", "on_color": "#ff3b30", "led": "red" },
+
+    { "name": "B 1", "kind": "button", "x": 350, "y": 292, "w": 100, "h": 40, "label": "1", "on_color": "#ff3b30", "led": "red+blink" },
+    { "name": "B 2", "kind": "button", "x": 350, "y": 342, "w": 100, "h": 40, "label": "2", "on_color": "#ff3b30", "led": "red+blink" },
+    { "name": "B 3", "kind": "button", "x": 350, "y": 392, "w": 100, "h": 40, "label": "3", "on_color": "#ff3b30", "led": "red+blink" },
+    { "name": "B 4", "kind": "button", "x": 350, "y": 442, "w": 100, "h": 40, "label": "4", "on_color": "#ff3b30", "led": "red+blink" },
+    { "name": "Hold B", "kind": "button", "x": 350, "y": 510, "w": 100, "h": 40, "label": "HOLD", "on_color": "#ff3b30", "led": "red" },
+
+    { "name": "Crossfader", "kind": "fader", "x": 110, "y": 640, "w": 300, "h": 44, "range": 1023,
+      "ends": ["A", "B"] },
+
+    { "name": "Fader curve", "kind": "switch", "x": 52, "y": 752, "w": 104, "h": 20,
+      "positions": ["1", "2", "3", "4"], "label": "FADER CURVE",
+      "help": ["Normal (linear)", "No mix (through black)", "Center mix", "Switcher (cut)"] },
+    { "name": "Mode", "kind": "switch", "x": 176, "y": 752, "w": 116, "h": 20,
+      "positions": ["BK", "WH", "C-K", "L-K"], "label": "MODE",
+      "help": ["Black background", "White background", "Chroma key (blue)", "Luma key"] },
+    { "name": "Fine", "kind": "knob", "x": 318, "y": 764, "r": 16, "range": 1023, "label": "FINE", "absolute": true },
+
+    { "name": "NTSC/PAL", "kind": "switch", "x": 346, "y": 50, "w": 44, "h": 16,
+      "positions": ["NTSC", "PAL"], "label": "NTSC/PAL", "help": ["NTSC (read at power-on)", "PAL (read at power-on)"] },
+    { "name": "Power", "kind": "switch", "x": 436, "y": 50, "w": 46, "h": 16,
+      "positions": ["STBY", "ON"], "label": "POWER" }
+  ]
+}
