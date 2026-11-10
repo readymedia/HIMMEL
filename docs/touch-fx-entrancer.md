@@ -219,6 +219,23 @@ What the Lightpad Block gives (from the weapon-2 session's profile,
 multi-touch surface, per finger x and y (12 bit), pressure z (8 bit) and
 strike velocity, up to 16 fingers, one Mode button on the side.
 
+Checked on the owner's Lightpad Block M (firmware 1.1.0, 2026-11-10, by the
+weapon-2 session; details in its `weapons/README.md`):
+
+- Finger indexes start at 1. Start / end messages carry a velocity, moves do
+  not. x and y span about 146..3953 (not 0..4095), z spans 0..255, and y = 0 is
+  the **top** (USB-C pointing away). The weapon driver normalises x, y to
+  0..1 over that range and flips y, so Touch FX gets y = 0 at the bottom, the
+  same as the MK2 pads and the mouse.
+- The BLOCKS API strike velocity is almost always 1: **useless**. The usable
+  strike is the factory program's MPE note-on velocity (3..127), which it keeps
+  sending in API mode, or the peak z over the first few ms of a touch (the same
+  idea as the MK2's velocity window).
+- Mode = button 0 down / up, works in API mode.
+- LEDs need Himmel's own LittleFoot renderer uploaded first; until then the
+  factory 4 × 4 pad display keeps running. The maximum LED frame rate is not
+  measured yet.
+
 ### 3.1 One finger (the Entrancer gesture)
 
 - Touch down = effect on (amount ramps in over ~20 ms to avoid a hard pop
@@ -229,7 +246,10 @@ strike velocity, up to 16 fingers, one Mode button on the side.
   the Entrancer's separate FX BALANCE knob, so one hand does all three. A per
   effect curve; a light touch is never zero (minimum 30 %) so a slide without
   pressing still shows the effect.
-- **Strike velocity → initial amount** for hit effects (Strobe, Hold Frame).
+- **Strike → initial amount** for hit effects (Strobe, Hold Frame). The strike
+  comes from the MPE note-on velocity or the early-z peak, never from the
+  API's velocity field (see above). Touch FX takes it as the `pressure` of
+  `touch_down`, as it does with MK2 pad velocity.
 - Lift = effect off (amount ramps out ~60 ms), **unless Hold**.
 
 ### 3.2 Hold, motion, more fingers
@@ -282,7 +302,10 @@ The Entrancer's backlight only changed colour. The Lightpad can draw state:
 
 LED frames are drawn by the Touch FX layer at ≤ 30 fps (to be checked on the
 real block; the LED path is a SysEx shared-data update, so it is slower than
-the MK2's HID). Only changed frames are sent.
+the MK2's HID). Only changed frames are sent. None of this shows until the
+weapon has uploaded its own LittleFoot LED program; before that the block
+shows its factory 4 × 4 pad display, so Touch FX must work without LED
+feedback (the MK2 screen and pad LEDs still show the state).
 
 ---
 
