@@ -170,6 +170,11 @@ The details are in the mockup (`docs/vj-mockup.html`).
     (8 bytes, 31 bits) and contrast `7A`. Never send `7B` (stored). Simulator checked in
     the browser. **Not yet checked on the owner's unit.** Map learning and the LCD segment
     hunt (click the lit part of the drawn LCD) are ready for it.
+    **Classic two-deck view** (owner's wish 2026-11-10, nostalgia): `?weapon=nuvj&view=classic`,
+    `tools/vj_classic.html` + model `tools/vj_classic.py`. It is the NuVJ software's workflow
+    in Himmel's own look: no logos or art, and nothing so close that it could cause trouble.
+    The GUI and the controller play the same model. 2D placeholder previews stand in until the
+    engine renders it.
 - **Visual mapping is the way to work with the controller. Keep it and build on
   it** (the owner wants graphical tools, not terminal tables):
   - `tools/mk2_live.py` + `tools/mk2_live.html`: a browser live view of the MK2

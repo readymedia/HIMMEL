@@ -402,6 +402,53 @@ The full protocol is in [`docs/nuvj-protocol.md`](../docs/nuvj-protocol.md). The
   4. It is saved in `nuvj_map.json` under `lcd_segments`.
 - **Contrast**: the slider sends `cmd 7A` (not stored).
 
+### The classic two-deck view (nostalgia)
+
+`http://127.0.0.1:8777/?weapon=nuvj&view=classic` is **Himmel's own take on the
+simple two-deck VJ workflow** the NuVJ was made for. The original software was
+easy and fun, and this view keeps the workflow without its art, logos or
+names. It runs on its own, or next to the controller view.
+
+**What is on the page**
+- A **browser** with Media (the `media/` folder), Effects (Himmel's planned
+  set), Generators and Inputs.
+- **Two decks.** Each has:
+  - 16 banks of 9 cells, laid out like the pads (7 8 9 on top);
+  - a preview;
+  - a position bar and a speed slider;
+  - LATCH / AUTO / SYNC;
+  - PMTR 1 / 2 knobs named after the playing cell's effect.
+- The **master**:
+  - a preview;
+  - brightness and contrast;
+  - a master effect with mix and two parameters;
+  - BLACK;
+  - the crossfader with A / B cut buttons;
+  - BPM and TAP;
+  - full-screen output.
+- **Cell properties**:
+  - how deck B blends onto A: mix, add, subtract, multiply, lighter, darker;
+  - brightness or colour key with centre and width;
+  - once / loop / ping-pong;
+  - text;
+  - the effect and its two parameters.
+
+**How you play it**
+- Drag an item onto a cell (or click the item, then the cell).
+- Click a cell to trigger it. Shift-click or right-click a cell to edit it.
+- Drag cells around (Ctrl = copy), or drop one on the bin to clear it.
+
+**How it connects**
+- The page and the NuVJ (real or simulated) change the **same model**,
+  `tools/vj_classic.py`, so either one can play it:
+  - the pads trigger cells;
+  - BANK steps the banks;
+  - PMTR turns the playing cell's parameters;
+  - the faders, jog, crossfader and master section all work.
+- The NuVJ's LEDs and LCD follow the model too.
+- **No render engine yet.** The previews are simple 2D stand-ins drawn by
+  the page. Later Himmel's engine renders the decks from the same model.
+
 ### NuVJ events in Himmel's event model
 
 The NuVJ uses the generic weapon plan below: one driver process (WinMM), a

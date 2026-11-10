@@ -869,5 +869,8 @@
    "r": 17,
    "label": "push"
   }
- ]
+ ],
+ "views": {
+  "classic": "vj_classic.html"
+ }
 }

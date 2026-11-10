@@ -635,8 +635,9 @@ class HwNuVJ(DeviceBase):
 # ---------------------------------------------------------------------------
 # The host: Himmel's side. Events -> a small VJ state -> LEDs (+ LCD text in the sim)
 # ---------------------------------------------------------------------------
-FX_NAMES = ("BLUR", "INVERT", "MIRROR", "KALEIDO", "STROBE", "RGB SPLIT", "PIXELATE", "FEEDBACK",
-            "EDGES", "HUE SPIN", "ZOOM", "TUNNEL")
+import vj_classic                      # the classic two-deck show model (tools/vj_classic.py)
+
+FX_NAMES = tuple(e["name"].upper() for e in vj_classic.EFFECTS)   # Himmel's effect set, as on the LCD
 TOGGLES = ("A Latch", "B Latch", "A Auto", "B Auto", "A Sync", "B Sync", "Master FX", "Insta Black")
 
 
@@ -677,7 +678,7 @@ class NuvjHost:
             text, bar = "%5.1fBPM" % st["bpm"] if st["bpm"] < 1000 else "BPM", st["xf"] / 16383
         beat = ((now - self.t0) * st["bpm"] / 60.0) % 1.0
         return {
-            "text": text[:8],
+            "text": text,          # text_bytes() makes it 8 characters (7 + "." when longer), as the NuVJ software did
             "big": "%02d" % (st[f]["bank"] + 1),
             "small": "%02d" % (st["fx"] + 1) if st["toggles"]["Master FX"] else "",
             "bar": None if bar is None else max(0, min(12, round(bar * 12))),
@@ -890,6 +891,7 @@ class NuvjLive:
         self.learn_msg = ""
         self.show_noise = False
         self.host = NuvjHost(self)
+        self.show = vj_classic.ClassicShow()   # the classic two-deck view's model, played by the GUI and the NuVJ
         self.dev = None
         self.ranges = {}           # name -> [min, max] seen on hardware
         self._use(SimNuVJ(self))
@@ -963,6 +965,8 @@ class NuvjLive:
                     self._save_soon()
             self.last = ([name] + [x for x in self.last if x != name])[:6]
             self.host.on_event(name, ev)
+            self.show.on_event(name, ev, bpm=self.host.state["bpm"])
+            self._sync_host()
 
     # ---- map learning: click a control, then move the real one ----
     def _learn_from(self, msg):
@@ -1041,9 +1045,27 @@ class NuvjLive:
                     if self._save_due and time.time() > self._save_due:
                         self._save_due = 0
                         save_map(self.m)
+                    self.show.tick()
+                    self._sync_host()
                     self.host.tick(self.dev, self.m, set(self.held))
             except Exception as ex:   # never let the LED loop die
                 self.learn_msg = "host error: %s" % ex
+
+    def _sync_host(self):
+        """The show model is the truth for decks and master; the host shows it on the LEDs and LCD."""
+        st, sh = self.host.state, self.show
+        for d in "AB":
+            dk = sh.decks[d]
+            st[d]["pad"], st[d]["bank"] = dk["playing"], dk["bank"]
+            for key in ("Latch", "Auto", "Sync"):
+                st["toggles"]["%s %s" % (d, key)] = dk[key.lower()]
+        m = sh.master
+        st["toggles"]["Master FX"], st["toggles"]["Insta Black"] = m["on"], m["black"]
+        st["xf"], st["insta"] = int(m["xf"] * 16383), m["insta"]
+        st["bpm"] = m["bpm"]
+        names = [e["name"] for e in vj_classic.EFFECTS]
+        if m["fx"] in names:
+            st["fx"] = names.index(m["fx"])
 
     # ---- the live view API ----
     def snapshot(self):
@@ -1077,6 +1099,8 @@ class NuvjLive:
                          "A": dict(st["A"]), "B": dict(st["B"]), "toggles": dict(st["toggles"]),
                          "xf": st["xf"]},
                 "events": [(t, n, ev) for t, n, ev in self.host.events[-14:]],
+                "show": self.show.snapshot(),
+                "library": self.show.library(),
                 "map": {"mapped": mapped, "seen": seen, "total": len(self.controls), "verified": self.m.get("verified", False),
                         "learned": [n for n, e in mc.items() if e.get("learned")],
                         "wire": {n: self._wire(e) for n, e in mc.items()}, "leds": self.m.get("leds")},
@@ -1141,6 +1165,9 @@ class NuvjLive:
         with self.lock:
             if "sim_input" in d:
                 self.sim_input(d["sim_input"])
+            elif "show" in d:          # the classic two-deck view
+                self.show.command(d["show"] or {})
+                self._sync_host()
             elif d.get("led_mode") in NuvjHost.MODES:
                 self.host.mode = d["led_mode"]
             elif "seg_hunt" in d:      # light one LCD segment bit at a time
