@@ -321,6 +321,16 @@ The details are in the mockup (`docs/vj-mockup.html`).
      outputs are tested as windows there; the show PC is the RTX 5090.
 5. Then: the ffmpeg/HAP import pipeline, audio analysis, the cue system, Smart
    Random and the GUI.
+6. **TODO (owner, 2026-11-10): the effect set, after the graphics engine is
+   ready.** Start from `docs/nuvj-effects.md`, "What Himmel takes from this":
+   - cheap single-pass effects (Kaleido, Mirror, RGB split, Tunnel, RotoZoom,
+     BPM strobe, Hue);
+   - feedback effects (Motion Blur, Larsen / Twirl);
+   - audio effects (Bass Zoom, EarthQuake);
+   - the mixer: copy modes, luma / chroma key, crossfade curves and mask wipes.
+   Each effect has two main parameters for PMTR 1 / 2 and knob pages, and some
+   parameters are speeds. Do not start before the engine's effect chain
+   exists.
 
 ## Open source (decided 2026-11-10)
 - Public repo: https://github.com/readymedia/HIMMEL, **MIT license**
