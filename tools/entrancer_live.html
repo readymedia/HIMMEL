@@ -6,63 +6,94 @@
 <title>Entrancer Sim</title>
 <style>
   :root {
-    --bg: #101113; --panel: #1c1d20; --edge: #2a2b2f; --btn: #3b3d42; --btn-text: #d8d9dc;
-    --label: #9a9ca3; --on: #f4f4f4; --knob: #26272b; --seg: #ff4a2e; --seg-off: #3a1510;
+    --bg: #101113; --text: #d8d9dc; --muted: #9a9ca3;
+    --body: #4a3aa8; --body-light: #5b4bc0; --rail: #3a2d8c; --label: #e8e6ff;
+    --btn: #b9b6cf; --btn-text: #2b2b3a; --seg: #47ff7a;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--btn-text); font: 13px/1.4 "Segoe UI", system-ui, sans-serif; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.4 "Segoe UI", system-ui, sans-serif; }
   header { display: flex; align-items: center; gap: 12px; padding: 12px 20px; flex-wrap: wrap; }
   header h1 { font-size: 16px; margin: 0; letter-spacing: .5px; }
   .pill { padding: 3px 10px; border-radius: 99px; background: #26272b; font-size: 12px; }
   .pill.ok { background: #143d27; color: #7ff0b0; } .pill.bad { background: #4a1719; color: #ffb3b5; }
   .pill.lp { background: #2b2350; color: #c8b8ff; }
-  button.tool { background: #2c2e33; color: var(--btn-text); border: 1px solid #3a3c42; border-radius: 6px;
+  button.tool { background: #2c2e33; color: var(--text); border: 1px solid #3a3c42; border-radius: 6px;
                 padding: 5px 10px; cursor: pointer; font: inherit; }
   button.tool.on { background: #4b3a99; border-color: #6b55d6; color: #fff; }
-  main { display: flex; gap: 20px; padding: 0 20px 20px; flex-wrap: wrap; align-items: flex-start; }
+  main { display: flex; gap: 24px; padding: 0 20px 20px; flex-wrap: wrap; align-items: flex-start; }
   #stage { position: relative; transform-origin: 0 0; flex: none; }
-  #panel { position: absolute; left: 0; top: 0; background: var(--panel); border: 1px solid var(--edge);
-           border-radius: 14px; box-shadow: 0 20px 60px #0008; touch-action: none; user-select: none; }
-  .brand { position: absolute; left: 22px; top: 10px; font-weight: 800; font-size: 15px; letter-spacing: 1px; }
-  .sec { position: absolute; font-size: 9px; font-weight: 700; color: var(--label); letter-spacing: .5px;
-         border-bottom: 1px solid #44464c; padding-bottom: 2px; }
+
+  /* ---- the unit (drawn from weapons/entrancer.weapon.json) ---- */
+  #panel { position: absolute; left: 0; top: 0; border-radius: 6px; overflow: hidden; touch-action: none;
+           user-select: none; box-shadow: 0 24px 60px #000a;
+           background:
+             repeating-linear-gradient(90deg, #ffffff06 0 1px, transparent 1px 3px),
+             linear-gradient(180deg, var(--body-light), var(--body) 45%, #3f3196); }
+  .rail { position: absolute; background: linear-gradient(90deg, #2e2378, var(--rail) 40%, #4a3bb0 85%, #2c2273);
+          box-shadow: inset 0 0 0 1px #0004; }
+  .screw { position: absolute; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%;
+           background: radial-gradient(circle at 35% 35%, #c9c9d6, #5b5b6e 70%); box-shadow: 0 0 0 1px #0007; }
+  .band { position: absolute; background: linear-gradient(180deg, #ffffff10, #ffffff04); }
+  .rule { position: absolute; height: 1px; background: #ffffff2a; box-shadow: 0 1px 0 #0003; }
+  .txt { position: absolute; transform: translateX(-50%); color: var(--label); font-weight: 700; white-space: pre;
+         text-align: center; line-height: 1.05; letter-spacing: .3px; pointer-events: none; }
+  .txt.lines::before, .txt.lines::after { content: ""; display: inline-block; width: 150px; height: 1px;
+         background: #ffffff55; vertical-align: middle; margin: 0 10px; }
+  .badge { position: absolute; right: 60px; bottom: 23px; font-weight: 800; font-size: 13px; letter-spacing: 1.5px;
+           color: var(--label); pointer-events: none; }
   .c { position: absolute; cursor: pointer; }
-  .lab { position: absolute; font-size: 8.5px; font-weight: 700; color: var(--label); text-align: center;
-         white-space: pre; line-height: 1.1; pointer-events: none; }
-  .b { background: var(--btn); border-radius: 4px; color: var(--btn-text); font-size: 9px; font-weight: 700;
-       display: flex; align-items: center; justify-content: center; text-align: center; white-space: pre;
-       line-height: 1.05; box-shadow: inset 0 -2px 0 #0006; }
-  .b.on { background: var(--on); color: #111; box-shadow: 0 0 12px #fff8; }
-  .b.stored::after { content: ""; position: absolute; right: 4px; top: 4px; width: 5px; height: 5px;
-                     border-radius: 50%; background: #3ddc84; }
-  .knob { border-radius: 50%; background: radial-gradient(circle at 40% 35%, #4a4c52, var(--knob) 70%);
-          border: 2px solid #c9cbd1; }
-  .knob .ind { position: absolute; left: 50%; top: 8%; width: 2px; height: 40%; margin-left: -1px;
-               background: #fff; transform-origin: 50% 105%; border-radius: 1px; }
-  .enc { border-style: dashed; }
-  .led { border-radius: 50%; background: #333; border: 1px solid #000; }
-  .disp { background: #120605; border: 2px solid #000; border-radius: 4px; display: flex; align-items: center;
-          justify-content: center; font: 700 44px/1 "Consolas", "Courier New", monospace; color: var(--seg);
-          text-shadow: 0 0 10px #ff4a2e99; letter-spacing: 4px; }
-  .lever { background: #111214; border: 1px solid #000; border-radius: 6px; }
-  .lever .pos { position: absolute; font-size: 8px; font-weight: 700; color: var(--label); display: flex;
-                align-items: center; justify-content: center; text-align: center; }
-  .lever .pos.on { color: #fff; }
-  .lever .stick { position: absolute; background: linear-gradient(#e8e9ec, #9a9ca3); border-radius: 3px;
-                  box-shadow: 0 2px 4px #000a; transition: left .06s, top .06s; pointer-events: none; }
-  .pad { border-radius: 8px; border: 2px solid #000; overflow: hidden; cursor: crosshair; }
-  .pad .dot { position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%;
-              border: 2px solid #fff; box-shadow: 0 0 18px #fff; pointer-events: none; }
-  .pad .hint { position: absolute; left: 10px; bottom: 8px; font-size: 10px; color: #fff9; pointer-events: none; }
+  .knob { border-radius: 50%; box-shadow: 0 3px 6px #0009, 0 0 0 1px #000;
+          background: radial-gradient(circle, #2b2b30 0 52%, transparent 53%),
+                      repeating-conic-gradient(#0d0d10 0 5deg, #3a3a42 5deg 10deg); }
+  .knob .ind { position: absolute; left: 50%; top: 10%; width: 2px; height: 36%; margin-left: -1px;
+               background: #f2f2f2; transform-origin: 50% 110%; border-radius: 1px; }
+  .led { border-radius: 50%; background: #5a2020; box-shadow: inset 0 0 2px #000; }
+  .ledlab { position: absolute; font-size: 7.5px; font-weight: 700; color: var(--label); pointer-events: none; }
+  .b { background: linear-gradient(180deg, #cfcce0, var(--btn)); border-radius: 3px; color: var(--btn-text);
+       font-size: 6.5px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+       text-align: center; white-space: pre; line-height: 1.05; box-shadow: 0 2px 0 #2a2060, 0 3px 5px #0007; }
+  .b.num { font-size: 9px; }
+  .b.round { border-radius: 50%; font-size: 8px; background: radial-gradient(circle at 45% 40%, #ffc2bb, #e98f86 70%);
+             box-shadow: 0 0 0 3px #3a2d8c, 0 0 0 4px #0006, 0 3px 6px #0008; }
+  .b.on { color: #200; }
+  .b.down { transform: translateY(1px); box-shadow: 0 1px 0 #2a2060; }
+  .sel { background: #3c3b4a; border-radius: 4px; box-shadow: inset 0 0 0 1px #0006; }
+  .sel .lab { position: absolute; font-size: 7.5px; font-weight: 800; color: #d8d6ea; transform: translateX(-50%);
+              pointer-events: none; }
+  .sel .lab.on { color: #fff; text-shadow: 0 0 6px #fff9; }
+  .sel .slot { position: absolute; left: 22%; right: 22%; top: 52%; height: 6px; margin-top: -3px; border-radius: 3px;
+               background: #111; }
+  .sel .stick { position: absolute; top: 52%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%;
+                background: radial-gradient(circle at 35% 30%, #fff, #8e8ea0 70%); box-shadow: 0 2px 3px #000a;
+                transition: left .07s; pointer-events: none; }
+  .disp { background: #050806; border-radius: 3px; box-shadow: inset 0 0 0 2px #000, 0 0 0 1px #ffffff22;
+          display: flex; align-items: center; justify-content: flex-end; padding-right: 10px; cursor: default;
+          font: italic 700 36px/1 "Consolas", "Courier New", monospace; color: var(--seg);
+          text-shadow: 0 0 8px #47ff7a88; letter-spacing: 3px; }
+  .lever { border-radius: 50%; background: radial-gradient(circle at 40% 35%, #3a3a44, #0c0c10 70%);
+           box-shadow: 0 0 0 2px #2b2178, 0 3px 6px #000a; }
+  .lever .slot { position: absolute; left: 50%; top: 22%; bottom: 22%; width: 8px; margin-left: -4px; border-radius: 4px;
+                 background: #000; }
+  .lever .stick { position: absolute; left: 50%; width: 12px; height: 18px; margin: -9px 0 0 -6px; border-radius: 5px;
+                  background: linear-gradient(90deg, #8e8ea0, #fff 45%, #8e8ea0); box-shadow: 0 2px 3px #000a;
+                  transition: top .06s; pointer-events: none; }
+  .frame { border-radius: 6px; background: linear-gradient(135deg, #e6e6ee, #8f8fa2 40%, #d9d9e3 60%, #7d7d90);
+           box-shadow: 0 0 0 1px #0008, 0 4px 10px #0008; cursor: crosshair; }
+  .frame .surf { position: absolute; border-radius: 2px; box-shadow: inset 0 0 0 2px #0007, inset 0 0 18px #0005;
+                 overflow: hidden; }
+  .frame .tick { position: absolute; left: 50%; width: 1px; height: 6px; background: #444; }
+  .frame .dot { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%;
+                border: 2px solid #fff; box-shadow: 0 0 16px #fff; pointer-events: none; }
+
   aside { flex: 1; min-width: 260px; max-width: 420px; }
-  aside h2 { font-size: 12px; color: var(--label); margin: 14px 0 6px; letter-spacing: .5px; }
+  aside h2 { font-size: 12px; color: var(--muted); margin: 14px 0 6px; letter-spacing: .5px; }
   #lp { display: grid; grid-template-columns: repeat(15, 1fr); gap: 2px; width: 240px; padding: 8px;
         background: #000; border-radius: 12px; }
   #lp div { aspect-ratio: 1; border-radius: 2px; background: #111; }
   .kv { display: grid; grid-template-columns: 120px 1fr; gap: 2px 8px; font-size: 12px; }
-  .kv span:nth-child(odd) { color: var(--label); }
-  .help { font-size: 12px; color: var(--label); }
-  .help b { color: var(--btn-text); }
+  .kv span:nth-child(odd) { color: var(--muted); }
+  .help { font-size: 12px; color: var(--muted); }
+  .help b { color: var(--text); }
 </style>
 </head>
 <body>
@@ -83,26 +114,28 @@
     <div class="help">
       <p><b>Pad:</b> drag with the mouse (Shift = light touch), or press <b>Use the real Lightpad</b> and play the block.
         X and Y move the effect; on most programs Y is <b>how much</b>, as on the real unit. The block's Mode button = HOLD.</p>
-      <p><b>PROGRAM / BPM:</b> drag or scroll the big knob (00–99). After <b>TAP/BPM</b> the same knob sets the tempo for 5 s.</p>
-      <p><b>HOLD</b> keeps the effect at the last position when you let go. <b>PAD MOTION</b> (lever up): touch to record up to 6 s,
-        let go and it loops. <b>MUTE/FREEZE</b> (lever down, hold it): freezes the picture.</p>
+      <p><b>PROGRAM/BPM:</b> drag or scroll the right knob (00–99). After <b>TAP/BPM</b> the same knob sets the tempo for 5 s.
+        TAP blinks on the beat.</p>
+      <p><b>HOLD</b> keeps the effect at the last position when you let go. <b>PAD MOTION</b> (click the top of the lever):
+        touch to record up to 6 s, let go and it loops. <b>MUTE/FREEZE</b> (press and hold the bottom): freezes the picture.</p>
       <p><b>Memories 1–8:</b> press to recall; hold <b>FUNCTION</b> + a key for 2 s to store.
-        <b>AUDIO</b> on the left lever: the pad leaves the video alone.</p>
+        <b>AUDIO</b> on CONTROL SELECT: the pad leaves the video alone.</p>
       <p>The engine: <code>himmel_render.exe</code> listens on UDP 8768. Sampling (SAMPLE, REC) is not in Himmel yet.</p>
     </div>
   </aside>
 </main>
 <script>
 "use strict";
-let W = null, S = null;
+let W = null, S = null, beatT0 = performance.now(), lastBpm = 0;
 const els = {};
 const post = (d) => fetch("/", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(d)});
+const px = (v) => v + "px";
 
 function hsv(h, s, v) {
   const f = (n) => { const k = (n + h * 6) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
   return [f(5), f(3), f(1)];
 }
-const rgb = (c) => `rgb(${c.map((v) => Math.round(v * 255)).join(",")})`;
+const rgb = (c) => `rgb(${c.map((v) => Math.round(Math.max(0, Math.min(1, v)) * 255)).join(",")})`;
 
 function el(tag, cls, parent, style) {
   const e = document.createElement(tag);
@@ -111,7 +144,6 @@ function el(tag, cls, parent, style) {
   parent.appendChild(e);
   return e;
 }
-const px = (v) => v + "px";
 
 function drag(e, target, onMove, onEnd) {
   target.setPointerCapture(e.pointerId);
@@ -127,15 +159,24 @@ function build() {
   const p = document.getElementById("panel");
   p.style.width = px(W.panel.w);
   p.style.height = px(W.panel.h);
-  el("div", "brand", p).textContent = W.badge;
-  for (const s of W.sections || []) el("div", "sec", p, {left: px(s.x), top: px(s.y), width: px(s.w)}).textContent = s.label;
+  for (const [k, v] of Object.entries(W.style || {})) document.documentElement.style.setProperty("--" + k.replace("_", "-"), v);
+  for (const d of W.deco || []) {
+    if (d.kind === "rail") el("div", "rail", p, {left: px(d.x), top: px(d.y), width: px(d.w), height: px(d.h)});
+    else if (d.kind === "screw") el("div", "screw", p, {left: px(d.x), top: px(d.y)});
+    else if (d.kind === "band") el("div", "band", p, {left: px(d.x), top: px(d.y), width: px(d.w), height: px(d.h)});
+    else if (d.kind === "rule") el("div", "rule", p, {left: px(d.x), top: px(d.y), width: px(d.w)});
+    else if (d.kind === "text") {
+      const t = el("div", "txt" + (d.lines ? " lines" : ""), p, {left: px(d.x), top: px(d.y - 6), fontSize: px(d.size || 8)});
+      if (d.bold) t.style.fontWeight = "900";
+      t.textContent = d.text;
+    }
+  }
+  el("div", "badge", p).textContent = W.badge;
   for (const c of W.controls) {
     let e;
     if (c.kind === "knob" || c.kind === "encoder") {
-      e = el("div", "c knob" + (c.kind === "encoder" ? " enc" : ""), p,
-             {left: px(c.x - c.r), top: px(c.y - c.r), width: px(2 * c.r), height: px(2 * c.r)});
+      e = el("div", "c knob", p, {left: px(c.x - c.r), top: px(c.y - c.r), width: px(2 * c.r), height: px(2 * c.r)});
       el("div", "ind", e);
-      el("div", "lab", p, {left: px(c.x - 50), top: px(c.y + c.r + 4), width: "100px"}).textContent = c.label;
       if (c.kind === "knob") {
         e.addEventListener("pointerdown", (ev) => {
           const y0 = ev.clientY, v0 = S ? S[c.control] : 0.5;
@@ -153,51 +194,61 @@ function build() {
         e.addEventListener("wheel", (ev) => { ev.preventDefault(); post({control: c.control, steps: -Math.sign(ev.deltaY)}); });
       }
     } else if (c.kind === "button") {
-      e = el("div", "c b", p, {left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h)});
+      e = el("div", "c b" + (c.shape === "round" ? " round" : "") + (/^\d$/.test(c.label) ? " num" : ""), p,
+             {left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h)});
       e.textContent = c.label;
-      e.addEventListener("pointerdown", (ev) => { e.setPointerCapture(ev.pointerId); post({control: c.control, n: c.n, down: true}); });
-      const up = () => post({control: c.control, n: c.n, down: false});
+      e.addEventListener("pointerdown", (ev) => { e.setPointerCapture(ev.pointerId); e.classList.add("down");
+                                                  post({control: c.control, n: c.n, down: true}); });
+      const up = () => { e.classList.remove("down"); post({control: c.control, n: c.n, down: false}); };
       e.addEventListener("pointerup", up);
       e.addEventListener("pointercancel", up);
     } else if (c.kind === "led") {
       e = el("div", "c led", p, {left: px(c.x - c.r), top: px(c.y - c.r), width: px(2 * c.r), height: px(2 * c.r)});
-      el("div", "lab", p, {left: px(c.x + c.r + 4), top: px(c.y - 5), textAlign: "left"}).textContent = c.label;
+      el("div", "ledlab", p, {left: px(c.x + c.r + 4), top: px(c.y - 5)}).textContent = c.label;
     } else if (c.kind === "display") {
-      e = el("div", "c disp", p, {left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h), cursor: "default"});
-    } else if (c.kind === "lever3h" || c.kind === "lever3v") {
-      const v = c.kind === "lever3v";
-      e = el("div", "c lever", p, {left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h)});
-      e.pos = [];
-      c.positions.forEach((name, i) => {
-        const q = el("div", "pos", e, v ? {left: "0", width: "100%", top: px(i * c.h / 3), height: px(c.h / 3)}
-                                       : {top: "0", height: "100%", left: px(i * c.w / 3), width: px(c.w / 3)});
-        q.textContent = c.labels[i];
-        if (v) Object.assign(q.style, {left: px(c.w + 4), width: "90px", justifyContent: "flex-start", textAlign: "left"});
-        q.dataset.value = name;
-        e.pos.push(q);
+      e = el("div", "c disp", p, {left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h)});
+    } else if (c.kind === "lever3h") {
+      e = el("div", "c sel", p, {left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h)});
+      const at = [0.18, 0.5, 0.82];
+      e.labs = c.labels.map((t, i) => {
+        const l = el("div", "lab", e, {left: (at[i] * 100) + "%", top: px(i === 1 ? 4 : 13)});
+        l.textContent = t;
+        l.dataset.value = c.positions[i];
+        return l;
       });
-      if (!v) for (const [i, q] of e.pos.entries()) q.style.top = px(c.h + 2), q.style.height = "12px";
-      e.stick = el("div", "stick", e, v ? {left: px(6), width: px(c.w - 12), height: px(c.h / 3 - 8)}
-                                         : {top: px(6), height: px(c.h - 12), width: px(c.w / 3 - 8)});
+      el("div", "slot", e);
+      e.stick = el("div", "stick", e);
+      e.at = at;
+      el("div", "lab", e, {left: "50%", bottom: px(4), fontSize: "7px"}).textContent = c.caption || "";
       e.addEventListener("pointerdown", (ev) => {
         const r = e.getBoundingClientRect();
-        const f = v ? (ev.clientY - r.top) / r.height : (ev.clientX - r.left) / r.width;
-        const name = c.positions[Math.max(0, Math.min(2, Math.floor(f * 3)))];
+        const i = Math.max(0, Math.min(2, Math.floor((ev.clientX - r.left) / r.width * 3)));
+        post({control: c.control, value: c.positions[i]});
+      });
+    } else if (c.kind === "lever3v") {
+      e = el("div", "c lever", p, {left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h)});
+      el("div", "slot", e);
+      e.stick = el("div", "stick", e);
+      e.addEventListener("pointerdown", (ev) => {
+        const r = e.getBoundingClientRect();
+        const f = (ev.clientY - r.top) / r.height;
+        const name = f < 0.38 ? "motion" : f > 0.62 ? "freeze" : "center";
         post({control: c.control, value: name});
-        if (v && name === "freeze") {     // MUTE/FREEZE springs back when let go
+        if (name === "freeze") {     // MUTE/FREEZE springs back when let go
           e.setPointerCapture(ev.pointerId);
           const up = () => { post({control: c.control, value: "center"}); e.removeEventListener("pointerup", up); };
           e.addEventListener("pointerup", up);
         }
       });
-      el("div", "lab", p, v ? {left: px(c.x - 10), top: px(c.y - 14), width: px(c.w + 20)}
-                            : {left: px(c.x - 10), top: px(c.y - 14), width: px(c.w + 20)}).textContent = v ? "" : "CONTROL SELECT";
     } else if (c.kind === "surface") {
-      e = el("div", "c pad", p, {left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h)});
-      e.dot = el("div", "dot", e, {display: "none"});
-      el("div", "hint", e).textContent = "TOUCH PAD — drag (Shift = light touch)";
+      e = el("div", "c frame", p, {left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h)});
+      const i = c.inset || 10;
+      e.surf = el("div", "surf", e, {left: px(i), top: px(i), right: px(i), bottom: px(i)});
+      el("div", "tick", e, {top: "1px"});
+      el("div", "tick", e, {bottom: "1px"});
+      e.dot = el("div", "dot", e.surf, {display: "none"});
       const send = (ev, phase) => {
-        const r = e.getBoundingClientRect();
+        const r = e.surf.getBoundingClientRect();
         const x = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
         const y = Math.max(0, Math.min(1, 1 - (ev.clientY - r.top) / r.height));
         const z = ev.shiftKey ? 0.35 : (ev.pressure > 0 && ev.pressure !== 0.5 ? ev.pressure : 1);
@@ -215,38 +266,45 @@ function build() {
 function fit() {
   const st = document.getElementById("stage");
   const avail = Math.min(window.innerWidth - 40, 760);
-  const k = Math.min(1.2, avail / W.panel.w);
+  const k = Math.min(1.25, avail / W.panel.w);
   st.style.transform = `scale(${k})`;
   st.style.width = px(W.panel.w * k);
   st.style.height = px(W.panel.h * k);
 }
 window.addEventListener("resize", () => W && fit());
 
+function lit(e, c, on) {
+  e.classList.toggle("on", on);
+  e.style.background = on ? `radial-gradient(circle at 50% 45%, #fff, ${c.on_color} 60%)` : "";
+  e.style.boxShadow = on ? `0 0 14px ${c.on_color}, 0 2px 0 #2a2060` : "";
+}
+
 function render() {
   if (!S || !W) return;
+  if (S.bpm !== lastBpm) { lastBpm = S.bpm; beatT0 = performance.now(); }
+  const beatOn = ((performance.now() - beatT0) / (60000 / S.bpm)) % 1 < 0.18;
   for (const {e, c} of Object.values(els)) {
     if (c.kind === "knob") e.firstChild.style.transform = `rotate(${-135 + 270 * S[c.control]}deg)`;
     else if (c.kind === "encoder") e.firstChild.style.transform = `rotate(${(S.tap_mode ? S.bpm : S.program) * 18}deg)`;
     else if (c.kind === "display") e.textContent = S.display;
     else if (c.kind === "button") {
       const on = c.control === "hold" ? S.hold : c.control === "function" ? S.function
-               : c.control === "tap" ? S.tap_mode : false;
-      e.classList.toggle("on", on);
-      if (c.control === "memory") e.classList.toggle("stored", S.memories[c.n - 1]);
+               : c.control === "tap" ? (beatOn || S.tap_mode) : c.control === "memory" ? S.mem_active === c.n - 1 : false;
+      lit(e, c, on);
+      if (c.shape === "round" && on) e.style.boxShadow = `0 0 0 3px #3a2d8c, 0 0 18px ${c.on_color}`;
     } else if (c.kind === "led") {
-      const on = c.name === "Peak" ? false : false;   // no audio, no second video input in Himmel
-      e.style.background = on ? c.on_color : "#333";
-    } else if (c.kind === "lever3h" || c.kind === "lever3v") {
-      const v = c.kind === "lever3v";
-      const val = c.control === "control_select" ? S.control : S.lever;
-      const i = c.positions.indexOf(val);
-      for (const q of e.pos) q.classList.toggle("on", q.dataset.value === val);
-      if (v) e.stick.style.top = px(i * c.h / 3 + 4);
-      else e.stick.style.left = px(i * c.w / 3 + 4);
+      e.style.background = "#5a2020";            // no audio in Himmel: PEAK stays dark
+    } else if (c.kind === "lever3h") {
+      const i = c.positions.indexOf(S.control);
+      e.stick.style.left = (e.at[i] * 100) + "%";
+      for (const l of e.labs) l.classList.toggle("on", l.dataset.value === S.control);
+    } else if (c.kind === "lever3v") {
+      e.stick.style.top = ({motion: 30, center: 50, freeze: 70}[S.lever]) + "%";
     } else if (c.kind === "surface") {
       const col = padColour(S.x, S.y, S.touch);
-      e.style.background = S.control === "audio" ? "#0b0b10"
-        : `radial-gradient(circle at ${S.x * 100}% ${(1 - S.y) * 100}%, ${rgb(col.map((v) => Math.min(1, v * 1.6)))}, ${rgb(col)} 60%)`;
+      e.surf.style.background = S.control === "audio" ? "#e9edf0"
+        : `radial-gradient(circle at ${S.x * 100}% ${(1 - S.y) * 100}%, ${rgb(col.map((v) => v * 1.7 + 0.15))}, ${rgb(col.map((v) => v * 0.6 + 0.25))} 70%)`;
+      if (!S.touch && S.control !== "audio") e.surf.style.background = "linear-gradient(180deg, #e8f2ee, #cfe0da)";
       e.dot.style.display = S.touch ? "block" : "none";
       e.dot.style.left = (S.x * 100) + "%";
       e.dot.style.top = ((1 - S.y) * 100) + "%";
@@ -282,9 +340,9 @@ function render() {
   ].map(([k, v]) => `<span>${k}</span><span>${v}</span>`).join("");
 }
 
-function padColour(x, y, lit) {    // same as Entrancer.pad_colour in tools/entrancer_sim.py
+function padColour(x, y, on) {    // same as Entrancer.pad_colour in tools/entrancer_sim.py
   const h = (S.program * 0.071 + x * 0.35) % 1;
-  return hsv(h, 0.85, lit ? 0.35 + 0.65 * y : 0.12);
+  return hsv(h, 0.85, on ? 0.35 + 0.65 * y : 0.25);
 }
 
 document.getElementById("lpbtn").addEventListener("click", () => post({lightpad: !(S && S.lightpad.on)}));

@@ -63,6 +63,7 @@ class Entrancer:
         self.function = False
         self.memories = self._load_memories()
         self.mem_down = {}               # key -> time pressed (FUNCTION held: store after STORE_HOLD_S)
+        self.mem_active = None           # the memory key that is lit (last recalled / stored)
         self.flash = ""                  # a short message on the display area
         self.flash_until = 0.0
         self.tap_times = []
@@ -126,6 +127,7 @@ class Entrancer:
                     self.tap_mode_until = now + TAP_MODE_S
                 else:
                     self.program = max(0, min(99, self.program + steps))
+                    self.mem_active = None
             elif c == "fx_balance":
                 self.fx_balance = clamp01(float(d.get("value", 1)))
             elif c == "input_volume":
@@ -187,6 +189,7 @@ class Entrancer:
                     self.hold = m["hold"]
                     if m["hold"]:
                         self.x, self.y = m["x"], m["y"]
+                    self.mem_active = i
                     self.show("P-%d" % (i + 1), 0.6)
                 else:
                     self.show("---", 0.6)
@@ -202,6 +205,7 @@ class Entrancer:
                                         "hold": self.hold, "x": self.x, "y": self.y}
                     self._save_memories()
                     self.mem_down.pop(i)
+                    self.mem_active = i
                     self.show("STO", 1.0)
             finger = self.lightpad or self.mouse
             touching = finger is not None
@@ -329,6 +333,7 @@ class Entrancer:
                 "motion_len": round(self.motion[-1][0], 2) if self.motion else 0,
                 "motion_playing": self.motion_play_xy is not None,
                 "memories": [m is not None for m in self.memories],
+                "mem_active": self.mem_active,
                 "display": self.display(now),
                 "tap_mode": now < self.tap_mode_until,
                 "engine": self.engine, "engine_effect": fx,
@@ -338,7 +343,7 @@ class Entrancer:
     def pad_colour(self, x, y, lit):
         """The pad's light: colour follows the finger and the program (the unit's 'Light')."""
         h = (self.program * 0.071 + x * 0.35) % 1.0
-        v = (0.35 + 0.65 * y) if lit else 0.12
+        v = (0.35 + 0.65 * y) if lit else 0.25
         return colorsys.hsv_to_rgb(h, 0.85, v)
 
     def close(self):

@@ -20,9 +20,12 @@ python tools/entrancer_live.py                        then open http://127.0.0.1
 
 (`himmel.exe` works too; the render process listens either way.)
 
-- The page draws the unit from [`weapons/entrancer.weapon.json`](../weapons/entrancer.weapon.json).
-  Positions follow the manual's list of top-panel controls; they are
-  approximate until checked against the owner's unit (a photo is enough).
+- The page draws the unit from [`weapons/entrancer.weapon.json`](../weapons/entrancer.weapon.json):
+  layout, colours and control shapes after product photos and the owner's own
+  unit (blue-violet front, side rails, green display, round TAP/BPM, round
+  PAD MOTION lever, chrome-framed pad that glows in the effect's colour).
+  No maker logo or wordmark; the badge says "HIMMEL · KPE1". TAP/BPM blinks on
+  the beat, the recalled memory key lights red.
 - **Mouse:** drag on the pad (Shift = light touch), drag or scroll the knobs,
   click the levers and buttons.
 - **Real Lightpad as the pad:** press *Use the real Lightpad as the pad* (or
