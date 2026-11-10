@@ -163,7 +163,7 @@ CFG_DEFAULTS = {10: 50, 13: 64}
 # gives a longer span from a light touch to full pressure (z reaches 255 later); lower values
 # make that span shorter.
 HIMMEL_CONFIG = {13: 127}
-CFG_NAMES = {10: "velocity sensitivity", 11: "glide sensitivity", 12: "slide sensitivity",
+CFG_NAMES = {4: "octave", 10: "velocity sensitivity", 11: "glide sensitivity", 12: "slide sensitivity",
              13: "pressure sensitivity", 14: "lift sensitivity", 32: "z tracking", 36: "brightness"}
 
 
@@ -325,7 +325,7 @@ def rgb565(r, g, b):
 
 def pixels_to_bytes(px):
     """225 (r, g, b) -> 450 bytes, the BitmapLEDProgram heap layout (bit = (x + y * 15) * 16)."""
-    out = bytearray(PIXEL_BYTES)
+    out = bytearray(2 * len(px))   # 450 bytes for the Lightpad, 48 for a LUMI
     for i, (r, g, b) in enumerate(px):
         v = rgb565(r, g, b)
         out[2 * i] = v & 0xFF
@@ -358,6 +358,18 @@ def describe(msg, to_device):
                 elif t == HOST_DATA:
                     parts.append("sharedDataChange #%d (%d bytes)" % (r.get(16) & 0x3FF, len(msg)))
                     break
+                elif t == HOST_CONFIG:
+                    cmd = r.get(4)
+                    if cmd == 0:
+                        item, val = r.get(8), r.get(32)
+                        parts.append("set config %d (%s) = %d" % (item, CFG_NAMES.get(item, "?"), val - (1 << 32) if val & 0x80000000 else val))
+                    elif cmd == 1:
+                        r.get(32)
+                        item = r.get(8)
+                        parts.append("read config %d (%s)" % (item, CFG_NAMES.get(item, "?")))
+                    else:
+                        parts.append("config command %d" % cmd)
+                    break
                 else:
                     parts.append("host msg 0x%02X" % t)
                     break
@@ -370,6 +382,9 @@ def describe(msg, to_device):
             elif e["type"] == "button":
                 out.append("button %d %s%s" % (e["id"], "down" if e["down"] else "up",
                                                " (via our program)" if e.get("via") else ""))
+            elif e["type"] == "config":
+                out.append("config %d (%s) = %d [%d..%d]" % (e["item"], CFG_NAMES.get(e["item"], "?"), e["value"], e["min"], e["max"])
+                           if "item" in e else "config command %d" % e["cmd"])
             elif e["type"] == "program":
                 out.append("program event %s" % e["values"])
             elif e["type"] == "ack":
@@ -400,6 +415,9 @@ def describe(msg, to_device):
 
 # ---------------------------------------------------------------- the simulated block
 class SimLightpad:
+    serial = SIM_SERIAL            # a subclass (the simulated LUMI) sets its own
+    engine_out = ENGINE_ADDR       # where block -> host messages also go (UDP)
+
     def __init__(self):
         self.lock = threading.RLock()
         self.t0 = time.time()
@@ -471,7 +489,7 @@ class SimLightpad:
                 pass
         if self.udp is not None:
             try:
-                self.udp.sendto(msg, ENGINE_ADDR)
+                self.udp.sendto(msg, self.engine_out)
             except OSError:
                 pass
 
@@ -508,7 +526,7 @@ class SimLightpad:
             self.counts["to_device"] += 1
             self._log(("engine" if source == "engine" else "host") + " → block", msg, True)
         if msg == SERIAL_REQUEST:
-            self.send(SERIAL_HEADER + (SIM_MAC + SIM_SERIAL).encode("ascii") + b"\xF7")
+            self.send(SERIAL_HEADER + (SIM_MAC + self.serial).encode("ascii") + b"\xF7")
             return
         u = unframe(msg)
         if u is None:
@@ -567,7 +585,7 @@ class SimLightpad:
             self.send(self._packet([(DEV_ACK, 7), (self.last_pkt, 10)]))
         elif cmd == CMD_TOPOLOGY:
             items = [(DEV_TOPOLOGY, 7), (1, 8), (1, 7), (0, 8)]
-            items += [(ord(c), 7) for c in SIM_SERIAL]
+            items += [(ord(c), 7) for c in self.serial]
             items += [(0, 7), (self.battery, 5), (1 if self.charging else 0, 1)]
             self.send(self._packet(items))
 
@@ -632,7 +650,9 @@ class SimLightpad:
         z = min(1.0, max(0.0, float(z)))
         with self.lock:
             f = self.fingers.get(pid)
-            if phase == "start" or f is None:
+            if f is None and phase != "start":
+                return   # a late move/end after the finger was lifted (browser requests can cross)
+            if phase == "start":
                 if f is not None:
                     self._finger_out(f, "end")
                 used = {g["i"] for g in self.fingers.values()}
@@ -858,22 +878,28 @@ class LocalHost:
 
     MODES = ("touch", "rainbow", "test", "off", "rally", "brick", "swarm")
     LONG_PRESS = 0.9            # hold Mode this long: next game (the easter egg)
+    DEFAULT_MODE = "touch"
+    WANT = HIMMEL_CONFIG        # config Himmel sets on this block
+    CONFIG_READ = (CFG_PRESSURE_SENSITIVITY, CFG_VELOCITY_SENSITIVITY)  # read at every handshake
+
+    def build_program(self):
+        return lf.build_bitmap_program()
 
     def __init__(self, sim):
         self.sim = sim
-        self.mode = "touch"
+        self.mode = self.DEFAULT_MODE
         self.enabled = True        # False = "unplug the host": no pings, the block falls back to MIDI mode
         self.state = "idle"
         self.serial = None
         self.battery = None
         self.config = {}           # item -> [value, min, max], as the block reported it
         self.original = {}         # first value seen per item: put back when Himmel lets go
-        self.want = dict(HIMMEL_CONFIG)  # item -> value Himmel wants (sent after every handshake)
+        self.want = dict(self.WANT)  # item -> value Himmel wants (sent after every handshake)
         self.z_now, self.z_max, self.z_hist = 0, 0, [0] * 8
         self.stopped = False
         self.sync = HeapSync()     # the block's shared data, kept in step with ACKs
         self.stage = "handshake"   # handshake -> clear -> program -> frames
-        self.program = lf.build_bitmap_program()
+        self.program = self.build_program()
         self.preview = None        # the last picture sent (shown on the drawing for the real block)
         self.last_pic = 0.0
         self.next_ping = 0.0
@@ -993,7 +1019,7 @@ class LocalHost:
             self.restart()
             self.stage = "clear"
             self.next_ping = now + PING_INTERVAL
-            for item in (CFG_PRESSURE_SENSITIVITY, CFG_VELOCITY_SENSITIVITY):
+            for item in self.CONFIG_READ:
                 sim.receive(host_config_request(item))   # learn the block's own values first
             for item, v in self.want.items():
                 sim.receive(host_config_set(item, v))
@@ -1027,7 +1053,8 @@ class LocalHost:
             pic = self.picture(now, dt)
             self.preview = pic
             t = bytearray(self.sync.target)
-            t[n:n + PIXEL_BYTES] = pixels_to_bytes(pic)
+            pb = pixels_to_bytes(pic)
+            t[n:n + len(pb)] = pb
             if t != self.sync.target:
                 self._send(t)
 
@@ -1112,11 +1139,24 @@ class LocalHost:
 class LightpadLive:
     """What tools/mk2_live.py talks to for ?weapon=lightpad: snapshot() and command()."""
 
+    weapon = "lightpad"
+
     def __init__(self, profile):
         self.profile = profile
-        self.sim = SimLightpad()
-        self.host = LocalHost(self.sim)
+        self.sim = self.make_sim()
+        self.host = self.make_host(self.sim)
         self.show_noise = False
+
+    # a subclass (the LUMI) swaps these three
+    def make_sim(self):
+        return SimLightpad()
+
+    def make_hw(self):
+        import lightpad_hw
+        return lightpad_hw.HwLightpad()
+
+    def make_host(self, sim):
+        return LocalHost(sim)
 
     def snapshot(self):
         s, h = self.sim, self.host
@@ -1128,7 +1168,9 @@ class LightpadLive:
             stats = dict(getattr(s, "stats", {}))
         hw = getattr(s, "kind", "") == "hw"
         return {
-            "weapon": "lightpad",
+            "weapon": self.weapon,
+            "modes": [m for m in h.MODES if m not in games.GAMES],
+            "games": [m for m in h.MODES if m in games.GAMES],
             "simulated": not hw,
             "hardware": hw,
             "connected": getattr(s, "connected", True),
@@ -1183,12 +1225,8 @@ class LightpadLive:
         want = dict(self.host.want)
         self.host.let_go()  # put the block's own settings back
         old.close()  # also ends the old LocalHost thread
-        if on:
-            import lightpad_hw
-            self.sim = lightpad_hw.HwLightpad()
-        else:
-            self.sim = SimLightpad()
-        self.host = LocalHost(self.sim)
+        self.sim = self.make_hw() if on else self.make_sim()
+        self.host = self.make_host(self.sim)
         self.host.mode, self.host.enabled, self.host.want = mode, enabled, want
 
     def close(self):

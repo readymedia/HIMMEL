@@ -649,7 +649,12 @@ def _make_lightpad(profile):
     return lightpad_sim.LightpadLive(profile)
 
 
-GENERIC = {"lightpad": _make_lightpad}
+def _make_lumi(profile):
+    import lumi_sim
+    return lumi_sim.LumiLive(profile)
+
+
+GENERIC = {"lightpad": _make_lightpad, "lumi": _make_lumi}
 _generic_live = {}
 _generic_lock = threading.Lock()
 

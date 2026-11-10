@@ -104,7 +104,8 @@ class HwLightpad:
     kind = "hw"
     leds_supported = True
 
-    def __init__(self):
+    def __init__(self, port_name=PORT_NAME, device_name="Lightpad"):
+        self.port_name, self.device_name = port_name, device_name   # e.g. "LUMI" for the LUMI Keys
         self.lock = threading.RLock()
         self.api = False
         self.fingers = {}          # finger index -> dict(i, x, y, z) from the block's own touch messages
@@ -135,10 +136,10 @@ class HwLightpad:
     def _open(self):
         mm = winmm()
         ins, outs = list_ports()
-        i = next((k for k, n in ins if PORT_NAME.lower() in n.lower()), None)
-        o = next((k for k, n in outs if PORT_NAME.lower() in n.lower()), None)
+        i = next((k for k, n in ins if self.port_name.lower() in n.lower()), None)
+        o = next((k for k, n in outs if self.port_name.lower() in n.lower()), None)
         if i is None or o is None:
-            self.notes = ["No Lightpad MIDI ports found. Plug the block in with USB (not Bluetooth). "
+            self.notes = ["No %s MIDI ports found. Plug it in with USB (not Bluetooth). " % self.device_name +
                           "Ports seen: in %s, out %s" % ([n for _, n in ins], [n for _, n in outs])]
             return False
         r = mm.midiInOpen(ctypes.byref(self.hin), i, ctypes.cast(self.cb, ctypes.c_void_p), 0, CALLBACK_FUNCTION)
@@ -164,7 +165,7 @@ class HwLightpad:
         mm.midiInStart(self.hin)
         self.port_names = (dict(ins)[i], dict(outs)[o])
         self.connected = True
-        self.notes = ["Real Lightpad on MIDI in %d / out %d (%s). Himmel drives the LEDs (own renderer, RAM only)." % (
+        self.notes = ["Real %s on MIDI in %%d / out %%d (%%s). Himmel drives the LEDs (own renderer, RAM only)." % self.device_name % (
             i, o, self.port_names[0])]
         self._event("ports opened")
         return True

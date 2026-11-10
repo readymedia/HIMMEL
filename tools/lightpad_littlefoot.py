@@ -118,14 +118,27 @@ class Asm:
             self.op("dupOffset", d)
 
 
-def build_bitmap_program(heap_bytes=PIXEL_BYTES):
-    """initialise(): status overlay off.  repaint(): 225 x fillPixel(makeARGB(255, r, g, b), x, y)
-    with r, g, b read from the RGB565 heap (bit = i * 16: r 5 bits, g 6 bits, b 5 bits)."""
+def build_key_program(keys=24):
+    """The same renderer for a LUMI Keys: one RGB565 pixel per key, drawn with fillPixel(colour, key, 0).
+    initialise() also keeps the block's own musical key handling (notes, pressure, glide as MIDI) and
+    hands only the lighting to us: setUseDefaultKeyHandler(true, false), as blocksd documents for
+    LUMI firmware 1.3.0 or newer."""
+    return build_bitmap_program(heap_bytes=keys * 2, width=keys, height=1, keep_key_handler=True)
+
+
+def build_bitmap_program(heap_bytes=PIXEL_BYTES, width=GRID, height=GRID, keep_key_handler=False):
+    """initialise(): status overlay off.  repaint(): width x height x fillPixel(makeARGB(255, r, g, b), x, y)
+    with r, g, b read from the RGB565 heap (bit = i * 16: r 5 bits, g 6 bits, b 5 bits).
+    The Lightpad uses the defaults (15 x 15)."""
     funcs = []
     # --- initialise() ---
     a = Asm()
     a.push(0)
     a.op("callNative", function_id("setStatusOverlayActive/vb"))
+    if keep_key_handler:                  # setUseDefaultKeyHandler(musical = true, lighting = false)
+        a.push(0)                         # second argument first
+        a.push(1)
+        a.op("callNative", function_id("setUseDefaultKeyHandler/vbb"))
     a.op("retVoid", 0)
     funcs.append(("initialise/v", a))
     # --- handleButtonDown(index) / handleButtonUp(index) ---
@@ -143,11 +156,11 @@ def build_bitmap_program(heap_bytes=PIXEL_BYTES):
     a = Asm()
     a.op("pushMultiple0", 1)              # i = 0             [ret, i]
     a.label("loop")
-    a.dup_depth(0)                        # y = i / 15        [i, i]
-    a.push(GRID)
+    a.dup_depth(0)                        # y = i / width     [i, i]
+    a.push(width)
     a.op("div_int32")                     #                   [i, y]
-    a.dup_depth(1)                        # x = i % 15
-    a.push(GRID)
+    a.dup_depth(1)                        # x = i % width
+    a.push(width)
     a.op("mod_int32")                     #                   [i, y, x]
     for shift_bits, bit_off, n, depth in ((3, 11, 5, 3), (2, 5, 6, 4), (3, 0, 5, 5)):  # b, g, r
         a.push(n)                         # numBits (getHeapBits pops start first, then numBits)
@@ -166,7 +179,7 @@ def build_bitmap_program(heap_bytes=PIXEL_BYTES):
     a.push(1)
     a.op("add_int32")                     # i += 1
     a.dup_depth(0)
-    a.push(GRID * GRID)
+    a.push(width * height)
     a.op("sub_int32")
     a.op("testLT_int32")
     a.op("jumpIfTrue", "loop")
@@ -209,14 +222,16 @@ class MiniVM:
 
     MAX_OPS = 200000
 
-    def __init__(self, block):
+    def __init__(self, block, width=GRID, height=GRID):
         p = parse_program(block)
         if p is None:
             raise ValueError("no valid program")
         self.size, self.heap_size, self.funcs = p
         self.prog = bytes(block[:self.size])
         self.heap = bytes(block[self.size:self.size + self.heap_size])
-        self.pixels = [(0, 0, 0)] * (GRID * GRID)
+        self.width, self.height = width, height
+        self.pixels = [(0, 0, 0)] * (width * height)
+        self.key_handler = None   # (musical, lighting) after setUseDefaultKeyHandler
         self.overlay = True
         self.to_host = []        # sendMessageToHost calls: (a, b, c)
 
@@ -232,9 +247,12 @@ class MiniVM:
             return ((a & 255) << 24) | ((r & 255) << 16) | ((g & 255) << 8) | (b & 255), 4, False
         if fid == function_id("fillPixel/viii"):
             c, x, y = args[:3]
-            if 0 <= x < GRID and 0 <= y < GRID:
-                self.pixels[y * GRID + x] = ((c >> 16) & 255, (c >> 8) & 255, c & 255)
+            if 0 <= x < self.width and 0 <= y < self.height:
+                self.pixels[y * self.width + x] = ((c >> 16) & 255, (c >> 8) & 255, c & 255)
             return 0, 3, True
+        if fid == function_id("setUseDefaultKeyHandler/vbb"):
+            self.key_handler = (bool(args[0]), bool(args[1]))
+            return 0, 2, True
         if fid == function_id("sendMessageToHost/viii"):
             self.to_host.append(tuple(args[:3]))
             return 0, 3, True
@@ -304,7 +322,8 @@ class MiniVM:
             elif name == "callNative":
                 n_args = {function_id("makeARGB/iiiii"): 4, function_id("fillPixel/viii"): 3,
                           function_id("setStatusOverlayActive/vb"): 1,
-                          function_id("sendMessageToHost/viii"): 3}.get(arg, 0)
+                          function_id("sendMessageToHost/viii"): 3,
+                          function_id("setUseDefaultKeyHandler/vbb"): 2}.get(arg, 0)
                 args = [stack[-1 - k] for k in range(n_args)]   # first argument on top
                 res, n, void = self.native(arg, args)
                 del stack[len(stack) - n:]
@@ -333,6 +352,14 @@ def selftest():
     b = vm.to_host == [(BUTTON_EVENT, 0, 1), (BUTTON_EVENT, 0, 0)]
     print(("ok   " if b else "FAIL ") + "Mode button forwarded to the host: %s" % vm.to_host)
     good = good and b
+    kp = build_key_program()
+    want_k = [((k * 10) & 0xF8, (255 - k * 10) & 0xFC, (k * 5) & 0xF8) for k in range(24)]
+    vm = MiniVM(bytearray(kp) + L.pixels_to_bytes(want_k), width=24, height=1)
+    vm.call("initialise/v")
+    vm.call("repaint/v")
+    k_ok = vm.pixels == want_k and vm.key_handler == (True, False) and not vm.overlay
+    print(("ok   " if k_ok else "FAIL ") + "LUMI key renderer: %d bytes, 24 keys drawn, musical handler kept, lighting ours" % len(kp))
+    good = good and k_ok
     print("function ids: repaint %d, fillPixel %d, makeARGB %d" % (
         function_id("repaint/v"), function_id("fillPixel/viii"), function_id("makeARGB/iiiii")))
     print("program:", prog.hex(" "))

@@ -88,6 +88,14 @@
                     font-size: 6px; color: var(--label); white-space: nowrap; }
   .surface { border-radius: 16px; background: #09090b; box-shadow: inset 0 0 0 1px #2a2a30, inset 0 0 30px #000; }
   .surface canvas { width: 100%; height: 100%; display: block; border-radius: 16px; }
+  .key { border-radius: 0 0 7px 7px; overflow: hidden; box-shadow: inset 0 -3px 0 #0008; }
+  .key.white { background: #24242a; border: 1px solid #3a3a42; }
+  .key.black { background: #0c0c0f; border: 1px solid #2a2a30; z-index: 2; }
+  .key .kled { position: absolute; left: 0; right: 0; top: 0; bottom: 0; opacity: .9; transition: background .04s; }
+  .key .kz { position: absolute; left: 3px; right: 3px; bottom: 4px; height: 0; background: #ffffffcc; border-radius: 2px; }
+  .key .kn { position: absolute; left: 0; right: 0; bottom: 12px; text-align: center; font-size: 8px; color: #fff9; }
+  .key.on { box-shadow: 0 0 16px #fff8, inset 0 -3px 0 #0008; }
+  body.sim .key { cursor: pointer; }
   body.sim .surface { cursor: crosshair; }
   #gen { display: none; grid-template-columns: 1fr 1fr; gap: 12px; padding: 12px 20px 30px; max-width: 1100px; }
   body.generic #gen { display: grid; }
@@ -137,7 +145,7 @@
       <button data-m="brick">★ Brick Burst</button>
       <button data-m="swarm">★ Star Swarm</button>
     </div>
-    <div class="help">Games (easter eggs): on the block, <b>hold Mode ~1 s</b> for the next game; a short Mode
+    <div class="help" id="gGamesHelp">Games (easter eggs): on the block, <b>hold Mode ~1 s</b> for the next game; a short Mode
       press launches, fires or restarts. <b>Rally:</b> a finger in the lower half moves the bottom paddle, one in
       the upper half the top paddle (or Himmel plays it). <b>Brick Burst:</b> slide the paddle, press harder for a
       wider one, tap to launch. <b>Star Swarm:</b> slide the ship, touch to fire (harder = faster).</div>
@@ -152,13 +160,12 @@
       <span class="help">Plug it in with USB and close ROLI Connect / Dashboard. The probe enters API mode and
         pings, uploads Himmel's own LED program (RAM only) and streams the LED pictures chosen above. Stop and the
         block goes back to its factory display.</span></div>
-    <div class="help">Check: touch each corner. The ring on the drawing must land in the same corner.
-      Press the Mode button: <b>M</b> must light up.</div>
+    <div class="help">Check: touch or press every control on the real device; the drawing must follow.</div>
     <div id="gHwInfo" class="mono small"></div>
     <h3>Pressure (z)</h3>
     <div class="help">Press slowly from very light to hard. If z hits 255 long before you press hard, <b>raise</b> the
-      value (higher = a longer span from light to full pressure). Himmel uses 127 and puts the block's own value back when it
-      lets go.</div>
+      value (higher = a longer span from light to full pressure). Himmel puts the block's own value back when it
+      lets go (the Lightpad uses 127).</div>
     <div class="row"><label>Pressure sensitivity <input type="range" id="gPress" min="0" max="127" value="64"></label>
       <span id="gPressV" class="mono"></span><button id="gZReset">Reset z stats</button></div>
     <div class="row"><div class="progress" style="max-width:420px"><div id="gZBar" style="transition:none"></div></div>
@@ -360,6 +367,9 @@ function buildPanel(w, wireFn = wire) {
       panel.appendChild(d);
     } else if (c.kind === "pad") {
       d = add('<span class="pn">' + c.n + '</span><span class="pv"></span>', "c pad", { left: c.x + "px", top: c.y + "px", width: c.w + "px", height: c.h + "px" });
+    } else if (c.kind === "key") {  // a piano key, lit by its own RGB LED
+      d = add('<div class="kled"></div><div class="kz"></div><div class="kn"></div>', "c key " + (c.black ? "black" : "white"),
+              { left: c.x + "px", top: c.y + "px", width: c.w + "px", height: c.h + "px" });
     } else if (c.kind === "surface") {  // multi-touch surface with an LED grid under it
       d = add(`<canvas width="${c.w * 2}" height="${c.h * 2}"></canvas>`, "c surface", { left: c.x + "px", top: c.y + "px", width: c.w + "px", height: c.h + "px" });
       c.ctx = d.firstChild.getContext("2d");
@@ -567,7 +577,10 @@ function startGeneric(wid) {
   simOn = true;
   fetch("/weapon?id=" + encodeURIComponent(wid)).then(r => r.json()).then(w => {
     buildPanel(w, wireGeneric);
-    document.getElementById("genHelp").innerHTML = (w.controls.some(c => c.kind === "surface")
+    document.getElementById("genHelp").innerHTML = (w.controls.some(c => c.kind === "key")
+      ? "<b>Keys:</b> click a key; lower on the key = harder strike. Hold for pressure (it grows, the scroll " +
+        "wheel changes it), drag sideways to glide. A touch screen plays chords.<br>" : "") +
+      (w.controls.some(c => c.kind === "surface")
       ? "<b>Surface:</b> press and hold with the mouse; pressure grows while you hold, the scroll wheel " +
         "changes it, drag to slide. <b>Alt + click</b> leaves a finger resting there (multi-touch with a mouse; " +
         "Alt + click it again to lift). A touch screen gives real multi-touch.<br>" : "") +
@@ -600,7 +613,10 @@ function surfXY(c, e) {
   return [Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))];
 }
 function fingerZ(f) { return f.fixed ? f.z0 : Math.min(1, f.z0 + (performance.now() - f.t0) / 1500 * 0.5); }
-function sendFinger(id, f, phase) { gsim({ touch: { id, x: f.x, y: f.y, z: phase === "end" ? 0 : fingerZ(f), phase } }); }
+function sendFinger(id, f, phase) {
+  if (f.key !== undefined) gsim({ key: { n: f.key, phase, vel: f.vel, z: phase === "end" ? 0 : fingerZ(f), x: f.glide || 0 } });
+  else gsim({ touch: { id, x: f.x, y: f.y, z: phase === "end" ? 0 : fingerZ(f), phase } });
+}
 setInterval(() => { for (const [id, f] of fingers) if (fingerZ(f) < 1) sendFinger(id, f, "move"); }, 60);  // pressure ramp
 
 function wireGeneric(c) {
@@ -609,6 +625,31 @@ function wireGeneric(c) {
     el.addEventListener("pointerdown", e => { e.preventDefault(); el.setPointerCapture(e.pointerId); gsim({ name: c.name, down: true }); });
     const up = () => gsim({ name: c.name, down: false });
     el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
+  } else if (c.kind === "key") {
+    el.addEventListener("pointerdown", e => {
+      e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+      const [x, y] = surfXY(c, e);
+      const f = { key: c.n, x0: e.clientX, w: c.el.getBoundingClientRect().width, vel: 0.25 + 0.75 * y,
+                  glide: 0, z0: force() * 0.5, t0: performance.now(), last: 0 };
+      fingers.set(e.pointerId, f);
+      sendFinger(e.pointerId, f, "start");
+    });
+    el.addEventListener("pointermove", e => {
+      const f = fingers.get(e.pointerId);
+      if (!f) return;
+      f.glide = Math.max(-1, Math.min(1, (e.clientX - f.x0) / (f.w * 2)));
+      const now = performance.now();
+      if (now - f.last > 20) { f.last = now; sendFinger(e.pointerId, f, "move"); }
+    });
+    const up = e => { const f = fingers.get(e.pointerId); if (!f) return; fingers.delete(e.pointerId); sendFinger(e.pointerId, f, "end"); };
+    el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
+    el.addEventListener("wheel", e => {
+      e.preventDefault();
+      const s = document.getElementById("gForce");
+      s.value = Math.min(100, Math.max(5, +s.value + (e.deltaY < 0 ? 5 : -5))); s.oninput();
+      for (const f of fingers.values()) { f.z0 = force(); f.t0 = performance.now(); }
+    }, { passive: false });
   } else if (c.kind === "surface") {
     el.addEventListener("pointerdown", e => {
       e.preventDefault();
@@ -694,6 +735,15 @@ function renderGeneric(s) {
   const held = new Set(s.held || []);
   for (const c of Object.values(els)) {
     if (c.kind === "surface") drawSurface(c, s);
+    else if (c.kind === "key") {
+      const hex = (s.leds || [])[c.n] || "000000", k = (s.keys || {})[c.n];
+      const n = parseInt(hex, 16), r = n >> 16, g = n >> 8 & 255, b = n & 255;
+      c.el.querySelector(".kled").style.background = r + g + b > 12
+        ? `linear-gradient(rgba(${r},${g},${b},0.95), rgba(${r},${g},${b},0.35))` : "transparent";
+      c.el.classList.toggle("on", !!k);
+      c.el.querySelector(".kz").style.height = k ? Math.round(4 + 60 * k.z) + "px" : "0";
+      c.el.querySelector(".kn").textContent = k ? `v${Math.round(k.vel * 127)}` : "";
+    }
     else if (c.kind === "button") {
       const on = held.has(c.name);
       c.el.classList.toggle("on", on);
@@ -701,6 +751,17 @@ function renderGeneric(s) {
     }
   }
   const h = s.host || {};
+  const gl = document.getElementById("gLed");
+  if (s.modes && gl.dataset.modes !== s.modes.join()) {   // the weapon's own picture modes
+    gl.dataset.modes = s.modes.join();
+    const names = { touch: "Touch glow", keys: "Key colours", rainbow: "Rainbow", test: "Test pattern", off: "LEDs off" };
+    gl.innerHTML = s.modes.map(m => `<button data-m="${m}">${names[m] || m}</button>`).join("");
+    gl.querySelectorAll("button").forEach(b => b.onclick = () => gpost({ led_mode: b.dataset.m }));
+    const hasGames = (s.games || []).length > 0;
+    document.getElementById("gGames").style.display = hasGames ? "" : "none";
+    document.getElementById("gGamesHelp").style.display = hasGames ? "" : "none";
+  }
+  if (s.octave !== undefined) document.getElementById("gStatus").dataset.octave = s.octave;
   document.querySelectorAll("#gLed button, #gGames button").forEach(b => b.classList.toggle("on", b.dataset.m === h.mode));
   document.getElementById("gHost").checked = h.enabled !== false;
   document.getElementById("gHostInfo").textContent =
@@ -721,7 +782,8 @@ function renderGeneric(s) {
   const k = s.counts || {};
   document.getElementById("gStatus").textContent = [
     (s.notes || []).join(" / "),
-    `block: ${s.mode_name}${s.engine ? " (an engine on UDP 127.0.0.1:8767 is the host)" : ""}`,
+    (s.octave !== undefined ? `octave ${s.octave >= 0 ? "+" : ""}${s.octave} (key 1 = note ${48 + 12 * s.octave})\n` : "") +
+    `block: ${s.mode_name}${s.engine ? ` (an engine on UDP 127.0.0.1:${s.weapon === "lumi" ? 8769 : 8767} is the host)` : ""}`,
     `messages: block → host ${k.to_host || 0}, host → block ${k.to_device || 0}, rejected ${k.bad || 0}`,
     `fingers down: ${(s.fingers || []).map(f => `#${f.i} x=${f.x.toFixed(2)} y=${f.y.toFixed(2)} z=${f.z.toFixed(2)}`).join("  ") || "-"}`,
   ].join("\n");

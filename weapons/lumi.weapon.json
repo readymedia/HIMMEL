@@ -1,0 +1,476 @@
+{
+  "format": "himmel-weapon/1",
+  "id": "lumi",
+  "name": "LUMI Keys",
+  "badge": "◎ HIMMEL · KEYS",
+  "hardware": {
+    "maker": "ROLI",
+    "model": "LUMI Keys (Studio Edition / Block)",
+    "usb": "2af4:0e00",
+    "note": "Class-compliant USB-MIDI (and BLE MIDI), part of the BLOCKS family. Works with the hardware; not affiliated with ROLI or Luminary."
+  },
+  "driver": "midi-blocks",
+  "protocol": {
+    "transport": "USB-MIDI (WinMM on Windows; ports are exclusive, close ROLI Connect / Dashboard)",
+    "keys": "the block's own key handler sends MPE: note on/off with strike velocity, channel pressure, pitch bend (glide); 24 keys, key 0 = note 48 + 12 * octave",
+    "api": "BLOCKS SysEx, as the Lightpad; buttons 0 = mode, 1 = octave down, 2 = octave up",
+    "leds": "one RGB LED per key, drawn by Himmel's renderer with fillPixel(colour, key, 0) from a 48-byte RGB565 heap (firmware 1.3.0 or newer)"
+  },
+  "map": null,
+  "status": "simulated; protocol from ROLI's reference code and blocksd, not yet checked on the owner's LUMI",
+  "panel": {
+    "w": 980,
+    "h": 330
+  },
+  "screens": [],
+  "deco": [
+    {
+      "kind": "body",
+      "x": 40,
+      "y": 48,
+      "w": 900,
+      "h": 240,
+      "r": 16
+    },
+    {
+      "kind": "dna",
+      "x": 40,
+      "y": 130,
+      "edge": "left"
+    },
+    {
+      "kind": "dna",
+      "x": 40,
+      "y": 210,
+      "edge": "left"
+    },
+    {
+      "kind": "dna",
+      "x": 940,
+      "y": 130,
+      "edge": "right"
+    },
+    {
+      "kind": "dna",
+      "x": 940,
+      "y": 210,
+      "edge": "right"
+    },
+    {
+      "kind": "dna",
+      "x": 260,
+      "y": 48,
+      "edge": "top"
+    },
+    {
+      "kind": "dna",
+      "x": 420,
+      "y": 48,
+      "edge": "top"
+    },
+    {
+      "kind": "dna",
+      "x": 580,
+      "y": 48,
+      "edge": "top"
+    },
+    {
+      "kind": "dna",
+      "x": 740,
+      "y": 48,
+      "edge": "top"
+    },
+    {
+      "kind": "port",
+      "x": 32,
+      "y": 70,
+      "w": 8,
+      "h": 30,
+      "label": "USB-C"
+    },
+    {
+      "kind": "port",
+      "x": 860,
+      "y": 66,
+      "w": 50,
+      "h": 8,
+      "label": "POWER"
+    }
+  ],
+  "sections": [
+    {
+      "label": "24 KEYS · STRIKE · PRESSURE · GLIDE · RGB PER KEY",
+      "x": 40,
+      "y": 302,
+      "w": 900
+    }
+  ],
+  "controls": [
+    {
+      "name": "Mode",
+      "kind": "button",
+      "x": 76,
+      "y": 66,
+      "w": 34,
+      "h": 20,
+      "label": "MODE",
+      "on_color": "#ffffff"
+    },
+    {
+      "name": "Octave -",
+      "kind": "button",
+      "x": 122,
+      "y": 66,
+      "w": 34,
+      "h": 20,
+      "label": "OCT −",
+      "on_color": "#ffffff"
+    },
+    {
+      "name": "Octave +",
+      "kind": "button",
+      "x": 168,
+      "y": 66,
+      "w": 34,
+      "h": 20,
+      "label": "OCT +",
+      "on_color": "#ffffff"
+    },
+    {
+      "name": "Key 1",
+      "kind": "key",
+      "n": 0,
+      "black": false,
+      "x": 71,
+      "y": 104,
+      "w": 58,
+      "h": 170,
+      "range": {
+        "velocity": 127,
+        "pressure": 127
+      }
+    },
+    {
+      "name": "Key 3",
+      "kind": "key",
+      "n": 2,
+      "black": false,
+      "x": 131,
+      "y": 104,
+      "w": 58,
+      "h": 170,
+      "range": {
+        "velocity": 127,
+        "pressure": 127
+      }
+    },
+    {
+      "name": "Key 5",
+      "kind": "key",
+      "n": 4,
+      "black": false,
+      "x": 191,
+      "y": 104,
+      "w": 58,
+      "h": 170,
+      "range": {
+        "velocity": 127,
+        "pressure": 127
+      }
+    },
+    {
+      "name": "Key 6",
+      "kind": "key",
+      "n": 5,
+      "black": false,
+      "x": 251,
+      "y": 104,
+      "w": 58,
+      "h": 170,
+      "range": {
+        "velocity": 127,
+        "pressure": 127
+      }
+    },
+    {
+      "name": "Key 8",
+      "kind": "key",
+      "n": 7,
+      "black": false,
+      "x": 311,
+      "y": 104,
+      "w": 58,
+      "h": 170,
+      "range": {
+        "velocity": 127,
+        "pressure": 127
+      }
+    },
+    {
+      "name": "Key 10",
+      "kind": "key",
+      "n": 9,
+      "black": false,
+      "x": 371,
+      "y": 104,
+      "w": 58,
+      "h": 170,
+      "range": {
+        "velocity": 127,
+        "pressure": 127
+      }
+    },
+    {
+      "name": "Key 12",
+      "kind": "key",
+      "n": 11,
+      "black": false,
+      "x": 431,
+      "y": 104,
+      "w": 58,
+      "h": 170,
+      "range": {
+        "velocity": 127,
+        "pressure": 127
+      }
+    },
+    {
+      "name": "Key 13",
+      "kind": "key",
+      "n": 12,
+      "black": false,
+      "x": 491,
+      "y": 104,
+      "w": 58,
+      "h": 170,
+      "range": {
+        "velocity": 127,
+        "pressure": 127
+      }
+    },
+    {
+      "name": "Key 15",
+      "kind": "key",
+      "n": 14,
+      "black": false,
+      "x": 551,
+      "y": 104,
+      "w": 58,
+      "h": 170,
+      "range": {
+        "velocity": 127,
+        "pressure": 127
+      }
+    },
+    {
+      "name": "Key 17",
+      "kind": "key",
+      "n": 16,
+      "black": false,
+      "x": 611,
+      "y": 104,
+      "w": 58,
+      "h": 170,
+      "range": {
+        "velocity": 127,
+        "pressure": 127
+      }
+    },
+    {
+      "name": "Key 18",
+      "kind": "key",
+      "n": 17,
+      "black": false,
+      "x": 671,
+      "y": 104,
+      "w": 58,
+      "h": 170,
+      "range": {
+        "velocity": 127,
+        "pressure": 127
+      }
+    },
+    {
+      "name": "Key 20",
+      "kind": "key",
+      "n": 19,
+      "black": false,
+      "x": 731,
+      "y": 104,
+      "w": 58,
+      "h": 170,
+      "range": {
+        "velocity": 127,
+        "pressure": 127
+      }
+    },
+    {
+      "name": "Key 22",
+      "kind": "key",
+      "n": 21,
+      "black": false,
+      "x": 791,
+      "y": 104,
+      "w": 58,
+      "h": 170,
+      "range": {
+        "velocity": 127,
+        "pressure": 127
+      }
+    },
+    {
+      "name": "Key 24",
+      "kind": "key",
+      "n": 23,
+      "black": false,
+      "x": 851,
+      "y": 104,
+      "w": 58,
+      "h": 170,
+      "range": {
+        "velocity": 127,
+        "pressure": 127
+      }
+    },
+    {
+      "name": "Key 2",
+      "kind": "key",
+      "n": 1,
+      "black": true,
+      "x": 112,
+      "y": 104,
+      "w": 36,
+      "h": 100,
+      "range": {
+        "velocity": 127,
+        "pressure": 127
+      }
+    },
+    {
+      "name": "Key 4",
+      "kind": "key",
+      "n": 3,
+      "black": true,
+      "x": 172,
+      "y": 104,
+      "w": 36,
+      "h": 100,
+      "range": {
+        "velocity": 127,
+        "pressure": 127
+      }
+    },
+    {
+      "name": "Key 7",
+      "kind": "key",
+      "n": 6,
+      "black": true,
+      "x": 292,
+      "y": 104,
+      "w": 36,
+      "h": 100,
+      "range": {
+        "velocity": 127,
+        "pressure": 127
+      }
+    },
+    {
+      "name": "Key 9",
+      "kind": "key",
+      "n": 8,
+      "black": true,
+      "x": 352,
+      "y": 104,
+      "w": 36,
+      "h": 100,
+      "range": {
+        "velocity": 127,
+        "pressure": 127
+      }
+    },
+    {
+      "name": "Key 11",
+      "kind": "key",
+      "n": 10,
+      "black": true,
+      "x": 412,
+      "y": 104,
+      "w": 36,
+      "h": 100,
+      "range": {
+        "velocity": 127,
+        "pressure": 127
+      }
+    },
+    {
+      "name": "Key 14",
+      "kind": "key",
+      "n": 13,
+      "black": true,
+      "x": 532,
+      "y": 104,
+      "w": 36,
+      "h": 100,
+      "range": {
+        "velocity": 127,
+        "pressure": 127
+      }
+    },
+    {
+      "name": "Key 16",
+      "kind": "key",
+      "n": 15,
+      "black": true,
+      "x": 592,
+      "y": 104,
+      "w": 36,
+      "h": 100,
+      "range": {
+        "velocity": 127,
+        "pressure": 127
+      }
+    },
+    {
+      "name": "Key 19",
+      "kind": "key",
+      "n": 18,
+      "black": true,
+      "x": 712,
+      "y": 104,
+      "w": 36,
+      "h": 100,
+      "range": {
+        "velocity": 127,
+        "pressure": 127
+      }
+    },
+    {
+      "name": "Key 21",
+      "kind": "key",
+      "n": 20,
+      "black": true,
+      "x": 772,
+      "y": 104,
+      "w": 36,
+      "h": 100,
+      "range": {
+        "velocity": 127,
+        "pressure": 127
+      }
+    },
+    {
+      "name": "Key 23",
+      "kind": "key",
+      "n": 22,
+      "black": true,
+      "x": 832,
+      "y": 104,
+      "w": 36,
+      "h": 100,
+      "range": {
+        "velocity": 127,
+        "pressure": 127
+      }
+    }
+  ]
+}
