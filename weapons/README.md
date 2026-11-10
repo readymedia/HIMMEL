@@ -243,11 +243,25 @@ What we saw:
   lives in RAM; Himmel never sends `saveProgramAsDefault`.
 - **No MPE with our program.** Only the API touch messages arrive.
   - `vz` at touch start is 1 for a slow press and up to 127 for a quick tap.
-  - z ramps smoothly from 0 but reaches 255 at medium pressure. The block's
-    config (read with `requestConfig`, message 0x10 command 1) has pressure
-    sensitivity 64, velocity sensitivity 50 and z tracking 1, the same with
-    our program as with the factory one.
-  - A lower pressure sensitivity may give more range. That is not tried yet.
+  - z ramps smoothly from 0, but at the block's own pressure sensitivity (64)
+    it reaches 255 at medium pressure.
+  - **Pressure sensitivity, config item 13 (fixed 2026-11-10).**
+    - **Higher means less sensitive and more range.** The owner tried 8–127
+      and found **127** (the maximum) best ("could even be more").
+    - Himmel sets 127 when it takes the block and puts the block's own value
+      back when it lets go.
+  - **Config values are stored on the block.** They survive a new session,
+    so restoring is required.
+    - The host loop is stopped first, so it cannot redo a handshake while
+      the port closes; then Himmel waits for the block to confirm.
+    - If Himmel was killed and left 127, the next session treats 127 as its
+      own leftover and restores ROLI's default, 64.
+    - Config messages: set = `0x10`, command 0, item 8 bit, value 32 bit.
+      Request = command 1, 32 zero bits, item 8 bit. The answer is `0x18`
+      command 4: item, value, min, max.
+  - The block's other config values: velocity sensitivity 50, z tracking 1,
+    brightness 100. They are the same with our program as with the factory
+    one.
 - **Touch moves** arrive every ~28 ms (~36 a second) while LED frames stream.
 
 ## Plan: how a generic weapon feeds Himmel (not wired yet)

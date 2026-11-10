@@ -154,6 +154,28 @@ def signed8(v):
 
 
 # ---- host side (what Himmel's driver will do) ----
+CFG_PRESSURE_SENSITIVITY = 13   # roli_BlockConfigId.h (via blocksd's config_ids.py)
+CFG_VELOCITY_SENSITIVITY = 10
+# The block's own defaults (seen on the owner's Lightpad M; ROLI's defaultConfig agrees per blocksd).
+CFG_DEFAULTS = {10: 50, 13: 64}
+# Himmel's choice: the owner found 127 gives the most pressure range (2026-11-10). Higher = less
+# sensitive, so z reaches 255 later.
+HIMMEL_CONFIG = {13: 127}
+CFG_NAMES = {10: "velocity sensitivity", 11: "glide sensitivity", 12: "slide sensitivity",
+             13: "pressure sensitivity", 14: "lift sensitivity", 32: "z tracking", 36: "brightness"}
+
+
+def host_config_set(item, value, index=0):
+    """configMessage setConfig: 4-bit command 0, 8-bit item, 32-bit value (HostPacketBuilder)."""
+    return frame(index, BitWriter().put(HOST_CONFIG, 7).put(0, 4).put(item, 8).put(value & 0xFFFFFFFF, 32))
+
+
+def host_config_request(item, index=0):
+    """configMessage requestConfig: command 1, then 32 bits of 0, then the 8-bit item (that order,
+    as in ROLI's HostPacketBuilder::addRequestMessage; checked on a Lightpad M)."""
+    return frame(index, BitWriter().put(HOST_CONFIG, 7).put(1, 4).put(0, 32).put(item, 8))
+
+
 def host_command(cmd, index=0):
     return frame(index, BitWriter().put(HOST_COMMAND, 7).put(cmd, 9))
 
@@ -377,6 +399,9 @@ class SimLightpad:
         self.fingers = {}          # pointer id -> dict(i, x, y, z, ...)
         self.button = False
         self.battery = 22          # 0..31
+        # config items as read on the owner's Lightpad M: item -> [value, min, max]
+        self.config = {2: [1, 0, 2], 10: [50, 0, 127], 11: [100, 0, 127], 12: [127, 0, 127],
+                       13: [64, 0, 127], 14: [127, 0, 127], 32: [1, 0, 5], 36: [100, 0, 100]}
         self.charging = True
         self.log = []              # (time, dir, hex, text)
         self.counts = {"to_host": 0, "to_device": 0, "bad": 0}
@@ -493,8 +518,25 @@ class SimLightpad:
                 with self.lock:
                     self.data = bytearray(DATA_BLOCK)
                     self.api, self.factory = False, True
+            elif t == HOST_CONFIG:
+                cmd = r.get(4)
+                if cmd == 0:
+                    item, val = r.get(8), r.get(32)
+                elif cmd == 1:
+                    r.get(32)
+                    item, val = r.get(8), None
+                else:
+                    break
+                c = self.config.get(item)
+                if c is None:
+                    break
+                if val is not None:
+                    c[0] = max(c[1], min(c[2], val - (1 << 32) if val & 0x80000000 else val))
+                self.send(self._packet([(0x18, 7), (4, 4), (item, 8), (c[0] & 0xFFFFFFFF, 32),
+                                        (c[1] & 0xFFFFFFFF, 32), (c[2] & 0xFFFFFFFF, 32)]))
+                break
             else:
-                break  # config / firmware / name: not simulated
+                break  # firmware / name: not simulated
 
     def _command(self, cmd):
         now = time.time()
@@ -609,8 +651,9 @@ class SimLightpad:
             vx = int(max(-127, min(127, (f["x"] - f["px"]) * 1270))) & 0xFF
             vy = int(max(-127, min(127, (f["y"] - f["py"]) * 1270))) & 0xFF
             vz = int(max(-127, min(127, (f["z"] if phase == "start" else f["z"] - f["pz"]) * 127))) & 0xFF
+            zs = min(1.0, f["z"] * self.config[CFG_PRESSURE_SENSITIVITY][0] / 64.0)  # simulator guess
             self.send(self._packet([(t, 7), (0, 5), (f["i"], 5), (round(f["x"] * 4095), 12),
-                                    (round(f["y"] * 4095), 12), (round(f["z"] * 255), 8),
+                                    (round(f["y"] * 4095), 12), (round(zs * 255), 8),
                                     (vx, 8), (vy, 8), (vz, 8)]))
         # The real block (factory program, firmware 1.1.0) keeps playing MPE in API mode too
         self._mpe(f, phase)
@@ -795,6 +838,11 @@ class LocalHost:
         self.state = "idle"
         self.serial = None
         self.battery = None
+        self.config = {}           # item -> [value, min, max], as the block reported it
+        self.original = {}         # first value seen per item: put back when Himmel lets go
+        self.want = dict(HIMMEL_CONFIG)  # item -> value Himmel wants (sent after every handshake)
+        self.z_now, self.z_max, self.z_hist = 0, 0, [0] * 8
+        self.stopped = False
         self.sync = HeapSync()     # the block's shared data, kept in step with ACKs
         self.stage = "handshake"   # handshake -> clear -> program -> frames
         self.program = lf.build_bitmap_program()
@@ -829,14 +877,54 @@ class LocalHost:
                         self.fingers[e["i"]] = (e["x"] / 4095, e["y"] / 4095, e["z"] / 255)
                 elif e["type"] == "button" and e["down"]:
                     self.palette = (self.palette + 1) % 6
+                elif e["type"] == "config" and "item" in e:
+                    self.config[e["item"]] = [e["value"], e["min"], e["max"]]
+                    v = e["value"]
+                    if v == self.want.get(e["item"]) and e["item"] in CFG_DEFAULTS:
+                        v = CFG_DEFAULTS[e["item"]]   # our own leftover (Himmel was killed): use the default
+                    self.original.setdefault(e["item"], v)
+                if e["type"] == "touch":
+                    self.z_now = e["z"] if e["phase"] != "end" else 0
+                    self.z_max = max(self.z_max, e["z"])
+                    self.z_hist[e["z"] // 32] += 1
 
     def loop(self):
-        while not self.sim.closed:
+        while not self.sim.closed and not self.stopped:
             time.sleep(0.005)  # fast loop: a new LED frame goes out as soon as the last one is ACKed
             try:
                 self.step()
             except Exception as ex:  # a drawing bug must never stop the host loop
                 self.state = "error: %s" % ex
+
+    def set_config(self, item, value):
+        self.want[item] = int(value)
+        if self.sim.api:
+            self.sim.receive(host_config_set(item, int(value)))
+            self.sim.receive(host_config_request(item))
+
+    def let_go(self):
+        """Stop this host and put back the block's own config values. Call it before closing
+        the block: once stopped, the host loop can no longer re-do a handshake (and re-send
+        Himmel's settings) while the port closes."""
+        self.stopped = True
+        time.sleep(0.02)  # let a step that is running finish
+        if not getattr(self.sim, "api", False):
+            return
+        # Config values are KEPT by the block across sessions (checked on a Lightpad M), so this
+        # matters: set each one back and wait until the block reports it (max ~1 s each).
+        for item, v in self.original.items():
+            if item in self.want and self.want[item] != v:
+                for _ in range(3):
+                    self.sim.receive(host_config_set(item, v))
+                    self.sim.receive(host_config_request(item))
+                    t_end = time.time() + 0.4
+                    while time.time() < t_end and self.config.get(item, [None])[0] != v:
+                        time.sleep(0.02)
+                    if self.config.get(item, [None])[0] == v:
+                        break
+
+    def reset_z(self):
+        self.z_max, self.z_hist = 0, [0] * 8
 
     def restart(self):
         self.stage = "handshake"
@@ -844,6 +932,8 @@ class LocalHost:
 
     def step(self):
         sim = self.sim
+        if self.stopped:
+            return
         if self.quiet():
             self.state = "engine is the host" if sim.engine_active() else "host unplugged (MIDI mode)"
             self.restart()
@@ -858,6 +948,11 @@ class LocalHost:
             self.restart()
             self.stage = "clear"
             self.next_ping = now + PING_INTERVAL
+            for item in (CFG_PRESSURE_SENSITIVITY, CFG_VELOCITY_SENSITIVITY):
+                sim.receive(host_config_request(item))   # learn the block's own values first
+            for item, v in self.want.items():
+                sim.receive(host_config_set(item, v))
+                sim.receive(host_config_request(item))
             return
         if now >= self.next_ping:
             self.next_ping = now + PING_INTERVAL
@@ -982,7 +1077,10 @@ class LightpadLive:
             "mode_name": "API mode (BLOCKS SysEx)" if api else "MIDI mode (MPE)",
             "host": {"state": h.state, "mode": h.mode, "enabled": h.enabled, "serial": h.serial,
                      "battery": h.battery, "acks": h.acks, "stage": h.stage, "led": h.sync.stats(),
-                     "program_bytes": len(h.program)},
+                     "program_bytes": len(h.program),
+                     "config": {str(k): v for k, v in h.config.items()},
+                     "original": {str(k): v for k, v in h.original.items()},
+                     "z": {"now": h.z_now, "max": h.z_max, "hist": h.z_hist}},
             "leds": (["%02x%02x%02x" % p for p in h.preview] if hw and h.preview else s.leds()),
             "led_preview": hw,
             "fingers": fingers,
@@ -1011,12 +1109,18 @@ class LightpadLive:
             self.host.enabled = bool(d["host_enabled"])
         elif "hardware" in d:
             self.use_hardware(bool(d["hardware"]))
+        elif "pressure" in d:
+            self.host.set_config(CFG_PRESSURE_SENSITIVITY, max(0, min(127, int(d["pressure"]))))
+        elif d.get("reset_z"):
+            self.host.reset_z()
 
     def use_hardware(self, on):
         """Swap the simulated block for the real one (tools/lightpad_hw.py) or back."""
         if on == (getattr(self.sim, "kind", "") == "hw"):
             return
         old, mode, enabled = self.sim, self.host.mode, self.host.enabled
+        want = dict(self.host.want)
+        self.host.let_go()  # put the block's own settings back
         old.close()  # also ends the old LocalHost thread
         if on:
             import lightpad_hw
@@ -1024,9 +1128,10 @@ class LightpadLive:
         else:
             self.sim = SimLightpad()
         self.host = LocalHost(self.sim)
-        self.host.mode, self.host.enabled = mode, enabled
+        self.host.mode, self.host.enabled, self.host.want = mode, enabled, want
 
     def close(self):
+        self.host.let_go()
         self.sim.close()
 
 

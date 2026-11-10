@@ -142,10 +142,15 @@ The details are in the mockup (`docs/vj-mockup.html`).
       - ~55-58 full frames/s, ~12 ms send->ACK.
       - endAPIMode brings the factory display back. RAM only; never
         saveProgramAsDefault.
-      - With our program there is no MPE. z saturates at medium pressure
-        (pressure sensitivity config 64). Touch moves come every ~28 ms.
-    - Next: try a lower pressure sensitivity for more z range, then the
-      generic weapon driver/shared block (plan in `weapons/README.md`).
+      - With our program there is no MPE. Touch moves come every ~28 ms.
+      - **Pressure sensitivity (config 13): higher = less sensitive.** The
+        owner chose 127 (`HIMMEL_CONFIG`; block default 64).
+        - Config values persist on the block. LocalHost.let_go() stops the
+          host loop, restores the block's value and waits for confirmation.
+        - A leftover 127 from a killed run is treated as ours and restored
+          to 64.
+    - Next: the generic weapon driver/shared block (plan in
+      `weapons/README.md`).
 - **Visual mapping is the way to work with the controller. Keep it and build on
   it** (the owner wants graphical tools, not terminal tables):
   - `tools/mk2_live.py` + `tools/mk2_live.html`: a browser live view of the MK2

@@ -146,6 +146,14 @@
     <div class="help">Check: touch each corner. The ring on the drawing must land in the same corner.
       Press the Mode button: <b>M</b> must light up.</div>
     <div id="gHwInfo" class="mono small"></div>
+    <h3>Pressure (z)</h3>
+    <div class="help">Press slowly from very light to hard. If z hits 255 long before you press hard, <b>raise</b> the
+      value (higher = less sensitive, more range). Himmel uses 127 and puts the block's own value back when it
+      lets go.</div>
+    <div class="row"><label>Pressure sensitivity <input type="range" id="gPress" min="0" max="127" value="64"></label>
+      <span id="gPressV" class="mono"></span><button id="gZReset">Reset z stats</button></div>
+    <div class="row"><div class="progress" style="max-width:420px"><div id="gZBar" style="transition:none"></div></div>
+      <span id="gZInfo" class="mono small"></span></div>
   </div>
   <div class="card" style="grid-column: 1 / -1">
     <h2>MIDI monitor (every message between block and host)</h2>
@@ -564,6 +572,10 @@ function startGeneric(wid) {
   document.getElementById("gHost").onchange = e => gpost({ host_enabled: e.target.checked });
   document.getElementById("gNoise").onchange = e => gpost({ show_noise: e.target.checked });
   document.getElementById("gHw").onclick = () => gpost({ hardware: !(G && G.hardware) });
+  const gp = document.getElementById("gPress");
+  gp.oninput = () => { gp.dataset.touched = Date.now(); document.getElementById("gPressV").textContent = gp.value + " (sending…)"; };
+  gp.onchange = () => gpost({ pressure: +gp.value });
+  document.getElementById("gZReset").onclick = () => gpost({ reset_z: true });
   window.addEventListener("blur", () => { pins.clear(); gsim({ release_all: true }); });
   // fingers left down by an earlier page (reload, closed tab) are lifted, now and when this page goes
   gsim({ release_all: true });
@@ -687,6 +699,16 @@ function renderGeneric(s) {
     `LEDs: ${h.stage === "frames" ? "our renderer runs" : (h.stage || "-")} (${h.program_bytes ?? "-"} bytes)   ` +
     `frames confirmed ${h.led ? h.led.frames : 0}, ${h.led ? h.led.fps : 0}/s, ${h.led ? h.led.sync_ms : "-"} ms send→ACK, ` +
     `${h.led ? h.led.bytes : 0} bytes last frame, ${h.led ? h.led.resends : 0} resends`;
+  const cfg = (h.config || {})["13"], orig = (h.original || {})["13"];
+  const gp = document.getElementById("gPress");
+  if (cfg && !(Date.now() - (+gp.dataset.touched || 0) < 1500)) gp.value = cfg[0];
+  document.getElementById("gPressV").textContent = cfg ? `block: ${cfg[0]} (range ${cfg[1]}–${cfg[2]}, its own value ${orig ?? "-"})` : "not read yet";
+  const z = h.z || { now: 0, max: 0, hist: [] };
+  document.getElementById("gZBar").style.width = (100 * z.now / 255) + "%";
+  document.getElementById("gZBar").style.background = z.now >= 255 ? "#e5484d" : "var(--seen)";
+  const tot = z.hist.reduce((a, b) => a + b, 0) || 1;
+  document.getElementById("gZInfo").textContent = `z ${z.now}   max ${z.max}   share of touch messages per z band (0–31 … 224–255): ` +
+    z.hist.map(n => Math.round(100 * n / tot) + "%").join(" ");
   const k = s.counts || {};
   document.getElementById("gStatus").textContent = [
     (s.notes || []).join(" / "),

@@ -816,6 +816,11 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        for live in list(_generic_live.values()):  # e.g. the Lightpad: put its settings back, let go
+            try:
+                live.close()
+            except Exception:
+                pass
         with LIVE.lock:
             if LIVE.save_due:
                 LIVE.save()
