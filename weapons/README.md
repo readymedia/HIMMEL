@@ -22,6 +22,7 @@ A weapon has up to four parts:
 | 1 | **MK2** (Maschine MK2) | USB HID: 16 pads, 8 knobs, encoder, 48 buttons, two 1-bit screens | [`mk2.weapon.json`](mk2.weapon.json) | [`tools/mk2_sim.py`](../tools/mk2_sim.py) | Map verified on hardware, C++ driver done |
 | 3 | **LUMI Keys** (ROLI LUMI Keys) | USB-MIDI, BLOCKS family: 24 keys with strike velocity, pressure and glide, one RGB LED per key, Mode / Octave − / Octave + | [`lumi.weapon.json`](lumi.weapon.json) | [`tools/lumi_sim.py`](../tools/lumi_sim.py) | Simulated, and checked on the owner's LUMI (firmware 1.3.8, 2026-11-10): keys, velocity, buttons, **Himmel's own key LEDs** |
 | 2 | **Lightpad** (ROLI Lightpad Block / Block M) | USB-MIDI: multi-touch surface (x, y, pressure per finger), 15 × 15 RGB LEDs, one Mode button | [`lightpad.weapon.json`](lightpad.weapon.json) | [`tools/lightpad_sim.py`](../tools/lightpad_sim.py) | Simulated, and played on the owner's Lightpad M (2026-11-10): touch, multi-touch, Mode button, orientation, factory note map, **and Himmel's own LED program** (~55 frames/s) |
+| 7 | **V-4 Mixer** (Roland / EDIROL V-4, 4-channel SD video mixer) | MIDI (5-pin DIN, via any USB-MIDI interface): T-bar, input A/B 1-4, 4 effects + CONTROL dial per channel, MIX / WIPE / EFX, transformers, output fade, BPM, memory | [`v4.weapon.json`](v4.weapon.json) | [`tools/v4_sim.py`](../tools/v4_sim.py) | Simulated only (the owner has no V-4, 2026-11-10). Protocol from the owner's manual |
 
 ## The live view: one tool for every weapon
 
@@ -83,6 +84,16 @@ the device.
   outline (`r` = corner radius), `dna` is a connector dot at `x, y`, and `port`
   is a socket or switch the protocol cannot see, with a small label.
 - `protocol` (optional, free text): a transport and message summary for people.
+- Video mixers (weapon no. 7) add:
+  - `kind: "fader"`: an absolute fader or T-bar, 0..1 from `ends[0]` (top) to
+    `ends[1]` (bottom); `range` = raw units on the wire.
+  - on a `knob`: `steps` (a selector that clicks between positions, value
+    0..steps-1), `endless` (no end stops), `center` (a centre detent).
+  - `deco` kinds `display` (a small LED readout, text from the simulator) and
+    `monitor` (a video monitor the page draws from the simulator's state;
+    `source` = `program` or `preview`).
+  - `"live": "mixer"` makes the page show the mixer cards (Himmel driving the
+    mixer, the MIDI setup table) instead of the BLOCKS cards.
 - `map` is `null` until a map has been learned on real hardware.
 
 ## Adding a weapon (the same process as for the MK2)
@@ -389,6 +400,102 @@ it, it stays awake. To undo: *Uninstall device* and replug.
   changes the colour family), rainbow, test pattern (key 1 red, 12 green,
   13 blue, 24 white), off.
 - **Engine link:** UDP 127.0.0.1:8769 (8768 is the Entrancer engine).
+
+## Weapon no. 7: the V-4 video mixer
+
+The owner asked for it on 2026-11-10 (link: Roland's V-4 page) and chose
+number 7. It is the original **V-4** (sold as EDIROL V-4, later Roland V-4):
+four SD inputs (composite / S-Video, NTSC or PAL), a T-bar, two frame
+synchronisers. Discontinued. Not the HD V-4EX. **The owner has no V-4**, so it
+is simulated only; the hardware steps below wait for a device.
+
+```
+python tools/mk2_live.py --port 8781 --weapon v4     then open http://127.0.0.1:8781 (launch config v4-live)
+python tools/v4_sim.py                              self-test
+```
+
+### What it could do for Himmel
+
+- **Himmel drives an external mixer.** The V-4 has no computer link other than
+  MIDI, but over MIDI Himmel can pick inputs A/B, move the T-bar, run an auto
+  take with its own timing, fade the output to black or white, switch effects,
+  and lock BPM SYNC to Himmel's tempo with MIDI clock. Useful when cameras or a
+  second PC go through a V-4 and Himmel's output is one of its inputs.
+- **The V-4 as a controller (a weapon).** Its T-bar, input selectors, effect
+  buttons and CONTROL dials can play Himmel. Out of the box only the inputs,
+  memory and the T-bar send MIDI. Himmel's MIDI setup (one SysEx message per
+  function) makes every function send its own CC.
+
+### How it talks (owner's manual, pp. 89-96)
+
+- **Connection:** MIDI IN / OUT, 5-pin DIN. No USB, no RS-232. Channel 1 both
+  ways at the factory. With MIDI Thru on, the V-4's own messages are **not**
+  sent.
+- **Inputs:** Bank Select MSB `00` (A) or `01` (B), LSB `00`, then Program
+  Change 0-3 = input 1-4. Sent when you turn an INPUT SELECT, received the same
+  way.
+- **Memory 1-8:** Bank `50H` / `00H` + Program Change 0-7.
+- **Factory controllers:**
+  - Video fader (T-bar): **CC#11**, 0 = A ... 127 = B.
+  - Transition time: CC#7, 0-127 = 0.0-4.0 s.
+  - Everything else is unassigned: effects A/B 1-4 (0 = off, 1-127 = on +
+    parameter), transition select (0-2), transformer A/B (< 64 off), output fade
+    (0 black, 64 centre, 127 white), BPM sync (< 64 off).
+- **MIDI setup over SysEx:** `F0 41 <dev> 00 5B 12 <addr ×3> <data> <sum> F7`
+  (DT1, model ID `00 5B`, device ID `10H` in the manual's example).
+  - Addresses: `01 10 00` ... `01 10 0C` = transition time, video fader,
+    transition select, transformer A, transformer B, output fade, BPM sync;
+    `02 10 00` ... `02 10 0E` = A effect 1-4, B effect 1-4.
+  - The value is one byte sent as two nibbles (high, low): a CC number (1-5,
+    7-31, 64-95), `D0` = channel pressure, `E0` = pitch bend, `EF` = off.
+  - Checksum: 128 − (sum of address + data bytes mod 128).
+  - At least 20 ms between DT1 messages.
+- **Note Mode** (off at the factory): note `24H 26H 28H 29H` = A 1-4,
+  `2BH 2DH 2FH 30H` = B 1-4.
+- **MIDI clock:** Timing Clock `F8` drives BPM SYNC; Start / Continue mark the
+  beat.
+- **Not documented, so the simulator guesses** (check on a real V-4):
+  - Does a CONTROL dial send the effect's CC while turning?
+  - What exactly does a second press on a lit effect button do?
+  - The two-nibble ("#") encoding of the setup values. The manual's own example
+    for it is garbled in the copy we read.
+
+### Himmel's MIDI setup
+
+| Function | CC | Function | CC |
+|---|---|---|---|
+| Transition time | 7 (factory) | A effect 1-4 | 16-19 |
+| Video fader | 11 (factory) | B effect 1-4 | 80-83 |
+| Transition select | 20 | Output fade | 23 |
+| Transformer A / B | 21 / 22 | BPM sync | 24 |
+
+### The simulator (checked in the browser, 2026-11-10)
+
+- **Panel:** buttons are held with the mouse. Knobs: drag or scroll; the INPUT
+  and MEMORY selectors click between positions. T-bar: drag it (top = A).
+- **Effects:** a press turns an effect on and makes it blink; the CONTROL dial
+  then sets its parameter. A press on the blinking one turns it off.
+- **The two monitors** show a made-up picture of what the mixer outputs:
+  four test sources, the transition (mix / wipe / slide), the effects, keys,
+  P in P, transformers, BPM sync cuts and output fade. It is a sketch, not the
+  V-4's real effects.
+- **Host card (Himmel driving the mixer):** input buttons, a T-bar slider,
+  Auto take, output fade, MIDI clock, "Send Himmel's MIDI setup" (15 DT1
+  messages), Note Mode and MIDI Thru tests.
+- **MIDI monitor:** every message both ways, with the bytes. MIDI clock is
+  hidden unless ticked.
+- **Engine link:** every MIDI message the V-4 sends also goes to UDP
+  127.0.0.1:8773. A datagram sent back is MIDI into the V-4.
+
+### When a V-4 turns up
+
+1. Connect it with a USB-MIDI interface (V-4 MIDI OUT → interface IN, and back).
+   If the interface fails to start on Windows, see the USBMidi2-ACX steps above.
+2. Read-only probe first: open the interface's WinMM port (as
+   `tools/lightpad_hw.py` does, ctypes, no new dependency). Then turn every
+   control and compare with the simulator's monitor.
+3. Then send: inputs, T-bar, and Himmel's MIDI setup.
+4. Check the guesses above, and only then write a map.
 
 ## Plan: how a generic weapon feeds Himmel (not wired yet)
 

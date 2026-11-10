@@ -177,6 +177,19 @@ The details are in the mockup (`docs/vj-mockup.html`).
       BLOCKS touch messages per key; they are not used yet.
     - Not done: a key map verified key by key, and games on the keys.
     - Weapon no. 4 = the Entrancer (the Touch FX session's branch).
+  - **Weapon no. 7 = the V-4 video mixer (Roland / EDIROL V-4, SD, 4 channels;
+    owner's choice 2026-11-10). The owner has none, so it is simulated only.**
+    - Profile `weapons/v4.weapon.json` (badge "HIMMEL · V4"). It adds kind
+      `fader` (T-bar), knob `steps` / `endless`, deco `display` / `monitor`, and
+      `"live": "mixer"` (the page shows mixer cards instead of BLOCKS cards).
+    - `tools/v4_sim.py`: SimV4 / V4Host / V4Live, self-test included. UDP
+      engine link 8773. Launch config `v4-live` (port 8781). Checked in the browser
+      2026-11-10.
+    - MIDI only (5-pin DIN, needs a USB-MIDI interface).
+      - Inputs = Bank 00/01 + Program 0-3; memory = Bank 50H + Program 0-7.
+      - T-bar = CC#11 at the factory; everything else needs a MIDI setup
+        sent as Roland SysEx DT1 (model 00 5B).
+      - Details and open questions: `weapons/README.md`.
 - **Visual mapping is the way to work with the controller. Keep it and build on
   it** (the owner wants graphical tools, not terminal tables):
   - `tools/mk2_live.py` + `tools/mk2_live.html`: a browser live view of the MK2

@@ -21,6 +21,13 @@
       "runtimeArgs": ["tools/mk2_live.py", "--port", "8776", "--sim"],
       "port": 8776,
       "url": "http://127.0.0.1:8776"
+    },
+    {
+      "name": "v4-live",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["tools/mk2_live.py", "--port", "8781", "--weapon", "v4"],
+      "port": 8781,
+      "url": "http://127.0.0.1:8781"
     }
   ]
 }

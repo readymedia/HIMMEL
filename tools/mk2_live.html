@@ -105,6 +105,27 @@
   #genLog td.hex { color: #7f838c; white-space: normal; word-break: break-all; }
   #genLog tr.up td.dir { color: #7ff0b0; } #genLog tr.down td.dir { color: #c8b8ff; }
   @media (max-width: 760px) { #gen { grid-template-columns: 1fr; } }
+  /* video-mixer weapons (profile "live": "mixer", kinds "fader" and deco "display" / "monitor") */
+  .fader { border-radius: 6px; }
+  .fader .ftrack { position: absolute; left: 50%; top: 14px; bottom: 14px; width: 8px; margin-left: -4px;
+                   background: #050506; border-radius: 4px; box-shadow: inset 0 0 0 1px #2c2c31; }
+  .fader .fhandle { position: absolute; left: 0; right: 0; height: 26px; margin-top: -13px; border-radius: 4px;
+                    background: linear-gradient(#d9dbe0, #8d9097); box-shadow: 0 3px 8px #000a; }
+  .fader .fhandle::after { content: ""; position: absolute; left: 6px; right: 6px; top: 12px; height: 2px; background: #333; }
+  .fader .fend { position: absolute; left: 0; right: 0; text-align: center; font-size: 8px; font-weight: 700; color: var(--label); }
+  .fader.on .fhandle { box-shadow: 0 0 14px #fff8, 0 3px 8px #000a; }
+  body.sim .fader { cursor: ns-resize; }
+  .deco-display { position: absolute; background: #1a0d05; border: 2px solid #000; border-radius: 3px; color: #ff9d2e;
+                  font: 700 18px/1 Consolas, monospace; display: flex; align-items: center; justify-content: center;
+                  text-shadow: 0 0 6px #ff9d2e88; letter-spacing: 1px; }
+  .deco-monitor { position: absolute; background: #000; border: 6px solid #222327; border-radius: 6px; box-shadow: 0 8px 24px #0008; }
+  .deco-monitor canvas { width: 100%; height: 100%; display: block; }
+  .deco-monitor span { position: absolute; left: 0; right: 0; top: -20px; text-align: center; font-size: 9px; font-weight: 700;
+                       color: var(--label); letter-spacing: .5px; }
+  .mixeronly { display: none; }
+  body.mixer .mixeronly { display: block; }
+  body.mixer .blocksonly { display: none !important; }
+  #xSetup td { padding: 0 10px 0 0; }
 </style>
 </head>
 <body>
@@ -129,10 +150,33 @@
   <div class="card">
     <h2>Play the simulated weapon</h2>
     <div class="help" id="genHelp"></div>
-    <div class="row"><label>Finger force <input type="range" id="gForce" min="5" max="100" value="45"></label>
+    <div class="row blocksonly"><label>Finger force <input type="range" id="gForce" min="5" max="100" value="45"></label>
       <span id="gForceV" class="mono"></span></div>
   </div>
-  <div class="card">
+  <div class="card mixeronly">
+    <h2>Host (the live view standing in for Himmel) → drives the mixer over MIDI</h2>
+    <div class="row seg">A input <button data-x="A1">1</button><button data-x="A2">2</button><button data-x="A3">3</button><button data-x="A4">4</button>
+      &nbsp; B input <button data-x="B1">1</button><button data-x="B2">2</button><button data-x="B3">3</button><button data-x="B4">4</button></div>
+    <div class="row"><label>T-bar (CC) <input type="range" id="xTbar" min="0" max="1000" value="0"></label>
+      <button id="xTake">Auto take</button><label>in <input type="number" id="xTakeS" value="1.5" min="0.1" max="10" step="0.1" style="width:52px"> s</label></div>
+    <div class="row"><label>Output fade <input type="range" id="xFade" min="-1000" max="1000" value="0"></label>
+      <span class="help">needs Himmel's MIDI setup (unassigned at the factory)</span></div>
+    <div class="row"><label><input type="checkbox" id="xClock"> Send MIDI clock at</label>
+      <input type="number" id="xBpm" value="128" min="40" max="250" step="1" style="width:60px"> BPM (drives BPM SYNC)</div>
+    <div class="row"><button id="xSetupH"><b>Send Himmel's MIDI setup</b> (SysEx)</button><button id="xSetupF">Factory setup</button></div>
+    <div class="help">At the factory the V-4 sends only the inputs, memory and the T-bar (CC#11). Himmel's setup gives every
+      effect, transition, transformer, output fade and BPM sync its own CC with 15 SysEx DT1 messages (20 ms apart), so
+      Himmel can see the whole panel.</div>
+    <div class="row"><label><input type="checkbox" id="xNote"> Note Mode on the V-4</label>
+      <button data-n="36">note 24H (A1)</button><button data-n="48">note 30H (B4)</button>
+      <label><input type="checkbox" id="xThru"> MIDI Thru on (the V-4 goes quiet)</label></div>
+    <div id="xHostInfo" class="mono small"></div>
+  </div>
+  <div class="card mixeronly" style="grid-column: 1 / -1">
+    <h2>MIDI setup in the (simulated) V-4: what each panel function sends</h2>
+    <table id="xSetup" class="mono small"></table>
+  </div>
+  <div class="card blocksonly" id="gHostCard">
     <h2>Host (the live view standing in for Himmel)</h2>
     <div class="row seg" id="gLed">
       <button data-m="touch">Touch glow</button>
@@ -154,7 +198,7 @@
       like the real one. The LEDs you see are decoded from the SysEx the host sent to the block.</div>
     <div id="gHostInfo" class="mono small"></div>
   </div>
-  <div class="card" style="grid-column: 1 / -1" id="gHwCard">
+  <div class="card blocksonly" style="grid-column: 1 / -1" id="gHwCard">
     <h2>Real block</h2>
     <div class="row"><button id="gHw">Use the real block</button>
       <span class="help">Plug it in with USB and close ROLI Connect / Dashboard. The probe enters API mode and
@@ -172,8 +216,8 @@
       <span id="gZInfo" class="mono small"></span></div>
   </div>
   <div class="card" style="grid-column: 1 / -1">
-    <h2>MIDI monitor (every message between block and host)</h2>
-    <div class="row"><label><input type="checkbox" id="gNoise"> Show pings, ACKs and LED data</label></div>
+    <h2 id="gLogTitle">MIDI monitor (every message between block and host)</h2>
+    <div class="row"><label><input type="checkbox" id="gNoise"> <span id="gNoiseLabel">Show pings, ACKs and LED data</span></label></div>
     <table id="genLog"></table>
   </div>
   <div class="card" style="grid-column: 1 / -1">
@@ -275,7 +319,7 @@ const els = {};          // control name -> control (with .el)
 const panel = document.getElementById("panel");
 function add(html, cls, style) { const d = document.createElement("div"); d.className = cls; Object.assign(d.style, style); d.innerHTML = html; panel.appendChild(d); return d; }
 const esc = t => String(t).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
-const ctxs = {}, imgs = {};
+const ctxs = {}, imgs = {}, decoEls = {};
 // 256x64 screens drawn at 1:1 device pixels, scaled to the panel (aspect 4:1)
 let lastScr = {};
 function drawScreen(side, b64) {
@@ -345,6 +389,11 @@ function buildPanel(w, wireFn = wire) {
     if (d.kind === "body") add("", "deco-body", { left: d.x + "px", top: d.y + "px", width: d.w + "px", height: d.h + "px", borderRadius: (d.r || 0) + "px" });
     else if (d.kind === "dna") add("", "deco-dna", { left: d.x + "px", top: d.y + "px" });
     else if (d.kind === "port") add(`<span${d.w > d.h ? ' style="transform: translate(-50%, -50%)"' : ""}>${esc(d.label || "")}</span>`, "deco-port", { left: d.x + "px", top: d.y + "px", width: d.w + "px", height: d.h + "px" });
+    else if (d.kind === "display") decoEls[d.id] = add("", "deco-display", { left: d.x + "px", top: d.y + "px", width: d.w + "px", height: d.h + "px" });
+    else if (d.kind === "monitor") {  // a video monitor drawn by the page from the simulator's state
+      const m = add(`<canvas width="320" height="240"></canvas><span>${esc(d.label || "")}</span>`, "deco-monitor", { left: d.x + "px", top: d.y + "px", width: d.w + "px", height: d.h + "px" });
+      decoEls[d.id] = { el: m, ctx: m.firstChild.getContext("2d"), source: d.source };
+    }
   }
   add(esc(w.badge || w.name), "brand", {});
   for (const s of w.sections || []) {
@@ -373,6 +422,10 @@ function buildPanel(w, wireFn = wire) {
     } else if (c.kind === "surface") {  // multi-touch surface with an LED grid under it
       d = add(`<canvas width="${c.w * 2}" height="${c.h * 2}"></canvas>`, "c surface", { left: c.x + "px", top: c.y + "px", width: c.w + "px", height: c.h + "px" });
       c.ctx = d.firstChild.getContext("2d");
+    } else if (c.kind === "fader") {  // a T-bar / fader: absolute position 0..1 from the first end to the second
+      const ends = c.ends || ["", ""];
+      d = add(`<div class="fend" style="top:-12px">${esc(ends[0])}</div><div class="ftrack"></div><div class="fhandle"></div>` +
+              `<div class="fend" style="bottom:-12px">${esc(ends[1])}</div>`, "c fader", { left: c.x + "px", top: c.y + "px", width: c.w + "px", height: c.h + "px" });
     } else continue;
     d.title = c.name;
     c.el = d; els[c.name] = c;
@@ -576,8 +629,10 @@ function startGeneric(wid) {
   document.body.classList.add("generic", "sim");
   simOn = true;
   fetch("/weapon?id=" + encodeURIComponent(wid)).then(r => r.json()).then(w => {
+    document.body.classList.toggle("mixer", w.live === "mixer");
     buildPanel(w, wireGeneric);
-    document.getElementById("genHelp").innerHTML = (w.controls.some(c => c.kind === "key")
+    if (w.live === "mixer") startMixer(w);
+    else document.getElementById("genHelp").innerHTML = (w.controls.some(c => c.kind === "key")
       ? "<b>Keys:</b> click a key; lower on the key = harder strike. Hold for pressure (it grows, the scroll " +
         "wheel changes it), drag sideways to glide. A touch screen plays chords.<br>" : "") +
       (w.controls.some(c => c.kind === "surface")
@@ -621,6 +676,37 @@ setInterval(() => { for (const [id, f] of fingers) if (fingerZ(f) < 1) sendFinge
 
 function wireGeneric(c) {
   const el = c.el;
+  if (c.kind === "knob") {  // generic weapons: drag up/down or scroll; "steps" knobs click from detent to detent
+    const stepPx = c.steps ? 18 : 1;
+    el.addEventListener("pointerdown", e => { e.preventDefault(); el.setPointerCapture(e.pointerId); c.dragY = e.clientY; });
+    el.addEventListener("pointermove", e => {
+      if (!el.hasPointerCapture(e.pointerId)) return;
+      const n = Math.trunc((c.dragY - e.clientY) / stepPx);
+      if (n) { c.dragY -= n * stepPx; gsim({ name: c.name, delta: n }); }
+    });
+    el.addEventListener("wheel", e => {
+      e.preventDefault();
+      gsim({ name: c.name, delta: (e.deltaY < 0 ? 1 : -1) * (c.steps ? 1 : 4) });
+    }, { passive: false });
+    return;
+  }
+  if (c.kind === "fader") {  // absolute: the handle follows the pointer
+    const at = e => { const r = el.getBoundingClientRect(), pad = 14 * r.height / c.h;
+                      return Math.min(1, Math.max(0, (e.clientY - r.top - pad) / (r.height - 2 * pad))); };
+    el.addEventListener("pointerdown", e => { e.preventDefault(); el.setPointerCapture(e.pointerId); c.last = 0; gsim({ name: c.name, value: at(e) }); });
+    el.addEventListener("pointermove", e => {
+      if (!el.hasPointerCapture(e.pointerId)) return;
+      const now = performance.now();
+      if (now - c.last > 15) { c.last = now; gsim({ name: c.name, value: at(e) }); }
+    });
+    el.addEventListener("pointerup", e => gsim({ name: c.name, value: at(e) }));
+    el.addEventListener("wheel", e => {
+      e.preventDefault();
+      const v = ((G && G.faders && G.faders[c.name]) || 0) + (e.deltaY < 0 ? -0.04 : 0.04);
+      gsim({ name: c.name, value: Math.min(1, Math.max(0, v)) });
+    }, { passive: false });
+    return;
+  }
   if (c.kind === "button") {
     el.addEventListener("pointerdown", e => { e.preventDefault(); el.setPointerCapture(e.pointerId); gsim({ name: c.name, down: true }); });
     const up = () => gsim({ name: c.name, down: false });
@@ -711,6 +797,7 @@ function drawSurface(c, s) {
 let lastLogKey = "";
 function renderGeneric(s) {
   G = s;
+  if (s.mixer) { renderMixer(s); return; }
   const conn = document.getElementById("conn");
   const nm = W ? W.name : gid;
   if (s.hardware) {
@@ -793,6 +880,163 @@ function renderGeneric(s) {
     lastLogKey = key;
     document.getElementById("genLog").innerHTML = log.slice().reverse().map(([t, dir, hex, text]) =>
       `<tr class="${dir.startsWith("block") ? "up" : "down"}"><td>${esc(t)}</td><td class="dir">${esc(dir)}</td>` +
+      `<td>${esc(text)}</td><td class="hex">${esc(hex)}</td></tr>`).join("") || "<tr><td>-</td></tr>";
+  }
+}
+
+// ================= video-mixer weapons (profile "live": "mixer", e.g. the V-4) =================
+// The panel is the mixer; the host card is Himmel driving it over MIDI. The monitors are drawn here from
+// the simulator's state, so you can see what the mixer would output (a sketch, not the device's real effects).
+function startMixer(w) {
+  document.getElementById("genHelp").innerHTML =
+    "<b>Buttons:</b> hold the mouse button down (effect buttons toggle; a second press on the blinking one turns it off). " +
+    "<b>Knobs:</b> drag up/down or scroll; INPUT and MEMORY click between positions. <b>T-bar:</b> drag it (top = A, " +
+    "bottom = B) or scroll. The simulator produces the V-4's real MIDI bytes (see the MIDI monitor). A CONTROL dial " +
+    "adjusts the blinking effect on its channel.";
+  document.getElementById("gLogTitle").textContent = "MIDI monitor (every message between the V-4 and the host)";
+  document.getElementById("gNoiseLabel").textContent = "Show MIDI clock";
+  document.querySelectorAll("[data-x]").forEach(b => b.onclick = () => gpost({ host_select: [b.dataset.x[0], +b.dataset.x[1]] }));
+  document.querySelectorAll("[data-n]").forEach(b => b.onclick = () => gpost({ host_note: +b.dataset.n }));
+  const tb = document.getElementById("xTbar");
+  tb.oninput = () => { tb.dataset.touched = Date.now(); gpost({ host_tbar: tb.value / 1000 }); };
+  document.getElementById("xFade").oninput = e => gpost({ host_fade: e.target.value / 1000 });
+  document.getElementById("xTake").onclick = () => gpost({ host_take: true, seconds: +document.getElementById("xTakeS").value || 1.5 });
+  const clk = () => gpost({ host_clock: document.getElementById("xClock").checked, bpm: +document.getElementById("xBpm").value || 128 });
+  document.getElementById("xClock").onchange = clk;
+  document.getElementById("xBpm").onchange = clk;
+  document.getElementById("xSetupH").onclick = () => gpost({ host_setup: "himmel" });
+  document.getElementById("xSetupF").onclick = () => gpost({ host_setup: "factory" });
+  document.getElementById("xNote").onchange = e => gpost({ note_mode: e.target.checked });
+  document.getElementById("xThru").onchange = e => gpost({ midi_thru: e.target.checked });
+}
+
+const mxBuf = {};
+function mxCanvas(k) { if (!mxBuf[k]) { const c = document.createElement("canvas"); c.width = 320; c.height = 240; mxBuf[k] = c; } return mxBuf[k]; }
+function mxInput(g, n, t) {  // four made-up camera/clip sources, one look each
+  g.save(); g.globalAlpha = 1; g.globalCompositeOperation = "source-over";
+  if (n === 1) {  // colour bars
+    ["#c0c0c0", "#c0c000", "#00c0c0", "#00c000", "#c000c0", "#c00000", "#0000c0"].forEach((c, i) => { g.fillStyle = c; g.fillRect(i * 320 / 7, 0, 320 / 7 + 1, 180); });
+    g.fillStyle = "#111"; g.fillRect(0, 180, 320, 60);
+    g.fillStyle = "#fff"; g.fillRect((t * 80) % 340 - 20, 196, 20, 28);
+  } else if (n === 2) {  // sky and a sun
+    const gr = g.createLinearGradient(0, 0, 0, 240); gr.addColorStop(0, "#0b2a6b"); gr.addColorStop(1, "#5aa7e8");
+    g.fillStyle = gr; g.fillRect(0, 0, 320, 240);
+    g.fillStyle = "#ffd166"; g.beginPath(); g.arc(160 + 110 * Math.cos(t * 0.7), 120 - 70 * Math.sin(t * 0.7), 30, 0, 7); g.fill();
+    g.fillStyle = "#1d3b1d"; g.fillRect(0, 200, 320, 40);
+  } else if (n === 3) {  // scrolling checkerboard
+    const o = (t * 40) % 64;
+    for (let y = -64; y < 240; y += 32) for (let x = -64; x < 320; x += 32) {
+      g.fillStyle = ((x + y) / 32) % 2 === 0 ? "#1f8a4c" : "#0c2d19"; g.fillRect(x + o, y + o, 32, 32);
+    }
+  } else {  // rings
+    g.fillStyle = "#200010"; g.fillRect(0, 0, 320, 240);
+    for (let r = 160; r > 0; r -= 18) { g.strokeStyle = `hsl(${(r * 2 + t * 90) % 360} 90% 60%)`; g.lineWidth = 7;
+      g.beginPath(); g.arc(160, 120, r * (0.8 + 0.2 * Math.sin(t * 2)), 0, 7); g.stroke(); }
+  }
+  g.fillStyle = "#000a"; g.fillRect(8, 8, 52, 20); g.fillStyle = "#fff"; g.font = "bold 14px Segoe UI"; g.fillText("IN " + n, 14, 23);
+  g.restore();
+}
+function mxChannel(ch, m, t) {  // an input with its channel's effects (factory assignment), drawn into a buffer
+  const c = mxCanvas(ch), g = c.getContext("2d"), tmp = mxCanvas(ch + "t"), tg = tmp.getContext("2d");
+  mxInput(g, ch === "A" ? m.a : m.b, t);
+  const fx = ch === "A" ? m.fx_a : m.fx_b, val = ch === "A" ? m.fx_val_a : m.fx_val_b;
+  if (fx[3] === "MULTI") { tg.drawImage(c, 0, 0); for (let i = 0; i < 4; i++) g.drawImage(tmp, (i % 2) * 160, (i >> 1) * 120, 160, 120); }
+  if (fx[0] === "MIRROR") { tg.drawImage(c, 0, 0); g.save(); g.translate(320, 0); g.scale(-1, 1); g.drawImage(tmp, 0, 0, 160, 240, 0, 0, 160, 240); g.restore(); }
+  if (fx[2] === "COLORIZE") { g.save(); g.globalCompositeOperation = "color"; g.fillStyle = `hsl(${val[2] * 2.8} 90% 50%)`; g.fillRect(0, 0, 320, 240); g.restore(); }
+  if (fx[1] === "NEGATIVE") { g.save(); g.globalCompositeOperation = "difference"; g.fillStyle = "#fff"; g.fillRect(0, 0, 320, 240); g.restore(); }
+  if (fx[0] === "STROBE" && Math.floor(t * (2 + val[0] / 10)) % 2) { g.fillStyle = "#000"; g.fillRect(0, 0, 320, 240); }
+  return c;
+}
+function mxProgram(g, m, t) {
+  const A = mxChannel("A", m, t), B = mxChannel("B", m, t);
+  let k = m.tbar;                       // 0 = A, 1 = B
+  if (m.bpm_sync) k = m.beat % 2;       // BPM SYNC: cut on every beat
+  if (m.transformer_a) k = 0;
+  if (m.transformer_b) k = 1;
+  g.globalAlpha = 1; g.globalCompositeOperation = "source-over";
+  const key = m.fx_b[1] || m.fx_b[2] || m.fx_b[3];
+  if (key) {  // keys and P in P: B over A; the video fader sets the key level / window size
+    g.drawImage(A, 0, 0);
+    if (m.fx_b[3]) { const s = 0.25 + 0.5 * m.tbar; g.drawImage(B, 320 * (1 - s) - 10, 10, 320 * s, 240 * s); g.strokeStyle = "#fff"; g.strokeRect(320 * (1 - s) - 10, 10, 320 * s, 240 * s); }
+    else { g.globalCompositeOperation = m.fx_b[1] ? "screen" : "lighten"; g.globalAlpha = 0.3 + 0.7 * m.tbar; g.drawImage(B, 0, 0); }
+  } else if (m.trans === "WIPE") {
+    g.drawImage(A, 0, 0); const x = 320 * k; g.drawImage(B, 0, 0, x || 0.01, 240, 0, 0, x || 0.01, 240);
+  } else if (m.trans === "EFX") {
+    g.drawImage(A, -320 * k, 0); g.drawImage(B, 320 * (1 - k), 0);
+  } else {
+    g.drawImage(A, 0, 0); g.globalAlpha = k; g.drawImage(B, 0, 0);
+  }
+  g.globalAlpha = 1; g.globalCompositeOperation = "source-over";
+  if (m.fade) { g.fillStyle = m.fade > 0 ? `rgba(255,255,255,${m.fade})` : `rgba(0,0,0,${-m.fade})`; g.fillRect(0, 0, 320, 240); }
+}
+function mxMonitor(d, m, t) {
+  const g = d.ctx;
+  if (d.source === "preview" && m.preview !== "out") { mxInput(g, m.preview, t); }
+  else mxProgram(g, m, t);
+  if (d.source === "preview") { g.fillStyle = "#000a"; g.fillRect(200, 210, 112, 22); g.fillStyle = "#3ddc84"; g.font = "bold 12px Consolas";
+    g.fillText(m.preview === "out" ? "PREVIEW: OUT" : "PREVIEW: IN " + m.preview, 206, 226); }
+}
+
+let lastMixLog = "";
+function renderMixer(s) {
+  const conn = document.getElementById("conn"), nm = W ? W.name : gid;
+  conn.textContent = s.engine ? nm + " simulated, playing Himmel" : nm + " simulated · " + (s.mode_name || "");
+  conn.className = "pill sim";
+  const held = new Set(s.held || []), lit = s.lit || {};
+  for (const c of Object.values(els)) {
+    if (c.kind === "button") {
+      const on = held.has(c.name), col = lit[c.name];
+      c.el.classList.toggle("on", on);
+      c.el.style.background = on ? (c.on_color || "") : col ? col : "";
+      c.el.style.color = !on && col ? "#111" : "";
+      c.el.style.boxShadow = !on && col ? `0 0 10px ${col}` : "";
+    } else if (c.kind === "knob") {
+      const v = (s.knobs || {})[c.name] ?? 0, r = c.range || 127;
+      const ang = c.endless ? v / 128 * 360 : -135 + 270 * v / r;
+      c.el.firstChild.style.transform = `rotate(${ang}deg)`;
+      c.val.textContent = (s.knob_text || {})[c.name] ?? v;
+    } else if (c.kind === "fader") {
+      const v = (s.faders || {})[c.name] ?? 0;
+      c.el.querySelector(".fhandle").style.top = (14 + v * (c.h - 28)) + "px";
+    }
+  }
+  for (const [id, text] of Object.entries(s.displays || {})) if (decoEls[id]) decoEls[id].textContent = text;
+  const t = performance.now() / 1000;
+  for (const d of Object.values(decoEls)) if (d.ctx && s.mix) mxMonitor(d, s.mix, t);
+  const h = s.host || {}, seen = h.seen || {}, m = s.mix || {};
+  const tb = document.getElementById("xTbar");
+  if (!(Date.now() - (+tb.dataset.touched || 0) < 1500)) tb.value = Math.round((m.tbar || 0) * 1000);
+  document.getElementById("xClock").checked = !!h.clock;
+  document.getElementById("xNote").checked = !!(s.device || {}).note_mode;
+  document.getElementById("xThru").checked = !!(s.device || {}).midi_thru;
+  document.querySelectorAll("[data-x]").forEach(b => b.classList.toggle("on", (b.dataset.x[0] === "A" ? m.a : m.b) === +b.dataset.x[1]));
+  document.getElementById("xHostInfo").textContent =
+    `Himmel has seen: A ${seen.a ?? "-"}  B ${seen.b ?? "-"}  T-bar ${seen.tbar ?? "-"}  memory ${seen.memory ?? "-"}\n` +
+    `Himmel assumes the ${h.setup} MIDI setup${h.take_busy ? "   · auto take running" : ""}\n` +
+    `last events: ${(h.events || []).slice(-4).join("  |  ") || "-"}`;
+  const st = document.getElementById("xSetup"), key = JSON.stringify(s.setup);
+  if (st.dataset.key !== key) {
+    st.dataset.key = key;
+    const rows = s.setup || [];
+    const half = Math.ceil(rows.length / 2);
+    st.innerHTML = rows.slice(0, half).map((r, i) => `<tr><td>${esc(r[0])}</td><td><b>${esc(r[1])}</b></td><td>&nbsp;&nbsp;&nbsp;</td>` +
+      (rows[half + i] ? `<td>${esc(rows[half + i][0])}</td><td><b>${esc(rows[half + i][1])}</b></td>` : "") + "</tr>").join("") +
+      `<tr><td colspan="5" class="help">Always sent: inputs A/B (bank 00/01 + program), memory (bank 50H + program).</td></tr>`;
+  }
+  const k = s.counts || {}, dev = s.device || {};
+  document.getElementById("gStatus").textContent = [
+    (s.notes || []).join(" / "),
+    `V-4: ${s.mode_name}, receives on ${dev.rx_ch}, Note Mode ${dev.note_mode ? "on" : "off"}, MIDI Thru ${dev.midi_thru ? "on" : "off"}` +
+      (s.engine ? `  (an engine on UDP 127.0.0.1:${s.engine_port} is talking to it)` : `  · engine link: UDP 127.0.0.1:${s.engine_port}`),
+    `mix: A = IN ${m.a}${(m.fx_a || []).filter(Boolean).map(x => " + " + x).join("")}   B = IN ${m.b}${(m.fx_b || []).filter(Boolean).map(x => " + " + x).join("")}   ` +
+      `${m.trans} ${Math.round((m.tbar || 0) * 100)}% B   fade ${m.fade}   BPM ${m.bpm}${m.bpm_sync ? " (sync on)" : ""}   memory ${m.memory}   transition time ${m.trans_time} s`,
+    `messages: V-4 → host ${k.to_host || 0}, host → V-4 ${k.to_device || 0}, rejected ${k.bad || 0}`,
+  ].join("\n");
+  const log = s.log || [], lk = log.map(r => r[0] + r[2]).join("|");
+  if (lk !== lastMixLog) {
+    lastMixLog = lk;
+    document.getElementById("genLog").innerHTML = log.slice().reverse().map(([t, dir, hex, text]) =>
+      `<tr class="${dir.startsWith("V-4") ? "up" : "down"}"><td>${esc(t)}</td><td class="dir">${esc(dir)}</td>` +
       `<td>${esc(text)}</td><td class="hex">${esc(hex)}</td></tr>`).join("") || "<tr><td>-</td></tr>";
   }
 }

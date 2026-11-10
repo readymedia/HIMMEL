@@ -1,0 +1,73 @@
+{
+  "format": "himmel-weapon/1",
+  "id": "v4",
+  "name": "V-4 Mixer",
+  "badge": "◎ HIMMEL · V4",
+  "number": 7,
+  "hardware": {
+    "maker": "Roland (sold as EDIROL V-4, later Roland V-4)",
+    "model": "V-4 four-channel SD video mixer (NTSC/PAL, 2005, discontinued)",
+    "usb": null,
+    "connect": "MIDI IN / MIDI OUT (5-pin DIN) only; needs a USB-MIDI interface on the PC. No USB, no RS-232.",
+    "note": "Drawn from the owner's manual (panel items 12-30) and public photos. The parameter setting buttons (item 12) are not drawn; their MIDI setup is done over SysEx instead. The owner has no V-4 (2026-11-10), so this weapon is simulated only."
+  },
+  "driver": "midi-v4",
+  "map": null,
+  "live": "mixer",
+  "protocol": "MIDI channel 1 (factory) both ways. Input A/B 1-4: Bank Select MSB 00 (A) / 01 (B), LSB 00, then Program Change 0-3. Memory 1-8: Bank 50H/00H + Program 0-7. Video fader: CC#11 (factory), 0 = A, 127 = B. Transition time: CC#7 (factory), 0-127 = 0.0-4.0 s. Every other panel function (effects A/B 1-4, transition select, transformer A/B, output fade, BPM sync) is unassigned at the factory and can be given a CC (1-5, 7-31, 64-95), channel pressure or pitch bend with SysEx DT1: F0 41 <dev> 00 5B 12 <addr 3> <data> <sum> F7, Roland checksum. Note Mode (off at the factory): notes 24H/26H/28H/29H = A 1-4, 2BH/2DH/2FH/30H = B 1-4. Timing Clock F8 / Start FA / Continue FB drive BPM SYNC. MIDI Thru ON = the V-4's own messages are not sent.",
+  "panel": { "w": 860, "h": 560 },
+  "deco": [
+    { "kind": "body", "x": 10, "y": 30, "w": 600, "h": 518, "r": 14 },
+    { "kind": "port", "x": 404, "y": 24, "w": 46, "h": 12, "label": "MIDI OUT" },
+    { "kind": "port", "x": 456, "y": 24, "w": 46, "h": 12, "label": "MIDI IN" },
+    { "kind": "display", "id": "bpm", "x": 410, "y": 62, "w": 92, "h": 30, "label": "BPM" },
+    { "kind": "monitor", "id": "program", "source": "program", "x": 632, "y": 46, "w": 212, "h": 159, "label": "OUTPUT (simulated picture)" },
+    { "kind": "monitor", "id": "preview", "source": "preview", "x": 632, "y": 250, "w": 212, "h": 159, "label": "PREVIEW OUT" }
+  ],
+  "sections": [
+    { "label": "PREVIEW OUT SELECT", "x": 30, "y": 44, "w": 214 },
+    { "label": "TEMPO", "x": 410, "y": 44, "w": 180 },
+    { "label": "OUTPUT FADE", "x": 36, "y": 112, "w": 68 },
+    { "label": "A · INPUT", "x": 144, "y": 112, "w": 62 },
+    { "label": "BPM CONTROL", "x": 278, "y": 112, "w": 64 },
+    { "label": "MEMORY", "x": 390, "y": 112, "w": 60 },
+    { "label": "B · INPUT", "x": 500, "y": 112, "w": 62 },
+    { "label": "A · EFFECTS", "x": 30, "y": 222, "w": 160 },
+    { "label": "TRANSITION", "x": 214, "y": 222, "w": 190 },
+    { "label": "B · EFFECTS", "x": 428, "y": 222, "w": 160 }
+  ],
+  "controls": [
+    { "name": "Preview 1", "kind": "button", "x": 30, "y": 64, "w": 38, "h": 24, "label": "1" },
+    { "name": "Preview 2", "kind": "button", "x": 74, "y": 64, "w": 38, "h": 24, "label": "2" },
+    { "name": "Preview 3", "kind": "button", "x": 118, "y": 64, "w": 38, "h": 24, "label": "3" },
+    { "name": "Preview 4", "kind": "button", "x": 162, "y": 64, "w": 38, "h": 24, "label": "4" },
+    { "name": "Preview Out", "kind": "button", "x": 206, "y": 64, "w": 38, "h": 24, "label": "OUT" },
+    { "name": "Tap", "kind": "button", "x": 520, "y": 62, "w": 70, "h": 30, "label": "TAP", "on_color": "#ffd166" },
+
+    { "name": "Output fade", "kind": "knob", "x": 70, "y": 164, "r": 24, "range": 127, "center": 64, "ends": ["BLACK", "WHITE"] },
+    { "name": "A input", "kind": "knob", "x": 175, "y": 164, "r": 26, "steps": 4, "range": 3 },
+    { "name": "BPM control", "kind": "knob", "x": 310, "y": 164, "r": 24, "endless": true, "range": 127 },
+    { "name": "Memory", "kind": "knob", "x": 420, "y": 164, "r": 22, "steps": 8, "range": 7 },
+    { "name": "B input", "kind": "knob", "x": 531, "y": 164, "r": 26, "steps": 4, "range": 3 },
+
+    { "name": "A effect 1", "kind": "button", "x": 30, "y": 244, "w": 76, "h": 30, "label": "STROBE", "on_color": "#ff6b6b" },
+    { "name": "A effect 2", "kind": "button", "x": 30, "y": 284, "w": 76, "h": 30, "label": "NEGATIVE", "on_color": "#ff6b6b" },
+    { "name": "A effect 3", "kind": "button", "x": 30, "y": 324, "w": 76, "h": 30, "label": "COLORIZE", "on_color": "#ff6b6b" },
+    { "name": "A effect 4", "kind": "button", "x": 30, "y": 364, "w": 76, "h": 30, "label": "MULTI", "on_color": "#ff6b6b" },
+    { "name": "A control", "kind": "knob", "x": 152, "y": 300, "r": 22, "range": 127 },
+    { "name": "A transformer", "kind": "button", "x": 30, "y": 430, "w": 76, "h": 40, "label": "TRANS-\nFORMER", "on_color": "#ffd166" },
+
+    { "name": "Mix", "kind": "button", "x": 214, "y": 244, "w": 56, "h": 28, "label": "MIX" },
+    { "name": "Wipe", "kind": "button", "x": 281, "y": 244, "w": 56, "h": 28, "label": "WIPE" },
+    { "name": "EFX", "kind": "button", "x": 348, "y": 244, "w": 56, "h": 28, "label": "EFX" },
+    { "name": "BPM sync", "kind": "button", "x": 214, "y": 330, "w": 56, "h": 34, "label": "BPM\nSYNC", "on_color": "#ffd166" },
+    { "name": "Video fader", "kind": "fader", "x": 292, "y": 292, "w": 64, "h": 230, "range": 127, "ends": ["A", "B"], "label": "VIDEO FADER" },
+
+    { "name": "B effect 1", "kind": "button", "x": 512, "y": 244, "w": 76, "h": 30, "label": "MIRROR", "on_color": "#4dabf7" },
+    { "name": "B effect 2", "kind": "button", "x": 512, "y": 284, "w": 76, "h": 30, "label": "CHROMA\nKEY", "on_color": "#4dabf7" },
+    { "name": "B effect 3", "kind": "button", "x": 512, "y": 324, "w": 76, "h": 30, "label": "LUMI\nKEY", "on_color": "#4dabf7" },
+    { "name": "B effect 4", "kind": "button", "x": 512, "y": 364, "w": 76, "h": 30, "label": "P in P", "on_color": "#4dabf7" },
+    { "name": "B control", "kind": "knob", "x": 466, "y": 300, "r": 22, "range": 127 },
+    { "name": "B transformer", "kind": "button", "x": 512, "y": 430, "w": 76, "h": 40, "label": "TRANS-\nFORMER", "on_color": "#ffd166" }
+  ]
+}
