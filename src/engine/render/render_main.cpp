@@ -16,7 +16,9 @@
 //   pressure = amount), or the mouse on any output window (drag = finger,
 //   1-9 = effect, H = hold), or an Entrancer-style unit over MIDI: the simulator
 //   (tools/entrancer_live.py) on UDP 127.0.0.1:8768 (--entrancer-port N,
-//   --no-entrancer). See docs/entrancer-weapon.md.
+//   --no-entrancer), or the real unit through a USB-MIDI interface
+//   (--entrancer-midi NAME [--entrancer-channel N]; --midi-list shows the
+//   ports). See docs/entrancer-weapon.md.
 // * Publishes a heartbeat + frame stats in "Local\HimmelEngine" for the
 //   supervisor. Exits with code 3 if the GPU device is lost (the supervisor
 //   restarts it).
@@ -53,6 +55,7 @@
 #include "himmel/engine/engine_shared.h"
 #include "himmel/engine/entrancer.h"
 #include "himmel/engine/entrancer_link.h"
+#include "himmel/engine/midi_in.h"
 #include "himmel/engine/touch_fx.h"
 #include "himmel/mk2/output.h"
 #include "himmel/mk2/pages.h"
@@ -94,6 +97,9 @@ struct Config {
     std::string camera_name;         // --camera NAME (part of the name)
     int camera_index = -1;           // --camera-index N
     int entrancer_port = himmel::engine::kEntrancerPort;  // --entrancer-port N, 0 = off (--no-entrancer)
+    std::string entrancer_midi;      // --entrancer-midi NAME: part of the MIDI input port's name
+    int entrancer_channel = 0;       // --entrancer-channel 1..16, 0 = all
+    bool midi_list = false;          // --midi-list: print the MIDI input ports and exit
 };
 
 // Default playlist: all .mov files under the nearest "media" folder above the exe.
@@ -137,6 +143,9 @@ Config parse_args(int argc, char** argv) {
         else if (a == "--camera-index") c.camera_index = std::atoi(next().c_str());
         else if (a == "--entrancer-port") c.entrancer_port = std::clamp(std::atoi(next().c_str()), 0, 65535);
         else if (a == "--no-entrancer") c.entrancer_port = 0;
+        else if (a == "--entrancer-midi") c.entrancer_midi = next();
+        else if (a == "--entrancer-channel") c.entrancer_channel = std::clamp(std::atoi(next().c_str()), 0, 16);
+        else if (a == "--midi-list") c.midi_list = true;
         else if (a == "--size") {
             const std::string s = next();
             int w = 0, h = 0;
@@ -779,6 +788,13 @@ int main(int argc, char** argv) {
     timeBeginPeriod(1);
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     const Config cfg = parse_args(argc, argv);
+    if (cfg.midi_list) {
+        const auto ports = himmel::engine::MidiIn::list();
+        std::printf("MIDI input ports (%zu):\n", ports.size());
+        for (size_t i = 0; i < ports.size(); ++i) std::printf("  %zu  %s\n", i, ports[i].c_str());
+        std::printf("Use: himmel_render --entrancer-midi \"part of a name\" [--entrancer-channel N]\n");
+        return 0;
+    }
     g_fullscreen = cfg.fullscreen;
     g_params.mirror = cfg.mirror;
 
@@ -872,7 +888,16 @@ int main(int argc, char** argv) {
         if (elink->ok()) log("entrancer: listening on UDP 127.0.0.1:%d", cfg.entrancer_port);
         else log("entrancer: UDP port %d is busy, no Entrancer input", cfg.entrancer_port), elink.reset();
     }
-    himmel::engine::entrancer::Mapper emap;
+    himmel::engine::entrancer::Mapper emap;       // the simulator (UDP)
+    himmel::engine::entrancer::Mapper emap_midi;  // the real unit (MIDI in): its own parser, never mixed
+    emap_midi.set_channel(cfg.entrancer_channel);
+    std::unique_ptr<himmel::engine::MidiIn> emidi;
+    uint32_t emidi_gen = 0;
+    if (!cfg.entrancer_midi.empty()) {
+        emidi = std::make_unique<himmel::engine::MidiIn>(cfg.entrancer_midi);
+        log("entrancer: waiting for a MIDI input port with \"%s\" in its name (channel %s)", cfg.entrancer_midi.c_str(),
+            cfg.entrancer_channel ? std::to_string(cfg.entrancer_channel).c_str() : "all");
+    }
     bool entrancer_alive = false, was_frozen = false;
     double fx_beats = 0.0;
     std::array<uint8_t, 1024> midi_buf{};
@@ -936,7 +961,25 @@ int main(int argc, char** argv) {
                 entrancer_alive = alive;
             }
         }
-        fx_beats += dt * emap.state().bpm / 60.0;  // 120 BPM until the Entrancer sends a tempo
+        // The real unit over MIDI: alive while its port is open (it need not send
+        // active sensing). A pulled cable closes the port; it reopens by itself.
+        if (emidi) {
+            if (emidi->generation() != emidi_gen) {
+                emidi_gen = emidi->generation();
+                if (emidi->is_open()) {
+                    set_msg("Entrancer MIDI connected");
+                    log("entrancer: MIDI port \"%s\" open", emidi->port_name());
+                } else {
+                    emap_midi.lost(g_touch);
+                    set_msg("Entrancer MIDI lost (waiting for the port to come back)");
+                }
+            }
+            for (size_t nb; (nb = emidi->read(midi_buf.data(), midi_buf.size())) > 0;) emap_midi.feed(midi_buf.data(), nb, g_touch);
+        }
+        const bool midi_alive = emidi && emidi->is_open();
+        // The simulator's tempo while it plays; the real unit sends none (120 BPM).
+        const auto& etempo = entrancer_alive ? emap.state() : emap_midi.state();
+        fx_beats += dt * etempo.bpm / 60.0;
 
         // Knob 7: pad fade time, 2 s (left) .. 0.03 s (right), exponential.
         const float fade = std::exp(-static_cast<float>(dt) / pad_fade_s(g_params.knob[6]));
@@ -1245,7 +1288,7 @@ int main(int argc, char** argv) {
         }
 
         // 4e. Entrancer MUTE/FREEZE: keep showing the picture from the moment it was pressed.
-        const bool freeze = entrancer_alive && emap.state().freeze && !lat.active;
+        const bool freeze = ((entrancer_alive && emap.state().freeze) || (midi_alive && emap_midi.state().freeze)) && !lat.active;
         if (freeze || was_frozen) g.ctx->OMSetRenderTargets(0, nullptr, nullptr);
         if (freeze && !was_frozen) g.ctx->CopyResource(g.frozen.Get(), g.canvas.Get());
         if (freeze) g.ctx->CopyResource(g.canvas.Get(), g.frozen.Get());

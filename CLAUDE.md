@@ -318,8 +318,10 @@ The details are in the mockup (`docs/vj-mockup.html`).
      change) + Himmel-only CCs 102-108 over UDP 127.0.0.1:8768 to
      `himmel_render` (`EntrancerLink` + `entrancer::Mapper`, tests
      `entrancer_tests.exe`). HOLD, PAD MOTION, MUTE/FREEZE, TAP, memories work.
-     The owner owns a real unit: next is a WinMM MIDI input into the same
-     Mapper. Details: `docs/entrancer-weapon.md`.
+     The real unit: `--entrancer-midi NAME [--entrancer-channel N]`
+     (`--midi-list` shows ports), WinMM input `src/engine/src/midi_in.cpp`,
+     reconnects by itself. Built and unit-tested, NOT yet tried on the unit
+     (it needs a USB-MIDI interface). Checklist: `docs/entrancer-weapon.md`.
    - Latency test: **Sampling** on the MK2. The canvas flips black/white every
      0.7 s, the camera (pointed at an output) reports when it sees it; 16 runs,
      median/min/max on the MK2 screen and in the log ("LOOP" = Present() ->

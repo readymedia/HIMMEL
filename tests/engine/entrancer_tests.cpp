@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "himmel/engine/entrancer.h"
+#include "himmel/engine/midi_in.h"
 
 using namespace himmel::engine;
 using namespace himmel::engine::entrancer;
@@ -108,11 +109,50 @@ static void test_bytes() {
     CHECK(near(m.state().x, 64 / 127.0f));
 }
 
+static void test_channel() {
+    std::printf("channel filter\n");
+    Mapper m;
+    touchfx::TouchFx fx;
+    m.set_channel(3);
+    send(m, fx, {0xB0, 12, 100});            // channel 1: ignored
+    CHECK(near(m.state().x, 0.5f));
+    send(m, fx, {0xB2, 12, 100});            // channel 3: taken
+    CHECK(near(m.state().x, 100 / 127.0f));
+    m.set_channel(99);                       // out of range = all channels
+    CHECK(m.channel() == 0);
+    send(m, fx, {0xBF, 12, 0});
+    CHECK(near(m.state().x, 0.0f));
+}
+
+static void test_midi_in_ring() {
+    std::printf("MIDI input ring (no port needed)\n");
+    MidiIn in("no such port for the test");
+    CHECK(!in.is_open());
+    in.on_short(0x7F0CB0);                   // CC 12 = 127 (WinMM packs status | d1 << 8 | d2 << 16)
+    in.on_short(0x24C0);                     // program change 36: two bytes
+    in.on_short(0xFE);                       // active sensing: one byte
+    uint8_t buf[16] = {};
+    const size_t n = in.read(buf, sizeof(buf));
+    CHECK(n == 6);
+    CHECK(buf[0] == 0xB0 && buf[1] == 12 && buf[2] == 127 && buf[3] == 0xC0 && buf[4] == 36 && buf[5] == 0xFE);
+    Mapper m;
+    touchfx::TouchFx fx;
+    m.feed(buf, n, fx);
+    CHECK(m.state().program == 36 && near(m.state().x, 1.0f));
+    CHECK(in.read(buf, sizeof(buf)) == 0);
+    for (int i = 0; i < 3000; ++i) in.on_short(0x7F0CB0);   // overflow: whole messages dropped, never half
+    size_t total = 0;
+    for (size_t k; (k = in.read(buf, sizeof(buf))) > 0;) total += k;
+    CHECK(total % 3 == 0 && total > 0 && total <= 4096);
+}
+
 int main() {
     test_table();
     test_pad();
     test_extensions();
     test_bytes();
+    test_channel();
+    test_midi_in_ring();
     std::printf("\n%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

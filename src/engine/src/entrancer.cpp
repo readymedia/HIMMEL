@@ -89,6 +89,7 @@ void Mapper::push(touchfx::TouchFx& fx) {
 
 void Mapper::message(uint8_t status, uint8_t d1, uint8_t d2, touchfx::TouchFx& fx) {
     const uint8_t kind = status & 0xF0;
+    if (channel_ && (status & 0x0F) + 1 != channel_) return;  // another device on the same cable
     ++st_.messages;
     if (kind == 0xC0) {                     // program change
         st_.program = std::min<int>(d1, kPrograms - 1);

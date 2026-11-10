@@ -84,12 +84,52 @@ himmel_render.exe: EntrancerLink (receive thread, lock-free ring)
   extensions), `python tools/entrancer_sim.py --selftest` (HOLD, PAD MOTION,
   tap tempo, freeze, the lever, the LED picture).
 
-## The real unit (next)
+## The real unit over MIDI (built 2026-11-10, not yet tried on the unit)
 
-- **MIDI in:** a WinMM input (the owner's USB-MIDI interface) feeding the same
-  `Mapper`. Then check on the unit: what it sends when HOLD keeps an effect
-  after the lift, whether PAD MOTION playback is sent (the manual says it is),
-  and the channel.
-- **MIDI clock out** from Himmel would keep the unit's own BPM effects in time.
+The unit has 5-pin MIDI IN / OUT, so it needs a **USB-MIDI interface**. Its
+MIDI OUT goes to the interface's IN.
+
+```
+build\bin\Release\himmel_render.exe --midi-list
+build\bin\Release\himmel_render.exe --entrancer-midi "part of the port name" [--entrancer-channel N]
+```
+
+- `--midi-list` prints the MIDI input ports and exits.
+- `--entrancer-midi NAME` opens the first input port whose name contains NAME
+  (case-insensitive). If none is there yet, the engine waits and opens it when
+  it appears; a pulled cable closes it ("Entrancer MIDI lost") and it reopens
+  by itself. The output never stops.
+- `--entrancer-channel N` listens to one channel (the unit's MIDI Edit
+  setting: FUNCTION + SAMPLE 2, then the PROGRAM/BPM knob). Default: all.
+- The real unit has its own parser (`emap_midi`), so it and the simulator can
+  run at the same time without mixing bytes. Both play Touch FX.
+- Code: `src/engine/src/midi_in.cpp` (WinMM, part of Windows: no new
+  dependency; a watcher thread opens / reopens, the WinMM callback fills a
+  lock-free ring, the render thread reads it). Tests in `entrancer_tests.exe`
+  (the ring and the channel filter, no port needed).
+- Ports are exclusive on Windows: close other MIDI software that holds the
+  interface's port.
+
+What the manual says the unit sends: CC 12 = X, CC 13 = Y (also CC 1 and CC 2),
+CC 93 = X+Y, CC 92 = touch on/off, program change 0–99; PAD MOTION playback
+is sent as normal pad messages. Himmel uses 12, 13, 92 and program change.
+
+**Check on the unit** when it is up from the cellar:
+1. `--midi-list`, then `--entrancer-midi` with the interface's name. The log
+   says "MIDI port … open".
+2. Touch the pad: the effect follows; let go: it fades out.
+3. HOLD on, touch, let go: does the unit keep the touch on (CC 92) or send off?
+   If it sends off, Himmel needs its own hold for this weapon.
+4. PAD MOTION: is the playback sent?
+5. Program knob: does the program change arrive (it can be switched off in
+   MIDI Edit)?
+6. FX BALANCE, MUTE/FREEZE and the AUDIO/VIDEO lever probably send nothing;
+   play them from the MK2 or the simulator meanwhile.
+
+## Later
+
+- **MIDI out to the unit:** it receives CC 12/13/92, program change and MIDI
+  clock, so Himmel could play the unit's own video effects and keep its BPM
+  effects in time.
 - **Its video out** (composite / S-video) can come in through a USB capture
   dongle as a Himmel camera; measure that latency with the Sampling test first.

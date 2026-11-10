@@ -1,8 +1,8 @@
 # Engine skeleton: supervisor (himmel.exe) + render process (himmel_render.exe).
 
-add_library(himmel_engine_shared STATIC src/engine_shared.cpp src/clip_player.cpp src/camera_capture.cpp src/touch_fx.cpp src/entrancer.cpp src/entrancer_link.cpp)
+add_library(himmel_engine_shared STATIC src/engine_shared.cpp src/clip_player.cpp src/camera_capture.cpp src/touch_fx.cpp src/entrancer.cpp src/entrancer_link.cpp src/midi_in.cpp)
 target_include_directories(himmel_engine_shared PUBLIC include)
-target_link_libraries(himmel_engine_shared PUBLIC himmel_media PRIVATE d3d11 mfplat mf mfreadwrite mfuuid ole32 ws2_32)
+target_link_libraries(himmel_engine_shared PUBLIC himmel_media PRIVATE d3d11 mfplat mf mfreadwrite mfuuid ole32 ws2_32 winmm)
 
 add_executable(himmel_render render/render_main.cpp)
 target_link_libraries(himmel_render PRIVATE himmel_engine_shared himmel_mk2 d3d11 dxgi d3dcompiler winmm)

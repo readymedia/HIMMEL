@@ -65,6 +65,9 @@ public:
     // The link went quiet: lift the finger (a held effect is the unit's job).
     void lost(touchfx::TouchFx& fx);
     const State& state() const { return st_; }
+    // Listen to one MIDI channel (1..16, the unit's MIDI Edit setting) or all (0).
+    void set_channel(int ch) { channel_ = ch >= 1 && ch <= 16 ? ch : 0; }
+    int channel() const { return channel_; }
 
 private:
     void message(uint8_t status, uint8_t d1, uint8_t d2, touchfx::TouchFx& fx);
@@ -74,6 +77,7 @@ private:
     uint8_t data_[2] = {};
     int have_ = 0;
     int bpm_msb_ = -1;
+    int channel_ = 0;
 };
 
 }  // namespace himmel::engine::entrancer
