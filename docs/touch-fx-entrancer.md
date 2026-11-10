@@ -231,9 +231,10 @@ weapon-2 session; details in its `weapons/README.md`):
   The API's touch-start velocity (vz) is 1 for a slow press and up to 127 for
   a quick tap, so it is a strike-*speed* signal: use it for hit effects
   (Strobe), not as pressure.
-- **Pressure**: with the block's default sensitivity (config item 13 = 64) z
-  saturates at 255 already at medium pressure. Higher = less sensitive; the
-  weapon now sets 127 (the owner found it best, "could even be more") and
+- **Pressure**: with the block's default pressure setting (config item 13 =
+  64) z saturates at 255 already at medium pressure. At 127 the owner gets the
+  longest span from a light touch to full pressure; lower values shorten that
+  span. The weapon now sets 127 and
   restores the block's own value when it lets go, since config persists on
   the block. z still reaches 255 on a hard press, so Touch FX shapes Lightpad
   pressure with a soft curve (z^1.5) before the 30 %..100 % amount mapping.
