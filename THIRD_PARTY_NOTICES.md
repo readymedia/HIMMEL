@@ -57,6 +57,7 @@ checked everything on real hardware.
 | QuickTime File Format / ISO base media file format (Apple, ISO/IEC 14496-12) | public specifications | Our minimal MOV reader (`src/media/src/mov.cpp`): atoms `moov/trak/mdia/minf/stbl`, `stsd`, `stts`, `stsc`, `stsz`, `stco`/`co64`. |
 | BC1/BC3/BC4 (S3TC/DXT, RGTC) texture compression, as documented by Microsoft for Direct3D | public documentation | HAP frames go to the GPU as BC textures; `hap_probe --png` has a small CPU BC decoder for checking. |
 | BT.709 YCbCr → RGB conversion (ITU-R BT.709) | public standard | Camera NV12 → RGB in the shader. |
+| KORG *KAOSS PAD Entrancer* (KPE1) Owner's Manual, MIDI implementation and Effect Program List (KORG Inc., 2003); Paul Gilby's review in *Sound On Sound* (June 2005) | © KORG Inc. / © SOS Publications (facts only, no text or images copied) | Background for the Touch FX design note `docs/touch-fx-entrancer.md`: the touch behaviour (X/Y, Hold, Pad Motion, BPM sync), the effect programs and their pad assignments, the MIDI CC numbers. Himmel's own effects get Himmel names. |
 | Ordered (Bayer 4×4) dithering | classic algorithm, public domain | Dithered images on the 1-bit MK2 screens. |
 | The classic 5×7 LCD bitmap font | widely shared, believed public domain | The glyph table in `src/controller/src/output.cpp` and `tools/mk2_screens.py` uses the same well-known 5×7 shapes found in many LCD and Arduino libraries. If you know its original author, please tell us so we can credit them. |
 
@@ -95,7 +96,9 @@ From the agreed stack in `CLAUDE.md`. Licenses as we understand them today;
 Native Instruments, Maschine and Controller Editor are trademarks of Native
 Instruments GmbH. Himmel is **not affiliated with or endorsed by** Native
 Instruments; it talks to the hardware you own over standard USB HID. Windows,
-Direct3D and Media Foundation are trademarks of Microsoft. HAP is a format by
+Direct3D and Media Foundation are trademarks of Microsoft. Korg, KAOSS PAD and
+Entrancer are trademarks of KORG Inc.; Himmel is not affiliated with KORG and
+only describes the Entrancer as inspiration. HAP is a format by
 VIDVOX. All other names belong to their owners.
 
 ## 9. AI assistance
