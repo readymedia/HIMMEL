@@ -138,6 +138,14 @@ static void test_lightpad_smoothing() {
     const Params m = mouse.update(0.016f), p = pad.update(0.016f);
     CHECK(m.x > 0.8f);                                   // 8 ms: almost there after one frame
     CHECK(p.x > 0.3f && p.x < 0.5f);                     // 30 ms: glides over the 28 ms gap
+
+    std::printf("lightpad pressure curve\n");
+    CHECK(near(shape_pressure(Source::Mouse, 0.5f), 0.5f));
+    CHECK(shape_pressure(Source::Lightpad, 0.5f) < 0.4f);   // soft: half z is well under half
+    CHECK(near(shape_pressure(Source::Lightpad, 1.0f), 1.0f));
+    CHECK(near(shape_pressure(Source::Lightpad, 0.0f), 0.0f));
+    pad.touch_pressure(Source::Lightpad, 0.5f);
+    CHECK(near(pad.pressure(), shape_pressure(Source::Lightpad, 0.5f)));
 }
 
 static void test_pads() {

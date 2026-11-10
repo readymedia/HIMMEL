@@ -231,10 +231,12 @@ weapon-2 session; details in its `weapons/README.md`):
   The API's touch-start velocity (vz) is 1 for a slow press and up to 127 for
   a quick tap, so it is a strike-*speed* signal: use it for hit effects
   (Strobe), not as pressure.
-- **Pressure**: z ramps smoothly from 0 but already saturates at 255 at medium
-  pressure (block pressure sensitivity 64; lowering it is untried). Until that
-  is tuned, Touch FX's 30 %..100 % amount range uses only the light half of
-  the finger's travel.
+- **Pressure**: with the block's default sensitivity (config item 13 = 64) z
+  saturates at 255 already at medium pressure. Higher = less sensitive; the
+  weapon now sets 127 (the owner found it best, "could even be more") and
+  restores the block's own value when it lets go, since config persists on
+  the block. z still reaches 255 on a hard press, so Touch FX shapes Lightpad
+  pressure with a soft curve (z^1.5) before the 30 %..100 % amount mapping.
 - **Rate**: touch moves arrive about every 28 ms (~36 Hz) while LED frames
   stream. That is slower than a 60 fps frame, so Touch FX smooths Lightpad
   touches over 30 ms (8 ms for the MK2 pads and the mouse) to avoid visible

@@ -58,6 +58,9 @@ public:
     static constexpr float kSmoothLightpadS = 0.030f;  // the block sends moves every ~28 ms
     static float smooth_s(Source s) { return s == Source::Lightpad ? kSmoothLightpadS : kSmoothS; }
     static constexpr float kMinAmount = 0.30f;  // a light touch still shows the effect
+    // Lightpad z (sensitivity 127) still reaches 255 on a hard press: a soft
+    // curve keeps the top of the amount range for really pressing.
+    static constexpr float kLightpadCurve = 1.5f;
 
     // Selection (knob / encoder / keys). Wraps around.
     void select(int effect);
@@ -104,6 +107,8 @@ private:
 
 // Pressure 0..1 -> amount kMinAmount..1.
 float pressure_amount(float pressure);
+// Raw touch pressure 0..1 -> the pressure Touch FX uses (per source curve).
+float shape_pressure(Source s, float pressure);
 
 // MK2 pad n (1..16, Pad 1 bottom-left) -> touch position at the pad's centre.
 struct Point { float x, y; };

@@ -30,6 +30,11 @@ const EffectInfo& info(int effect) {
     return kInfo[static_cast<size_t>(std::clamp(effect, 0, kEffects - 1))];
 }
 
+float shape_pressure(Source s, float pressure) {
+    const float p = clamp01(pressure);
+    return s == Source::Lightpad ? std::pow(p, TouchFx::kLightpadCurve) : p;
+}
+
 float pressure_amount(float pressure) { return TouchFx::kMinAmount + (1.0f - TouchFx::kMinAmount) * clamp01(pressure); }
 
 Point mk2_pad_point(int pad) {
@@ -53,7 +58,7 @@ void TouchFx::touch_down(Source s, float x, float y, float pressure) {
     src_ = last_src_ = s;
     tx_ = clamp01(x);
     ty_ = clamp01(y);
-    pressure_ = clamp01(pressure);
+    pressure_ = shape_pressure(s, pressure);
     if (jump && env_ <= 0.0f) x_ = tx_, y_ = ty_;  // no glide from the old position into a fresh touch
 }
 
@@ -61,12 +66,12 @@ void TouchFx::touch_move(Source s, float x, float y, float pressure) {
     if (s != src_ || s == Source::None) return;
     tx_ = clamp01(x);
     ty_ = clamp01(y);
-    pressure_ = clamp01(pressure);
+    pressure_ = shape_pressure(s, pressure);
 }
 
 void TouchFx::touch_pressure(Source s, float pressure) {
     if (s != src_ || s == Source::None) return;
-    pressure_ = clamp01(pressure);
+    pressure_ = shape_pressure(s, pressure);
 }
 
 void TouchFx::touch_up(Source s) {
