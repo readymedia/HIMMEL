@@ -158,8 +158,9 @@ CFG_PRESSURE_SENSITIVITY = 13   # roli_BlockConfigId.h (via blocksd's config_ids
 CFG_VELOCITY_SENSITIVITY = 10
 # The block's own defaults (seen on the owner's Lightpad M; ROLI's defaultConfig agrees per blocksd).
 CFG_DEFAULTS = {10: 50, 13: 64}
-# Himmel's choice: the owner found 127 gives the most pressure range (2026-11-10). Higher = less
-# sensitive, so z reaches 255 later.
+# Himmel's choice: the owner found 127 gives the most pressure range (2026-11-10). A higher value
+# gives a longer span from a light touch to full pressure (z reaches 255 later); lower values
+# make that span shorter.
 HIMMEL_CONFIG = {13: 127}
 CFG_NAMES = {10: "velocity sensitivity", 11: "glide sensitivity", 12: "slide sensitivity",
              13: "pressure sensitivity", 14: "lift sensitivity", 32: "z tracking", 36: "brightness"}

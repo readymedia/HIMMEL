@@ -143,7 +143,8 @@ The details are in the mockup (`docs/vj-mockup.html`).
       - endAPIMode brings the factory display back. RAM only; never
         saveProgramAsDefault.
       - With our program there is no MPE. Touch moves come every ~28 ms.
-      - **Pressure sensitivity (config 13): higher = less sensitive.** The
+      - **Pressure sensitivity (config 13): higher = longer span from light to full
+        pressure (more z range).** The
         owner chose 127 (`HIMMEL_CONFIG`; block default 64).
         - Config values persist on the block. LocalHost.let_go() stops the
           host loop, restores the block's value and waits for confirmation.

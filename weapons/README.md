@@ -246,8 +246,9 @@ What we saw:
   - z ramps smoothly from 0, but at the block's own pressure sensitivity (64)
     it reaches 255 at medium pressure.
   - **Pressure sensitivity, config item 13 (fixed 2026-11-10).**
-    - **Higher means less sensitive and more range.** The owner tried 8–127
-      and found **127** (the maximum) best ("could even be more").
+    - **A higher value gives a longer span from a light touch to full
+      pressure;** lower values make it shorter. The owner tried 8–127 and
+      found **127** (the maximum) gives the most range ("could even be more").
     - Himmel sets 127 when it takes the block and puts the block's own value
       back when it lets go.
   - **Config values are stored on the block.** They survive a new session,
