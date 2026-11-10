@@ -177,6 +177,13 @@ The details are in the mockup (`docs/vj-mockup.html`).
       BLOCKS touch messages per key; they are not used yet.
     - Not done: a key map verified key by key, and games on the keys.
     - Weapon no. 4 = the Entrancer (the Touch FX session's branch).
+  - **Weapon no. 8 = Livid Ohm64, first version (owner's choice 2026-11-10;
+    he owns one, blue LEDs only).** Profile `weapons/ohm64.weapon.json` (drawn
+    from his photos, badge "HIMMEL · 64"), own page `tools/ohm64_live.html`,
+    `tools/ohm64_sim.py` (sim, WinMM link with an allow-list, map readback via
+    SysEx 07.0B/07.0A, learning, LED hunt). Launch config `ohm64-live` (8783).
+    Simulated and self-tested only: the owner tests the hardware on 2026-11-11.
+    Details: `weapons/README.md`.
 - **Visual mapping is the way to work with the controller. Keep it and build on
   it** (the owner wants graphical tools, not terminal tables):
   - `tools/mk2_live.py` + `tools/mk2_live.html`: a browser live view of the MK2

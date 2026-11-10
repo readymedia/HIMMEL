@@ -22,6 +22,7 @@ A weapon has up to four parts:
 | 1 | **MK2** (Maschine MK2) | USB HID: 16 pads, 8 knobs, encoder, 48 buttons, two 1-bit screens | [`mk2.weapon.json`](mk2.weapon.json) | [`tools/mk2_sim.py`](../tools/mk2_sim.py) | Map verified on hardware, C++ driver done |
 | 3 | **LUMI Keys** (ROLI LUMI Keys) | USB-MIDI, BLOCKS family: 24 keys with strike velocity, pressure and glide, one RGB LED per key, Mode / Octave − / Octave + | [`lumi.weapon.json`](lumi.weapon.json) | [`tools/lumi_sim.py`](../tools/lumi_sim.py) | Simulated, and checked on the owner's LUMI (firmware 1.3.8, 2026-11-10): keys, velocity, buttons, **Himmel's own key LEDs** |
 | 2 | **Lightpad** (ROLI Lightpad Block / Block M) | USB-MIDI: multi-touch surface (x, y, pressure per finger), 15 × 15 RGB LEDs, one Mode button | [`lightpad.weapon.json`](lightpad.weapon.json) | [`tools/lightpad_sim.py`](../tools/lightpad_sim.py) | Simulated, and played on the owner's Lightpad M (2026-11-10): touch, multi-touch, Mode button, orientation, factory note map, **and Himmel's own LED program** (~55 frames/s) |
+| 8 | **Ohm64** (Livid Instruments Ohm64, first version) | USB-MIDI: 8 × 8 button grid, 16 knobs, 8 faders, crossfader, 8 mutes, XL / XR, F1-F6, BPM; 75 single-colour (blue) LEDs, backlight and logo dimmers | [`ohm64.weapon.json`](ohm64.weapon.json) | [`tools/ohm64_sim.py`](../tools/ohm64_sim.py) | Simulated from the user guide, with map readback, probe, learning and LED hunt ready; not yet checked on the owner's unit |
 
 ## The live view: one tool for every weapon
 
@@ -389,6 +390,67 @@ it, it stays awake. To undo: *Uninstall device* and replug.
   changes the colour family), rainbow, test pattern (key 1 red, 12 green,
   13 blue, 24 white), off.
 - **Engine link:** UDP 127.0.0.1:8769 (8768 is the Entrancer engine).
+
+## Weapon no. 8: the Ohm64 (first version)
+
+The owner's Livid Ohm64 from 2009: the first version, with blue LEDs only
+(not the later OhmRGB). Drawn from the owner's photos. Its own page,
+`tools/ohm64_live.html` (profile `"page"`), runs on `tools/ohm64_sim.py`.
+
+```
+python tools/mk2_live.py --port 8783 --weapon ohm64     (launch config ohm64-live)
+python tools/ohm64_sim.py --selftest
+```
+
+**The protocol** (from the Ohm64 user guide, see `THIRD_PARTY_NOTICES.md`):
+- Plain USB-MIDI. Buttons send notes (or CCs), the 25 analog inputs send 7-bit
+  CCs (or 14-bit CCs or pitch bend), all on the basic channel. Everything is
+  remappable in the device, and **the device reports its own map**: SysEx
+  `F0 00 01 61 02 07 0B F7` (buttons, 88 slots) and `… 07 0A F7` (analog,
+  25 inputs). So Himmel reads the map instead of guessing it; the guide does
+  not list the factory numbers.
+- LEDs: `F0 00 01 61 02 04 <6 × LL HH> F7` sets all 75 at once. 6 LED
+  columns × 14 rows (row 11 does not exist), **a 1 bit = off**. The LED
+  codes do not follow the button layout; `LED_CODE` has the guide's table.
+  The guide's two tables disagree on the order of the mute LEDs; the LED hunt
+  settles it.
+- LEDs also follow incoming notes / CCs through the device's LED input map,
+  but only while Local Control is off (CC 122). CC 27 = backlight dimmer,
+  CC 31 (+ 63) = logo dimmer. All Notes Off clears the LEDs.
+- F1-F6 have no LED of their own; their light is the backlight.
+- Factory crossfader: the value **grows towards the left** (F1+XR flips it).
+
+**Safety on the real device.** `HwOhm` has an allow-list: LED SysEx (04),
+requests (07.xx), notes, CCs 0-120, Local Control and All Notes Off. It never
+sends save (02), factory reset (06), remapping (09-0F) or omni / mono / poly.
+Opening the device only listens. **Let Himmel drive the LEDs** first asks for
+the LED state and Local Control, then turns Local Control off (not stored);
+**Give them back** restores both.
+
+**Steps on the owner's unit (not done yet):**
+1. Use the real Ohm64 (listen only). Check the port name; "Ohm64 External" is
+   the DIN jack and is skipped.
+2. Read the map from the device. Then touch every control (click-then-press
+   fixes single entries) and mark the map verified (`ohm64_map.json`).
+3. Let Himmel drive the LEDs: All on, Chase, Follow, then the LED hunt (click
+   the button that lit) to confirm every LED code. Unknown: whether the bit
+   order in `04` is row 1 = bit 0, and which F button is F1.
+
+**In Himmel's event model:**
+
+| Control | Event | What it could do |
+|---|---|---|
+| Grid (8 × 8) | `ButtonDown` / `ButtonUp`, no velocity | 8 columns = 8 layers, rows = clips: a clip launcher. LED = the playing clip. |
+| Faders 1-8 | absolute CC → layer opacity (or `KnobDelta`) | the opacity of the layer above / in that column |
+| Mute 1-8 | `ButtonDown` | layer on/off; LED = the layer is live |
+| Crossfader | absolute CC, normalised so 0 = A (left) | A/B mix |
+| XL / XR | `ButtonDown` / `ButtonUp` | bump: cut to A or B while held; LED = the crossfader side |
+| Knobs 1-16 | absolute CC → `KnobDelta` | effect parameters of the current page |
+| F1-F6 | `ButtonDown` | knob page / bank select (no LEDs) |
+| BPM | `ButtonDown` | tap tempo; LED blinks on the beat |
+
+The live view's **Himmel** LED mode shows exactly this. **Text** scrolls
+"HIMMEL" across the grid.
 
 ## Plan: how a generic weapon feeds Himmel (not wired yet)
 
