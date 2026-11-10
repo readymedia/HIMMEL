@@ -137,6 +137,15 @@
       like the real one. The LEDs you see are decoded from the SysEx the host sent to the block.</div>
     <div id="gHostInfo" class="mono small"></div>
   </div>
+  <div class="card" style="grid-column: 1 / -1" id="gHwCard">
+    <h2>Real block (hardware probe, read-only)</h2>
+    <div class="row"><button id="gHw">Use the real block</button>
+      <span class="help">Plug it in with USB and close ROLI Connect / Dashboard. The probe enters API mode and
+        pings; it does not write the LEDs yet (that needs our renderer program on the block).</span></div>
+    <div class="help">Check: touch each corner. The ring on the drawing must land in the same corner.
+      Press the Mode button: <b>M</b> must light up.</div>
+    <div id="gHwInfo" class="mono small"></div>
+  </div>
   <div class="card" style="grid-column: 1 / -1">
     <h2>MIDI monitor (every message between block and host)</h2>
     <div class="row"><label><input type="checkbox" id="gNoise"> Show pings, ACKs and LED data</label></div>
@@ -310,7 +319,7 @@ function buildPanel(w, wireFn = wire) {
   for (const d of w.deco || []) {  // drawing only: device body, connectors, ports (not controls)
     if (d.kind === "body") add("", "deco-body", { left: d.x + "px", top: d.y + "px", width: d.w + "px", height: d.h + "px", borderRadius: (d.r || 0) + "px" });
     else if (d.kind === "dna") add("", "deco-dna", { left: d.x + "px", top: d.y + "px" });
-    else if (d.kind === "port") add(`<span>${esc(d.label || "")}</span>`, "deco-port", { left: d.x + "px", top: d.y + "px", width: d.w + "px", height: d.h + "px" });
+    else if (d.kind === "port") add(`<span${d.w > d.h ? ' style="transform: translate(-50%, -50%)"' : ""}>${esc(d.label || "")}</span>`, "deco-port", { left: d.x + "px", top: d.y + "px", width: d.w + "px", height: d.h + "px" });
   }
   add(esc(w.badge || w.name), "brand", {});
   for (const s of w.sections || []) {
@@ -553,6 +562,7 @@ function startGeneric(wid) {
   document.querySelectorAll("#gLed button").forEach(b => b.onclick = () => gpost({ led_mode: b.dataset.m }));
   document.getElementById("gHost").onchange = e => gpost({ host_enabled: e.target.checked });
   document.getElementById("gNoise").onchange = e => gpost({ show_noise: e.target.checked });
+  document.getElementById("gHw").onclick = () => gpost({ hardware: !(G && G.hardware) });
   window.addEventListener("blur", () => { pins.clear(); gsim({ release_all: true }); });
   // fingers left down by an earlier page (reload, closed tab) are lifted, now and when this page goes
   gsim({ release_all: true });
@@ -640,8 +650,26 @@ function renderGeneric(s) {
   G = s;
   const conn = document.getElementById("conn");
   const nm = W ? W.name : gid;
-  conn.textContent = s.engine ? nm + " simulated, playing Himmel" : nm + " simulated · " + (s.mode_name || "");
-  conn.className = "pill sim";
+  if (s.hardware) {
+    conn.textContent = s.connected ? nm + " hardware · " + (s.api ? "API mode" : "connecting / MIDI mode") : nm + " not found";
+    conn.className = "pill " + (s.connected ? "ok" : "bad");
+  } else {
+    conn.textContent = s.engine ? nm + " simulated, playing Himmel" : nm + " simulated · " + (s.mode_name || "");
+    conn.className = "pill sim";
+  }
+  document.body.classList.toggle("sim", !s.hardware);
+  const hb = document.getElementById("gHw");
+  hb.textContent = s.hardware ? "■ Back to the simulator" : "Use the real block";
+  hb.classList.toggle("simon", !!s.hardware);
+  const st = s.stats || {};
+  const rng = k => st[k] && st[k][0] !== null ? `${st[k][0]}..${st[k][1]}` : "-";
+  document.getElementById("gHwInfo").textContent = s.hardware ?
+    "LEDs on the drawing = a preview of what Himmel would send; the block itself is not written yet.\n" +
+    `serial ${st.serial || "-"}   battery ${st.battery || "-"}   ping ACKs ${st.acks ?? 0}\n` +
+    `touch messages ${st.touch_msgs ?? 0} (${st.rate ?? 0}/s now)   x seen ${rng("x")}   y seen ${rng("y")}   z seen ${rng("z")}\n` +
+    `strike velocity (vz) of the last touches: ${(st.vz_start || []).join(", ") || "-"}   MPE notes ${st.mpe_notes ?? 0}\n` +
+    `touch starts (finger x y): ${(st.starts || []).map(s => s.join(" ")).join(" | ") || "-"}\n` +
+    `message types: ${Object.entries(st.types || {}).map(([k, v]) => k + " ×" + v).join(", ") || "-"}   Mode button events ${st.buttons ?? 0}` : "";
   const held = new Set(s.held || []);
   for (const c of Object.values(els)) {
     if (c.kind === "surface") drawSurface(c, s);

@@ -109,8 +109,9 @@ The details are in the mockup (`docs/vj-mockup.html`).
     queued WSAECONNRESET; the Python receiver must drain them without sleeping
     (Python cannot switch SIO_UDP_CONNRESET off).
   - **Weapon no. 2 = ROLI Lightpad Block (owner's choice 2026-11-10; he owns
-    one, USB `2af4:0900`, WinMM ports "ROLI Lightpad BLOCK").** Simulated only so
-    far. Details and the protocol summary: `weapons/README.md`.
+    one: a Lightpad **Block M**, firmware 1.1.0, USB `2af4:0900`, WinMM ports
+    "ROLI Lightpad BLOCK" in 0 / out 1).** Simulated, plus a read-only hardware
+    probe checked on his block. Details, protocol and findings: `weapons/README.md`.
     - Profile `weapons/lightpad.weapon.json` adds the kinds `surface` (multi-touch
       + 15x15 LED grid) and `deco`.
     - `tools/lightpad_sim.py`: the BLOCKS SysEx codec (from ROLI's ISC
@@ -123,9 +124,20 @@ The details are in the mockup (`docs/vj-mockup.html`).
       the browser 2026-11-10: multi-touch, LED feedback, test pattern, MPE
       fallback, MK2 + Simulate unchanged.
     - Engine sim link for it: UDP 127.0.0.1:8767 (not used by the C++ side yet).
-    - Next: a Python WinMM probe on the real block (x/y orientation, touch
-      rate, MPE layout), then the LittleFoot LED renderer upload, then the
-      generic weapon driver/shared block (plan in `weapons/README.md`).
+    - `tools/lightpad_hw.py`: read-only WinMM probe (ctypes), the same
+      interface as the sim. Live view: **Use the real block**. Checked
+      2026-11-10:
+      - touches 0x13/0x11/0x15, fingers from 1, x/y about 146..3953;
+      - y = 0 at the top with USB-C pointing away from you;
+      - Mode = button 0;
+      - API `vz` strike is useless: velocity comes from the MPE note-on,
+        which the factory program keeps sending in API mode;
+      - factory layout 4x4 pads, notes 36..51 from the bottom-left.
+      - It never writes shared data: on hardware that is the factory
+        LittleFoot program.
+    - Next: upload our own LittleFoot LED renderer and measure the LED frame
+      rate, then the generic weapon driver/shared block (plan in
+      `weapons/README.md`).
 - **Visual mapping is the way to work with the controller. Keep it and build on
   it** (the owner wants graphical tools, not terminal tables):
   - `tools/mk2_live.py` + `tools/mk2_live.html`: a browser live view of the MK2

@@ -12,7 +12,8 @@ The real block speaks two languages over USB-MIDI:
   - **MIDI mode** (stand-alone, no host talking to it): MPE notes, one MIDI
     channel per finger (note on/off, pitch bend = x glide, CC74 = y slide,
     channel pressure = z). The simulator plays an *approximation* of the
-    factory 5 x 5 note grid; check the real numbers on hardware.
+    factory 4 x 4 note grid (36..51, as measured on a Lightpad M). The real
+    block keeps sending this MPE in API mode too.
   - **API mode** (the BLOCKS protocol): SysEx `F0 00 21 10 77 <index> <7-bit
     packed bits> <checksum> F7`. The host sends `beginAPIMode` and must ping
     every ~400 ms, or the block falls back to MIDI mode after 5 s. In API mode
@@ -81,10 +82,10 @@ CMD_NAMES = {0: "beginAPIMode", 1: "requestTopology", 2: "endAPIMode", 3: "ping"
              4: "debugMode", 5: "saveProgramAsDefault"}
 MODE_BUTTON = 0                           # button index 0 = "mode" (the side button)
 
-# MIDI mode (approximation of the factory note grid; verify on hardware)
-MPE_BASE_NOTE = 48
-MPE_ROW_STEP = 5
-MPE_PADS = 5
+# MIDI mode: the factory note grid, measured on the owner's Lightpad M (2026-11-10)
+MPE_BASE_NOTE = 36
+MPE_ROW_STEP = 4
+MPE_PADS = 4
 
 
 # ---------------------------------------------------------------- codec
@@ -243,7 +244,7 @@ def decode_device(msg):
             break
         if t in (TOUCH_START, TOUCH_MOVE, TOUCH_END, TOUCH_START_V, TOUCH_MOVE_V, TOUCH_END_V):
             off, idx, x, y, z = r.get(5), r.get(5), r.get(12), r.get(12), r.get(8)
-            e = {"type": "touch", "phase": "start move end".split()[(t - 0x10) % 3], "t": ts + off,
+            e = {"type": "touch", "code": t, "phase": "start move end".split()[(t - 0x10) % 3], "t": ts + off,
                  "i": idx, "x": x, "y": y, "z": z}
             if t >= TOUCH_START_V:
                 e.update(vx=signed8(r.get(8)), vy=signed8(r.get(8)), vz=signed8(r.get(8)))
@@ -262,6 +263,10 @@ def decode_device(msg):
             for _ in range(nc):
                 r.get(7 + 5 + 7 + 5)
             ev.append({"type": "topology", "version": ver, "devices": devs})
+        elif t in (0x06, 0x07):  # deviceVersion / deviceName: index 7 bit, length 7 bit, 7-bit chars
+            idx, n = r.get(7), r.get(7)
+            text = "".join(chr(r.get(7)) for _ in range(min(n, r.left() // 7)))
+            ev.append({"type": "version" if t == 0x06 else "name", "index": idx, "text": text})
         else:
             ev.append({"type": "unknown", "msg": t})
             break
@@ -320,6 +325,8 @@ def describe(msg, to_device):
                 out.append("button %d %s" % (e["id"], "down" if e["down"] else "up"))
             elif e["type"] == "ack":
                 out.append("ACK %d" % e["packet"])
+            elif e["type"] in ("version", "name"):
+                out.append("%s %s" % ("firmware" if e["type"] == "version" else "name", e["text"]))
             elif e["type"] == "topology":
                 out.append("topology: " + ", ".join("%s battery %d%s" % (d["serial"], d["battery"],
                                                                          " charging" if d["charging"] else "")
@@ -584,11 +591,12 @@ class SimLightpad:
             self.send(self._packet([(t, 7), (0, 5), (f["i"], 5), (round(f["x"] * 4095), 12),
                                     (round(f["y"] * 4095), 12), (round(f["z"] * 255), 8),
                                     (vx, 8), (vy, 8), (vz, 8)]))
-        else:
-            self._mpe(f, phase)
+        # The real block (factory program, firmware 1.1.0) keeps playing MPE in API mode too
+        self._mpe(f, phase)
 
     def _mpe(self, f, phase):
-        """Approximate factory note mode: 5 x 5 pads, notes up by 1 to the right and 5 per row up."""
+        """Factory note mode as measured on the owner's Lightpad M (2026-11-10): 4 x 4 pads,
+        note 36 bottom-left, +1 to the right, +4 per row up (36..51)."""
         ch = f["ch"]
         if phase == "start":
             col = min(MPE_PADS - 1, int(f["x"] * MPE_PADS))
@@ -642,14 +650,18 @@ class SimLightpad:
             return self._note_mode_picture()
 
     def _note_mode_picture(self):
-        """What the block shows on its own in MIDI mode: the 5 x 5 pads (approximation)."""
+        """What the block shows on its own: 4 x 4 pads of 3 x 3 LEDs with 1-LED gaps (as seen on
+        the owner's block; the real colours differ)."""
         lit = {f.get("pad") for f in self.fingers.values()}
         out = []
         for y in range(GRID):
             for x in range(GRID):
-                col, row = x // 3, (GRID - 1 - y) // 3
+                if x % 4 == 3 or y % 4 == 3:
+                    out.append("000000")  # the gap between pads
+                    continue
+                col, row = x // 4, (GRID - 1 - y) // 4
                 note = MPE_BASE_NOTE + col + MPE_ROW_STEP * row
-                edge = x % 3 == 1 and y % 3 == 1
+                edge = x % 4 == 1 and y % 4 == 1
                 if (col, row) in lit:
                     out.append("ffffff" if edge else "8fd6ff")
                 elif note % 12 == 0:
@@ -675,6 +687,7 @@ class LocalHost:
         self.sent = bytearray(PIXEL_BYTES)  # what we believe the block holds
         self.packet = 0
         self.need_full = True
+        self.preview = None        # real block: the picture we would send (not sent yet)
         self.next_ping = 0.0
         self.fingers = {}          # touch index -> (x, y, z) 0..1, from decoded block messages
         self.glow = [[0.0, 0.0, 0.0] for _ in range(GRID * GRID)]
@@ -734,6 +747,9 @@ class LocalHost:
         if now >= self.next_ping:
             self.next_ping = now + PING_INTERVAL
             sim.receive(host_command(CMD_PING))
+        if not getattr(sim, "leds_supported", True):
+            self.preview = self.picture(now)  # shown on the drawing only
+            return  # the real block: no LED writes until our renderer program is on it
         target = pixels_to_bytes(self.picture(now))
         old = bytes(b ^ 0xFF for b in target) if self.need_full else self.sent
         packets = host_data_changes(self.packet + 1, old, target)
@@ -817,15 +833,21 @@ class LightpadLive:
                        for f in s.fingers.values()]
             log = [e[:4] for e in s.log if self.show_noise or not e[4]][-18:]
             api, button, counts = s.api, s.button, dict(s.counts)
+            stats = dict(getattr(s, "stats", {}))
+        hw = getattr(s, "kind", "") == "hw"
         return {
             "weapon": "lightpad",
-            "simulated": True,
+            "simulated": not hw,
+            "hardware": hw,
+            "connected": getattr(s, "connected", True),
+            "stats": stats,
             "engine": s.engine_active(),
             "api": api,
             "mode_name": "API mode (BLOCKS SysEx)" if api else "MIDI mode (MPE)",
             "host": {"state": h.state, "mode": h.mode, "enabled": h.enabled, "serial": h.serial,
                      "battery": h.battery, "acks": h.acks},
-            "leds": s.leds(),
+            "leds": (["%02x%02x%02x" % p for p in h.preview] if hw and h.preview else s.leds()),
+            "led_preview": hw,
             "fingers": fingers,
             "held": ["Mode"] if button else [],
             "counts": counts,
@@ -850,6 +872,22 @@ class LightpadLive:
             self.show_noise = bool(d["show_noise"])
         elif "host_enabled" in d:
             self.host.enabled = bool(d["host_enabled"])
+        elif "hardware" in d:
+            self.use_hardware(bool(d["hardware"]))
+
+    def use_hardware(self, on):
+        """Swap the simulated block for the real one (tools/lightpad_hw.py) or back."""
+        if on == (getattr(self.sim, "kind", "") == "hw"):
+            return
+        old, mode, enabled = self.sim, self.host.mode, self.host.enabled
+        old.close()  # also ends the old LocalHost thread
+        if on:
+            import lightpad_hw
+            self.sim = lightpad_hw.HwLightpad()
+        else:
+            self.sim = SimLightpad()
+        self.host = LocalHost(self.sim)
+        self.host.mode, self.host.enabled = mode, enabled
 
     def close(self):
         self.sim.close()

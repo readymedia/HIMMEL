@@ -14,11 +14,11 @@
     "transport": "USB-MIDI (WinMM on Windows; ports are exclusive, close ROLI Connect / Dashboard)",
     "standalone": "MPE: one channel per finger, note on/off, pitch bend (x), CC74 (y), channel pressure (z)",
     "api": "BLOCKS SysEx F0 00 21 10 77 <index> <7-bit packed bits> <checksum> F7; host pings every 400 ms",
-    "touch": { "x_bits": 12, "y_bits": 12, "z_bits": 8, "velocity_bits": 8, "origin": "top-left (to verify)" },
+    "touch": { "x_bits": 12, "y_bits": 12, "z_bits": 8, "velocity_bits": 8, "origin": "top-left with the USB-C port pointing away from you (checked 2026-11-10)" },
     "leds": "15 x 15 RGB565 bitmap in the block's shared data (needs a LittleFoot renderer on hardware)"
   },
   "map": null,
-  "status": "simulated; protocol from ROLI's reference code, not yet checked on the owner's block",
+  "status": "simulated; read-only probe checked on the owner's Lightpad M 2026-11-10 (touch, Mode, orientation, factory notes); LEDs not written yet",
   "panel": {
     "w": 600,
     "h": 620
@@ -34,7 +34,7 @@
     { "kind": "dna", "x": 60, "y": 382, "edge": "left" },
     { "kind": "dna", "x": 540, "y": 202, "edge": "right" },
     { "kind": "dna", "x": 540, "y": 382, "edge": "right" },
-    { "kind": "port", "x": 541, "y": 270, "w": 8, "h": 44, "label": "USB-C" },
+    { "kind": "port", "x": 278, "y": 44, "w": 44, "h": 8, "label": "USB-C" },
     { "kind": "port", "x": 52, "y": 440, "w": 8, "h": 30, "label": "POWER" }
   ],
   "sections": [

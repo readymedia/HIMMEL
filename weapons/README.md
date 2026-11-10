@@ -20,7 +20,7 @@ A weapon has up to four parts:
 | No. | Weapon | Kind | Profile | Simulator | Status |
 |---|---|---|---|---|---|
 | 1 | **MK2** (Maschine MK2) | USB HID: 16 pads, 8 knobs, encoder, 48 buttons, two 1-bit screens | [`mk2.weapon.json`](mk2.weapon.json) | [`tools/mk2_sim.py`](../tools/mk2_sim.py) | Map verified on hardware, C++ driver done |
-| 2 | **Lightpad** (ROLI Lightpad Block / Block M) | USB-MIDI: multi-touch surface (x, y, pressure per finger), 15 × 15 RGB LEDs, one Mode button | [`lightpad.weapon.json`](lightpad.weapon.json) | [`tools/lightpad_sim.py`](../tools/lightpad_sim.py) | Simulated (chosen 2026-11-10). Protocol from ROLI's reference code, not yet checked on the owner's block |
+| 2 | **Lightpad** (ROLI Lightpad Block / Block M) | USB-MIDI: multi-touch surface (x, y, pressure per finger), 15 × 15 RGB LEDs, one Mode button | [`lightpad.weapon.json`](lightpad.weapon.json) | [`tools/lightpad_sim.py`](../tools/lightpad_sim.py) | Simulated, and read-only probe checked on the owner's Lightpad M (2026-11-10): touch, multi-touch, Mode button, orientation, factory note map. LEDs not written yet |
 
 ## The live view: one tool for every weapon
 
@@ -181,14 +181,51 @@ The facts below come from ROLI's `roli_blocks_basics` (ISC license).
   127.0.0.1:8767. A host there that answers (and pings) takes over the LEDs,
   like the MK2's 8766 link.
 
-### Still to check on the owner's block
-- The orientation of x and y. The test pattern has red top-left, green
-  top-right, blue bottom-left and white bottom-right.
-- The real MPE note layout.
-- Where the Mode button sits.
-- Touch rate and velocity scaling.
-- The highest full LED frame rate the block keeps up with (diff packets +
-  ACKs). Touch FX needs this number.
+### Checked on the owner's block (2026-11-10)
+
+`tools/lightpad_hw.py` is a read-only probe over WinMM (ctypes, no new
+dependency). In the live view press **Use the real block**; on the console run
+`python tools/lightpad_hw.py [seconds]`. It does the handshake and pings, and
+never writes the block's shared data.
+
+The owner's block is a **Lightpad Block M**:
+- serial `LPM…`, firmware 1.1.0;
+- WinMM ports "ROLI Lightpad BLOCK" (in 0, out 1).
+
+What we saw:
+- **Handshake works as in ROLI's code.** Serial, topology (with battery and
+  charging), firmware version (message 0x06), and pings answered with ACKs.
+  - The block's own index byte is `0x77`, not `0x40`.
+  - Entering API mode sends CC120/CC123 (all sound/notes off) on all 16
+    channels.
+- **Touches.**
+  - Start and end come as 0x13 / 0x15 (with velocity). Moves come as 0x11
+    (no velocity).
+  - Finger indexes count from 1. Two and three fingers work.
+- **Orientation.** x = 0 is left and y = 0 is the top, with the **USB-C port
+  pointing away from you**. The profile draws the port at the top.
+- **Range.** x and y run from about 146 to 3953 (the edges are inset); z runs
+  from 0 to 255.
+- **Strike velocity.** The API strike velocity (`vz` at touch start) is
+  nearly always 1, so it is useless.
+  - The factory program **keeps sending MPE in API mode**, and its note-on
+    velocity (3–127) follows the hit.
+  - A driver should take velocity from that note-on, or from z in the first
+    few ms (as with the MK2).
+- **Mode button:** `button 0 down` / `button 0 up` in API mode.
+- **Factory note layout:** 4 × 4 pads of 3 × 3 LEDs with 1-LED gaps.
+  - Note 36 is bottom-left. Notes go +1 to the right and +4 per row up, to 51
+    at the top right.
+  - The pads glow blue under the finger, and the block keeps them lit all the
+    time.
+  - The simulator now plays the same notes and also sends MPE in API mode.
+
+Still open:
+- **LEDs.** The factory program keeps drawing until we upload our own renderer
+  (LittleFoot). After that, measure the highest full LED frame rate the block
+  keeps up with (diff packets + ACKs); Touch FX needs this number.
+- **Touch rate.** Not measured yet. Moves seemed to arrive as fast as the
+  finger moved.
 
 ## Plan: how a generic weapon feeds Himmel (not wired yet)
 
