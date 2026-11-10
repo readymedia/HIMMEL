@@ -35,10 +35,12 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "himmel/engine/camera_capture.h"
 #include "himmel/engine/clip_player.h"
 #include "himmel/engine/engine_shared.h"
 #include "himmel/mk2/output.h"
@@ -76,6 +78,9 @@ struct Config {
     int win_w = 640, win_h = 360;
     bool mirror = false;
     std::vector<std::string> clips;  // --clip (repeatable); default: every .mov under media/
+    bool camera = true;              // --no-camera
+    std::string camera_name;         // --camera NAME (part of the name)
+    int camera_index = -1;           // --camera-index N
 };
 
 // Default playlist: all .mov files under the nearest "media" folder above the exe.
@@ -114,6 +119,9 @@ Config parse_args(int argc, char** argv) {
         else if (a == "--windowed") c.fullscreen = false;
         else if (a == "--mode") c.mirror = next() == "mirror";
         else if (a == "--clip") c.clips.push_back(next());
+        else if (a == "--no-camera") c.camera = false;
+        else if (a == "--camera") c.camera_name = next();
+        else if (a == "--camera-index") c.camera_index = std::atoi(next().c_str());
         else if (a == "--size") {
             const std::string s = next();
             int w = 0, h = 0;
@@ -141,9 +149,13 @@ struct Params {
     int touched = -1;           // last turned knob (inverted on the MK2 screen)
     uint64_t touched_us = 0;
     // Knob page 2: the clip layer. Knob 8 (master) is shared by both pages.
-    int page = 0;  // 0 = test card, 1 = clip
+    int page = 0;  // 0 = test card, 1 = clip, 2 = camera
     std::array<float, mk2::kKnobs> clip = {1.00f, 0.75f, 0.50f, 0.50f, 0.50f, 0.0f, 0.0f, 0.0f};
     // opacity, speed (0.75 = 1x), zoom (0.5 = fill), pos x, pos y
+    // Knob page 3: the camera layer.
+    std::array<float, mk2::kKnobs> cam = {0.70f, 0.50f, 0.50f, 0.50f, 1.00f, 0.50f, 0.50f, 0.0f};
+    // opacity, zoom (0.5 = fill), pos x, pos y, mirror (> 0.5 = on), brightness, contrast
+    bool latency_toggle = false;  // Sampling: start / stop the latency test
     bool clip_paused = false;
     float clip_jump = -1.0f;   // 0..1: jump there on the next frame
     int clip_step = 0;         // encoder: next / previous clip
@@ -189,9 +201,9 @@ struct Gpu {
     ComPtr<ID3D11DeviceContext> ctx;
     ComPtr<IDXGIFactory2> factory;
     ComPtr<ID3D11VertexShader> vs;
-    ComPtr<ID3D11PixelShader> ps_pattern, ps_blit, ps_clip;
+    ComPtr<ID3D11PixelShader> ps_pattern, ps_blit, ps_clip, ps_camera;
     ComPtr<ID3D11BlendState> blend_alpha;
-    ComPtr<ID3D11Buffer> cb_pattern, cb_blit, cb_clip;
+    ComPtr<ID3D11Buffer> cb_pattern, cb_blit, cb_clip, cb_camera;
     ComPtr<ID3D11SamplerState> lin, pnt;
     ComPtr<ID3D11Texture2D> canvas;
     ComPtr<ID3D11RenderTargetView> canvas_rtv;
@@ -239,6 +251,8 @@ bool init_gpu(Gpu& g) {
     g.dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g.ps_pattern);
     if (!compile("ps_blit", "ps_5_0", b)) return false;
     g.dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g.ps_blit);
+    if (!compile("ps_camera", "ps_5_0", b)) return false;
+    g.dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g.ps_camera);
     if (!compile("ps_clip", "ps_5_0", b)) return false;
     g.dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g.ps_clip);
     D3D11_BLEND_DESC bl{};
@@ -263,6 +277,7 @@ bool init_gpu(Gpu& g) {
     g.dev->CreateBuffer(&bd, nullptr, &g.cb_blit);
     bd.ByteWidth = (sizeof(ClipCB) + 15) & ~15u;
     g.dev->CreateBuffer(&bd, nullptr, &g.cb_clip);
+    g.dev->CreateBuffer(&bd, nullptr, &g.cb_camera);  // same layout as ClipCB
 
     D3D11_SAMPLER_DESC sd{};
     sd.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
@@ -429,12 +444,16 @@ constexpr std::array<std::string_view, mk2::kKnobs> kKnobLabels = {"HUE", "SATUR
                                                                    "GRID", "BAR", "PAD FADE", "MASTER"};
 constexpr std::array<std::string_view, mk2::kKnobs> kClipLabels = {"OPACITY", "SPEED", "ZOOM", "POS X",
                                                                    "POS Y", "", "", "MASTER"};
+constexpr std::array<std::string_view, mk2::kKnobs> kCamLabels = {"OPACITY", "ZOOM", "POS X", "POS Y",
+                                                                  "MIRROR", "BRIGHT", "CONTRAST", "MASTER"};
 
 // What the MK2 screens show about the clip (filled by the frame loop).
 struct ClipView {
     char name[40] = "NO CLIP";
     char state[24] = "";
     int index = -1, count = 0;
+    char cam[48] = "NO CAMERA";
+    char lat[48] = "SAMPLING = LATENCY TEST";
 };
 
 // ---------------------------------------------------------------- MK2 input
@@ -467,7 +486,7 @@ struct Mk2Link {
             if (!earliest_event_us) earliest_event_us = e.t_us;
             switch (e.type) {
                 case mk2::EventType::KnobDelta: {
-                    float& v = p.page == 1 && e.id != 7 ? p.clip[e.id] : p.knob[e.id];
+                    float& v = e.id == 7 || p.page == 0 ? p.knob[e.id] : p.page == 1 ? p.clip[e.id] : p.cam[e.id];
                     v = std::clamp(v + e.value / 1000.0f, 0.0f, 1.0f);
                     p.touched = e.id;
                     p.touched_us = e.t_us;
@@ -484,7 +503,8 @@ struct Mk2Link {
                 case mk2::EventType::ButtonDown:
                     if (e.id == static_cast<int>(mk2::Button::Navigate)) p.mirror = !p.mirror, p.resized = true;
                     if (e.id == static_cast<int>(mk2::Button::PageLeft) || e.id == static_cast<int>(mk2::Button::PageRight))
-                        p.page = 1 - p.page, p.touched = -1;
+                        p.page = (p.page + (e.id == static_cast<int>(mk2::Button::PageRight) ? 1 : 2)) % 3, p.touched = -1;
+                    if (e.id == static_cast<int>(mk2::Button::Sampling)) p.latency_toggle = true;
                     if (e.id == static_cast<int>(mk2::Button::Play)) p.clip_paused = !p.clip_paused;
                     if (e.id == static_cast<int>(mk2::Button::Restart)) p.clip_jump = 0.0f;
                     break;
@@ -508,6 +528,10 @@ struct Mk2Link {
             std::snprintf(buf, sizeof(buf), "%s  %.0f FPS", p.mirror ? "MIRROR" : "SPAN", fps);
             m.head[1].left.set(buf);
             m.head[1].right.set("PAGE = CLIP");
+        } else if (p.page == 2) {
+            m.head[0].left.set(cv.cam);
+            m.head[0].right.set("P3 CAMERA");
+            m.head[1].left.set(cv.lat);
         } else {
             std::snprintf(buf, sizeof(buf), "%d/%d %s", cv.index + 1, cv.count, cv.name);
             m.head[0].left.set(buf);
@@ -518,10 +542,18 @@ struct Mk2Link {
         for (int k = 0; k < mk2::kKnobs; ++k) {
             auto& slot = m.knobs[static_cast<size_t>(k)];
             const bool clip_knob = p.page == 1 && k != 7;
-            const float v = clip_knob ? p.clip[static_cast<size_t>(k)] : p.knob[static_cast<size_t>(k)];
-            slot.label.set(clip_knob ? kClipLabels[static_cast<size_t>(k)] : kKnobLabels[static_cast<size_t>(k)]);
+            const bool cam_knob = p.page == 2 && k != 7;
+            const size_t ks = static_cast<size_t>(k);
+            const float v = clip_knob ? p.clip[ks] : cam_knob ? p.cam[ks] : p.knob[ks];
+            slot.label.set(clip_knob ? kClipLabels[ks] : cam_knob ? kCamLabels[ks] : kKnobLabels[ks]);
             slot.norm = v;
-            if (clip_knob) {
+            if (cam_knob) {
+                slot.bipolar = k == 2 || k == 3 || k == 5 || k == 6;
+                if (k == 1) std::snprintf(buf, sizeof(buf), "%.2fX", clip_zoom(v));
+                else if (k == 4) std::snprintf(buf, sizeof(buf), "%s", v > 0.5f ? "ON" : "OFF");
+                else if (slot.bipolar) std::snprintf(buf, sizeof(buf), "%+d", static_cast<int>(std::lround((v - 0.5f) * 200)));
+                else std::snprintf(buf, sizeof(buf), "%d%%", static_cast<int>(std::lround(v * 100)));
+            } else if (clip_knob) {
                 slot.bipolar = k == 1 || k == 3 || k == 4;
                 if (k == 1) std::snprintf(buf, sizeof(buf), "%.2fX", clip_speed(v));
                 else if (k == 2) std::snprintf(buf, sizeof(buf), "%.2fX", clip_zoom(v));
@@ -550,7 +582,8 @@ struct Mk2Link {
         }
         s.buttons[static_cast<int>(mk2::led_of(mk2::Button::Navigate).index)] = p.mirror ? 127 : 20;
         s.buttons[static_cast<int>(mk2::led_of(mk2::Button::PageLeft).index)] = p.page == 0 ? 127 : 20;
-        s.buttons[static_cast<int>(mk2::led_of(mk2::Button::PageRight).index)] = p.page == 1 ? 127 : 20;
+        s.buttons[static_cast<int>(mk2::led_of(mk2::Button::PageRight).index)] = p.page > 0 ? 127 : 20;
+        s.buttons[static_cast<int>(mk2::led_of(mk2::Button::Sampling).index)] = p.page == 2 ? 60 : 10;
         s.transport[static_cast<int>(mk2::led_of(mk2::Button::Play).index)] = p.clip_paused ? 20 : 127;
         mk2::seq_write(shm.get()->outputs.led_seq, shm.get()->outputs.leds, s);
     }
@@ -620,6 +653,29 @@ int main(int argc, char** argv) {
     int page_led_last = -1;
     bool paused_led_last = false;
 
+    // Camera: its own capture thread; this thread only uploads the newest frame.
+    std::unique_ptr<himmel::engine::CameraCapture> cam;
+    if (cfg.camera) cam = std::make_unique<himmel::engine::CameraCapture>(cfg.camera_name, cfg.camera_index);
+    ComPtr<ID3D11Texture2D> cam_y, cam_uv;
+    ComPtr<ID3D11ShaderResourceView> cam_y_srv, cam_uv_srv;
+    int cam_w = 0, cam_h = 0;
+    uint64_t cam_seq = 0;
+    uint32_t cam_opens_seen = 0;
+    std::string cam_error_seen;
+
+    // Glass-to-glass loop test: the canvas flips black/white, the camera (pointed
+    // at an output) reports when it sees the change. Result = Present() -> camera.
+    struct LatencyTest {
+        bool active = false, light = false, switch_pending = false, detected = true;
+        uint64_t phase_start = 0, t_switch = 0;
+        double dark_sum = 0, light_sum = 0;
+        int dark_n = 0, light_n = 0, cycle = 0, n = 0;
+        float dark = -1, light_level = -1;
+        std::array<double, 32> res{};
+    } lat;
+    constexpr uint64_t kLatPhaseUs = 700000;
+    constexpr int kLatRuns = 16;
+
     Mk2Link mk2link;
     const uint64_t t0 = now_us();
     uint64_t last_frame = t0, stats_start = t0, frames = 0, stat_frames = 0, overlay_next = 0;
@@ -678,6 +734,109 @@ int main(int argc, char** argv) {
         if (player.load_failed.load() != seen_fail) {
             seen_fail = player.load_failed.load();
             set_msg(player.last_error);
+        }
+
+        // Camera: upload the newest frame (NV12 -> R8 + R8G8 textures).
+        bool cam_visible = false;
+        if (cam) {
+            if (cam->opens.load() != cam_opens_seen) {
+                cam_opens_seen = cam->opens.load();
+                std::snprintf(cv.cam, sizeof(cv.cam), "%s", cam->format);
+                log("camera: %s  %s", cam->name, cam->format);
+            }
+            if (!cam->running.load() && cam->error[0] && cam_error_seen != cam->error) {
+                cam_error_seen = cam->error;
+                log("camera: %s", cam->error);
+                std::snprintf(cv.cam, sizeof(cv.cam), "CAMERA OFF");
+            }
+            if (const himmel::engine::CameraFrame* cf = cam->latest()) {
+                if (cf->width != cam_w || cf->height != cam_h) {  // rare: first frame or a new format
+                    cam_w = cf->width, cam_h = cf->height;
+                    D3D11_TEXTURE2D_DESC td{};
+                    td.Width = static_cast<UINT>(cam_w);
+                    td.Height = static_cast<UINT>(cam_h);
+                    td.MipLevels = td.ArraySize = 1;
+                    td.Format = DXGI_FORMAT_R8_UNORM;
+                    td.SampleDesc.Count = 1;
+                    td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+                    cam_y.Reset(), cam_uv.Reset(), cam_y_srv.Reset(), cam_uv_srv.Reset();
+                    g.dev->CreateTexture2D(&td, nullptr, &cam_y);
+                    td.Width /= 2, td.Height /= 2, td.Format = DXGI_FORMAT_R8G8_UNORM;
+                    g.dev->CreateTexture2D(&td, nullptr, &cam_uv);
+                    g.dev->CreateShaderResourceView(cam_y.Get(), nullptr, &cam_y_srv);
+                    g.dev->CreateShaderResourceView(cam_uv.Get(), nullptr, &cam_uv_srv);
+                    cam_seq = 0;
+                }
+                if (cf->seq != cam_seq) {
+                    g.ctx->UpdateSubresource(cam_y.Get(), 0, nullptr, cf->y.data(), static_cast<UINT>(cam_w), 0);
+                    g.ctx->UpdateSubresource(cam_uv.Get(), 0, nullptr, cf->uv.data(), static_cast<UINT>(cam_w), 0);
+                    cam_seq = cf->seq;
+                }
+                cam_visible = cam->running.load();
+            }
+        }
+
+        // Latency test state machine (Sampling starts / stops it).
+        if (g_params.latency_toggle) {
+            g_params.latency_toggle = false;
+            if (lat.active) {
+                lat.active = false;
+                std::snprintf(cv.lat, sizeof(cv.lat), "TEST STOPPED");
+            } else if (!cam || !cam->running.load()) {
+                std::snprintf(cv.lat, sizeof(cv.lat), "NO CAMERA");
+            } else {
+                lat = LatencyTest{};
+                lat.active = true;
+                lat.phase_start = t;
+                std::snprintf(cv.lat, sizeof(cv.lat), "POINT CAMERA AT SCREEN");
+                log("latency test: started (camera must see an output)");
+            }
+        }
+        himmel::engine::LumaSample ls;
+        while (cam && cam->pop_luma(ls)) {
+            if (!lat.active) continue;
+            if (!lat.light) {
+                if (ls.t_us > lat.phase_start + 350000) lat.dark_sum += ls.luma, ++lat.dark_n;
+            } else {
+                if (lat.t_switch && !lat.detected && ls.t_us > lat.t_switch) {
+                    const float thr = lat.light_level > lat.dark + 12 ? (lat.dark + lat.light_level) * 0.5f : lat.dark + 25.0f;
+                    if (ls.luma > thr) {
+                        lat.detected = true;
+                        if (lat.cycle > 0 && lat.n < static_cast<int>(lat.res.size()))
+                            lat.res[static_cast<size_t>(lat.n++)] = (ls.t_us - lat.t_switch) / 1000.0;
+                        std::snprintf(cv.lat, sizeof(cv.lat), "TESTING %d/%d", lat.n, kLatRuns);
+                    }
+                }
+                if (ls.t_us > lat.phase_start + 350000) lat.light_sum += ls.luma, ++lat.light_n;
+            }
+        }
+        if (lat.active && t - lat.phase_start >= kLatPhaseUs) {
+            if (!lat.light) {
+                if (lat.dark_n) lat.dark = static_cast<float>(lat.dark_sum / lat.dark_n);
+                lat.dark_sum = 0, lat.dark_n = 0;
+                lat.light = true, lat.switch_pending = true, lat.detected = false, lat.t_switch = 0;
+            } else {
+                if (lat.light_n) lat.light_level = static_cast<float>(lat.light_sum / lat.light_n);
+                lat.light_sum = 0, lat.light_n = 0;
+                lat.light = false;
+                ++lat.cycle;
+            }
+            lat.phase_start = t;
+            if (lat.n >= kLatRuns || lat.cycle > 3 * kLatRuns) {
+                lat.active = false;
+                if (lat.n >= 3) {
+                    std::sort(lat.res.begin(), lat.res.begin() + lat.n);
+                    const double med = lat.res[static_cast<size_t>(lat.n / 2)];
+                    std::snprintf(cv.lat, sizeof(cv.lat), "LOOP %.0f MS (%.0f-%.0f)", med, lat.res[0],
+                                  lat.res[static_cast<size_t>(lat.n - 1)]);
+                    log("latency test: screen -> camera loop median %.1f ms, min %.1f, max %.1f (%d runs; dark %.0f, light %.0f)",
+                        med, lat.res[0], lat.res[static_cast<size_t>(lat.n - 1)], lat.n, lat.dark, lat.light_level);
+                } else {
+                    std::snprintf(cv.lat, sizeof(cv.lat), "NO FLASH SEEN");
+                    log("latency test: the camera never saw the flash (dark %.0f, light %.0f) - point it at an output",
+                        lat.dark, lat.light_level);
+                }
+            }
         }
 
         // Clip: advance the play head, ask the worker for that frame, upload it if it is ready.
@@ -755,6 +914,13 @@ int main(int argc, char** argv) {
         g.ctx->PSSetShader(g.ps_pattern.Get(), nullptr, 0);
         g.ctx->PSSetConstantBuffers(0, 1, g.cb_pattern.GetAddressOf());
         g.ctx->Draw(3, 0);
+        if (lat.active) {  // the latency test owns the canvas
+            const float c = lat.light ? 1.0f : 0.0f;
+            const float col[4] = {c, c, c, 1.0f};
+            g.ctx->ClearRenderTargetView(g.canvas_rtv.Get(), col);
+            clip_visible = false;
+            cam_visible = false;
+        }
 
         // 4b. Clip layer over the test card (cover-fit, zoom, position, opacity).
         const float opacity = g_params.clip[0];
@@ -788,6 +954,36 @@ int main(int argc, char** argv) {
             g.ctx->PSSetShaderResources(0, 1, &none);
         }
 
+        // 4c. Camera layer on top (NV12 -> RGB in the shader, mirror, brightness/contrast).
+        const auto& ck = g_params.cam;
+        if (cam_visible && ck[0] > 0.001f && cam_y_srv) {
+            const float cw = static_cast<float>(cam_w), ch = static_cast<float>(cam_h);
+            const float sc = std::max(g.canvas_w / cw, g.canvas_h / ch) * clip_zoom(ck[1]);
+            ClipCB kcb{};
+            kcb.xform[0] = g.canvas_w / (cw * sc) * (ck[4] > 0.5f ? -1.0f : 1.0f);  // mirror = flip x
+            kcb.xform[1] = g.canvas_h / (ch * sc);
+            kcb.xform[2] = -(ck[2] - 0.5f) * (ck[4] > 0.5f ? -1.0f : 1.0f);
+            kcb.xform[3] = ck[3] - 0.5f;
+            kcb.info[0] = (ck[5] - 0.5f) * 1.0f;            // brightness -0.5..+0.5
+            kcb.info[1] = std::pow(4.0f, (ck[6] - 0.5f) * 2);  // contrast 0.25x..4x
+            kcb.info[3] = ck[0];
+            if (SUCCEEDED(g.ctx->Map(g.cb_camera.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &ms))) {
+                std::memcpy(ms.pData, &kcb, sizeof(kcb));
+                g.ctx->Unmap(g.cb_camera.Get(), 0);
+            }
+            ID3D11SamplerState* lin = g.lin.Get();
+            g.ctx->PSSetSamplers(0, 1, &lin);
+            g.ctx->PSSetShader(g.ps_camera.Get(), nullptr, 0);
+            g.ctx->PSSetConstantBuffers(3, 1, g.cb_camera.GetAddressOf());
+            ID3D11ShaderResourceView* cs[2] = {cam_y_srv.Get(), cam_uv_srv.Get()};
+            g.ctx->PSSetShaderResources(2, 2, cs);
+            g.ctx->OMSetBlendState(g.blend_alpha.Get(), nullptr, 0xFFFFFFFF);
+            g.ctx->Draw(3, 0);
+            g.ctx->OMSetBlendState(nullptr, nullptr, 0xFFFFFFFF);
+            ID3D11ShaderResourceView* none2[2] = {};
+            g.ctx->PSSetShaderResources(2, 2, none2);
+        }
+
         // 5. Each output shows its part of the canvas (+ status overlay).
         const bool overlay_due = t >= overlay_next;
         if (overlay_due) {
@@ -812,7 +1008,7 @@ int main(int argc, char** argv) {
             bcb.overlay[0] = 8, bcb.overlay[1] = 8;
             bcb.overlay[2] = static_cast<float>(kOverlayW * kOverlayScale);
             bcb.overlay[3] = static_cast<float>(kOverlayH * kOverlayScale);
-            bcb.out_master = k[7];
+            bcb.out_master = lat.active ? 1.0f : k[7];
             if (SUCCEEDED(g.ctx->Map(g.cb_blit.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &ms))) {
                 std::memcpy(ms.pData, &bcb, sizeof(bcb));
                 g.ctx->Unmap(g.cb_blit.Get(), 0);
@@ -828,6 +1024,10 @@ int main(int argc, char** argv) {
             g.ctx->Draw(3, 0);
             const HRESULT hr = o.swap->Present(1, 0);
             if (FAILED(hr)) present_hr = hr;
+        }
+        if (lat.switch_pending) {  // first white frame handed to the swap chains
+            lat.t_switch = now_us();
+            lat.switch_pending = false;
         }
         ID3D11ShaderResourceView* null_srv[2] = {};
         g.ctx->PSSetShaderResources(0, 2, null_srv);

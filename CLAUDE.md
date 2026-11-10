@@ -219,9 +219,20 @@ The details are in the mockup (`docs/vj-mockup.html`).
      knob page 1 test card / 2 clip (opacity, speed -2..2x, zoom, pos x/y),
      encoder = next/previous clip, pads = 16 jump points, Play = pause,
      Restart = start. ffmpeg's HAP encoder needs width/height divisible by 4.
-   - Still to do: one camera mixed in and controlled from the MK2; measure
-     glass-to-glass latency; black "curtain" windows held by the supervisor so
-     a renderer restart shows black, not the desktop.
+   - ~~one camera mixed in~~ **done 2026-11-10** (checked on screen; the MK2
+     camera page and the latency test still need an external webcam):
+     `CameraCapture` (`src/engine/src/camera_capture.cpp`), Media Foundation,
+     best native format (>= 29 fps, up to 1080p), NV12 via the source reader,
+     low-latency mode, lock-free triple buffer, retries every 2 s, skips IR
+     cameras. Render args `--camera NAME`, `--camera-index N`, `--no-camera`.
+     MK2 knob page 3 CAMERA: opacity, zoom, pos x/y, mirror, bright, contrast.
+   - Latency test: **Sampling** on the MK2. The canvas flips black/white every
+     0.7 s, the camera (pointed at an output) reports when it sees it; 16 runs,
+     median/min/max on the MK2 screen and in the log ("LOOP" = Present() ->
+     screen -> camera frame delivered). The dev laptop's LifeCam is built into
+     the screen, so this needs an external webcam (or a mirror).
+   - Still to do: run the latency test; black "curtain" windows held by the
+     supervisor so a renderer restart shows black, not the desktop.
    - Dev PC note: the owner's dev laptop is a GTX 1070 with one screen, so
      outputs are tested as windows there; the show PC is the RTX 5090.
 5. Then: the ffmpeg/HAP import pipeline, audio analysis, the cue system, Smart

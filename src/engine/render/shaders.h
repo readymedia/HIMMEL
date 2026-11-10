@@ -21,7 +21,13 @@ cbuffer Clip : register(b2) {
     float4 xform;        // canvas uv -> clip uv: scale.xy, offset.zw
     float4 info;         // tex scale x, y, mode (0 rgb, 1 rgba, 2 Hap Q YCoCg, 3 alpha), opacity
 };
+cbuffer Camera : register(b3) {
+    float4 cam_xform;    // canvas uv -> camera uv: scale.xy (x < 0 = mirror), offset.zw
+    float4 cam_info;     // brightness, contrast, -, opacity
+};
 Texture2D canvas_tex : register(t0);
+Texture2D cam_y : register(t2);
+Texture2D cam_uv : register(t3);
 Texture2D overlay_tex : register(t1);
 SamplerState lin : register(s0);
 SamplerState pnt : register(s1);
@@ -93,6 +99,17 @@ float4 ps_clip(VSOut i) : SV_Target {
     }
     else if (info.z > 0.5) { a = c.a; }
     return float4(saturate(rgb), a * info.w);
+}
+
+// Camera layer: NV12 (Y + interleaved UV), BT.709 limited range -> RGB.
+float4 ps_camera(VSOut i) : SV_Target {
+    float2 cu = (i.uv - 0.5) * cam_xform.xy + 0.5 + cam_xform.zw;
+    if (any(cu < 0) || any(cu > 1)) return 0;
+    float y = (cam_y.Sample(lin, cu).r - 16.0 / 255.0) * (255.0 / 219.0);
+    float2 c = (cam_uv.Sample(lin, cu).rg - 128.0 / 255.0) * (255.0 / 224.0);
+    float3 rgb = float3(y + 1.5748 * c.y, y - 0.1873 * c.x - 0.4681 * c.y, y + 1.8556 * c.x);
+    rgb = (rgb - 0.5) * cam_info.y + 0.5 + cam_info.x;
+    return float4(saturate(rgb), cam_info.w);
 }
 
 float4 ps_blit(VSOut i) : SV_Target {
