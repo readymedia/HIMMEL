@@ -1,4 +1,4 @@
-# Weapon no. 3: the Entrancer (simulated, Lightpad as its pad)
+# Weapon no. 4: the Entrancer (simulated, Lightpad as its pad)
 
 Status (2026-11-10): **simulated and playing the engine**, checked in the
 browser and on the engine's output window. The owner has a real unit; its

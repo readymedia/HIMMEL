@@ -310,7 +310,7 @@ The details are in the mockup (`docs/vj-mockup.html`).
      pressure = amount), mouse drag on an output (keys 1-9, H = hold).
      `touch_fx_check.exe` renders them to PNG and times them. Next: Lightpad
      as the touch source + its LED feedback.
-   - **Weapon no. 3: Entrancer, simulated (2026-11-10, checked in the browser +
+   - **Weapon no. 4: Entrancer, simulated (2026-11-10, checked in the browser +
      engine window):** `python tools/entrancer_live.py` (http://127.0.0.1:8770,
      launch config `entrancer-live`) draws the unit from
      `weapons/entrancer.weapon.json` and plays it with the mouse or the real

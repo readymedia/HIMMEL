@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 ReadyMedia.no and Himmel contributors
-"""A simulated Entrancer-style X/Y effects unit (weapon no. 3), played with the
+"""A simulated Entrancer-style X/Y effects unit (weapon no. 4), played with the
 mouse on the drawn panel or with a real Lightpad Block as its touch pad.
 
 It behaves like the real unit (owner's manual; docs/touch-fx-entrancer.md):
