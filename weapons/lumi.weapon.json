@@ -17,7 +17,7 @@
     "leds": "one RGB LED per key, drawn by Himmel's renderer with fillPixel(colour, key, 0) from a 48-byte RGB565 heap (firmware 1.3.0 or newer)"
   },
   "map": null,
-  "status": "simulated; protocol from ROLI's reference code and blocksd, not yet checked on the owner's LUMI",
+  "status": "simulated; checked on the owner's LUMI (firmware 1.3.8) 2026-11-10: keys, velocity, buttons, Himmel's key LEDs. Windows: MIDI driver USBMidi2-ACX (see weapons/README.md)",
   "panel": {
     "w": 980,
     "h": 330

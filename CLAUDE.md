@@ -161,6 +161,22 @@ The details are in the mockup (`docs/vj-mockup.html`).
           renderer forwards them with sendMessageToHost (program event 0x28).
     - Next: the generic weapon driver/shared block (plan in
       `weapons/README.md`).
+  - **Weapon no. 3 = ROLI LUMI Keys (owner's choice 2026-11-10; owner's
+    unit: firmware 1.3.8, serial LKB…).** It is checked on the device: keys
+    with velocity, buttons, and Himmel's own key LEDs.
+    - Profile `weapons/lumi.weapon.json` (kind `key`, badge
+      "HIMMEL · KEYS").
+    - `tools/lumi_sim.py`: SimLumi / LumiHost / LumiLive, subclasses of the
+      Lightpad code. Self-test included. UDP link 8769.
+    - **Windows gotcha:** the LUMI's MIDI interface failed with code 10 under
+      `usbaudio`. The owner switched it in Device Manager to
+      **USBMidi2-ACX**. The port is then named "USBMidi2-ACX", so make_hw
+      matches both names. Steps are in `weapons/README.md`.
+    - Every LUMI button arrives twice (firmware message + our program
+      event); LumiHost ignores the program copies. The LUMI also sends
+      BLOCKS touch messages per key; they are not used yet.
+    - Not done: a key map verified key by key, and games on the keys.
+    - Weapon no. 4 = the Entrancer (the Touch FX session's branch).
 - **Visual mapping is the way to work with the controller. Keep it and build on
   it** (the owner wants graphical tools, not terminal tables):
   - `tools/mk2_live.py` + `tools/mk2_live.html`: a browser live view of the MK2
