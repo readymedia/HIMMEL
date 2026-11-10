@@ -77,7 +77,22 @@ the device.
 3. **Simulator:** a pretend device that produces the same reports.
 4. **Credit** every source in `THIRD_PARTY_NOTICES.md`.
 
+## Playing Himmel with the simulator
+
+The simulator can also be the MK2 for the real engine:
+
+```
+python tools/mk2_live.py                    then press Simulate on the page
+build\bin\Release\himmel.exe --sim -- --outputs 3 --size 640x360
+```
+
+`--sim` makes `mk2_controller.exe` read the simulated MK2 over UDP on
+127.0.0.1:8766 instead of USB. The simulator sends the same raw reports as the
+hardware; the controller sends its LED and screen reports back, so the drawn
+panel shows the engine's screen pages and LEDs (the pill says "playing
+Himmel"). Everything between the reports and the engine is the code that runs
+with the real MK2. Stop simulating and the controller reports the MK2 lost
+after 1 s; the engine keeps running, as with a pulled cable.
+
 Today the live view and the simulator are MK2-specific in Python, and only the
-drawing is generic. The next steps are a generic MIDI weapon and a simulated
-weapon that feeds the C++ shared memory (`Local\HimmelMk2`), so the engine can
-be played with no hardware at all.
+drawing is generic. The next step is a generic MIDI weapon.

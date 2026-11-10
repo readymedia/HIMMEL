@@ -92,6 +92,12 @@ class Live:
     def simulated(self):
         return isinstance(self.t, mk2_sim.SimMk2)
 
+    def engine_active(self):
+        """The simulated MK2 is played by Himmel (mk2_controller --sim answers): the engine
+        owns the screens and LEDs, the live view only shows them."""
+        t = self.t
+        return isinstance(t, mk2_sim.SimMk2) and t.engine_active()
+
     # ---------- map file ----------
     def load(self):
         try:
@@ -176,6 +182,10 @@ class Live:
         while True:
             t0 = time.perf_counter()
             dt, last = min(0.1, t0 - last), t0
+            if self.engine_active():
+                time.sleep(0.1)
+                last = time.perf_counter()
+                continue
             try:
                 with self.lock:
                     if self.boot_until and time.time() > self.boot_until:
@@ -486,6 +496,7 @@ class Live:
                 "connected": m is not None,
                 "sim": self.sim,
                 "simulated": self.simulated(),
+                "engine": self.engine_active(),
                 "leds": self.led_state(),
                 "notes": self.notes[-2:],
                 "reports": dict(m.reports) if m else {},
@@ -507,8 +518,8 @@ class Live:
                 "screen": dict(self.saved["screen"], mode=self.screen_mode,
                                write_ms=round(self.sender.write_ms, 2), writes=self.sender.writes,
                                fps=round(self.fps, 1),
-                               left=base64.b64encode(self.screen_bits["left"]).decode(),
-                               right=base64.b64encode(self.screen_bits["right"]).decode()),
+                               left=base64.b64encode(bytes(self.shown_screen("left"))).decode(),
+                               right=base64.b64encode(bytes(self.shown_screen("right"))).decode()),
             }
 
     def led_state(self):
@@ -517,24 +528,32 @@ class Live:
         m = self.m
         if m is None:
             return {}
+        if self.engine_active():
+            rx = self.t.rx_leds
+            leds80, leds81, leds82 = rx[0x80], rx[0x81], rx[0x82]
+        else:
+            leds80, leds81, leds82 = m.leds80, m.leds81, m.leds82
         out = {}
         for i, name in enumerate(mk.LED_82):
-            v = m.leds82[i]
+            v = leds82[i]
             if v:
                 out[name.rstrip("*")] = [v, v, v]
         for g, name in enumerate(mk.GROUPS):
-            rgb = m.leds81[g * 6:g * 6 + 3]
+            rgb = leds81[g * 6:g * 6 + 3]
             if any(rgb):
                 out[name] = list(rgb)
         for i, name in enumerate(mk.LED_81_TRANSPORT):
-            v = m.leds81[48 + i]
+            v = leds81[48 + i]
             if v:
                 out[name.rstrip("*")] = [v, v, v]
         for name, pid in self.pad_ids().items():
-            rgb = m.leds80[pid * 3:pid * 3 + 3]
+            rgb = leds80[pid * 3:pid * 3 + 3]
             if any(rgb):
                 out[name] = list(rgb)
         return out
+
+    def shown_screen(self, side):
+        return self.t.rx_screens[side] if self.engine_active() else self.screen_bits[side]
 
     def sim_input(self, d):
         """Mouse/keyboard input for the simulated MK2. Not under lock (the sim has its own)."""

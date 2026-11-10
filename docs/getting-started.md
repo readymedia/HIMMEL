@@ -123,12 +123,26 @@ Everything after `--` goes to the renderer:
 | `--clip file.mov` | Add a clip to the playlist (repeatable). Default: every `.mov` under `media/`. |
 | `--camera NAME`, `--camera-index N`, `--no-camera` | Pick the webcam (part of its name, or its index), or none. Default: the first camera that is not an IR camera. |
 
-Supervisor option: `--no-controller` (renderer only). The supervisor logs to
+Supervisor options: `--no-controller` (renderer only), `--sim` (no MK2: play
+Himmel from the simulated MK2 in the browser, see below). The supervisor logs to
 `build\bin\Release\logs\himmel-YYYY-MM-DD.log`, restarts a crashed part within
 0.25 s and kills and restarts a part that hangs for 2 s. **Ctrl+C** in its
 window stops everything cleanly. In a fullscreen output only **Shift+Esc**
 closes the renderer (which the supervisor then restarts); **M** toggles
 span/mirror.
+
+### No MK2? Play Himmel from the browser
+
+1. `python tools/mk2_live.py`, open <http://127.0.0.1:8765> and press **Simulate**.
+2. `build\bin\Release\himmel.exe --sim -- --outputs 3 --size 640x360`
+3. The pill on the page says **MK2 simulated, playing Himmel**. The drawn panel
+   is now Himmel's MK2: its screens show the engine's pages, its LEDs are the
+   engine's LEDs, and your clicks, drags and scrolls play the engine (the table
+   below applies). Keyboard Shift = Shift.
+
+The simulator sends the same USB reports as the hardware over UDP on
+127.0.0.1:8766; the controller does the rest exactly as with the real device
+([weapons/README.md](../weapons/README.md)).
 
 ### Playing it from the MK2
 

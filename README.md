@@ -22,6 +22,7 @@ takes down the output), **low latency**, **easy to use**, **light on the GPU**.
 |---|---|
 | **MK2 mapping** | Every control and LED verified on the device ([`maschine_mk2_map.json`](maschine_mk2_map.json)); a browser live view to check and re-learn your own unit. |
 | **MK2 controller** | C++ process: events over shared memory (~750 Hz pads, velocity, aftertouch), LEDs, both 1-bit screens, automatic reconnect. |
+| **No MK2? Simulate it** | The browser live view becomes a virtual MK2 that plays the real engine (`himmel.exe --sim`). See [weapons](weapons/README.md). |
 | **MK2 screen pages** | Perform / browse / audio / menu / message pages with values right above the physical knobs. Plus games for the screens (Snake, Star Swarm, Sky Shield, ...). |
 | **Engine** | Supervisor that restarts crashed or hung parts in < 1 s; Direct3D 11 renderer, 1–8 outputs, span or mirror, waitable flip-model swap chains. |
 | **HAP playback** | Own MOV reader + HAP decoder (Hap, Hap Alpha, Hap Q), frames decoded ahead in a worker and sent to the GPU compressed. |

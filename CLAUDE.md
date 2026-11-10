@@ -98,8 +98,17 @@ The details are in the mockup (`docs/vj-mockup.html`).
     panel, keyboard Shift = Shift. Simulated input never marks "seen", never
     changes the map, never measured. Checked in the browser 2026-11-10
     (knobs, encoder, buttons, pads, Snake with lit d-pad, switch back to HW).
-  - Next: a generic MIDI weapon; a simulated weapon feeding `Local\HimmelMk2`
-    so the C++ engine runs with no hardware.
+  - **Simulated MK2 plays the engine (2026-11-10, checked):** `himmel.exe --sim`
+    / `mk2_controller.exe --sim [--sim-port N]` read raw reports over UDP
+    127.0.0.1:8766 (`src/controller/include/himmel/mk2/sim_link.h`) instead of
+    hidapi, behind a small `detail::Device` interface in `controller.cpp`.
+    LED/screen reports go back to the sender, plus hello `0xFE` every 250 ms.
+    Heartbeat timeout 1 s in sim. A new simulator port = new session (full
+    resend). The live view shows the engine's screens/LEDs while hellos arrive.
+    Windows gotcha: every datagram sent while nobody listens comes back as a
+    queued WSAECONNRESET; the Python receiver must drain them without sleeping
+    (Python cannot switch SIO_UDP_CONNRESET off).
+  - Next: a generic MIDI weapon.
 - **Visual mapping is the way to work with the controller. Keep it and build on
   it** (the owner wants graphical tools, not terminal tables):
   - `tools/mk2_live.py` + `tools/mk2_live.html`: a browser live view of the MK2

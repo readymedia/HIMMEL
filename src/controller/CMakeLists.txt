@@ -6,9 +6,10 @@ add_library(himmel_mk2 STATIC
     src/output.cpp
     src/shared.cpp
     src/controller.cpp
+    src/sim_link.cpp
     src/pages.cpp)
 target_include_directories(himmel_mk2 PUBLIC include)
-target_link_libraries(himmel_mk2 PUBLIC nlohmann_json::nlohmann_json PRIVATE hidapi::hidapi)
+target_link_libraries(himmel_mk2 PUBLIC nlohmann_json::nlohmann_json PRIVATE hidapi::hidapi ws2_32)
 
 if(MSVC)
     target_compile_options(himmel_mk2 PRIVATE /W4 /permissive- /utf-8)

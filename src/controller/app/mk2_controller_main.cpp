@@ -2,7 +2,10 @@
 // Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // mk2_controller.exe - the Maschine MK2 controller process (spec 5.1).
 //
-//   mk2_controller [--map path\to\maschine_mk2_map.json]
+//   mk2_controller [--map path\to\maschine_mk2_map.json] [--sim [--sim-port N]]
+//
+// --sim: no hardware. Reads a simulated MK2 over UDP on 127.0.0.1:8766 (the
+// browser panel in tools/mk2_live.py, Simulate) and sends LEDs and screens back.
 //
 // Creates the shared block "Local\HimmelMk2", loads the map (falls back to the
 // built-in verified layout if the file is missing or broken), and runs until
@@ -18,6 +21,7 @@
 
 #include <atomic>
 #include <cstdio>
+#include <cstdlib>
 #include <ctime>
 #include <filesystem>
 #include <string>
@@ -86,7 +90,18 @@ int main(int argc, char** argv) {
     shm.get()->status.map_verified.store(from_file && map.verified ? 1 : 0);
     log_line("Shared memory ready: Local\\HimmelMk2 (" + std::to_string(sizeof(SharedBlock)) + " bytes)");
 
-    Controller controller(map, ControllerConfig{}, shm.get(), log_line);
+    ControllerConfig cfg;
+    for (int i = 1; i < argc; ++i) {
+        const std::string a = argv[i];
+        if (a == "--sim") cfg.sim = true;
+        else if (a == "--sim-port" && i + 1 < argc) cfg.sim_port = static_cast<uint16_t>(std::atoi(argv[++i]));
+    }
+    if (cfg.sim) {
+        // Python is not a USB device: allow it a hiccup before calling the MK2 lost.
+        cfg.heartbeat_timeout_us = 1000000;
+        log_line("Simulated MK2 on udp 127.0.0.1:" + std::to_string(cfg.sim_port));
+    }
+    Controller controller(map, cfg, shm.get(), log_line);
     controller.run(g_stop);
 
     log_line("Stopped");

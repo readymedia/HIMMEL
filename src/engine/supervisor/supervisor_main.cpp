@@ -2,8 +2,9 @@
 // Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // himmel.exe - the supervisor (CLAUDE.md "Processes").
 //
-//   himmel [--no-controller] [-- render arguments ...]
+//   himmel [--no-controller] [--sim] [-- render arguments ...]
 //   e.g. himmel -- --outputs 3 --fullscreen
+//   --sim: no MK2; the controller reads the simulated MK2 in tools/mk2_live.py.
 //
 // Starts mk2_controller.exe and himmel_render.exe from its own folder and keeps
 // them alive for a whole night:
@@ -148,10 +149,11 @@ int main(int argc, char** argv) {
     _wfopen_s(&g_logfile, (dir / "logs" / name).c_str(), L"a");
 
     bool with_controller = true;
-    std::wstring render_args;
+    std::wstring render_args, ctl_args;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "--no-controller") with_controller = false;
+        else if (a == "--sim") ctl_args = L"--sim";
         else if (a == "--") {
             for (++i; i < argc; ++i) render_args += widen(argv[i]) + L" ";
         }
@@ -165,7 +167,7 @@ int main(int argc, char** argv) {
     himmel::engine::EngineShm eshm;
     himmel::mk2::SharedMemory mshm;
 
-    Child ctl{"controller", (dir / "mk2_controller.exe").wstring(), L""};
+    Child ctl{"controller", (dir / "mk2_controller.exe").wstring(), ctl_args};
     Child ren{"render", (dir / "himmel_render.exe").wstring(), render_args};
     ctl.ctx = &mshm;
     ctl.heartbeat = [](void* p) -> uint64_t {
@@ -180,7 +182,8 @@ int main(int argc, char** argv) {
         return m->get()->heartbeat_us.load();
     };
 
-    log("supervisor up in %s%s", dir.string().c_str(), with_controller ? "" : " (no controller)");
+    log("supervisor up in %s%s", dir.string().c_str(),
+        !with_controller ? " (no controller)" : ctl_args.empty() ? "" : " (simulated MK2)");
     Child* children[2] = {&ctl, &ren};
     constexpr uint64_t kHungUs = 2000000, kGraceUs = 8000000;  // grace: start-up (GPU, shaders, USB)
     uint64_t next_report = now_us() + 60000000;

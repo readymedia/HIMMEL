@@ -104,6 +104,12 @@ flowchart LR
 ```
 
 - The pad report streams all the time (~750 Hz), so silence means the device is gone.
+- **Simulated MK2** (`mk2_controller --sim`, `himmel --sim`): the device under the
+  reader and writer is a UDP socket on 127.0.0.1:8766 instead of USB
+  (`sim_link.h`). The simulator in `tools/mk2_live.py` sends the same raw
+  reports; LED and screen reports go back to it, plus a 1-byte hello (`0xFE`)
+  every 250 ms so it knows a controller listens. Parsing, velocity, events,
+  LEDs and screens are the same code. Heartbeat timeout 1 s instead of 250 ms.
 - Pad velocity = highest pressure in the first 4 ms after onset (measured: the
   peak cannot tell soft from medium), with a per-pad noise floor and a 25 ms
   re-trigger hold-off against release rebound.

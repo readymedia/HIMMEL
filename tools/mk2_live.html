@@ -278,6 +278,7 @@ function buildPanel(w) {
     } else if (c.kind === "pad") {
       d = add('<span class="pn">' + c.n + '</span><span class="pv"></span>', "c pad", { left: c.x + "px", top: c.y + "px", width: c.w + "px", height: c.h + "px" });
     } else continue;
+    d.title = c.name;
     c.el = d; els[c.name] = c;
     wire(c);
   }
@@ -365,7 +366,7 @@ function render(s) {
   sb.textContent = simOn ? "■ Stop simulating" : "Simulate";
   sb.classList.toggle("simon", simOn);
   const nm = W ? W.name : "";
-  conn.textContent = s.simulated ? nm + " simulated" : s.connected ? nm + " connected" : nm + " not connected";
+  conn.textContent = s.engine ? nm + " simulated, playing Himmel" : s.simulated ? nm + " simulated" : s.connected ? nm + " connected" : nm + " not connected";
   conn.className = "pill " + (s.simulated ? "sim" : s.connected ? "ok" : "bad");
   const leds = s.leds || {};
   const seen = new Set(s.seen), held = new Set(s.held), mapped = new Set(s.mapped);
