@@ -169,7 +169,7 @@ The details are in the mockup (`docs/vj-mockup.html`).
       optical readback, or a microcontroller mod (not recommended).
     - Simulated fully: `tools/kf4_sim.py` (state machine, curves, keys,
       `--selftest`) + its own page `tools/kf4_live.html` with simulated
-      inputs, MAIN OUT and MONITOR OUT (profile field `live_page`).
+      inputs, MAIN OUT and MONITOR OUT (profile field `page`, same hook as the NuVJ).
       Launch config `kf4-live` (port 8779). Checked in the browser
       2026-11-10.
     - Events go as JSON datagrams to UDP 127.0.0.1:8771 (not read by the

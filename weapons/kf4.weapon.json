@@ -10,7 +10,7 @@
     "note": "Standalone SD video mixer: 4 inputs onto 2 channels (A/B), DJ-style crossfader with 4 curves, black/white background, chroma and luma key, HOLD (freeze) per channel, 2 frame synchronizers, NTSC/PAL. No MIDI, USB, RS-232 or any other control port (owner's manual, rear and front panel). Works with the hardware; not affiliated with Korg."
   },
   "driver": null,
-  "live_page": "kf4_live.html",
+  "page": "kf4_live.html",
   "protocol": {
     "transport": "none: the unit has no data port. The simulator speaks Himmel events directly (JSON datagrams to UDP 127.0.0.1:8771), see weapons/kf4.md",
     "video_in": "IN 1 S-Video or composite (S-Video wins), IN 2 / IN 3 composite (rear), IN 4 composite (front)",

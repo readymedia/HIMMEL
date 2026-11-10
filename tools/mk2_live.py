@@ -660,6 +660,21 @@ def _make_kf4(profile):
 
 
 GENERIC = {"lightpad": _make_lightpad, "lumi": _make_lumi, "kf4": _make_kf4}
+
+
+def weapon_page(wid):
+    """A weapon whose profile names its own page ("page": "x.html" in tools/) gets that page at /."""
+    p = weapon_path(wid) if wid and wid != "mk2" else None
+    if p is None:
+        return None
+    try:
+        with open(p, encoding="utf-8") as f:
+            page = json.load(f).get("page")
+    except (OSError, ValueError):
+        return None
+    if page and os.path.basename(page) == page and os.path.exists(os.path.join(HERE, page)):
+        return os.path.join(HERE, page)
+    return None
 _generic_live = {}
 _generic_lock = threading.Lock()
 
@@ -741,13 +756,9 @@ class Handler(BaseHTTPRequestHandler):
                     time.sleep(1 / 30)
             except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
                 return
-        elif u.path.endswith("_live.html") and u.path[1:-10].isalnum() and u.path != "/mk2_live.html":
-            # a weapon's own page (profile field "live_page"), e.g. /kf4_live.html
-            p = os.path.join(HERE, u.path[1:])
-            if not os.path.exists(p):
-                self.send_error(404)
-                return
-            with open(p, "rb") as f:
+        elif u.path in ("/", "/index.html") and weapon_page(
+                (parse_qs(u.query).get("weapon") or [DEFAULT_WEAPON])[0]):
+            with open(weapon_page((parse_qs(u.query).get("weapon") or [DEFAULT_WEAPON])[0]), "rb") as f:
                 body = f.read()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")

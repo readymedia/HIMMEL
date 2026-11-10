@@ -11,7 +11,7 @@ python tools/kf4_sim.py --selftest                       mixer logic + engine li
 
 `.claude/launch.json` has the config `kf4-live`. In the picker of any live view
 the KF4 entry opens its own page, `tools/kf4_live.html` (profile field
-`live_page`), because it needs picture outputs that the other weapons do not.
+`page`, the same hook as the NuVJ), because it needs picture outputs that the other weapons do not.
 
 ## The unit
 

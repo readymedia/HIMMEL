@@ -83,8 +83,8 @@ the device.
   outline (`r` = corner radius), `dna` is a connector dot at `x, y`, and `port`
   is a socket or switch the protocol cannot see, with a small label.
 - `protocol` (optional, free text): a transport and message summary for people.
-- `live_page` (optional): the weapon has its own page in `tools/` (e.g.
-  `kf4_live.html`); the picker opens it instead of the generic panel.
+- `page` (optional): the weapon has its own page in `tools/` (e.g.
+  `kf4_live.html`); `/?weapon=<id>` serves it instead of the generic panel.
 - `kind: "fader"` (a linear fader, absolute 0..`range`) and `kind: "switch"`
   (`positions`: a list of labels) were added for the KF4.
 - `map` is `null` until a map has been learned on real hardware.
