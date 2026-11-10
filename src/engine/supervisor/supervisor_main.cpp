@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // himmel.exe - the supervisor (CLAUDE.md "Processes").
 //
 //   himmel [--no-controller] [-- render arguments ...]

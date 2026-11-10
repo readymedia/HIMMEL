@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // Maschine MK2 controller: the control map (maschine_mk2_map.json).
 // Spec section 4. The verified layout is also baked in (default_map) so the
 // controller still works if the file is missing or broken (show-safe).

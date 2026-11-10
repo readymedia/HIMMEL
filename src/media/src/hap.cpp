@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 #include "himmel/media/hap.h"
 
 #include <cstring>

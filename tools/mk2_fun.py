@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 """
 Fun modes for the two MK2 screens (one 512 x 64 image across both)
 ==================================================================

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // hap_probe.exe - checks a HAP clip without the engine.
 //
 //   hap_probe clip.mov [--png first_frame.png]

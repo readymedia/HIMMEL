@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // mk2_pages_demo.exe - the Himmel screen pages, live on the MK2.
 //
 // Run mk2_controller.exe first. This is a stand-in for the engine/GUI: it keeps

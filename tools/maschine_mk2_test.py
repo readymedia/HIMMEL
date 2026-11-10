@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 """
 Maschine MK2 hardware test and mapper (no video)
 ================================================
@@ -16,7 +18,8 @@ Known protocol (MK2 is a vendor HID device):
   input  report 0x01 = buttons and knobs (25 bytes), 0x20 = pads (65 bytes)
   output report 0x80 = 16 pads x RGB, 0x81 = 8 groups x 2 LEDs x RGB + 8 transport,
                 0x82 = 31 single-color buttons. LED values 0..127.
-Sources: github.com/abique/ni-mk2 (LED layout), Encdr and maschine-rs notes.
+Source: github.com/abique/ni-mk2 (MIT; LED layout, report ids). Everything was
+re-checked on the device. Credits: THIRD_PARTY_NOTICES.md.
 
 Setup on Windows:
   1. Python 3.10+ from python.org.

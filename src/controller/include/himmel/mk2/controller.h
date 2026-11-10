@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // Maschine MK2 controller: device I/O and the run loop (spec 5.1).
 #pragma once
 

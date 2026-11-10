@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // Minimal QuickTime / MP4 reader for HAP clips (decision 2026-11-10: own MOV
 // reader + Snappy, FFmpeg is not linked).
 //

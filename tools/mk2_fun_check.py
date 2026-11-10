@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 """
 Check MK2 screen modes without the hardware.
 

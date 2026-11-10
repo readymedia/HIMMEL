@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // Maschine MK2 controller: LED and screen output reports (spec 3), plus a
 // small 1-bit canvas with the 5x7 font (port of tools/mk2_screens.py).
 #pragma once

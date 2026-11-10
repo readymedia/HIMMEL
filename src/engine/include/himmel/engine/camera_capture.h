@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // Webcam capture (Media Foundation, CLAUDE.md: one capture thread per camera).
 //
 // The worker opens the camera, picks the best native format (>= 29 fps first,

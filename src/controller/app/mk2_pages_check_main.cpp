@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // mk2_pages_check.exe - renders every screen page with sample content to PNG,
 // so layouts can be checked without the MK2.
 //

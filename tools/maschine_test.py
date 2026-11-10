@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 """
 Maschine hardware test (no video)
 =================================

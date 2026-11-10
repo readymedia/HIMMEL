@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // mk2_controller.exe - the Maschine MK2 controller process (spec 5.1).
 //
 //   mk2_controller [--map path\to\maschine_mk2_map.json]

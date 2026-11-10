@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // Maschine MK2 screen pages: the real Himmel layouts for the two 256x64 1-bit
 // screens, drawn as one 512x64 canvas.
 //

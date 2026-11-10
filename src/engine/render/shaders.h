@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // HLSL for the render skeleton. Compiled once at start-up (D3DCompile), never in
 // the frame loop. Later: precompiled .cso at build time.
 #pragma once

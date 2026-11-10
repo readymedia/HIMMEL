@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 #include "himmel/engine/engine_shared.h"
 
 #ifndef WIN32_LEAN_AND_MEAN

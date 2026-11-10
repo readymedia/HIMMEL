@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // Maschine MK2 controller: the shared-memory interface (spec 5.1, 5.2, 5.5).
 //
 // One named shared-memory block "Local\HimmelMk2" holds:

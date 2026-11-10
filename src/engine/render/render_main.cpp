@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // himmel_render.exe - render process skeleton (CLAUDE.md "Engine skeleton").
 //
 //   himmel_render [--outputs N] [--fullscreen] [--size 640x360] [--mode span|mirror]

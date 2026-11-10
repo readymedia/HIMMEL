@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // Tiny PNG writer (RGB, 8-bit, stored/uncompressed deflate). Only for check
 // tools: no zlib dependency, files are small enough at these sizes.
 #pragma once

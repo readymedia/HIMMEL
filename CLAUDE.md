@@ -238,6 +238,19 @@ The details are in the mockup (`docs/vj-mockup.html`).
 5. Then: the ffmpeg/HAP import pipeline, audio analysis, the cue system, Smart
    Random and the GUI.
 
+## Open source (decided 2026-11-10)
+- Public repo: https://github.com/readymedia/HIMMEL, **MIT license**
+  (© ReadyMedia.no and Himmel contributors). Be open about everything.
+- Every dependency, spec, tool and font is credited with its license in
+  `THIRD_PARTY_NOTICES.md`; compiled-in license texts live in `licenses/`.
+  Update both in the same commit as a new dependency.
+- Development is openly AI-assisted: `docs/ai-assisted-development.md`.
+- Docs for others: `README.md`, `docs/getting-started.md`,
+  `docs/architecture.md`, `CONTRIBUTING.md`. Keep them current when behaviour
+  changes.
+- Copyleft parts (Ableton Link GPL, beat-link EPL) go in separate bridge
+  processes so the core stays MIT.
+
 ## Working rules
 - Keep the render loop free of allocation, locks and disk I/O. Do all
   loading in workers.

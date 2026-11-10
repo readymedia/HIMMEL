@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // Shared status block of the render process ("Local\HimmelEngine").
 //
 // The render process creates it and updates it every frame; the supervisor

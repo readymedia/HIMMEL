@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 """
 MK2 measurements for the controller spec (used by mk2_live.py)
 ==============================================================

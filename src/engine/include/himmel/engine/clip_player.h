@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // HAP clip player: a worker thread reads + decodes frames ahead of the render
 // thread; the render thread picks finished frames without locks and uploads
 // them to the clip's GPU texture.

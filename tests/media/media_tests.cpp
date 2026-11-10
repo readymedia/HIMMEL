@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // Unit tests for the MOV reader and the HAP decoder. Synthetic data only; the
 // clips in media/test are checked too when they exist (hap_probe makes them visible).
 #include <cstdio>

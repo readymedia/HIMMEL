@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // Unit tests for the MK2 controller core. No hardware needed.
 // Run: build\tests\...\mk2_tests.exe   (or ctest)
 #include <cmath>

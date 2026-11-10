@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // HAP frame decoder (https://github.com/Vidvox/hap/blob/master/documentation/HapVideoDRAFT.md).
 //
 // A HAP frame is one or more sections: [3-byte LE size][type] (size 0 = a

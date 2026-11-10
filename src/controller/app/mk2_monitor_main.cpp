@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // mk2_monitor.exe - test client for mk2_controller.exe.
 //
 // Attaches to the shared block, prints every event, and drives the outputs so

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // Shared sample content for the page check tool and the live page demo.
 // Knob pages and decks follow the mockup (docs/vj-mockup.html).
 #pragma once

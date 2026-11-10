@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // Maschine MK2 controller: turning input reports into events (spec 2 and 5.2-5.4).
 // Pure logic, no I/O, no allocation: unit-tested without hardware.
 #pragma once
