@@ -12,7 +12,8 @@ Fully supported: Maschine MK1 (USB 17cc:0808, white pad lights).
 Detected only:   Maschine MK2 (17cc:1140) and other NI devices - the script
                  tells you which one you have, and prints the USB layout.
 
-Protocol source: the Linux kernel driver snd-usb-caiaq (sound/usb/caiaq),
+Protocol source (facts only, no code copied): the Linux kernel driver
+snd-usb-caiaq (sound/usb/caiaq, GPL-2.0; credited in THIRD_PARTY_NOTICES.md),
 which supports the Maschine MK1:
   - EP 0x01 OUT (bulk): commands  [cmd, payload...]
   - EP 0x81 IN  (bulk): replies   0x01 device info, 0x04 buttons, 0x02 knobs
