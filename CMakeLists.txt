@@ -20,8 +20,17 @@ FetchContent_Declare(json
     URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
 
-FetchContent_MakeAvailable(hidapi json)
+# Snappy (BSD) for HAP's second-stage compression (decision 2026-11-10).
+set(SNAPPY_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(SNAPPY_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
+set(SNAPPY_INSTALL OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(snappy
+    URL https://github.com/google/snappy/archive/refs/tags/1.2.1.tar.gz
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+
+FetchContent_MakeAvailable(hidapi json snappy)
 
 enable_testing()
 add_subdirectory(src/controller)
+add_subdirectory(src/media)
 add_subdirectory(src/engine)

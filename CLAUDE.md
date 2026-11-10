@@ -207,9 +207,21 @@ The details are in the mockup (`docs/vj-mockup.html`).
    - Decided 2026-11-10: **HAP playback uses our own small MOV reader +
      Snappy (BSD)**, BC textures straight to the GPU. FFmpeg is not linked;
      `ffmpeg.exe` is only an external tool for import/transcoding.
-   - Still to do: one test clip (HAP) and one camera mixed and controlled from
-     the MK2; measure glass-to-glass latency; black "curtain" windows held by
-     the supervisor so a renderer restart shows black, not the desktop.
+   - ~~one test clip (HAP)~~ **done 2026-11-10, checked on the MK2**:
+     `src/media/` (`himmel_media`: own MOV reader + HAP decoder, Snappy 1.2.1
+     via FetchContent; Hap, Hap Alpha, Hap Q, chunked; not yet Hap Q Alpha),
+     `hap_probe.exe clip.mov [--png f.png]`, `media_tests.exe`.
+     `ClipPlayer` (`src/engine/src/clip_player.cpp`): a worker reads + decodes
+     4 frames ahead (also backwards) into lock-free slots; the renderer uploads
+     ready frames as BC textures (UpdateSubresource). 1080p: 0.2-0.9 ms per frame.
+     Playlist = `--clip` (repeatable) or every .mov under `media/` (gitignored;
+     test clips in `media/test/`, made with ffmpeg testsrc). MK2: Page </> =
+     knob page 1 test card / 2 clip (opacity, speed -2..2x, zoom, pos x/y),
+     encoder = next/previous clip, pads = 16 jump points, Play = pause,
+     Restart = start. ffmpeg's HAP encoder needs width/height divisible by 4.
+   - Still to do: one camera mixed in and controlled from the MK2; measure
+     glass-to-glass latency; black "curtain" windows held by the supervisor so
+     a renderer restart shows black, not the desktop.
    - Dev PC note: the owner's dev laptop is a GTX 1070 with one screen, so
      outputs are tested as windows there; the show PC is the RTX 5090.
 5. Then: the ffmpeg/HAP import pipeline, audio analysis, the cue system, Smart

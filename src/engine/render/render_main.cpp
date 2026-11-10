@@ -34,10 +34,12 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "himmel/engine/clip_player.h"
 #include "himmel/engine/engine_shared.h"
 #include "himmel/mk2/output.h"
 #include "himmel/mk2/pages.h"
@@ -52,7 +54,7 @@ using himmel::mk2::now_us;
 namespace {
 
 constexpr int kMaxOutputs = 8;
-constexpr int kOverlayW = 512, kOverlayH = 16, kOverlayScale = 2;
+constexpr int kOverlayW = 512, kOverlayH = 24, kOverlayScale = 2;
 constexpr int kEngineRing = 0;  // ring 0 of the MK2 block belongs to the engine
 
 void log(const char* fmt, ...) {
@@ -73,7 +75,34 @@ struct Config {
     bool fullscreen = false;
     int win_w = 640, win_h = 360;
     bool mirror = false;
+    std::vector<std::string> clips;  // --clip (repeatable); default: every .mov under media/
 };
+
+// Default playlist: all .mov files under the nearest "media" folder above the exe.
+std::vector<std::string> find_clips() {
+    std::vector<std::string> out;
+    wchar_t self[MAX_PATH];
+    GetModuleFileNameW(nullptr, self, MAX_PATH);
+    std::error_code ec;
+    for (auto dir = std::filesystem::path(self).parent_path(); !dir.empty(); dir = dir.parent_path()) {
+        const auto media = dir / "media";
+        if (std::filesystem::is_directory(media, ec)) {
+            for (auto it = std::filesystem::recursive_directory_iterator(media, ec);
+                 it != std::filesystem::recursive_directory_iterator(); it.increment(ec)) {
+                auto ext = it->path().extension().string();
+                for (auto& ch : ext) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+                if (ext == ".mov") {
+                    const auto u = it->path().u8string();
+                    out.emplace_back(u.begin(), u.end());
+                }
+            }
+            break;
+        }
+        if (dir == dir.parent_path()) break;
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+}
 
 Config parse_args(int argc, char** argv) {
     Config c;
@@ -84,6 +113,7 @@ Config parse_args(int argc, char** argv) {
         else if (a == "--fullscreen") c.fullscreen = true;
         else if (a == "--windowed") c.fullscreen = false;
         else if (a == "--mode") c.mirror = next() == "mirror";
+        else if (a == "--clip") c.clips.push_back(next());
         else if (a == "--size") {
             const std::string s = next();
             int w = 0, h = 0;
@@ -110,6 +140,13 @@ struct Params {
     std::array<float, mk2::kPads> pad{};
     int touched = -1;           // last turned knob (inverted on the MK2 screen)
     uint64_t touched_us = 0;
+    // Knob page 2: the clip layer. Knob 8 (master) is shared by both pages.
+    int page = 0;  // 0 = test card, 1 = clip
+    std::array<float, mk2::kKnobs> clip = {1.00f, 0.75f, 0.50f, 0.50f, 0.50f, 0.0f, 0.0f, 0.0f};
+    // opacity, speed (0.75 = 1x), zoom (0.5 = fill), pos x, pos y
+    bool clip_paused = false;
+    float clip_jump = -1.0f;   // 0..1: jump there on the next frame
+    int clip_step = 0;         // encoder: next / previous clip
     bool mirror = false;
     bool quit = false;
     bool resized = false;
@@ -124,6 +161,10 @@ struct PatternCB {
     float bar, master, bar_pos, beat;
     float pads[16];
     float seams[8];
+};
+struct ClipCB {
+    float xform[4];  // canvas uv -> clip uv: scale.xy, offset.zw
+    float info[4];   // tex scale x, y, mode (0 rgb, 1 rgba, 2 ycocg, 3 alpha), opacity
 };
 struct BlitCB {
     float src[4];
@@ -148,8 +189,9 @@ struct Gpu {
     ComPtr<ID3D11DeviceContext> ctx;
     ComPtr<IDXGIFactory2> factory;
     ComPtr<ID3D11VertexShader> vs;
-    ComPtr<ID3D11PixelShader> ps_pattern, ps_blit;
-    ComPtr<ID3D11Buffer> cb_pattern, cb_blit;
+    ComPtr<ID3D11PixelShader> ps_pattern, ps_blit, ps_clip;
+    ComPtr<ID3D11BlendState> blend_alpha;
+    ComPtr<ID3D11Buffer> cb_pattern, cb_blit, cb_clip;
     ComPtr<ID3D11SamplerState> lin, pnt;
     ComPtr<ID3D11Texture2D> canvas;
     ComPtr<ID3D11RenderTargetView> canvas_rtv;
@@ -197,6 +239,19 @@ bool init_gpu(Gpu& g) {
     g.dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g.ps_pattern);
     if (!compile("ps_blit", "ps_5_0", b)) return false;
     g.dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g.ps_blit);
+    if (!compile("ps_clip", "ps_5_0", b)) return false;
+    g.dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g.ps_clip);
+    D3D11_BLEND_DESC bl{};
+    auto& rt = bl.RenderTarget[0];
+    rt.BlendEnable = TRUE;
+    rt.SrcBlend = D3D11_BLEND_SRC_ALPHA;
+    rt.DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+    rt.BlendOp = D3D11_BLEND_OP_ADD;
+    rt.SrcBlendAlpha = D3D11_BLEND_ONE;
+    rt.DestBlendAlpha = D3D11_BLEND_ZERO;
+    rt.BlendOpAlpha = D3D11_BLEND_OP_ADD;
+    rt.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+    g.dev->CreateBlendState(&bl, &g.blend_alpha);
 
     D3D11_BUFFER_DESC bd{};
     bd.Usage = D3D11_USAGE_DYNAMIC;
@@ -206,6 +261,8 @@ bool init_gpu(Gpu& g) {
     g.dev->CreateBuffer(&bd, nullptr, &g.cb_pattern);
     bd.ByteWidth = (sizeof(BlitCB) + 15) & ~15u;
     g.dev->CreateBuffer(&bd, nullptr, &g.cb_blit);
+    bd.ByteWidth = (sizeof(ClipCB) + 15) & ~15u;
+    g.dev->CreateBuffer(&bd, nullptr, &g.cb_clip);
 
     D3D11_SAMPLER_DESC sd{};
     sd.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
@@ -349,12 +406,13 @@ void layout(Gpu& g, std::vector<Output>& outs, bool mirror, PatternCB& cb) {
     }
 }
 
-void update_overlay(Gpu& g, Output& o, int index, int count, bool mirror, float fps, bool mk2) {
+void update_overlay(Gpu& g, Output& o, int index, int count, bool mirror, float fps, bool mk2, const char* clip_line) {
     mk2::Canvas<kOverlayW, kOverlayH> c;
     char line[96];
     std::snprintf(line, sizeof(line), "HIMMEL  OUT %d/%d  %dx%d  %s  %.1f FPS  MK2 %s", index + 1, count, o.w, o.h,
                   mirror ? "MIRROR" : "SPAN", fps, mk2 ? "OK" : "OFF");
-    c.text(2, 4, line);
+    c.text(2, 3, line);
+    c.text(2, 14, clip_line);
     for (int y = 0; y < kOverlayH; ++y)
         for (int x = 0; x < kOverlayW; ++x) o.overlay_px[y * kOverlayW + x] = c.get(x, y) ? 255 : 0;
     g.ctx->UpdateSubresource(o.overlay.Get(), 0, nullptr, o.overlay_px.data(), kOverlayW, 0);
@@ -363,9 +421,21 @@ void update_overlay(Gpu& g, Output& o, int index, int count, bool mirror, float 
 // Knob value -> unit, shared by the frame loop and the MK2 screen readout.
 float pad_fade_s(float k) { return 2.0f * std::pow(0.015f, k); }        // 2 s .. 0.03 s
 double bar_rate(float k) { return 0.02 + 0.8 * k * k; }               // canvas widths per second
+// Clip page: speed -2x..+2x (0.75 = 1x, a small dead zone = stop), zoom 0.25x..4x (0.5 = fill).
+float clip_speed(float k) { return std::fabs(k - 0.5f) < 0.02f ? 0.0f : (k - 0.5f) * 4.0f; }
+float clip_zoom(float k) { return 0.25f * std::pow(16.0f, k); }
 
 constexpr std::array<std::string_view, mk2::kKnobs> kKnobLabels = {"HUE", "SATURATE", "SPEED", "ZOOM",
                                                                    "GRID", "BAR", "PAD FADE", "MASTER"};
+constexpr std::array<std::string_view, mk2::kKnobs> kClipLabels = {"OPACITY", "SPEED", "ZOOM", "POS X",
+                                                                   "POS Y", "", "", "MASTER"};
+
+// What the MK2 screens show about the clip (filled by the frame loop).
+struct ClipView {
+    char name[40] = "NO CLIP";
+    char state[24] = "";
+    int index = -1, count = 0;
+};
 
 // ---------------------------------------------------------------- MK2 input
 struct Mk2Link {
@@ -396,17 +466,27 @@ struct Mk2Link {
         while (ring.pop(e)) {
             if (!earliest_event_us) earliest_event_us = e.t_us;
             switch (e.type) {
-                case mk2::EventType::KnobDelta:
-                    p.knob[e.id] = std::clamp(p.knob[e.id] + e.value / 1000.0f, 0.0f, 1.0f);
+                case mk2::EventType::KnobDelta: {
+                    float& v = p.page == 1 && e.id != 7 ? p.clip[e.id] : p.knob[e.id];
+                    v = std::clamp(v + e.value / 1000.0f, 0.0f, 1.0f);
                     p.touched = e.id;
                     p.touched_us = e.t_us;
                     break;
-                case mk2::EventType::PadHit: p.pad[e.id - 1] = e.value / 127.0f; break;
+                }
+                case mk2::EventType::PadHit:
+                    p.pad[e.id - 1] = e.value / 127.0f;
+                    if (p.page == 1) p.clip_jump = (e.id - 1) / 16.0f;  // pads = 16 jump points
+                    break;
+                case mk2::EventType::EncoderDelta: p.clip_step += e.value; break;  // browse wheel: clips
                 case mk2::EventType::PadPressure:
                     p.pad[e.id - 1] = std::max(p.pad[e.id - 1], std::min(1.0f, e.value / 3300.0f));
                     break;
                 case mk2::EventType::ButtonDown:
                     if (e.id == static_cast<int>(mk2::Button::Navigate)) p.mirror = !p.mirror, p.resized = true;
+                    if (e.id == static_cast<int>(mk2::Button::PageLeft) || e.id == static_cast<int>(mk2::Button::PageRight))
+                        p.page = 1 - p.page, p.touched = -1;
+                    if (e.id == static_cast<int>(mk2::Button::Play)) p.clip_paused = !p.clip_paused;
+                    if (e.id == static_cast<int>(mk2::Button::Restart)) p.clip_jump = 0.0f;
                     break;
                 default: break;
             }
@@ -416,26 +496,41 @@ struct Mk2Link {
     uint64_t next_screen_us = 0;
     himmel::mk2::ui::Screen canvas;
     std::array<uint8_t, mk2::kScreenBytes> left{}, right{};
-    void screens(const Params& p, float fps, uint64_t t) {
+    void screens(const Params& p, float fps, uint64_t t, const ClipView& cv) {
         if (!open || t < next_screen_us) return;
         next_screen_us = t + 33000;
         namespace ui = himmel::mk2::ui;
         ui::PerformModel m;
-        m.head[0].left.set("HIMMEL ENGINE");
-        m.head[0].right.set("TEST CARD");
-        char buf[32];
-        std::snprintf(buf, sizeof(buf), "%s  %.0f FPS", p.mirror ? "MIRROR" : "SPAN", fps);
-        m.head[1].left.set(buf);
-        m.head[1].right.set("NAVIGATE=MODE");
+        char buf[48];
+        if (p.page == 0) {
+            m.head[0].left.set("HIMMEL ENGINE");
+            m.head[0].right.set("P1 TEST CARD");
+            std::snprintf(buf, sizeof(buf), "%s  %.0f FPS", p.mirror ? "MIRROR" : "SPAN", fps);
+            m.head[1].left.set(buf);
+            m.head[1].right.set("PAGE = CLIP");
+        } else {
+            std::snprintf(buf, sizeof(buf), "%d/%d %s", cv.index + 1, cv.count, cv.name);
+            m.head[0].left.set(buf);
+            m.head[0].right.set("P2 CLIP");
+            m.head[1].left.set(cv.state);
+            m.head[1].right.set("ENC=CLIP PAD=JUMP");
+        }
         for (int k = 0; k < mk2::kKnobs; ++k) {
             auto& slot = m.knobs[static_cast<size_t>(k)];
-            slot.label.set(kKnobLabels[static_cast<size_t>(k)]);
-            slot.norm = p.knob[static_cast<size_t>(k)];
-            const float v = p.knob[static_cast<size_t>(k)];
-            if (k == 2) std::snprintf(buf, sizeof(buf), "%.2f/S", bar_rate(v));
+            const bool clip_knob = p.page == 1 && k != 7;
+            const float v = clip_knob ? p.clip[static_cast<size_t>(k)] : p.knob[static_cast<size_t>(k)];
+            slot.label.set(clip_knob ? kClipLabels[static_cast<size_t>(k)] : kKnobLabels[static_cast<size_t>(k)]);
+            slot.norm = v;
+            if (clip_knob) {
+                slot.bipolar = k == 1 || k == 3 || k == 4;
+                if (k == 1) std::snprintf(buf, sizeof(buf), "%.2fX", clip_speed(v));
+                else if (k == 2) std::snprintf(buf, sizeof(buf), "%.2fX", clip_zoom(v));
+                else if (k == 3 || k == 4) std::snprintf(buf, sizeof(buf), "%+d", static_cast<int>(std::lround((v - 0.5f) * 200)));
+                else std::snprintf(buf, sizeof(buf), "%d%%", static_cast<int>(std::lround(v * 100)));
+            } else if (k == 2) std::snprintf(buf, sizeof(buf), "%.2f/S", bar_rate(v));
             else if (k == 6) std::snprintf(buf, sizeof(buf), "%.2fS", pad_fade_s(v));
             else std::snprintf(buf, sizeof(buf), "%d%%", static_cast<int>(std::lround(v * 100)));
-            slot.value.set(buf);
+            slot.value.set(slot.label.empty() ? "" : buf);
         }
         m.touched = p.touched >= 0 && t - std::min(t, p.touched_us) < 1500000 ? p.touched : -1;
         ui::draw_perform(canvas, m);
@@ -454,6 +549,9 @@ struct Mk2Link {
             s.pad_rgb[i][2] = static_cast<uint8_t>(std::max<int>(v, 12));
         }
         s.buttons[static_cast<int>(mk2::led_of(mk2::Button::Navigate).index)] = p.mirror ? 127 : 20;
+        s.buttons[static_cast<int>(mk2::led_of(mk2::Button::PageLeft).index)] = p.page == 0 ? 127 : 20;
+        s.buttons[static_cast<int>(mk2::led_of(mk2::Button::PageRight).index)] = p.page == 1 ? 127 : 20;
+        s.transport[static_cast<int>(mk2::led_of(mk2::Button::Play).index)] = p.clip_paused ? 20 : 127;
         mk2::seq_write(shm.get()->outputs.led_seq, shm.get()->outputs.leds, s);
     }
 };
@@ -505,6 +603,23 @@ int main(int argc, char** argv) {
     std::vector<HANDLE> waits;
     for (auto& o : outs) waits.push_back(o.waitable);
 
+    // Clips: the worker loads/decodes, this thread only uploads ready frames.
+    himmel::engine::ClipPlayer player(g.dev.Get(), cfg.clips.empty() ? find_clips() : cfg.clips);
+    log("clips: %zu in the playlist%s", player.playlist().size(),
+        player.playlist().empty() ? " (put .mov files under media/ or pass --clip)" : "");
+    if (!player.playlist().empty()) player.load(0);
+    himmel::engine::LoadedClip* shown = nullptr;
+    double clip_pos = 0.0;
+    int64_t uploaded = -1;
+    int clip_index = 0;
+    uint32_t clip_misses = 0, seen_fail = 0;
+    uint64_t clip_decoded_last = 0;
+    ClipView cv;
+    cv.count = static_cast<int>(player.playlist().size());
+    char clip_line[96] = "CLIP  none";
+    int page_led_last = -1;
+    bool paused_led_last = false;
+
     Mk2Link mk2link;
     const uint64_t t0 = now_us();
     uint64_t last_frame = t0, stats_start = t0, frames = 0, stat_frames = 0, overlay_next = 0;
@@ -554,13 +669,65 @@ int main(int argc, char** argv) {
         for (auto& p : g_params.pad) p = p * fade < 0.002f ? 0.0f : p * fade;
         // Knob 3: bar speed, integrated so turning the knob never makes the bar jump.
         bar_pos = std::fmod(bar_pos + bar_rate(g_params.knob[2]) * dt, 1.0);
-        if (mk2_alive) mk2link.screens(g_params, fps, t);
-        bool leds_changed = g_params.mirror != mirror_led_last;
+        if (g_params.clip_step && !player.playlist().empty()) {  // browse wheel: next / previous clip
+            const int count = static_cast<int>(player.playlist().size());
+            clip_index = ((clip_index + g_params.clip_step) % count + count) % count;
+            g_params.clip_step = 0;
+            player.load(clip_index);
+        }
+        if (player.load_failed.load() != seen_fail) {
+            seen_fail = player.load_failed.load();
+            set_msg(player.last_error);
+        }
+
+        // Clip: advance the play head, ask the worker for that frame, upload it if it is ready.
+        himmel::engine::LoadedClip* clip = player.current();
+        if (clip != shown) {
+            shown = clip;
+            uploaded = -1;
+            clip_pos = 0.0;
+            overlay_next = 0;
+            cv.index = player.loaded_index.load();
+            strncpy_s(cv.name, sizeof(cv.name), clip->name.c_str(), _TRUNCATE);
+            for (char* ch = cv.name; *ch; ++ch) *ch = static_cast<char>(std::toupper(static_cast<unsigned char>(*ch)));
+            log("clip %d/%d: %s  %s %dx%d %.2f fps %zu frames", cv.index + 1, cv.count, clip->name.c_str(),
+                himmel::media::hap_texture_name(clip->texture), clip->track.width, clip->track.height, clip->track.fps,
+                clip->track.frames());
+        }
+        bool clip_visible = false;
+        if (clip) {
+            const double nframes = static_cast<double>(clip->track.frames());
+            if (g_params.clip_jump >= 0.0f) clip_pos = g_params.clip_jump * nframes, g_params.clip_jump = -1.0f;
+            const float spd = clip_speed(g_params.clip[1]);
+            if (!g_params.clip_paused) clip_pos += dt * clip->track.fps * spd;
+            clip_pos = std::fmod(clip_pos, nframes);
+            if (clip_pos < 0) clip_pos += nframes;
+            const int64_t f = std::min(static_cast<int64_t>(clip_pos), static_cast<int64_t>(nframes) - 1);
+            player.request(f, spd < 0 ? -1 : 1);
+            if (f != uploaded) {
+                if (const uint8_t* data = player.acquire(f)) {
+                    g.ctx->UpdateSubresource(clip->tex, 0, nullptr, data, static_cast<UINT>(clip->row_pitch), 0);
+                    player.release();
+                    uploaded = f;
+                } else {
+                    ++clip_misses;
+                }
+            }
+            clip_visible = uploaded >= 0;
+            std::snprintf(cv.state, sizeof(cv.state), "%s %lld/%zu", g_params.clip_paused ? "PAUSE" : "PLAY",
+                          static_cast<long long>(f + 1), clip->track.frames());
+        }
+
+        if (mk2_alive) mk2link.screens(g_params, fps, t, cv);
+        bool leds_changed = g_params.mirror != mirror_led_last || g_params.page != page_led_last ||
+                            g_params.clip_paused != paused_led_last;
         for (int i = 0; i < mk2::kPads; ++i) leds_changed |= std::fabs(g_params.pad[i] - led_last[i]) > 0.02f;
         if (leds_changed && mk2_alive) {
             mk2link.leds(g_params);
             led_last = g_params.pad;
             mirror_led_last = g_params.mirror;
+            page_led_last = g_params.page;
+            paused_led_last = g_params.clip_paused;
         }
 
         // 4. Render the canvas.
@@ -589,16 +756,57 @@ int main(int argc, char** argv) {
         g.ctx->PSSetConstantBuffers(0, 1, g.cb_pattern.GetAddressOf());
         g.ctx->Draw(3, 0);
 
+        // 4b. Clip layer over the test card (cover-fit, zoom, position, opacity).
+        const float opacity = g_params.clip[0];
+        if (clip_visible && opacity > 0.001f) {
+            const float cw = static_cast<float>(clip->track.width), ch = static_cast<float>(clip->track.height);
+            const float sc = std::max(g.canvas_w / cw, g.canvas_h / ch) * clip_zoom(g_params.clip[2]);
+            ClipCB ccb{};
+            ccb.xform[0] = g.canvas_w / (cw * sc);
+            ccb.xform[1] = g.canvas_h / (ch * sc);
+            ccb.xform[2] = -(g_params.clip[3] - 0.5f);
+            ccb.xform[3] = g_params.clip[4] - 0.5f;
+            ccb.info[0] = cw / clip->tex_w;
+            ccb.info[1] = ch / clip->tex_h;
+            using HT = himmel::media::HapTexture;
+            ccb.info[2] = clip->texture == HT::DXT5 ? 1.0f : clip->texture == HT::YCoCgDXT5 ? 2.0f
+                                                    : clip->texture == HT::RGTC1 ? 3.0f : 0.0f;
+            ccb.info[3] = opacity;
+            if (SUCCEEDED(g.ctx->Map(g.cb_clip.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &ms))) {
+                std::memcpy(ms.pData, &ccb, sizeof(ccb));
+                g.ctx->Unmap(g.cb_clip.Get(), 0);
+            }
+            ID3D11SamplerState* lin = g.lin.Get();
+            g.ctx->PSSetSamplers(0, 1, &lin);
+            g.ctx->PSSetShader(g.ps_clip.Get(), nullptr, 0);
+            g.ctx->PSSetConstantBuffers(2, 1, g.cb_clip.GetAddressOf());
+            g.ctx->PSSetShaderResources(0, 1, &clip->srv);
+            g.ctx->OMSetBlendState(g.blend_alpha.Get(), nullptr, 0xFFFFFFFF);
+            g.ctx->Draw(3, 0);
+            g.ctx->OMSetBlendState(nullptr, nullptr, 0xFFFFFFFF);
+            ID3D11ShaderResourceView* none = nullptr;
+            g.ctx->PSSetShaderResources(0, 1, &none);
+        }
+
         // 5. Each output shows its part of the canvas (+ status overlay).
         const bool overlay_due = t >= overlay_next;
-        if (overlay_due) overlay_next = t + 1000000;
+        if (overlay_due) {
+            overlay_next = t + 1000000;
+            using HT = himmel::media::HapTexture;
+            if (clip)
+                std::snprintf(clip_line, sizeof(clip_line), "CLIP %d/%d %s  %s %dX%d  DECODE MAX %.1f MS  MISSED %u",
+                              cv.index + 1, cv.count, cv.name,
+                              clip->texture == HT::YCoCgDXT5 ? "HAP Q" : clip->texture == HT::DXT5 ? "HAP ALPHA" : "HAP",
+                              clip->track.width, clip->track.height, player.stats().decode_us_max.load() / 1000.0,
+                              clip_misses);
+        }
         ID3D11SamplerState* samplers[2] = {g.lin.Get(), g.pnt.Get()};
         g.ctx->PSSetSamplers(0, 2, samplers);
         g.ctx->PSSetShader(g.ps_blit.Get(), nullptr, 0);
         HRESULT present_hr = S_OK;
         for (size_t i = 0; i < outs.size(); ++i) {
             auto& o = outs[i];
-            if (overlay_due) update_overlay(g, o, static_cast<int>(i), n, g_params.mirror, fps, mk2_alive);
+            if (overlay_due) update_overlay(g, o, static_cast<int>(i), n, g_params.mirror, fps, mk2_alive, clip_line);
             BlitCB bcb{};
             std::memcpy(bcb.src, o.src, sizeof(bcb.src));
             bcb.overlay[0] = 8, bcb.overlay[1] = 8;
@@ -652,8 +860,14 @@ int main(int argc, char** argv) {
             fps = static_cast<float>(stat_frames / period);
             const double avg_ms = interval_sum / stat_frames * 1000.0;
             const double lat_ms = lat_n ? lat_sum / lat_n / 1000.0 : 0.0;
-            log("%.1f fps  frame avg %.2f ms  max %.2f ms  late %u  input->present %s%.2f ms (%u)", fps, avg_ms,
-                interval_max * 1000.0, late, lat_n ? "" : "-", lat_ms, lat_n);
+            const uint64_t dec = player.stats().decoded.load();
+            log("%.1f fps  frame avg %.2f ms  max %.2f ms  late %u  input->present %s%.2f ms (%u)  clip: %.0f decodes/s, "
+                "max %.2f ms, missed %u, errors %u",
+                fps, avg_ms, interval_max * 1000.0, late, lat_n ? "" : "-", lat_ms, lat_n,
+                (dec - clip_decoded_last) / period, player.stats().decode_us_max.load() / 1000.0, clip_misses,
+                player.stats().errors.load());
+            clip_decoded_last = dec;
+            player.stats().decode_us_max.store(0);
             if (es) {
                 es->fps_x100.store(static_cast<uint32_t>(fps * 100));
                 es->frame_ms_avg_x100.store(static_cast<uint32_t>(avg_ms * 100));

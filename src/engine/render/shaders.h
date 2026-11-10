@@ -17,6 +17,10 @@ cbuffer Blit : register(b1) {
     float4 overlay;      // overlay rect in output pixels: x, y, w, h
     float out_master; float3 pad_;
 };
+cbuffer Clip : register(b2) {
+    float4 xform;        // canvas uv -> clip uv: scale.xy, offset.zw
+    float4 info;         // tex scale x, y, mode (0 rgb, 1 rgba, 2 Hap Q YCoCg, 3 alpha), opacity
+};
 Texture2D canvas_tex : register(t0);
 Texture2D overlay_tex : register(t1);
 SamplerState lin : register(s0);
@@ -71,6 +75,24 @@ float4 ps_pattern(VSOut i) : SV_Target {
         if (sx > 0 && abs(px.x - sx) < 1.5) col = float3(1, 0, 0);
     }
     return float4(col * master, 1);
+}
+
+// A HAP clip layer (BC texture straight from the decoder), blended over the canvas.
+float4 ps_clip(VSOut i) : SV_Target {
+    float2 cu = (i.uv - 0.5) * xform.xy + 0.5 + xform.zw;
+    if (any(cu < 0) || any(cu > 1)) return 0;
+    float4 c = canvas_tex.Sample(lin, cu * info.xy);
+    float3 rgb = c.rgb;
+    float a = 1;
+    if (info.z > 2.5) { rgb = c.rrr; }
+    else if (info.z > 1.5) {          // Hap Q: scaled YCoCg in DXT5 (Vidvox reference maths)
+        float scale = c.b * (255.0 / 8.0) + 1.0;
+        float co = (c.r - 0.5 * 256.0 / 255.0) / scale;
+        float cg = (c.g - 0.5 * 256.0 / 255.0) / scale;
+        rgb = float3(c.a + co - cg, c.a + cg, c.a - co - cg);
+    }
+    else if (info.z > 0.5) { a = c.a; }
+    return float4(saturate(rgb), a * info.w);
 }
 
 float4 ps_blit(VSOut i) : SV_Target {

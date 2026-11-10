@@ -7,3 +7,6 @@ tools/_screens/
 # C++ build output
 build/
 out/
+
+# Clips and media (large, never in git)
+media/
