@@ -18,7 +18,16 @@ No MK2? Press "Simulate" on the page (or start with --sim): a virtual MK2
 with the mouse. Simulated input never marks controls as seen and never changes
 the map or the measurements.
 
-Run:   python tools/mk2_live.py [--sim]     then open http://127.0.0.1:8765
+Other weapons: every weapons/<id>.weapon.json is listed in the picker at the top
+of the page (or open http://127.0.0.1:8765/?weapon=<id>). A weapon other than the
+MK2 is drawn from its profile and played by its own simulator, e.g. the
+Lightpad (tools/lightpad_sim.py).
+
+Run:   python tools/mk2_live.py [--sim] [--port N] [--weapon ID]
+       then open http://127.0.0.1:8765
+       --weapon ID (not mk2) opens that weapon by default and leaves the MK2
+       hardware alone (no device thread, no screens), handy when another
+       MK2 Live already holds the MK2.
 Needs: pip install hidapi  (same as maschine_mk2_test.py). Standard library otherwise.
 The device is reopened automatically if the USB cable is pulled.
 """
@@ -30,6 +39,7 @@ import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlsplit
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -626,12 +636,106 @@ class Live:
 
 LIVE = Live()
 
+# ---------- other weapons ----------
+# The MK2 above is the hardware-backed weapon with its own map, LEDs and screens.
+# Other weapons are drawn from their profile and run by a small live object with
+# snapshot() and command(d), created on first use.
+WEAPONS_DIR = os.path.join(os.path.dirname(HERE), "weapons")
+DEFAULT_WEAPON = "mk2"
+
+
+def _make_lightpad(profile):
+    import lightpad_sim
+    return lightpad_sim.LightpadLive(profile)
+
+
+GENERIC = {"lightpad": _make_lightpad}
+_generic_live = {}
+_generic_lock = threading.Lock()
+
+
+def weapon_path(wid):
+    if not wid.replace("_", "").replace("-", "").isalnum():
+        return None
+    p = os.path.join(WEAPONS_DIR, wid + ".weapon.json")
+    return p if os.path.exists(p) else None
+
+
+def list_weapons():
+    out = []
+    for fn in sorted(os.listdir(WEAPONS_DIR)):
+        if fn.endswith(".weapon.json"):
+            try:
+                with open(os.path.join(WEAPONS_DIR, fn), encoding="utf-8") as f:
+                    w = json.load(f)
+                out.append({"id": w.get("id", fn[:-12]), "name": w.get("name", fn[:-12]),
+                            "playable": w.get("id") == "mk2" or w.get("id") in GENERIC})
+            except (OSError, ValueError):
+                pass
+    return {"default": DEFAULT_WEAPON, "weapons": out}
+
+
+def generic_live(wid):
+    """The live object for a non-MK2 weapon, or None."""
+    if wid not in GENERIC:
+        return None
+    with _generic_lock:
+        if wid not in _generic_live:
+            with open(weapon_path(wid), encoding="utf-8") as f:
+                _generic_live[wid] = GENERIC[wid](json.load(f))
+        return _generic_live[wid]
+
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
+    def send_json(self, obj, code=200):
+        body = json.dumps(obj).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self):
+        u = urlsplit(self.path)
+        wid = (parse_qs(u.query).get("id") or [""])[0]
+        if u.path == "/weapons":
+            self.send_json(list_weapons())
+        elif u.path == "/weapon" and wid and wid != "mk2":
+            p = weapon_path(wid)
+            if p is None:
+                self.send_error(404, "no such weapon")
+                return
+            with open(p, "rb") as f:
+                body = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+        elif u.path == "/wevents":
+            live = generic_live(wid)
+            if live is None:
+                self.send_error(404, "no simulator for this weapon")
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            try:
+                while True:
+                    self.wfile.write(("data: %s\n\n" % json.dumps(live.snapshot())).encode())
+                    self.wfile.flush()
+                    time.sleep(1 / 30)
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+                return
+        else:  # the page itself and the MK2 routes, exactly as before
+            self.path = u.path
+            self.do_GET_mk2()
+
+    def do_GET_mk2(self):
         if self.path in ("/", "/index.html"):
             with open(HTML, "rb") as f:
                 body = f.read()
@@ -669,6 +773,18 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         n = int(self.headers.get("Content-Length") or 0)
+        u = urlsplit(self.path)
+        if u.path == "/wcmd":
+            live = generic_live((parse_qs(u.query).get("id") or [""])[0])
+            try:
+                if live is not None:
+                    live.command(json.loads(self.rfile.read(n) or b"{}"))
+            except ValueError:
+                self.send_error(400)
+                return
+            self.send_response(204)
+            self.end_headers()
+            return
         try:
             LIVE.command(json.loads(self.rfile.read(n) or b"{}"))
         except ValueError:
@@ -678,13 +794,23 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
 
+def _arg(name, default):
+    a = sys.argv[1:]
+    return a[a.index(name) + 1] if name in a and a.index(name) + 1 < len(a) else default
+
+
 def main():
+    global DEFAULT_WEAPON
     LIVE.sim = "--sim" in sys.argv[1:]
-    threading.Thread(target=LIVE.device_loop, daemon=True).start()
-    threading.Thread(target=LIVE.screen_loop, daemon=True).start()
-    srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    port = int(_arg("--port", PORT))
+    DEFAULT_WEAPON = _arg("--weapon", "mk2")
+    if DEFAULT_WEAPON == "mk2":
+        threading.Thread(target=LIVE.device_loop, daemon=True).start()
+        threading.Thread(target=LIVE.screen_loop, daemon=True).start()
+    srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     srv.daemon_threads = True
-    print("MK2 live view on http://127.0.0.1:%d  (Ctrl-C to stop)" % PORT)
+    print("%s live view on http://127.0.0.1:%d  (Ctrl-C to stop)" % (
+        "MK2" if DEFAULT_WEAPON == "mk2" else DEFAULT_WEAPON, port))
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

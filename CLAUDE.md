@@ -108,7 +108,24 @@ The details are in the mockup (`docs/vj-mockup.html`).
     Windows gotcha: every datagram sent while nobody listens comes back as a
     queued WSAECONNRESET; the Python receiver must drain them without sleeping
     (Python cannot switch SIO_UDP_CONNRESET off).
-  - Next: a generic MIDI weapon.
+  - **Weapon no. 2 = ROLI Lightpad Block (owner's choice 2026-11-10; he owns
+    one, USB `2af4:0900`, WinMM ports "ROLI Lightpad BLOCK").** Simulated only so
+    far. Details and the protocol summary: `weapons/README.md`.
+    - Profile `weapons/lightpad.weapon.json` adds the kinds `surface` (multi-touch
+      + 15x15 LED grid) and `deco`.
+    - `tools/lightpad_sim.py`: the BLOCKS SysEx codec (from ROLI's ISC
+      reference code), the simulated block (API mode + MPE fallback) and a
+      `LocalHost` that does the handshake, pings and LED frames.
+      `--selftest` checks the round trips.
+    - Live view: the weapon picker or `?weapon=lightpad`. Run
+      `mk2_live.py --port 8775 --weapon lightpad` next to a running MK2 Live
+      (`--weapon` other than mk2 leaves the MK2 hardware alone). Checked in
+      the browser 2026-11-10: multi-touch, LED feedback, test pattern, MPE
+      fallback, MK2 + Simulate unchanged.
+    - Engine sim link for it: UDP 127.0.0.1:8767 (not used by the C++ side yet).
+    - Next: a Python WinMM probe on the real block (x/y orientation, touch
+      rate, MPE layout), then the LittleFoot LED renderer upload, then the
+      generic weapon driver/shared block (plan in `weapons/README.md`).
 - **Visual mapping is the way to work with the controller. Keep it and build on
   it** (the owner wants graphical tools, not terminal tables):
   - `tools/mk2_live.py` + `tools/mk2_live.html`: a browser live view of the MK2

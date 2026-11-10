@@ -77,15 +77,36 @@
   #missingList span:hover { background: #3a3c42; }
   .help { color: var(--label); font-size: 12px; }
   @media (max-width: 760px) { #below { grid-template-columns: 1fr; } }
+  /* other weapons (profile kinds "surface" and "deco") */
+  #weaponPick { font-weight: 600; }
+  .deco-body { position: absolute; background: #151518; border: 1px solid #2c2c31;
+               box-shadow: inset 0 2px 0 #ffffff10, 0 10px 30px #0006; }
+  .deco-dna { position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%;
+              background: radial-gradient(circle at 40% 35%, #f1d48a, #9a7a2c); box-shadow: 0 0 0 2px #0008; }
+  .deco-port { position: absolute; background: #050506; border: 1px solid #3a3a40; border-radius: 3px; }
+  .deco-port span { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-90deg);
+                    font-size: 6px; color: var(--label); white-space: nowrap; }
+  .surface { border-radius: 16px; background: #09090b; box-shadow: inset 0 0 0 1px #2a2a30, inset 0 0 30px #000; }
+  .surface canvas { width: 100%; height: 100%; display: block; border-radius: 16px; }
+  body.sim .surface { cursor: crosshair; }
+  #gen { display: none; grid-template-columns: 1fr 1fr; gap: 12px; padding: 12px 20px 30px; max-width: 1100px; }
+  body.generic #gen { display: grid; }
+  body.generic #below, body.generic .mk2only { display: none !important; }
+  #genLog { width: 100%; border-collapse: collapse; font: 11px/1.4 Consolas, monospace; }
+  #genLog td { padding: 1px 6px 1px 0; vertical-align: top; white-space: nowrap; }
+  #genLog td.hex { color: #7f838c; white-space: normal; word-break: break-all; }
+  #genLog tr.up td.dir { color: #7ff0b0; } #genLog tr.down td.dir { color: #c8b8ff; }
+  @media (max-width: 760px) { #gen { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
 <header>
+  <select id="weaponPick" title="Weapon: the controller to show"></select>
   <h1 id="title">Live</h1>
   <span id="conn" class="pill">connecting…</span>
-  <span id="count" class="pill">0 / 0 seen</span>
-  <div class="progress"><div id="bar"></div></div>
-  <span class="tools">
+  <span id="count" class="pill mk2only">0 / 0 seen</span>
+  <div class="progress mk2only"><div id="bar"></div></div>
+  <span class="tools mk2only">
     <button id="simBtn" title="No MK2 here? Play the drawn panel with the mouse">Simulate</button>
     <button data-led="pads">Pad LEDs</button>
     <button data-led="groups">Group LEDs</button>
@@ -96,6 +117,36 @@
   </span>
 </header>
 <div id="wrap"><div id="stage"><div id="panel"></div></div></div>
+<div id="gen">
+  <div class="card">
+    <h2>Play the simulated weapon</h2>
+    <div class="help" id="genHelp"></div>
+    <div class="row"><label>Finger force <input type="range" id="gForce" min="5" max="100" value="45"></label>
+      <span id="gForceV" class="mono"></span></div>
+  </div>
+  <div class="card">
+    <h2>Host (the live view standing in for Himmel)</h2>
+    <div class="row seg" id="gLed">
+      <button data-m="touch">Touch glow</button>
+      <button data-m="rainbow">Rainbow</button>
+      <button data-m="test">Test pattern</button>
+      <button data-m="off">LEDs off</button>
+    </div>
+    <div class="row"><label><input type="checkbox" id="gHost" checked> Host plugged in (pings every 400 ms)</label></div>
+    <div class="help">Unplug the host and the block drops back to MIDI mode (MPE) after 5 s without a ping,
+      like the real one. The LEDs you see are decoded from the SysEx the host sent to the block.</div>
+    <div id="gHostInfo" class="mono small"></div>
+  </div>
+  <div class="card" style="grid-column: 1 / -1">
+    <h2>MIDI monitor (every message between block and host)</h2>
+    <div class="row"><label><input type="checkbox" id="gNoise"> Show pings, ACKs and LED data</label></div>
+    <table id="genLog"></table>
+  </div>
+  <div class="card" style="grid-column: 1 / -1">
+    <h2>Status</h2>
+    <div id="gStatus" class="mono small">-</div>
+  </div>
+</div>
 <div id="below">
   <div class="card" id="measure" style="grid-column: 1 / -1">
     <h2>Measure (numbers for the controller spec) — saved to docs/mk2-measurements.json</h2>
@@ -251,11 +302,16 @@ function renderMeasure(ms) {
 }
 document.getElementById("scrOk").onclick = () => post({ screen_set: { checked: true } });
 
-function buildPanel(w) {
+function buildPanel(w, wireFn = wire) {
   W = w;
   document.title = w.name + " Live";
   document.getElementById("title").textContent = w.name + " Live";
   panel.style.width = w.panel.w + "px"; panel.style.height = w.panel.h + "px";
+  for (const d of w.deco || []) {  // drawing only: device body, connectors, ports (not controls)
+    if (d.kind === "body") add("", "deco-body", { left: d.x + "px", top: d.y + "px", width: d.w + "px", height: d.h + "px", borderRadius: (d.r || 0) + "px" });
+    else if (d.kind === "dna") add("", "deco-dna", { left: d.x + "px", top: d.y + "px" });
+    else if (d.kind === "port") add(`<span>${esc(d.label || "")}</span>`, "deco-port", { left: d.x + "px", top: d.y + "px", width: d.w + "px", height: d.h + "px" });
+  }
   add(esc(w.badge || w.name), "brand", {});
   for (const s of w.sections || []) {
     add(esc(s.label), "sec", { left: s.x + "px", top: s.y + "px" });
@@ -277,10 +333,13 @@ function buildPanel(w) {
       panel.appendChild(d);
     } else if (c.kind === "pad") {
       d = add('<span class="pn">' + c.n + '</span><span class="pv"></span>', "c pad", { left: c.x + "px", top: c.y + "px", width: c.w + "px", height: c.h + "px" });
+    } else if (c.kind === "surface") {  // multi-touch surface with an LED grid under it
+      d = add(`<canvas width="${c.w * 2}" height="${c.h * 2}"></canvas>`, "c surface", { left: c.x + "px", top: c.y + "px", width: c.w + "px", height: c.h + "px" });
+      c.ctx = d.firstChild.getContext("2d");
     } else continue;
     d.title = c.name;
     c.el = d; els[c.name] = c;
-    wire(c);
+    wireFn(c);
   }
   fit();
 }
@@ -346,7 +405,9 @@ document.getElementById("reset").onclick = () => { if (confirm("Clear all 'seen'
 function fit() {
   if (!W) return;
   const pw = W.panel.w + 2, ph = W.panel.h + 2;
-  const s = Math.min((window.innerWidth - 40) / pw, 1.6);
+  // other weapons: also fit the window height, so a square device stays on screen (the MK2 is unchanged)
+  const maxS = document.body.classList.contains("generic") ? Math.max(0.5, Math.min(1.6, (window.innerHeight - 70) / ph)) : 1.6;
+  const s = Math.min((window.innerWidth - 40) / pw, maxS);
   const st = document.getElementById("stage");
   st.style.transform = `scale(${s})`; st.style.width = pw + "px"; st.style.height = ph + "px";
   document.getElementById("wrap").style.height = (ph * s + 8) + "px";
@@ -445,8 +506,172 @@ function connect() {
     const c = document.getElementById("conn"); c.textContent = "server not running"; c.className = "pill bad";
   };
 }
-fetch("/weapon").then(r => r.json()).then(w => { buildPanel(w); connect(); })
-  .catch(e => { document.getElementById("status").textContent = "Could not load the weapon profile: " + e; });
+function startMk2() {
+  fetch("/weapon").then(r => r.json()).then(w => { buildPanel(w); connect(); })
+    .catch(e => { document.getElementById("status").textContent = "Could not load the weapon profile: " + e; });
+}
+
+// ---- weapon picker: ?weapon=<id> (default: the MK2, or what the server was started with) ----
+const pick = document.getElementById("weaponPick");
+pick.onchange = () => { location.search = "?weapon=" + encodeURIComponent(pick.value); };
+fetch("/weapons").then(r => r.json()).then(list => {
+  const wid = new URLSearchParams(location.search).get("weapon") || list.default || "mk2";
+  for (const w of list.weapons) {
+    const o = document.createElement("option");
+    o.value = w.id; o.textContent = "⚔ " + w.name + (w.playable ? "" : " (drawing only)");
+    pick.appendChild(o);
+  }
+  pick.value = wid;
+  if (wid === "mk2") startMk2(); else startGeneric(wid);
+}).catch(() => startMk2());
+
+// ================= other weapons (drawn from the profile, played by their simulator) =================
+let G = null;            // the latest snapshot of a non-MK2 weapon
+let gid = "";
+const gpost = o => fetch("/wcmd?id=" + encodeURIComponent(gid), { method: "POST", body: JSON.stringify(o) }).catch(() => {});
+const gsim = o => gpost({ sim_input: o });
+const force = () => document.getElementById("gForce").value / 100;
+document.getElementById("gForce").oninput = () => { document.getElementById("gForceV").textContent = force().toFixed(2); };
+document.getElementById("gForceV").textContent = force().toFixed(2);
+
+function startGeneric(wid) {
+  gid = wid;
+  document.body.classList.add("generic", "sim");
+  simOn = true;
+  fetch("/weapon?id=" + encodeURIComponent(wid)).then(r => r.json()).then(w => {
+    buildPanel(w, wireGeneric);
+    document.getElementById("genHelp").innerHTML = (w.controls.some(c => c.kind === "surface")
+      ? "<b>Surface:</b> press and hold with the mouse; pressure grows while you hold, the scroll wheel " +
+        "changes it, drag to slide. <b>Alt + click</b> leaves a finger resting there (multi-touch with a mouse; " +
+        "Alt + click it again to lift). A touch screen gives real multi-touch.<br>" : "") +
+      "<b>Buttons:</b> hold the mouse button down. The simulator produces the device's real MIDI bytes; " +
+      "see the MIDI monitor below. Simulated input is never measured and never changes a map.";
+    const es = new EventSource("/wevents?id=" + encodeURIComponent(wid));
+    es.onmessage = e => renderGeneric(JSON.parse(e.data));
+    es.onerror = () => { const c = document.getElementById("conn"); c.textContent = "server not running"; c.className = "pill bad"; };
+  }).catch(e => { document.getElementById("gStatus").textContent = "Could not load the weapon profile: " + e; });
+  document.querySelectorAll("#gLed button").forEach(b => b.onclick = () => gpost({ led_mode: b.dataset.m }));
+  document.getElementById("gHost").onchange = e => gpost({ host_enabled: e.target.checked });
+  document.getElementById("gNoise").onchange = e => gpost({ show_noise: e.target.checked });
+  window.addEventListener("blur", () => { pins.clear(); gsim({ release_all: true }); });
+  // fingers left down by an earlier page (reload, closed tab) are lifted, now and when this page goes
+  gsim({ release_all: true });
+  window.addEventListener("pagehide", () => navigator.sendBeacon("/wcmd?id=" + encodeURIComponent(gid),
+    JSON.stringify({ sim_input: { release_all: true } })));
+}
+
+// fingers: pointer id -> {x, y, z0, t0}; Alt-click pins stay down until Alt-clicked again
+const fingers = new Map(), pins = new Map();
+let pinSeq = 0;
+function surfXY(c, e) {
+  const r = c.el.getBoundingClientRect();
+  return [Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))];
+}
+function fingerZ(f) { return f.fixed ? f.z0 : Math.min(1, f.z0 + (performance.now() - f.t0) / 1500 * 0.5); }
+function sendFinger(id, f, phase) { gsim({ touch: { id, x: f.x, y: f.y, z: phase === "end" ? 0 : fingerZ(f), phase } }); }
+setInterval(() => { for (const [id, f] of fingers) if (fingerZ(f) < 1) sendFinger(id, f, "move"); }, 60);  // pressure ramp
+
+function wireGeneric(c) {
+  const el = c.el;
+  if (c.kind === "button") {
+    el.addEventListener("pointerdown", e => { e.preventDefault(); el.setPointerCapture(e.pointerId); gsim({ name: c.name, down: true }); });
+    const up = () => gsim({ name: c.name, down: false });
+    el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
+  } else if (c.kind === "surface") {
+    el.addEventListener("pointerdown", e => {
+      e.preventDefault();
+      const [x, y] = surfXY(c, e);
+      if (e.altKey) {  // toggle a resting finger
+        for (const [id, p] of pins) {
+          if (Math.hypot((p.x - x) * c.w, (p.y - y) * c.h) < 18) { pins.delete(id); sendFinger(id, p, "end"); return; }
+        }
+        const id = "pin" + (++pinSeq), p = { x, y, z0: force(), fixed: true };
+        pins.set(id, p); sendFinger(id, p, "start");
+        return;
+      }
+      el.setPointerCapture(e.pointerId);
+      const f = { x, y, z0: force(), t0: performance.now(), last: 0 };
+      fingers.set(e.pointerId, f);
+      sendFinger(e.pointerId, f, "start");
+    });
+    el.addEventListener("pointermove", e => {
+      const f = fingers.get(e.pointerId);
+      if (!f) return;
+      [f.x, f.y] = surfXY(c, e);
+      const now = performance.now();
+      if (now - f.last > 20) { f.last = now; sendFinger(e.pointerId, f, "move"); }
+    });
+    const up = e => { const f = fingers.get(e.pointerId); if (!f) return; fingers.delete(e.pointerId); sendFinger(e.pointerId, f, "end"); };
+    el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
+    el.addEventListener("wheel", e => {
+      e.preventDefault();
+      const s = document.getElementById("gForce");
+      s.value = Math.min(100, Math.max(5, +s.value + (e.deltaY < 0 ? 5 : -5))); s.oninput();
+      for (const f of fingers.values()) { f.z0 = force(); f.t0 = performance.now(); }
+    }, { passive: false });
+  }
+}
+
+function drawSurface(c, s) {
+  const g = c.ctx, W2 = g.canvas.width, H2 = g.canvas.height;
+  const cols = c.grid.cols, rows = c.grid.rows, cw = W2 / cols, ch = H2 / rows;
+  g.fillStyle = "#09090b"; g.fillRect(0, 0, W2, H2);
+  const leds = s.leds || [];
+  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+    const hex = leds[y * cols + x] || "000000";
+    const n = parseInt(hex, 16), r = n >> 16, gg = n >> 8 & 255, b = n & 255;
+    const cx = (x + 0.5) * cw, cy = (y + 0.5) * ch;
+    if (r + gg + b > 24) {  // soft glow, then the LED itself
+      g.fillStyle = `rgba(${r},${gg},${b},0.22)`; g.beginPath(); g.arc(cx, cy, cw * 0.62, 0, 7); g.fill();
+      g.fillStyle = `rgb(${r},${gg},${b})`;
+    } else g.fillStyle = "#1b1b20";
+    g.beginPath(); g.arc(cx, cy, cw * 0.27, 0, 7); g.fill();
+  }
+  for (const f of s.fingers || []) {  // where the simulated fingers are, and how hard they press
+    const cx = f.x * W2, cy = f.y * H2, rad = 14 + 46 * f.z;
+    g.strokeStyle = "rgba(255,255,255,0.85)"; g.lineWidth = 3; g.beginPath(); g.arc(cx, cy, rad, 0, 7); g.stroke();
+    g.fillStyle = "rgba(255,255,255,0.12)"; g.fill();
+    g.fillStyle = "#fff"; g.font = "bold 20px Segoe UI"; g.fillText(String(f.i), cx + rad * 0.75, cy - rad * 0.75);
+  }
+}
+
+let lastLogKey = "";
+function renderGeneric(s) {
+  G = s;
+  const conn = document.getElementById("conn");
+  const nm = W ? W.name : gid;
+  conn.textContent = s.engine ? nm + " simulated, playing Himmel" : nm + " simulated · " + (s.mode_name || "");
+  conn.className = "pill sim";
+  const held = new Set(s.held || []);
+  for (const c of Object.values(els)) {
+    if (c.kind === "surface") drawSurface(c, s);
+    else if (c.kind === "button") {
+      const on = held.has(c.name);
+      c.el.classList.toggle("on", on);
+      c.el.style.background = on && c.on_color ? c.on_color : "";
+    }
+  }
+  const h = s.host || {};
+  document.querySelectorAll("#gLed button").forEach(b => b.classList.toggle("on", b.dataset.m === h.mode));
+  document.getElementById("gHost").checked = h.enabled !== false;
+  document.getElementById("gHostInfo").textContent =
+    `host: ${h.state || "-"}\nblock serial: ${h.serial || "-"}   battery: ${h.battery ?? "-"} / 31   LED packets ACKed: ${h.acks ?? 0}`;
+  const k = s.counts || {};
+  document.getElementById("gStatus").textContent = [
+    (s.notes || []).join(" / "),
+    `block: ${s.mode_name}${s.engine ? " (an engine on UDP 127.0.0.1:8767 is the host)" : ""}`,
+    `messages: block → host ${k.to_host || 0}, host → block ${k.to_device || 0}, rejected ${k.bad || 0}`,
+    `fingers down: ${(s.fingers || []).map(f => `#${f.i} x=${f.x.toFixed(2)} y=${f.y.toFixed(2)} z=${f.z.toFixed(2)}`).join("  ") || "-"}`,
+  ].join("\n");
+  const log = s.log || [];
+  const key = log.map(r => r[0] + r[2]).join("|");
+  if (key !== lastLogKey) {
+    lastLogKey = key;
+    document.getElementById("genLog").innerHTML = log.slice().reverse().map(([t, dir, hex, text]) =>
+      `<tr class="${dir.startsWith("block") ? "up" : "down"}"><td>${esc(t)}</td><td class="dir">${esc(dir)}</td>` +
+      `<td>${esc(text)}</td><td class="hex">${esc(hex)}</td></tr>`).join("") || "<tr><td>-</td></tr>";
+  }
+}
 </script>
 </body>
 </html>
