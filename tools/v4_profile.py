@@ -77,9 +77,9 @@ for i in range(8):
     a = math.radians(-135 + i * 270 / 7)
     T(str(i + 1), round(375 + 30 * math.sin(a)), round(414 - 30 * math.cos(a)), 8, WHITE)
 T("TRANSITION", 372, 470, 13, WHITE, 900)
-T("1 MIX", 297, 500, 9, WHITE); T("2 WIPE", 350, 500, 9, WHITE); T("3 EFX", 400, 500, 9, WHITE)
-T("BPM", 450, 491, 8, WHITE); T("SYNC", 450, 500, 8, WHITE)
-deco.append({"kind": "ladder", "source": "beat", "x": 440, "y": 551, "w": 22, "h": 30, "n": 5, "z": 3})
+T("1 MIX", 297, 492, 9, WHITE); T("2 WIPE", 350, 492, 9, WHITE); T("3 EFX", 400, 492, 9, WHITE)
+T("BPM", 450, 485, 8, WHITE); T("SYNC", 450, 494, 8, WHITE)
+deco.append({"kind": "ladder", "source": "beat", "x": 441, "y": 541, "w": 20, "h": 17, "n": 4})
 # input select (two rows of 4 key-cap buttons)
 for side, x0, tab in (("A", 45, 75), ("B", 451, 481)):
     R(tab, 340, 190, 18, fill=NAVY, r=3); T("INPUT SELECT", tab + 95, 350, 10, WHITE)
@@ -123,7 +123,7 @@ knob("A control", 205, 532, 22)
 knob("B control", 545, 532, 22)
 controls.append({"name": "A transformer", "kind": "button", "style": "dark", "x": 130, "y": 683, "w": 55, "h": 55, "label": "", "led_color": "#ff3b30"})
 controls.append({"name": "B transformer", "kind": "button", "style": "dark", "x": 565, "y": 683, "w": 55, "h": 55, "label": "", "led_color": "#ff3b30"})
-rb("Mix", 297, 533, 13, "#7cfc4a"); rb("Wipe", 350, 533, 13, "#7cfc4a"); rb("EFX", 400, 533, 13, "#ff3b30"); rb("BPM sync", 450, 533, 14, "#ff3b30")
+rb("Mix", 297, 522, 13, "#7cfc4a"); rb("Wipe", 350, 522, 13, "#7cfc4a"); rb("EFX", 400, 522, 13, "#ff3b30"); rb("BPM sync", 450, 522, 13, "#ff3b30")
 controls.append({"name": "Video fader", "kind": "fader", "plate": True, "x": 223, "y": 543, "w": 304, "h": 304, "range": 127,
                  "ends": ["A", "B"], "orientation": "vertical", "orientations": ["vertical", "horizontal"],
                  "note": "The T-bar mounts up/down or, turned 90 degrees, left/right. Vertical: A near you (bottom), B away. Horizontal: A left, B right. Same MIDI either way."})

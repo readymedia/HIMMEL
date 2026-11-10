@@ -488,6 +488,12 @@ python tools/v4_sim.py                              self-test
   - The two-nibble ("#") encoding of the setup values. The manual's own example
     for it is garbled in the copy we read.
 
+### All its effects
+
+[`docs/v4-effects.md`](../docs/v4-effects.md) lists every effect pattern (96),
+transition (248), transformer setting and menu item from the manual, with
+ideas for rebuilding them in Himmel.
+
 ### Himmel's MIDI setup
 
 | Function | CC | Function | CC |
