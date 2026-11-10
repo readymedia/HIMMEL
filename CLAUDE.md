@@ -165,16 +165,19 @@ The details are in the mockup (`docs/vj-mockup.html`).
 ## Next steps
 1. ~~Run the MK2 mapper with the owner.~~ **Done 2026-11-09**: map verified and
    committed.
-2. **Write the `controller` module** — **the spec is `docs/mk2-controller-spec.md`**
-   (reports byte by byte, map schema, events/commands, threads, reconnect, velocity
-   formula, measured timings in `docs/mk2-measurements.json`). In short:
-   - load `maschine_mk2_map.json` (names → byte/bit, knob words, pad ids,
-     per-pad noise floor) instead of hard-coding the layout;
-   - read the MK2 at ≥ 500 Hz;
-   - publish events (button, knob delta, pad velocity / aftertouch) over a
-     lock-free queue or shared memory;
-   - accept LED and screen commands;
-   - reconnect on its own if the USB cable is pulled.
+2. ~~Write the `controller` module.~~ **Done 2026-11-10, checked on the MK2**
+   (pads/velocity colours, aftertouch, Pad 12 quiet, button LEDs, knobs, encoder,
+   screens, cable pull + reconnect). Spec: `docs/mk2-controller-spec.md`.
+   - Code: `src/controller/` (library `himmel_mk2`, `mk2_controller.exe`, test
+     client `mk2_monitor.exe`), unit tests `tests/controller/mk2_tests.cpp`
+     (no hardware needed).
+   - Shared memory `Local\HimmelMk2`: 4 SPSC event rings (one per consumer),
+     seqlock LED/screen outputs, status. Pad stream = heartbeat (250 ms).
+   - Build (VS Build Tools 2022, its bundled CMake):
+     `cmake -S . -B build -G "Visual Studio 17 2022" -A x64` then
+     `cmake --build build --config Release`; run `build\bin\Release\mk2_tests.exe`.
+     hidapi 0.14.0 and nlohmann/json 3.11.3 come via FetchContent.
+   - Close MK2 Live before running `mk2_controller` (both open the device).
 3. **Screen driver for the 1-bit displays**: the protocol and format are proven
    (`tools/mk2_screens.py`). Still to do: the real page layouts (aligned to the
    knob positions), meters, dithered images, and the C++ port in the controller.

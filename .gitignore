@@ -3,3 +3,7 @@ __pycache__/
 *.tmp
 maschine_mk2_map.bak.json
 tools/_screens/
+
+# C++ build output
+build/
+out/
