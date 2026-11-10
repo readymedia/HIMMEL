@@ -85,13 +85,37 @@ the device.
   is a socket or switch the protocol cannot see, with a small label.
 - `protocol` (optional, free text): a transport and message summary for people.
 - Video mixers (weapon no. 7) add:
-  - `kind: "fader"`: an absolute fader or T-bar, 0..1 from `ends[0]` (top) to
-    `ends[1]` (bottom); `range` = raw units on the wire.
-  - on a `knob`: `steps` (a selector that clicks between positions, value
-    0..steps-1), `endless` (no end stops), `center` (a centre detent).
-  - `deco` kinds `display` (a small LED readout, text from the simulator) and
-    `monitor` (a video monitor the page draws from the simulator's state;
-    `source` = `program` or `preview`).
+  - `kind: "fader"`: an absolute fader or T-bar, 0..1 from `ends[0]` to
+    `ends[1]`; `range` = raw units on the wire.
+    - With `plate: true` it is drawn as the V-4's round T-bar plate: slot,
+      printed A/B scales, black T grip.
+    - `orientation` is the default mounting, and `orientations` lists the ways it
+      can be mounted (`vertical`: A near you, B away; `horizontal`: A left, B
+      right). The page has a **Turn the T-bar 90°** button and remembers the
+      choice per browser. The MIDI is the same either way.
+  - On a `button`, these change the look only:
+    - `shape: "round"`: a round LED button;
+    - `style: "cap"`: a light key cap with an LED tick;
+    - `style: "dark"`: a dark square button.
+    - `led_color` is the colour of its LED.
+  - On a `knob`:
+    - `steps`: a selector that clicks between positions, value 0..steps-1;
+    - `endless`: no end stops;
+    - `center`: a centre detent;
+    - `style: "black"`: a black knob;
+    - `dial`: the number of printed dots around it;
+    - `show_value: false`: no value under it.
+  - `deco` kinds:
+    - `rect` (fill / stroke), `text` (printed lettering: `size`, `color`,
+      `weight`, `align`), `jack` (an RCA socket);
+    - `ladder`: LED bars; `source: "beat"` runs down once per beat while BPM
+      SYNC is on;
+    - `display`: an LED readout (`color`, `size`), text from the simulator;
+    - `monitor`: a video monitor the page draws from the simulator's state;
+      `source` = `program` or `preview`.
+  - `brand: {x, y, size, color}` moves the badge, e.g. to where the maker's logo
+    is printed.
+  - `body` takes an optional `fill` (the V-4 is silver).
   - `"live": "mixer"` makes the page show the mixer cards (Himmel driving the
     mixer, the MIDI setup table) instead of the BLOCKS cards.
 - `map` is `null` until a map has been learned on real hardware.
@@ -455,6 +479,10 @@ python tools/v4_sim.py                              self-test
 - **MIDI clock:** Timing Clock `F8` drives BPM SYNC; Start / Continue mark the
   beat.
 - **Not documented, so the simulator guesses** (check on a real V-4):
+  - The on-screen menu: MENU / ▲ / ▼ / ENTER are drawn and work, but the real
+    menu pages are not in what we read. The simulator's menu holds only the MIDI
+    settings the manual names (TX / RX channel, Note Mode, MIDI Thru,
+    transition time).
   - Does a CONTROL dial send the effect's CC while turning?
   - What exactly does a second press on a lit effect button do?
   - The two-nibble ("#") encoding of the setup values. The manual's own example
@@ -471,8 +499,16 @@ python tools/v4_sim.py                              self-test
 
 ### The simulator (checked in the browser, 2026-11-10)
 
-- **Panel:** buttons are held with the mouse. Knobs: drag or scroll; the INPUT
-  and MEMORY selectors click between positions. T-bar: drag it (top = A).
+- **The drawing** is laid out from the owner's photos (2026-11-10), with
+  Himmel's words where the maker's logo and model print are.
+  - `tools/v4_profile.py` writes the drawing part of `weapons/v4.weapon.json`.
+  - INPUT SELECT is two rows of four key caps with an LED tick. MEMORY is a
+    1-8 knob.
+- **Panel:** buttons are held with the mouse. Knobs: drag or scroll. T-bar: drag
+  the grip or scroll; wheel up = towards B.
+- **The T-bar can be turned 90°**, like the real plate: **Turn the T-bar 90°**
+  switches between up/down (A near you) and left/right (A left). Checked in
+  the browser both ways.
 - **Effects:** a press turns an effect on and makes it blink; the CONTROL dial
   then sets its parameter. A press on the blinking one turns it off.
 - **The two monitors** show a made-up picture of what the mixer outputs:

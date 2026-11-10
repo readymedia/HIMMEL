@@ -179,9 +179,14 @@ The details are in the mockup (`docs/vj-mockup.html`).
     - Weapon no. 4 = the Entrancer (the Touch FX session's branch).
   - **Weapon no. 7 = the V-4 video mixer (Roland / EDIROL V-4, SD, 4 channels;
     owner's choice 2026-11-10). The owner has none, so it is simulated only.**
-    - Profile `weapons/v4.weapon.json` (badge "HIMMEL · V4"). It adds kind
-      `fader` (T-bar), knob `steps` / `endless`, deco `display` / `monitor`, and
-      `"live": "mixer"` (the page shows mixer cards instead of BLOCKS cards).
+    - Profile `weapons/v4.weapon.json` (badge "HIMMEL · V4"). The owner wants it
+      to look as much like the real V-4 as possible.
+      - It is drawn from his photos by `tools/v4_profile.py`.
+      - The T-bar plate turns 90°: vertical or horizontal mounting.
+      - New profile words: kind `fader` (with `plate`, `orientations`), button
+        looks, knob `steps` / `endless` / `style`, and deco `rect` / `text` /
+        `jack` / `ladder` / `display` / `monitor`.
+      - `"live": "mixer"` makes the page show mixer cards instead of BLOCKS cards.
     - `tools/v4_sim.py`: SimV4 / V4Host / V4Live, self-test included. UDP
       engine link 8773. Launch config `v4-live` (port 8781). Checked in the browser
       2026-11-10.

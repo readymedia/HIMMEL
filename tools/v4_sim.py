@@ -202,6 +202,7 @@ class SimV4:
         self.bpm_sync = False
         self.memory = 1
         self.preview = "out"
+        self.menu_open, self.menu_sel = False, 0
         self.held = set()
         self.taps = []
         self.clock_ticks = []             # times of received F8, for BPM from MIDI clock
@@ -301,6 +302,10 @@ class SimV4:
                 self.preview = "out" if name.endswith("Out") else int(name[-1])
         elif name == "Tap" and down:
             self._tap()
+        elif name[1:].startswith(" input ") and down:            # INPUT SELECT buttons, A 1-4 and B 1-4
+            self.select(name[0], int(name[-1]))
+        elif name in ("Menu", "Up", "Down", "Enter") and down:
+            self._menu(name)
         elif name in ("Mix", "Wipe", "EFX") and down:
             with self.lock:
                 self.transition = ("Mix", "Wipe", "EFX").index(name)
@@ -331,15 +336,7 @@ class SimV4:
         delta = int(delta)
         if not delta:
             return
-        if name in ("A input", "B input"):
-            ch = name[0]
-            with self.lock:
-                n = max(1, min(4, self.sel[ch] + (1 if delta > 0 else -1)))
-                if n == self.sel[ch]:
-                    return
-                self.sel[ch] = n
-            self._program(BANK_A if ch == "A" else BANK_B, n - 1)
-        elif name == "Memory":
+        if name == "Memory":
             with self.lock:
                 n = max(1, min(8, self.memory + (1 if delta > 0 else -1)))
                 if n == self.memory:
@@ -363,6 +360,49 @@ class SimV4:
                 self.fx_val[ch][i] = max(1, min(127, self.fx_val[ch][i] + delta))
                 v = self.fx_val[ch][i]
             self._out("%s effect %d" % (ch, i + 1), v)
+
+    def select(self, ch, n):
+        with self.lock:
+            if self.sel[ch] == n:
+                return
+            self.sel[ch] = n
+        self._program(BANK_A if ch == "A" else BANK_B, n - 1)
+
+    # The on-screen menu on the preview output. The real V-4's menu pages are not documented in what we read;
+    # this one holds the MIDI settings the manual names (p. 95), so they can be changed on the drawn panel.
+    MENU = ("MIDI TX CH", "MIDI RX CH", "NOTE MODE", "MIDI THRU", "TRANSITION TIME")
+
+    def _menu(self, name):
+        with self.lock:
+            if name == "Menu":
+                if not self.menu_open:
+                    self.menu_open, self.menu_sel = True, 0
+                else:
+                    self.menu_sel = (self.menu_sel + 1) % len(self.MENU)
+                return
+            if not self.menu_open:
+                return
+            if name == "Enter":
+                self.menu_open = False
+                return
+            d = 1 if name == "Up" else -1
+            item = self.MENU[self.menu_sel]
+            if item == "MIDI TX CH":
+                self.tx_ch = (self.tx_ch + d) % 16
+            elif item == "MIDI RX CH":
+                self.rx_ch = (self.rx_ch + d) % 17          # 16 = off
+            elif item == "NOTE MODE":
+                self.note_mode = not self.note_mode
+            elif item == "MIDI THRU":
+                self.midi_thru = not self.midi_thru
+            else:
+                self.trans_time = max(0, min(127, self.trans_time + 4 * d))
+
+    def menu(self):
+        with self.lock:
+            vals = [self.tx_ch + 1, "OFF" if self.rx_ch >= 16 else self.rx_ch + 1, "ON" if self.note_mode else "OFF",
+                    "ON" if self.midi_thru else "OFF", "%.1f s" % (self.trans_time * 4 / 127)]
+            return {"open": self.menu_open, "sel": self.menu_sel, "items": [[n, v] for n, v in zip(self.MENU, vals)]}
 
     def fader(self, name, value):
         if name != "Video fader":
@@ -652,6 +692,11 @@ class V4Live:
                 if (st["fx_" + ch.lower()][i]) and (fx_sel[ch] != i or blink):
                     lit["%s effect %d" % (ch, i + 1)] = col
         lit[("Mix", "Wipe", "EFX")[TRANSITIONS.index(st["trans"])]] = "#ffd166"
+        lit["A input %d" % st["a"]] = lit["B input %d" % st["b"]] = "#ff5a1f"
+        menu = s.menu()
+        if menu["open"]:
+            for n in ("Menu", "Up", "Down", "Enter"):
+                lit[n] = "#ffffff"
         p = st["preview"]
         lit["Preview Out" if p == "out" else "Preview %d" % p] = "#3ddc84"
         if st["bpm_sync"] or phase < 0.15:
@@ -667,12 +712,10 @@ class V4Live:
         for ch in "AB":
             i = fx_sel[ch]
             ctrl[ch] = (i, st["fx_val_" + ch.lower()][i]) if i is not None else (None, None)
-        knobs = {"Output fade": s.fade, "A input": st["a"] - 1, "B input": st["b"] - 1,
-                 "Memory": st["memory"] - 1, "BPM control": int(st["bpm"]) % 128,
+        knobs = {"Output fade": s.fade, "Memory": st["memory"] - 1, "BPM control": int(st["bpm"]) % 128,
                  "A control": ctrl["A"][1] if ctrl["A"][1] is not None else 0,
                  "B control": ctrl["B"][1] if ctrl["B"][1] is not None else 0}
-        knob_text = {"Output fade": fade_txt, "A input": "IN %d" % st["a"], "B input": "IN %d" % st["b"],
-                     "Memory": "MEM %d" % st["memory"], "BPM control": "%g" % st["bpm"],
+        knob_text = {"Output fade": fade_txt, "Memory": "MEM %d" % st["memory"], "BPM control": "%g" % st["bpm"],
                      "A control": ("%s %d" % (EFFECTS["A"][ctrl["A"][0]], ctrl["A"][1])) if ctrl["A"][0] is not None else "-",
                      "B control": ("%s %d" % (EFFECTS["B"][ctrl["B"][0]], ctrl["B"][1])) if ctrl["B"][0] is not None else "-"}
         with h.lock:
@@ -693,7 +736,8 @@ class V4Live:
             "faders": {"Video fader": st["tbar"]},
             "held": held,
             "lit": lit,
-            "displays": {"bpm": "%g" % st["bpm"]},
+            "displays": {"bpm": "%03d" % round(st["bpm"])},          # three red digits, e.g. 042
+            "menu": menu,
             "mix": st,
             "setup": [[n, assign_name(setup[n])] for n, _ in ASSIGNABLE],
             "device": {"rx_ch": "off" if rx_ch >= 16 else rx_ch + 1, "note_mode": note_mode, "midi_thru": thru},
@@ -772,8 +816,9 @@ def selftest():
     h = V4Host(s)
     out = []
     s.listeners.append(out.append)
-    s.knob("A input", +1)
-    check("A input 1 -> 2 sends bank 00/00 + program 1",
+    s.button("A input 2", True)
+    s.button("A input 2", False)
+    check("A input button 2 sends bank 00/00 + program 1",
           out[-3:] == [b"\xB0\x00\x00", b"\xB0\x20\x00", b"\xC0\x01"] and h.seen["a"] == 2)
     s.knob("Memory", +1)
     check("memory 2 sends bank 50H + program 1", out[-3:] == [b"\xB0\x00\x50", b"\xB0\x20\x00", b"\xC0\x01"])
@@ -809,6 +854,11 @@ def selftest():
     finally:
         time.time = real_time
     check("MIDI clock sets BPM 150 (got %s)" % s.bpm, abs(s.bpm - 150) < 1)
+    s.button("Menu", True); s.button("Menu", False)
+    s.button("Up", True); s.button("Up", False)
+    check("menu: MIDI TX CH up = channel 2", s.tx_ch == 1)
+    s.button("Enter", True); s.button("Enter", False)
+    s.tx_ch = 0
     s.midi_thru = True
     n = len(out)
     s.fader("Video fader", 0.0)
