@@ -31,8 +31,23 @@
   .brand { position: absolute; font-weight: 800; font-size: 15px; letter-spacing: 1px; }
   .sec { position: absolute; font-size: 9px; font-weight: 700; color: var(--label); letter-spacing: .5px; }
   .rule { position: absolute; height: 1px; background: #44464c; }
-  .body { position: absolute; background: #141518; border: 1px solid #2c2d32; box-shadow: inset 0 2px 0 #ffffff10, 0 14px 40px #0007; }
-  .inset { position: absolute; background: #0f1012; border: 1px solid #2a2b30; }
+  .body { position: absolute; background: linear-gradient(160deg, #1b1c20, #0b0b0d 60%); border: 3px solid #d7d8dc;
+          box-shadow: inset 0 0 0 2px #050506, inset 0 3px 0 #ffffff14, 0 18px 50px #000a; }
+  .inset { position: absolute; background: #08090a; border: 1.5px solid #5d5f66; box-shadow: inset 0 1px 0 #ffffff10; }
+  .plate { position: absolute; background: linear-gradient(170deg, #f2f3f5, #c9cbd0); border: 1px solid #8e9097;
+           box-shadow: inset 0 2px 0 #fff, inset 0 -2px 0 #0002, 0 2px 6px #000a; }
+  .silver { position: absolute; background: linear-gradient(180deg, #e3e4e7, #a7a9af); border: 1px solid #6e7077;
+            box-shadow: inset 0 1px 0 #fff, 0 1px 4px #000a; }
+  .plaque { position: absolute; transform: translateX(-50%); background: #ececee; color: #08090a; font: 900 10px/1 "Segoe UI", sans-serif;
+            letter-spacing: 1.5px; padding: 3px 8px 3px 9px; border-radius: 3px; box-shadow: 0 0 0 2px #08090a, 0 0 0 3px #8e9097; }
+  svg.deco { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+  .lbl.dark { color: #4b4d53; }
+  /* buttons as on the device: black rubber with two light strips, small grey caps, silver-framed caps */
+  .b.strip { background: linear-gradient(#26272b, #0c0c0e); box-shadow: 0 0 0 2px #050506, 0 2px 3px #000a, inset 0 1px 0 #ffffff1a; }
+  .strips { position: absolute; left: 14%; right: 14%; top: 26%; bottom: 26%; border-top: 3px solid #3a3c42; border-bottom: 3px solid #3a3c42;
+            border-radius: 2px; transition: border-color .04s, box-shadow .04s; }
+  .b.grey { background: linear-gradient(#7d7f86, #55575d); box-shadow: 0 0 0 1.5px #050506, inset 0 1px 0 #ffffff40; }
+  .b.silver { background: linear-gradient(#55575d, #2c2d32); box-shadow: 0 0 0 3px #c4c6cb, 0 0 0 4px #55575d, inset 0 1px 0 #ffffff30; }
   .port { position: absolute; background: #050506; border: 1px solid #3a3a40; border-radius: 2px; }
   .port span { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); font-size: 7px; color: var(--label); white-space: nowrap; }
   .c { position: absolute; user-select: none; touch-action: none; }
@@ -54,11 +69,14 @@
   .knob.enc { background: repeating-conic-gradient(#2a2b30 0 6deg, #1a1b1f 6deg 12deg); }
   .knob.flash { box-shadow: 0 0 0 1px #50525a, 0 0 12px #fff8; }
   .val { position: absolute; font-size: 8px; color: var(--label); transform: translateX(-50%); white-space: nowrap; pointer-events: none; }
-  .wheel { border-radius: 50%; background: radial-gradient(circle, #2a2b30 0 46%, #0c0c0e 47% 49%, #1b1c20 50%);
-           box-shadow: 0 0 0 3px #0a0a0b, 0 0 0 5px #3a3b40, inset 0 0 20px #000; }
-  .wheel .dimple { position: absolute; width: 22%; height: 22%; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #3a3b42, #111);
-                   left: 39%; top: 12%; }
-  .wheel .rot { position: absolute; inset: 0; border-radius: 50%; }
+  .wheel { border-radius: 50%; background: #070708; box-shadow: 0 6px 14px #000c, 0 0 0 2px #050506; }
+  .wheel .rot { position: absolute; inset: 0; border-radius: 50%;
+                background: radial-gradient(circle, transparent 0 77%, #0006 78%),
+                            repeating-conic-gradient(#3b3c42 0 2.5deg, #121215 2.5deg 6deg); }
+  .wheel .face { position: absolute; inset: 9%; border-radius: 50%; background: radial-gradient(circle at 42% 35%, #34353b, #141518 70%);
+                 box-shadow: inset 0 2px 0 #ffffff14, 0 0 0 2px #050506; }
+  .wheel .dimple { position: absolute; width: 20%; height: 20%; border-radius: 50%; background: radial-gradient(circle at 60% 65%, #3a3b42, #0a0a0b 70%);
+                   left: 40%; top: 13%; box-shadow: inset 0 3px 5px #000; }
   .wheel.flash { box-shadow: 0 0 0 3px #0a0a0b, 0 0 0 5px #8ab8ff, inset 0 0 20px #000; }
   .track { position: absolute; background: #050506; border-radius: 3px; box-shadow: inset 0 0 0 1px #34353b; }
   .cap { position: absolute; background: linear-gradient(#e8e9ec, #8d8f95); border-radius: 3px; box-shadow: 0 2px 4px #000a; }
@@ -69,7 +87,9 @@
   .switch { background: #050506; border-radius: 10px; box-shadow: inset 0 0 0 1px #3a3b40; }
   .switch .nub { position: absolute; top: 2px; width: 16px; height: 12px; border-radius: 6px; background: linear-gradient(#ddd, #888); transition: left .08s; }
   .swl { position: absolute; font-size: 7px; color: var(--label); transform: translateX(-50%); pointer-events: none; }
-  .lcd { position: absolute; background: #1131a8; border: 3px solid #050506; border-radius: 4px; box-shadow: inset 0 0 18px #000a, 0 0 18px #2d6bff33; }
+  .lcd { position: absolute; background: #050506; border: 6px solid #050506; border-radius: 10px;
+         box-shadow: 0 0 0 1.5px #5d5f66, 0 0 24px #2d6bff2a; }
+  .lcd canvas { border-radius: 3px; }
   .lcd canvas { width: 100%; height: 100%; display: block; }
   .c.seen::after { content: ""; position: absolute; right: -3px; top: -3px; width: 7px; height: 7px; border-radius: 50%;
                    background: var(--seen); box-shadow: 0 0 0 2px var(--panel); }
@@ -146,9 +166,27 @@
       <button data-r="note on velocity = brightness">Brightness follows velocity</button>
       <button data-r="no LEDs with note on">Nothing lights</button>
       <span id="ledResult" class="mono"></span></div>
+    <h3>2b · LED hunt (if a button's own note lights nothing)</h3>
+    <div class="help">On Numark's Total Control the LED notes differ from the button notes, so the NuVJ may do the
+      same. The hunt lights <b>one note at a time</b> on the chosen channel. When an LED lights on the NuVJ,
+      <b>click that control in the drawing</b>: its LED note is saved in the map. Auto steps every 1.2 s and stops
+      when you click.</div>
+    <div class="row">
+      <label>channel <select id="huCh"></select></label>
+      <button id="huGo">Start hunt</button><button data-step="-1">◀ note</button><button data-step="1">note ▶</button>
+      <label><input type="checkbox" id="huAuto"> Auto step</label><button id="huStop">Stop hunt</button>
+      <span id="huInfo" class="mono"></span>
+    </div>
     <h3>3 · LCD</h3>
-    <div class="help">The NuVJ software writes values to the LCD; how is not published. On the simulator the LCD shows what
-      Himmel would write. On the device it keeps saying its own startup text until we know the protocol.</div>
+    <div class="help">The LCD is a custom segment display (read from the owner's photo): 9 dot-matrix characters,
+      two 2-digit 7-segment numbers, a 12-step bar, SYNC / BLACK icons and A / B triangles. Himmel fills it from one small
+      model (below), the same way it fills the MK2 screens. The drawing renders that model now. The NuVJ software
+      drives the real LCD with messages nobody has published; once we see them (by watching the NuVJ / GrandVJ
+      software talk to it), the driver turns the same model into those bytes. Until then Himmel leaves the device
+      LCD alone.</div>
+    <div class="row"><button id="idBtn" title="F0 7E 7F 06 01 F7, from the MIDI standard; harmless">Ask the NuVJ who it is (identity request)</button>
+      <span class="help">the only SysEx Himmel sends; the answer (if any) shows in the MIDI monitor</span></div>
+    <div id="lcdModel" class="mono"></div>
   </div>
   <div class="card">
     <h2>Himmel events (what the engine would get)</h2>
@@ -182,10 +220,22 @@ const px = v => v + "px";
 function build(w) {
   W = w;
   panel.style.width = px(w.panel.w); panel.style.height = px(w.panel.h);
+  const box = d => ({ left: px(d.x), top: px(d.y), width: px(d.w), height: px(d.h), borderRadius: px(d.r || 0) });
+  const plates = (w.deco || []).filter(d => d.kind === "plate" || d.kind === "silver");
+  const onPlate = (x, y) => plates.some(p => x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h);
   for (const d of w.deco || []) {
-    if (d.kind === "body") add("", "body", { left: px(d.x), top: px(d.y), width: px(d.w), height: px(d.h), borderRadius: px(d.r || 0) });
-    else if (d.kind === "panel") add("", "inset", { left: px(d.x), top: px(d.y), width: px(d.w), height: px(d.h), borderRadius: px(d.r || 0) });
+    if (d.kind === "body") add("", "body", box(d));
+    else if (d.kind === "panel") add("", "inset", box(d));
+    else if (d.kind === "plate") add("", "plate", box(d));
+    else if (d.kind === "silver") add("", "silver", box(d));
+    else if (d.kind === "plaque") add(esc(d.text), "plaque", { left: px(d.x), top: px(d.y) });
     else if (d.kind === "port") add(`<span>${esc(d.label)}</span>`, "port", { left: px(d.x), top: px(d.y), width: px(d.w), height: px(d.h) });
+    else if (d.kind === "line") {   // a printed line (from SCRATCH to the jog wheel)
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("class", "deco"); svg.setAttribute("width", w.panel.w); svg.setAttribute("height", w.panel.h);
+      svg.innerHTML = `<polyline points="${d.points.map(p => p.join(",")).join(" ")}" fill="none" stroke="#1d1e22" stroke-width="2.5" stroke-linejoin="round"/>`;
+      panel.appendChild(svg);
+    }
   }
   for (const s of w.sections || []) {
     add(esc(s.label), "sec", { left: px(s.x), top: px(s.y) });
@@ -193,22 +243,27 @@ function build(w) {
   }
   add(esc(w.badge || w.name), "brand", { left: px(w.panel.w / 2), top: px(40), fontSize: "13px", transform: "translateX(-50%)" });
   for (const s of w.screens || []) {
-    const d = add('<canvas width="320" height="180"></canvas>', "lcd", { left: px(s.x), top: px(s.y), width: px(s.w), height: px(s.h) });
+    const [uw, uh] = s.units || [200, 108];
+    const d = add(`<canvas width="${uw * 4}" height="${uh * 4}"></canvas>`, "lcd", { left: px(s.x), top: px(s.y), width: px(s.w), height: px(s.h) });
     s.ctx = d.firstChild.getContext("2d"); W.lcd = s;
   }
   for (const c of w.controls) {
     let d;
-    if (c.kind === "button") {
-      d = add(esc(c.label), "c b", { left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h) });
-    } else if (c.kind === "pad") {
-      d = add(`<div class="bar"></div>${esc(c.label)}`, "c pad", { left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h) });
+    if (c.kind === "button" || c.kind === "pad") {
+      const st = c.style || (c.kind === "pad" ? "strip" : "");
+      if (st) {   // the label is printed next to the button, as on the device
+        d = add(st === "strip" ? '<div class="strips"></div>' : "", "c b " + st, { left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h) });
+        const dark = onPlate(c.x + c.w / 2, c.y + c.h / 2);
+        const lab = (c.label || "").replace("\n", " ");
+        add(esc(lab), "lbl" + (dark ? " dark" : ""), c.kind === "pad" ? { left: px(c.x + c.w / 2), top: px(c.y - 11) } : { left: px(c.x + c.w / 2), top: px(c.y + c.h + 4) });
+      } else d = add(esc(c.label), "c b", { left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h) });
     } else if (c.kind === "knob" || c.kind === "encoder") {
       d = add('<div class="ind"></div>', "c knob" + (c.kind === "encoder" ? " enc" : ""), { left: px(c.x - c.r), top: px(c.y - c.r), width: px(2 * c.r), height: px(2 * c.r) });
       add(esc(c.label), "lbl", { left: px(c.x), top: px(c.y + c.r + 3) });
       c.v = add("", "val", { left: px(c.x), top: px(c.y - c.r - 12) });
     } else if (c.kind === "wheel") {
-      d = add('<div class="rot"><div class="dimple"></div></div>', "c wheel", { left: px(c.x - c.r), top: px(c.y - c.r), width: px(2 * c.r), height: px(2 * c.r) });
-      c.v = add("", "val", { left: px(c.x), top: px(c.y + c.r + 6) });
+      d = add('<div class="rot"></div><div class="face"><div class="dimple"></div></div>', "c wheel", { left: px(c.x - c.r), top: px(c.y - c.r), width: px(2 * c.r), height: px(2 * c.r) });
+      c.v = add("", "val" , { left: px(c.x), top: px(c.y + c.r + 6), color: "#4b4d53" });
     } else if (c.kind === "fader") {
       const v = c.orient === "v", L = c.len;
       d = add("", "c", v ? { left: px(c.x - 16), top: px(c.y), width: px(32), height: px(L) } : { left: px(c.x), top: px(c.y - 16), width: px(L), height: px(32) });
@@ -233,11 +288,15 @@ function build(w) {
 
 // ---------- input: simulator = the drawing is the controller; hardware = click to learn ----------
 function hw() { return S && S.hardware; }
+function hunting() { return !!(S && S.host && S.host.hunt); }
 function wire(c) {
   const el = c.el;
-  el.addEventListener("click", () => { if (hw()) post({ learn: c.name }); });
+  el.addEventListener("click", () => {
+    if (hunting()) { if (c.kind === "button" || c.kind === "pad") post({ led_assign: c.name }); }
+    else if (hw()) post({ learn: c.name });
+  });
   el.addEventListener("pointerdown", e => {
-    if (hw()) return;
+    if (hw() || hunting()) return;
     e.preventDefault();
     try { el.setPointerCapture(e.pointerId); } catch (_) { /* synthetic or already released pointer */ }
     c.drag = { x: e.clientX, y: e.clientY, a: null };
@@ -301,23 +360,71 @@ function fit() {
 }
 window.addEventListener("resize", fit);
 
-// ---------- LCD: dot-matrix text ----------
-function drawLcd(lines, note) {
+// ---------- LCD: the NuVJ's segment display (dot-matrix cells, 7-segment digits, bar, icons) ----------
+// Classic 5x7 font (the same public-domain shapes as tools/mk2_screens.py): 5 columns, bit 0 = top row.
+const FONT = {" ":"0000000000","!":"00005f0000","%":"2313086462","+":"08083e0808","-":"0808080808",".":"0060600000","/":"2010080402",
+  "0":"3e5149453e","1":"00427f4000","2":"4261514946","3":"2141454b31","4":"1814127f10","5":"2745454539","6":"3c4a494930","7":"0171090503",
+  "8":"3649494936","9":"064949291e",":":"0036360000","<":"0814224100",">":"0041221408","?":"0201510906","A":"7e1111117e","B":"7f49494936",
+  "C":"3e41414122","D":"7f4141221c","E":"7f49494941","F":"7f09090901","G":"3e4149497a","H":"7f0808087f","I":"00417f4100","J":"2040413f01",
+  "K":"7f08142241","L":"7f40404040","M":"7f020c027f","N":"7f0408107f","O":"3e4141413e","P":"7f09090906","Q":"3e4151215e","R":"7f09192946",
+  "S":"4649494931","T":"01017f0101","U":"3f4040403f","V":"1f2040201f","W":"3f4038403f","X":"6314081463","Y":"0708700807","Z":"6151494543","_":"4040404040"};
+const SEG7 = { "0": "abcdef", "1": "bc", "2": "abged", "3": "abgcd", "4": "fgbc", "5": "afgcd", "6": "afgedc", "7": "abc", "8": "abcdefg", "9": "abcdfg", "-": "g", " ": "" };
+const LCD_BG = "#1f3fd0", LCD_ON = "#eef3ff", LCD_GHOST = "rgba(6, 10, 70, 0.20)";
+function drawLcd(m, note) {
   const s = W && W.lcd; if (!s) return;
-  const g = s.ctx, cw = g.canvas.width, ch = g.canvas.height;
-  g.fillStyle = "#1131a8"; g.fillRect(0, 0, cw, ch);
-  const cols = s.text_cols || 16, rows = s.text_rows || 2;
-  const cellW = (cw - 20) / cols, cellH = (ch - 40) / rows;
-  g.font = `bold ${Math.floor(cellH * 0.62)}px Consolas, monospace`; g.textBaseline = "middle";
-  for (let r = 0; r < rows; r++) {
-    const t = (lines[r] || "").padEnd(cols).slice(0, cols);
-    for (let k = 0; k < cols; k++) {
-      const x = 10 + k * cellW, y = 12 + r * cellH;
-      g.fillStyle = "#1a3fc2"; g.fillRect(x + 1, y + 2, cellW - 2, cellH - 4);
-      g.fillStyle = "#e9f0ff"; g.fillText(t[k], x + cellW * 0.18, y + cellH / 2);
+  const g = s.ctx, [uw, uh] = s.units || [200, 108], k = g.canvas.width / uw;
+  const grad = g.createLinearGradient(0, 0, 0, g.canvas.height);
+  grad.addColorStop(0, "#2a4fe6"); grad.addColorStop(1, "#1532b8");
+  g.fillStyle = grad; g.fillRect(0, 0, g.canvas.width, g.canvas.height);
+  g.save(); g.scale(k, k);
+  const on = b => b ? LCD_ON : LCD_GHOST;
+  for (const e of s.elements || []) {
+    if (e.kind === "dots") {           // a row of 5x7 dot-matrix cells
+      const t = (m.text || "").toUpperCase().padEnd(e.cells).slice(0, e.cells);
+      const dw = e.cw / 6, dh = e.ch / 8;
+      for (let i = 0; i < e.cells; i++) {
+        const cols = FONT[t[i]] || FONT["?"];
+        for (let cx = 0; cx < 5; cx++) {
+          const bits = parseInt(cols.substr(cx * 2, 2), 16);
+          for (let cy = 0; cy < 7; cy++) {
+            g.fillStyle = on(bits >> cy & 1);
+            g.fillRect(e.x + i * e.cw + cx * dw, e.y + cy * dh, dw * 0.82, dh * 0.82);
+          }
+        }
+      }
+    } else if (e.kind === "digits") {  // 7-segment digits
+      const t = (m[e.id] || "").padStart(e.n).slice(-e.n), lit = (m[e.id] || "") !== "";
+      for (let i = 0; i < e.n; i++) seg7(g, e.x + i * (e.w + 4), e.y, e.w, e.h, lit ? SEG7[t[i]] ?? "" : "", on);
+    } else if (e.kind === "bar") {     // a bar graph of n blocks
+      const n = m.bar ?? -1, bw = e.w / e.n;
+      for (let i = 0; i < e.n; i++) { g.fillStyle = on(i < n); g.fillRect(e.x + i * bw, e.y + (e.h * 0.35) * (1 - i / e.n), bw * 0.78, e.h - (e.h * 0.35) * (1 - i / e.n)); }
+    } else if (e.kind === "icon") {
+      g.fillStyle = on((m.icons || {})[e.id]);
+      if (e.shape === "tri") { g.beginPath(); g.moveTo(e.x, e.y); g.lineTo(e.x + e.w, e.y); g.lineTo(e.x + e.w / 2, e.y + e.h); g.closePath(); g.fill(); }
+      else if (e.shape === "square") { g.fillRect(e.x, e.y, e.w, e.h); }
+      else { g.fillRect(e.x, e.y, e.w, e.h); g.fillStyle = on(false); g.fillRect(e.x + 3, e.y + 3, e.w - 6, e.h - 6); g.fillStyle = on((m.icons || {})[e.id]); g.fillRect(e.x + 5, e.y + 5, e.w - 10, e.h - 10); }
+    } else if (e.kind === "label") {   // small printed-style segment words; lit when their element is in use
+      const base = e.id.replace(/_label$/, ""), lit = base in (m.icons || {}) ? m.icons[base] : base === "bar" ? (m.bar ?? null) !== null : (m[base] || "") !== "";
+      g.fillStyle = lit ? "#c9d6ff" : LCD_GHOST; g.font = "bold 7px Segoe UI, sans-serif"; g.textAlign = "center"; g.fillText(e.text, e.x, e.y);
     }
   }
-  g.fillStyle = "#9fb4ff"; g.font = "11px Segoe UI"; g.fillText(note, 10, ch - 12);
+  g.restore();
+  s.ctx.canvas.title = note;
+}
+function seg7(g, x, y, w, h, segs, on) {
+  const t = Math.max(1.6, w * 0.2), hh = h / 2, sk = w * 0.12;   // stroke, half height, italic skew
+  const S = {
+    a: [[x + t * 0.6 + sk, y], [x + w - t * 0.6 + sk, y], [x + w - t * 1.4 + sk, y + t], [x + t * 1.4 + sk, y + t]],
+    g: [[x + t * 0.7 + sk / 2, y + hh - t / 2], [x + w - t * 0.7 + sk / 2, y + hh - t / 2], [x + w - t * 0.7 + sk / 2, y + hh + t / 2], [x + t * 0.7 + sk / 2, y + hh + t / 2]],
+    d: [[x + t * 1.4, y + h - t], [x + w - t * 1.4, y + h - t], [x + w - t * 0.6, y + h], [x + t * 0.6, y + h]],
+    f: [[x + sk, y + t * 0.6], [x + t + sk, y + t * 1.4], [x + t + sk / 2, y + hh - t * 0.6], [x + sk / 2, y + hh - t * 0.2]],
+    b: [[x + w - t + sk, y + t * 1.4], [x + w + sk, y + t * 0.6], [x + w + sk / 2, y + hh - t * 0.2], [x + w - t + sk / 2, y + hh - t * 0.6]],
+    e: [[x + sk / 2, y + hh + t * 0.2], [x + t + sk / 2, y + hh + t * 0.6], [x + t, y + h - t * 1.4], [x, y + h - t * 0.6]],
+    c: [[x + w - t + sk / 2, y + hh + t * 0.6], [x + w + sk / 2, y + hh + t * 0.2], [x + w, y + h - t * 0.6], [x + w - t, y + h - t * 1.4]],
+  };
+  for (const [k, pts] of Object.entries(S)) {
+    g.fillStyle = on(segs.includes(k)); g.beginPath(); pts.forEach(([px_, py], i) => i ? g.lineTo(px_, py) : g.moveTo(px_, py)); g.closePath(); g.fill();
+  }
 }
 
 // ---------- render a snapshot ----------
@@ -347,14 +454,17 @@ function render(s) {
     if (c.kind === "button" || c.kind === "pad") {
       cl.toggle("held", held.has(c.name));
       const lv = leds[c.name] || 0;
-      if (lv) { const [bg, sh] = ledCss(c, lv); c.el.style.background = c.kind === "pad" ? `linear-gradient(${bg}, #d9dadd 140%)` : bg;
-                c.el.style.boxShadow = (held.has(c.name) ? "0 0 0 2px #fff, " : "") + sh; c.el.style.color = "#06121f"; }
+      const strips = c.el.querySelector(".strips");
+      if (strips) {   // black rubber: only the two light strips glow
+        if (lv) { const [bg, sh] = ledCss(c, lv); strips.style.borderColor = bg; strips.style.boxShadow = sh + ", inset " + sh; c.el.style.boxShadow = ""; }
+        else { strips.style.borderColor = ""; strips.style.boxShadow = ""; }
+      } else if (lv) { const [bg, sh] = ledCss(c, lv); c.el.style.background = bg; c.el.style.boxShadow = (c.style === "silver" ? "0 0 0 3px #c4c6cb, " : "") + sh; c.el.style.color = "#06121f"; }
       else { c.el.style.background = ""; c.el.style.boxShadow = ""; c.el.style.color = ""; }
     } else if (c.kind === "knob") {
       c.el.firstChild.style.transform = `rotate(${-135 + 270 * (v || 0) / 127}deg)`;
       c.v.textContent = v === undefined ? "" : v; cl.toggle("flash", fl);
     } else if (c.kind === "encoder" || c.kind === "wheel") {
-      (c.kind === "wheel" ? c.el.firstChild : c.el.firstChild).style.transform = `rotate(${(v || 0) / (c.range || 128) * 360}deg)`;
+      for (const part of c.el.children) part.style.transform = `rotate(${(v || 0) / (c.range || 128) * 360}deg)`;
       c.v.textContent = c.kind === "encoder" ? `bank ${((s.host[c.name[0]] || {}).bank ?? 0) + 1}` : `${v || 0} ticks`;
       cl.toggle("flash", fl);
     } else if (c.kind === "fader") {
@@ -365,7 +475,7 @@ function render(s) {
       c.el.firstChild.style.left = px(2 + 18 * (v || 0));
     }
   }
-  drawLcd(s.lcd || [], s.hardware ? "drawing: what Himmel would write (device LCD protocol unknown)" : "simulated: what Himmel would write");
+  drawLcd(s.lcd || {}, s.hardware ? "drawing: what Himmel would write (device LCD protocol unknown)" : "simulated: what Himmel would write");
   // host card
   const h = s.host;
   const lm = $("ledModes");
@@ -392,6 +502,12 @@ function render(s) {
     }
   }
   $("learnMsg").textContent = s.learn_msg || "";
+  $("lcdModel").textContent = "LCD model now: " + JSON.stringify(s.lcd);
+  $("idBtn").disabled = !s.hardware;
+  const hu = h.hunt;
+  $("huInfo").textContent = hu ? `lighting note ${hu.note} on channel ${hu.ch + 1}${hu.auto ? " (auto)" : ""} - click the control that lights` : "";
+  if (hu && !$("huAuto").matches(":focus")) $("huAuto").checked = hu.auto;
+  document.body.classList.toggle("hunt", !!hu);
   const miss = Object.keys(els).filter(n => !seen.has(n)), mk = miss.join("|");
   if (mk !== lastMissKey) {
     lastMissKey = mk;
@@ -434,6 +550,12 @@ $("noise").onchange = e => post({ show_noise: e.target.checked });
 for (let i = 1; i <= 16; i++) $("lpCh").insertAdjacentHTML("beforeend", `<option value="${i - 1}">${i}</option>`);
 $("lpGo").onclick = () => post({ led_probe: { ch: +$("lpCh").value, vel: +$("lpVel").value } });
 $("lpOff").onclick = () => post({ led_probe: null });
+for (let i = 1; i <= 16; i++) $("huCh").insertAdjacentHTML("beforeend", `<option value="${i - 1}">${i}</option>`);
+$("huGo").onclick = () => post({ hunt: { ch: +$("huCh").value, note: 0, auto: $("huAuto").checked } });
+$("huStop").onclick = () => post({ hunt: null });
+$("idBtn").onclick = () => post({ identity: true });
+$("huAuto").onchange = e => { if (hunting()) post({ hunt: { auto: e.target.checked } }); };
+document.querySelectorAll("[data-step]").forEach(b => b.onclick = () => post({ hunt: { step: +b.dataset.step, auto: false } }));
 document.querySelectorAll("[data-r]").forEach(b => b.onclick = () => post({ led_result: b.dataset.r }));
 $("help").innerHTML = "<b>Simulator:</b> the drawing is the NuVJ. <b>Buttons and pads:</b> hold the mouse. " +
   "<b>Knobs:</b> drag up/down or scroll. <b>BANK:</b> endless, drag or scroll one step at a time. " +

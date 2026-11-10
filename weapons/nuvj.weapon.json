@@ -26,14 +26,139 @@
  "screens": [
   {
    "id": "lcd",
-   "kind": "lcd",
+   "kind": "segment-lcd",
    "x": 347,
-   "y": 70,
+   "y": 66,
    "w": 246,
    "h": 140,
-   "text_cols": 16,
-   "text_rows": 2,
-   "note": "size and protocol not known yet"
+   "units": [
+    200,
+    108
+   ],
+   "note": "layout read from a photo; the device protocol is not known yet, so Himmel's meaning of each element is ours",
+   "elements": [
+    {
+     "id": "text",
+     "kind": "dots",
+     "x": 9,
+     "y": 12,
+     "cells": 9,
+     "cw": 13.4,
+     "ch": 20
+    },
+    {
+     "id": "small",
+     "kind": "digits",
+     "x": 136,
+     "y": 12,
+     "n": 2,
+     "w": 10,
+     "h": 20
+    },
+    {
+     "id": "small_label",
+     "kind": "label",
+     "x": 147,
+     "y": 38,
+     "text": "FX"
+    },
+    {
+     "id": "big_label",
+     "kind": "label",
+     "x": 22,
+     "y": 46,
+     "text": "BANK"
+    },
+    {
+     "id": "big",
+     "kind": "digits",
+     "x": 9,
+     "y": 52,
+     "n": 2,
+     "w": 13,
+     "h": 24
+    },
+    {
+     "id": "bar_label",
+     "kind": "label",
+     "x": 106,
+     "y": 46,
+     "text": "VALUE"
+    },
+    {
+     "id": "bar",
+     "kind": "bar",
+     "x": 50,
+     "y": 56,
+     "n": 12,
+     "w": 112,
+     "h": 16
+    },
+    {
+     "id": "sync",
+     "kind": "icon",
+     "shape": "square",
+     "x": 10,
+     "y": 85,
+     "w": 11,
+     "h": 11
+    },
+    {
+     "id": "sync_label",
+     "kind": "label",
+     "x": 37,
+     "y": 93,
+     "text": "SYNC"
+    },
+    {
+     "id": "black",
+     "kind": "icon",
+     "shape": "rect",
+     "x": 60,
+     "y": 84,
+     "w": 30,
+     "h": 13
+    },
+    {
+     "id": "black_label",
+     "kind": "label",
+     "x": 75,
+     "y": 81,
+     "text": "BLACK"
+    },
+    {
+     "id": "deck_a",
+     "kind": "icon",
+     "shape": "tri",
+     "x": 110,
+     "y": 82,
+     "w": 26,
+     "h": 16
+    },
+    {
+     "id": "deck_b",
+     "kind": "icon",
+     "shape": "tri",
+     "x": 150,
+     "y": 82,
+     "w": 26,
+     "h": 16
+    },
+    {
+     "id": "deck_a_label",
+     "kind": "label",
+     "x": 123,
+     "y": 104,
+     "text": "A"
+    },
+    {
+     "id": "deck_b_label",
+     "kind": "label",
+     "x": 163,
+     "y": 104,
+     "text": "B"
+    }
+   ]
   }
  ],
  "deco": [
@@ -62,28 +187,100 @@
    "label": "6V DC"
   },
   {
+   "kind": "plate",
+   "x": 66,
+   "y": 246,
+   "w": 258,
+   "h": 556,
+   "r": 14
+  },
+  {
+   "kind": "plate",
+   "x": 616,
+   "y": 246,
+   "w": 258,
+   "h": 556,
+   "r": 14
+  },
+  {
+   "kind": "panel",
+   "x": 340,
+   "y": 236,
+   "w": 260,
+   "h": 228,
+   "r": 12
+  },
+  {
+   "kind": "silver",
+   "x": 436,
+   "y": 322,
+   "w": 68,
+   "h": 132,
+   "r": 8
+  },
+  {
+   "kind": "panel",
+   "x": 340,
+   "y": 478,
+   "w": 260,
+   "h": 234,
+   "r": 8
+  },
+  {
+   "kind": "silver",
+   "x": 340,
+   "y": 734,
+   "w": 260,
+   "h": 66,
+   "r": 6
+  },
+  {
+   "kind": "line",
+   "points": [
+    [
+     100,
+     747
+    ],
+    [
+     100,
+     712
+    ],
+    [
+     130,
+     690
+    ]
+   ]
+  },
+  {
+   "kind": "line",
+   "points": [
+    [
+     840,
+     747
+    ],
+    [
+     840,
+     712
+    ],
+    [
+     810,
+     690
+    ]
+   ]
+  },
+  {
+   "kind": "plaque",
+   "x": 470,
+   "y": 248,
+   "text": "HIMMEL"
+  },
+  {
    "kind": "body",
    "x": 30,
    "y": 836,
    "w": 880,
    "h": 84,
    "r": 10
-  },
-  {
-   "kind": "panel",
-   "x": 335,
-   "y": 236,
-   "w": 270,
-   "h": 230,
-   "r": 8
-  },
-  {
-   "kind": "panel",
-   "x": 335,
-   "y": 480,
-   "w": 270,
-   "h": 240,
-   "r": 8
   }
  ],
  "sections": [
@@ -98,18 +295,6 @@
    "x": 620,
    "y": 46,
    "w": 250
-  },
-  {
-   "label": "MASTER",
-   "x": 345,
-   "y": 240,
-   "w": 250
-  },
-  {
-   "label": "SPEED",
-   "x": 450,
-   "y": 488,
-   "w": 40
   },
   {
    "label": "FRONT EDGE (switches you reach from the front)",
@@ -154,7 +339,8 @@
    "w": 48,
    "h": 22,
    "label": "LATCH",
-   "led_color": "#4aa8ff"
+   "led_color": "#4aa8ff",
+   "style": "grey"
   },
   {
    "name": "A Auto",
@@ -164,7 +350,8 @@
    "w": 48,
    "h": 22,
    "label": "AUTO",
-   "led_color": "#4aa8ff"
+   "led_color": "#4aa8ff",
+   "style": "grey"
   },
   {
    "name": "A Sync",
@@ -174,7 +361,8 @@
    "w": 48,
    "h": 22,
    "label": "SYNC",
-   "led_color": "#4aa8ff"
+   "led_color": "#4aa8ff",
+   "style": "silver"
   },
   {
    "name": "A Pad 7",
@@ -185,7 +373,8 @@
    "w": 64,
    "h": 46,
    "label": "PAD 7",
-   "range": 127
+   "range": 127,
+   "style": "strip"
   },
   {
    "name": "A Pad 8",
@@ -196,7 +385,8 @@
    "w": 64,
    "h": 46,
    "label": "PAD 8",
-   "range": 127
+   "range": 127,
+   "style": "strip"
   },
   {
    "name": "A Pad 9",
@@ -207,7 +397,8 @@
    "w": 64,
    "h": 46,
    "label": "PAD 9",
-   "range": 127
+   "range": 127,
+   "style": "strip"
   },
   {
    "name": "A Pad 4",
@@ -218,7 +409,8 @@
    "w": 64,
    "h": 46,
    "label": "PAD 4",
-   "range": 127
+   "range": 127,
+   "style": "strip"
   },
   {
    "name": "A Pad 5",
@@ -229,7 +421,8 @@
    "w": 64,
    "h": 46,
    "label": "PAD 5",
-   "range": 127
+   "range": 127,
+   "style": "strip"
   },
   {
    "name": "A Pad 6",
@@ -240,7 +433,8 @@
    "w": 64,
    "h": 46,
    "label": "PAD 6",
-   "range": 127
+   "range": 127,
+   "style": "strip"
   },
   {
    "name": "A Pad 1",
@@ -251,7 +445,8 @@
    "w": 64,
    "h": 46,
    "label": "PAD 1",
-   "range": 127
+   "range": 127,
+   "style": "strip"
   },
   {
    "name": "A Pad 2",
@@ -262,7 +457,8 @@
    "w": 64,
    "h": 46,
    "label": "PAD 2",
-   "range": 127
+   "range": 127,
+   "style": "strip"
   },
   {
    "name": "A Pad 3",
@@ -273,7 +469,8 @@
    "w": 64,
    "h": 46,
    "label": "PAD 3",
-   "range": 127
+   "range": 127,
+   "style": "strip"
   },
   {
    "name": "A Jog",
@@ -287,12 +484,13 @@
   {
    "name": "A Scratch",
    "kind": "button",
-   "x": 88,
-   "y": 722,
+   "x": 74,
+   "y": 747,
    "w": 52,
    "h": 26,
    "label": "SCRATCH",
-   "led_color": "#4aa8ff"
+   "led_color": "#4aa8ff",
+   "style": "strip"
   },
   {
    "name": "B Bank",
@@ -329,7 +527,8 @@
    "w": 48,
    "h": 22,
    "label": "LATCH",
-   "led_color": "#4aa8ff"
+   "led_color": "#4aa8ff",
+   "style": "grey"
   },
   {
    "name": "B Auto",
@@ -339,7 +538,8 @@
    "w": 48,
    "h": 22,
    "label": "AUTO",
-   "led_color": "#4aa8ff"
+   "led_color": "#4aa8ff",
+   "style": "grey"
   },
   {
    "name": "B Sync",
@@ -349,7 +549,8 @@
    "w": 48,
    "h": 22,
    "label": "SYNC",
-   "led_color": "#4aa8ff"
+   "led_color": "#4aa8ff",
+   "style": "silver"
   },
   {
    "name": "B Pad 7",
@@ -360,7 +561,8 @@
    "w": 64,
    "h": 46,
    "label": "PAD 7",
-   "range": 127
+   "range": 127,
+   "style": "strip"
   },
   {
    "name": "B Pad 8",
@@ -371,7 +573,8 @@
    "w": 64,
    "h": 46,
    "label": "PAD 8",
-   "range": 127
+   "range": 127,
+   "style": "strip"
   },
   {
    "name": "B Pad 9",
@@ -382,7 +585,8 @@
    "w": 64,
    "h": 46,
    "label": "PAD 9",
-   "range": 127
+   "range": 127,
+   "style": "strip"
   },
   {
    "name": "B Pad 4",
@@ -393,7 +597,8 @@
    "w": 64,
    "h": 46,
    "label": "PAD 4",
-   "range": 127
+   "range": 127,
+   "style": "strip"
   },
   {
    "name": "B Pad 5",
@@ -404,7 +609,8 @@
    "w": 64,
    "h": 46,
    "label": "PAD 5",
-   "range": 127
+   "range": 127,
+   "style": "strip"
   },
   {
    "name": "B Pad 6",
@@ -415,7 +621,8 @@
    "w": 64,
    "h": 46,
    "label": "PAD 6",
-   "range": 127
+   "range": 127,
+   "style": "strip"
   },
   {
    "name": "B Pad 1",
@@ -426,7 +633,8 @@
    "w": 64,
    "h": 46,
    "label": "PAD 1",
-   "range": 127
+   "range": 127,
+   "style": "strip"
   },
   {
    "name": "B Pad 2",
@@ -437,7 +645,8 @@
    "w": 64,
    "h": 46,
    "label": "PAD 2",
-   "range": 127
+   "range": 127,
+   "style": "strip"
   },
   {
    "name": "B Pad 3",
@@ -448,7 +657,8 @@
    "w": 64,
    "h": 46,
    "label": "PAD 3",
-   "range": 127
+   "range": 127,
+   "style": "strip"
   },
   {
    "name": "B Jog",
@@ -462,32 +672,35 @@
   {
    "name": "B Scratch",
    "kind": "button",
-   "x": 800,
-   "y": 722,
+   "x": 814,
+   "y": 747,
    "w": 52,
    "h": 26,
    "label": "SCRATCH",
-   "led_color": "#4aa8ff"
+   "led_color": "#4aa8ff",
+   "style": "strip"
   },
   {
    "name": "Insta A",
    "kind": "button",
-   "x": 272,
+   "x": 257,
    "y": 752,
    "w": 56,
    "h": 32,
    "label": "INSTA A",
-   "led_color": "#4aa8ff"
+   "led_color": "#4aa8ff",
+   "style": "strip"
   },
   {
    "name": "Insta B",
    "kind": "button",
-   "x": 612,
+   "x": 627,
    "y": 752,
    "w": 56,
    "h": 32,
    "label": "INSTA B",
-   "led_color": "#4aa8ff"
+   "led_color": "#4aa8ff",
+   "style": "strip"
   },
   {
    "name": "FX Level",
@@ -506,7 +719,8 @@
    "w": 50,
    "h": 20,
    "label": "MASTER FX",
-   "led_color": "#4aa8ff"
+   "led_color": "#4aa8ff",
+   "style": "grey"
   },
   {
    "name": "Master FX Select",
@@ -534,7 +748,8 @@
    "w": 50,
    "h": 28,
    "label": "INSTA\nBLACK",
-   "led_color": "#4aa8ff"
+   "led_color": "#4aa8ff",
+   "style": "grey"
   },
   {
    "name": "Contrast",
@@ -562,7 +777,8 @@
    "w": 50,
    "h": 28,
    "label": "BPM TAP",
-   "led_color": "#4aa8ff"
+   "led_color": "#4aa8ff",
+   "style": "silver"
   },
   {
    "name": "Bright",

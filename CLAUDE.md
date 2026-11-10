@@ -167,7 +167,10 @@ The details are in the mockup (`docs/vj-mockup.html`).
     WinMM link, click-then-move map learning into `nuvj_map.json`, LED host + probe),
     own page `tools/nuvj_live.html` (`mk2_live.py --port 8777 --weapon nuvj`,
     launch config `nuvj-live`). Simulator checked in the browser; **not yet checked
-    on the owner's unit** (map, LEDs). LCD protocol unknown. Details: `weapons/README.md`.
+    on the owner's unit** (map, LEDs). The LCD is a segment display (9 dot chars,
+    7-segment numbers, bar, icons), drawn from Himmel's LCD model; its protocol is
+    unknown and not public, so the device LCD is left alone. LED hunt for LED notes
+    that differ from button notes. Details: `weapons/README.md`.
 - **Visual mapping is the way to work with the controller. Keep it and build on
   it** (the owner wants graphical tools, not terminal tables):
   - `tools/mk2_live.py` + `tools/mk2_live.html`: a browser live view of the MK2

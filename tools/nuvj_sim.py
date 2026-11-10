@@ -92,6 +92,14 @@ def entry_from_source(t):
     return e
 
 
+def led_key(e):
+    """(channel, note) that lights this control's LED: a learned "led" entry, else the button's own note
+    (the first guess; on Numark's Total Control the LED notes differ from the button notes)."""
+    if e.get("led"):
+        return e["led"]["ch"], e["led"]["num"]
+    return e["ch"], e["num"]
+
+
 def load_profile():
     with open(PROFILE, encoding="utf-8") as f:
         return json.load(f)
@@ -172,6 +180,11 @@ def describe(msg):
     st = msg[0]
     hi, ch = st & 0xF0, (st & 15) + 1
     if st == 0xF0:
+        if len(msg) >= 6 and msg[1] == 0x7E and msg[3] == 0x06 and msg[4] == 0x01:
+            return "SysEx: universal identity request"
+        if len(msg) >= 10 and msg[1] == 0x7E and msg[3] == 0x06 and msg[4] == 0x02:
+            man = msg[5:8].hex(" ") if msg[5] == 0 else "%02x" % msg[5]
+            return "SysEx: identity reply, manufacturer %s, rest %s" % (man, msg[8 if msg[5] == 0 else 6:-1].hex(" "))
         return "SysEx (%d bytes)" % len(msg)
     if hi == 0x90 and len(msg) > 2:
         return "note on  ch%d  %3d vel %3d" % (ch, msg[1], msg[2]) if msg[2] else "note on  ch%d  %3d vel   0 (= off)" % (ch, msg[1])
@@ -252,7 +265,7 @@ class DeviceBase:
         del self.log[:-400]
 
     def emit(self, data):
-        for msg in split_midi(data):
+        for msg in ([bytes(data)] if data[:1] == b"\xF0" else split_midi(data)):
             with self.lock:
                 self.counts["to_host"] += 1
                 self._log("device → host", msg)
@@ -295,7 +308,7 @@ class SimNuVJ(DeviceBase):
         out = {}
         for name, e in m["controls"].items():
             if e.get("type") == "note":
-                v = self.led_raw.get((e["ch"], e["num"]), 0)
+                v = self.led_raw.get(led_key(e), 0)
                 if v:
                     out[name] = v
         return out
@@ -425,6 +438,30 @@ class HwNuVJ(DeviceBase):
                 self.stats["first"] = time.strftime("%H:%M:%S")
         self.emit(msg)
 
+    IDENTITY_REQUEST = bytes([0xF0, 0x7E, 0x7F, 0x06, 0x01, 0xF7])
+
+    def identity(self):
+        """Send the MIDI standard's Universal Identity Request (the only SysEx sent to the NuVJ).
+        A device that supports it answers F0 7E <id> 06 02 <manufacturer> <family> <model> <version> F7."""
+        if not self.connected or not self.has_out:
+            return
+        W, mm = self.W, self.mm
+        msg = self.IDENTITY_REQUEST
+        with self.out_lock:
+            b = ctypes.create_string_buffer(msg, len(msg))
+            h = W.MIDIHDR()
+            h.lpData = ctypes.cast(b, ctypes.c_void_p)
+            h.dwBufferLength = h.dwBytesRecorded = len(msg)
+            mm.midiOutPrepareHeader(self.hout, ctypes.byref(h), ctypes.sizeof(h))
+            r = mm.midiOutLongMsg(self.hout, ctypes.byref(h), ctypes.sizeof(h))
+            t_end = time.time() + 0.2
+            while r == 0 and not (h.dwFlags & W.MHDR_DONE) and time.time() < t_end:
+                time.sleep(0.001)
+            mm.midiOutUnprepareHeader(self.hout, ctypes.byref(h), ctypes.sizeof(h))
+        with self.lock:
+            self.counts["to_device"] += 1
+            self._log("host → device", msg)
+
     def receive(self, msg):
         """Short MIDI from the host to the real device (LED notes). SysEx is never sent from here."""
         msg = bytes(msg)
@@ -476,6 +513,8 @@ class HwNuVJ(DeviceBase):
 # The host: Himmel's side. Events -> a small VJ state -> LEDs (+ LCD text in the sim)
 # ---------------------------------------------------------------------------
 LED_ON, LED_DIM = 127, 0
+FX_NAMES = ("BLUR", "INVERT", "MIRROR", "KALEIDO", "STROBE", "RGB SPLIT", "PIXELATE", "FEEDBACK",
+            "EDGES", "HUE SPIN", "ZOOM", "TUNNEL")
 TOGGLES = ("A Latch", "B Latch", "A Auto", "B Auto", "A Sync", "B Sync", "Master FX", "Insta Black")
 
 
@@ -487,14 +526,41 @@ class NuvjHost:
         self.mode = "himmel"
         self.state = {"A": {"pad": None, "bank": 0, "jog": 0}, "B": {"pad": None, "bank": 0, "jog": 0},
                       "toggles": {n: False for n in TOGGLES}, "bpm": 120.0, "taps": [], "xf": 8192,
-                      "insta": None}
+                      "insta": None, "focus": "A", "fx": 0}
         for n in ("A Latch", "B Latch"):
             self.state["toggles"][n] = True
         self.events = []           # the last Himmel events, newest last
         self.sent = {}             # (ch, note) -> velocity we last sent
         self.t0 = time.time()
-        self.lcd = ["  HIMMEL  VJ", "  ready"]
+        self.flash = None          # (until, text, bar 0..1 or None): a value shown for a moment
         self.led_probe = None      # {"ch": c, "vel": v} lights every mapped note on that channel
+        self.hunt = None           # LED hunt: {"ch", "note", "auto", "t"} lights one note at a time
+
+    # ---- the LCD: Himmel's page for the NuVJ's segment display ----
+    def show(self, text, bar=None, secs=1.5):
+        self.flash = (time.time() + secs, text, bar)
+
+    def lcd(self):
+        """The LCD as a model the drawing (and, once the protocol is known, the driver) renders:
+        text = 9 dot-matrix cells, big / small = 2 seven-segment digits each, bar = 0..12 segments,
+        icons on/off. This is the interface between Himmel and the device, like the MK2 pages."""
+        st, now = self.state, time.time()
+        f = st["focus"]
+        if self.flash and now < self.flash[0]:
+            text, bar = self.flash[1], self.flash[2]
+        elif now - self.t0 < 3.0:
+            text, bar = "HIMMEL VJ", (now - self.t0) / 3.0          # start-up: name + a filling bar
+        else:
+            text, bar = "%5.1f BPM" % st["bpm"] if st["bpm"] < 1000 else "BPM", st["xf"] / 16383
+        beat = ((now - self.t0) * st["bpm"] / 60.0) % 1.0
+        return {
+            "text": text[:9],
+            "big": "%02d" % (st[f]["bank"] + 1),
+            "small": "%02d" % (st["fx"] + 1) if st["toggles"]["Master FX"] else "",
+            "bar": None if bar is None else max(0, min(12, round(bar * 12))),
+            "icons": {"sync": st["toggles"][f + " Sync"] and beat < 0.5, "black": st["toggles"]["Insta Black"],
+                      "deck_a": f == "A", "deck_b": f == "B"},
+        }
 
     # ---- input ----
     def on_event(self, name, ev):
@@ -505,12 +571,21 @@ class NuvjHost:
             return
         k = ev["kind"]
         side = name[0] if name[:2] in ("A ", "B ") else None
+        if side:
+            st["focus"] = side
         if k == "down":
             if name in TOGGLES:
                 st["toggles"][name] = not st["toggles"][name]
+                if name == "Insta Black":
+                    self.show("BLACKOUT" if st["toggles"][name] else "LIGHTS ON")
+                elif name == "Master FX":
+                    self.show(FX_NAMES[st["fx"]] if st["toggles"][name] else "FX OFF")
+                else:
+                    self.show("%s %s" % (name.split()[1].upper(), "ON" if st["toggles"][name] else "OFF"))
             if " Pad " in name:
                 n = int(name.split()[-1])
                 st[side]["pad"] = n if (st[side]["pad"] != n or not st["toggles"][side + " Latch"]) else None
+                self.show("CLIP %s%d-%d" % (side, st[side]["bank"] + 1, n))
             if name == "BPM Tap":
                 now = time.time()
                 taps = [t for t in st["taps"] if now - t < 3.0] + [now]
@@ -519,9 +594,13 @@ class NuvjHost:
                     iv = (taps[-1] - taps[0]) / (len(taps) - 1)
                     if iv > 0.2:
                         st["bpm"] = round(60.0 / iv, 1)
+                self.show("TAP %5.1f" % st["bpm"])
             if name in ("Insta A", "Insta B"):
                 st["insta"] = name[-1]
-            self.lcd = [name.upper()[:16], "pressed"]
+                st["focus"] = name[-1]
+                self.show("ONLY " + name[-1], 0.0 if name[-1] == "A" else 1.0)
+            if name.endswith("Scratch"):
+                self.show("SCRATCH " + side)
         elif k == "up":
             if " Pad " in name and not st["toggles"][side + " Latch"]:
                 st[side]["pad"] = None           # latch off: the clip plays while the pad is held
@@ -530,23 +609,33 @@ class NuvjHost:
         elif k == "delta":
             if name.endswith("Bank"):
                 st[side]["bank"] = (st[side]["bank"] + (1 if ev["delta"] > 0 else -1)) % 16
-                self.lcd = ["DECK %s BANK" % side, "%02d / 16" % (st[side]["bank"] + 1)]
+                self.show("BANK %s %02d" % (side, st[side]["bank"] + 1), st[side]["bank"] / 15)
             elif name.endswith("Jog"):
                 st[side]["jog"] += ev["delta"]
-                self.lcd = ["DECK %s %s" % (side, "SCRATCH" if self.live.held_now(side + " Scratch") else "NUDGE"),
-                            "%+d" % st[side]["jog"]]
+                scr = self.live.held_now(side + " Scratch")
+                self.show(("SCR %+5d" if scr else "NUDGE %+3d") % (st[side]["jog"] if scr else max(-99, min(99, ev["delta"] * 10))),
+                          (st[side]["jog"] % 128) / 127)
         elif k == "value":
-            self.lcd = [name.upper()[:16], "%3d%%" % round(ev["value"] / 1.27)]
+            v = ev["value"] / 127
+            if name == "Master FX Select":
+                st["fx"] = min(len(FX_NAMES) - 1, int(v * len(FX_NAMES)))
+                self.show(FX_NAMES[st["fx"]], v)
+            else:
+                short = {"FX Level": "FX LEVEL", "Master PMTR1": "FX PAR 1", "Master PMTR2": "FX PAR 2",
+                         "Contrast": "CONTRAST", "Bright": "BRIGHT", "Auto Fade Speed": "FADE SPD"}.get(name)
+                self.show(short or (name.split()[1].replace("PMTR", "PAR ") + " " + name[0]), v)
         elif k == "fader":
+            v = ev["value"] / 16383
             if name == "Crossfader":
                 st["xf"] = ev["value"]
-                self.lcd = ["CROSSFADE", "A " + "#" * int(10 * (1 - ev["value"] / 16383)) + "|" + "#" * int(10 * ev["value"] / 16383) + " B"]
+                self.show("XF %3d%%" % round(v * 100), v, secs=0.8)
             else:
-                self.lcd = [name.upper(), "%+.2fx" % ((ev["value"] - 8192) / 8192 * 2)]
+                self.show("SPD%s %+.1f" % (name[0], (v - 0.5) * 4), v)
         elif k == "switch":
             c = self.live.control(name)
             pos = ev["pos"]
-            self.lcd = [name.upper(), c["positions"][pos] if c and 0 <= pos < len(c["positions"]) else "?"]
+            p = c["positions"][pos] if c and 0 <= pos < len(c["positions"]) else "?"
+            self.show(("MODE " if name == "Fader Mode" else "FSTART ") + p)
 
     # ---- LEDs ----
     def wanted(self, m, held):
@@ -556,8 +645,13 @@ class NuvjHost:
         notes = [(n, e) for n, e in m["controls"].items() if e.get("type") == "note" and e.get("enc") != "toggle"]
         t = time.time() - self.t0
         beat = (t * st["bpm"] / 60.0) % 1.0
+        if self.hunt is not None:   # one note lit on the hunt channel, every other note on it dark
+            h = self.hunt
+            if h["auto"] and time.time() - h["t"] > 1.2:
+                h["note"], h["t"] = (h["note"] + 1) % 128, time.time()
+            return {(h["ch"], n): (LED_ON if n == h["note"] else 0) for n in range(128)}
         for i, (n, e) in enumerate(notes):
-            key = (e["ch"], e["num"])
+            key = led_key(e)
             if self.led_probe is not None:
                 out[(self.led_probe["ch"], e["num"])] = self.led_probe["vel"]
                 continue
@@ -784,7 +878,7 @@ class NuvjLive:
             leds = {}
             for name, e in mc.items():
                 if e.get("type") == "note" and e.get("enc") != "toggle":
-                    v = dev.led_raw.get((e["ch"], e["num"]), 0)
+                    v = dev.led_raw.get(led_key(e), 0)
                     if v:
                         leds[name] = v
             st = self.host.state
@@ -800,10 +894,10 @@ class NuvjLive:
                 "ranges": dict(self.ranges),
                 "leds": leds,
                 "led_preview": hw,
-                "lcd": list(self.host.lcd),
+                "lcd": self.host.lcd(),
                 "host": {"mode": self.host.mode, "modes": list(NuvjHost.MODES), "bpm": st["bpm"],
                          "A": dict(st["A"]), "B": dict(st["B"]), "toggles": dict(st["toggles"]),
-                         "xf": st["xf"], "probe": self.host.led_probe},
+                         "xf": st["xf"], "probe": self.host.led_probe, "hunt": self.host.hunt},
                 "events": [(t, n, ev) for t, n, ev in self.host.events[-14:]],
                 "map": {"mapped": mapped, "seen": seen, "total": len(self.controls), "verified": self.m.get("verified", False),
                         "learned": [n for n, e in mc.items() if e.get("learned")],
@@ -819,7 +913,7 @@ class NuvjLive:
     def _wire(e):
         t = e.get("type")
         if t == "note":
-            return "note %d ch%d" % (e["num"], e["ch"] + 1) + (" (%s)" % "/".join(map(str, e["values"])) if e.get("values") else "")
+            return "note %d ch%d" % (e["num"], e["ch"] + 1) + (" (%s)" % "/".join(map(str, e["values"])) if e.get("values") else "") +                 ("  LED note %d ch%d" % (e["led"]["num"], e["led"]["ch"] + 1) if e.get("led") else "")
         if t == "cc":
             return "CC %d ch%d %s" % (e["num"], e["ch"] + 1, e.get("enc", "abs") +
                                      (" cw=" + e.get("cw", "pos") if e.get("enc") == "rel" else "") +
@@ -872,6 +966,33 @@ class NuvjLive:
             elif d.get("led_mode") in NuvjHost.MODES:
                 self.host.mode = d["led_mode"]
                 self.host.led_probe = None
+                self.host.hunt = None
+            elif "hunt" in d:
+                h = d["hunt"]
+                if h is None:
+                    self.host.hunt = None
+                else:
+                    old = self.host.hunt or {"ch": 0, "note": 0, "auto": False}
+                    self.host.hunt = {"ch": int(h.get("ch", old["ch"])) & 15,
+                                      "note": (int(h["note"]) if "note" in h else old["note"] + int(h.get("step", 0))) % 128,
+                                      "auto": bool(h.get("auto", old["auto"])), "t": time.time()}
+                    self.host.led_probe = None
+            elif "led_assign" in d:   # LED hunt: the control the owner sees lit gets this note as its LED
+                n, h = d["led_assign"], self.host.hunt
+                if h and n in self.m["controls"] and self.dev.kind != "hw":
+                    self.learn_msg = "LED hunt on the simulator: nothing is saved (only the real NuVJ teaches LED notes)"
+                elif h and n in self.m["controls"]:
+                    for other, oe in self.m["controls"].items():
+                        if oe.get("led") == {"ch": h["ch"], "num": h["note"]}:
+                            oe.pop("led")
+                    self.m["controls"][n]["led"] = {"ch": h["ch"], "num": h["note"]}
+                    self.learn_msg = "LED of %s = note %d ch%d" % (n, h["note"], h["ch"] + 1)
+                    h["auto"] = False
+                    save_map(self.m)
+            elif d.get("identity"):
+                if hasattr(self.dev, "identity"):
+                    self.dev.identity()
+                    self.learn_msg = "identity request sent; an answer shows in the MIDI monitor (SysEx)"
             elif "led_probe" in d:
                 p = d["led_probe"]
                 self.host.led_probe = None if p is None else {"ch": int(p.get("ch", 0)) & 15, "vel": int(p.get("vel", 127)) & 127}
@@ -906,6 +1027,7 @@ class NuvjLive:
             try:
                 self.host.mode = "off"
                 self.host.led_probe = None
+                self.host.hunt = None
                 self.host.tick(self.dev, self.m, set(), force=True)
             except Exception:
                 pass

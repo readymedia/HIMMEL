@@ -345,7 +345,7 @@ other weapons do not have.
 | Master | FX LEVEL, MASTER FX (select), PMTR 1, PMTR 2, CONTRAST, BRIGHT | CC 8, 9, 4, 5, 6, 7 |
 | | MASTER FX, INSTA BLACK, BPM TAP (LED buttons) | notes 30, 31, 32 |
 | Front edge | FADER MODE (A/B/C), AUTO FADE SPEED, FADER START (on/off) | CC 18 = 1/2/0, CC 13, note 33 = 0/65 |
-| Display | blue LCD | written by the host software; protocol not published |
+| Display | blue segment LCD: 9 dot-matrix characters, two 2-digit 7-segment numbers, a 12-step bar, icons, A / B triangles | written by the host software; protocol not published |
 
 The table comes from a NuVJ owner's public forum post (credited in
 `THIRD_PARTY_NOTICES.md`). Until a control is learned on the owner's unit it is
@@ -384,9 +384,33 @@ switch values.
   - The **LED probe** lights every button note on a chosen channel and
     velocity. The owner records what the device does, and that is saved in
     the map.
-- **LCD**: the simulator shows what Himmel would write (16 × 2 text). The real
-  LCD protocol is not published (the NuVJ / GrandVJ software drive it), so
-  Himmel does not write to it yet.
+  - The **LED hunt** is for the case where a button's own note lights nothing.
+    On Numark's Total Control the LED notes differ from the button notes, so
+    the NuVJ may do the same.
+    - The hunt lights one note at a time.
+    - The owner clicks the control that lit up, and its LED note is saved in
+      the map (`"led": {"ch", "num"}`).
+    - It is saved only with the real device.
+- **LCD**: a custom segment display, read from the owner's photo. It has:
+  - a row of 9 dot-matrix characters;
+  - big 2-digit 7-segment numbers (Himmel: the deck's BANK);
+  - small 2-digit numbers (Himmel: the master FX number);
+  - a 12-step bar (Himmel: the value just touched, or the crossfader);
+  - icons: SYNC (blinks on the beat), BLACK (insta black), and the A / B
+    triangles (the deck in focus).
+
+  `NuvjHost.lcd()` returns this as one small model:
+  `{text, big, small, bar, icons}`. The drawing renders it with the unlit
+  segments showing faintly, as on the real glass.
+  - Once the protocol is known, the driver will turn the same model into the
+    device's bytes. It works like the MK2 pages: Himmel draws a model, and the
+    driver sends it.
+  - The protocol is not published anywhere we could find. The NuVJ / GrandVJ
+    software drive the LCD, and the manual says the contrast setting is stored
+    in the controller. Until we know it, Himmel leaves the device LCD alone.
+  - The only SysEx Himmel sends is the MIDI standard's **identity request**
+    (`F0 7E 7F 06 01 F7`). The owner sends it with a button, to learn the
+    maker id and firmware.
 
 ### NuVJ events in Himmel's event model
 
@@ -427,8 +451,15 @@ profile.
 1. Plug the NuVJ in and press **Use the real NuVJ**. Touch every control; fix
    any differences by learning; mark the map verified.
 2. Run the LED probe and save what the LEDs do.
-3. LCD: find the protocol, if the owner has the NuVJ or GrandVJ software, by
-   watching what it sends. Until then, Himmel leaves the LCD alone.
+3. Press **Ask the NuVJ who it is**: the identity reply (if any) gives the maker
+   id and firmware.
+4. LCD: find the protocol by watching the NuVJ or GrandVJ software talk to the
+   device. Two ways to watch:
+   - a virtual MIDI loopback, so a monitor sits between the software and the
+     device (needs a small extra driver: ask the owner first);
+   - USB capture with USBPcap + Wireshark (also extra software).
+
+   Then the driver can write Himmel's LCD model to the glass.
 
 ## Plan: how a generic weapon feeds Himmel (not wired yet)
 
