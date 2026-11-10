@@ -54,7 +54,9 @@ class TouchFx {
 public:
     static constexpr float kRampInS = 0.020f;
     static constexpr float kRampOutS = 0.060f;
-    static constexpr float kSmoothS = 0.008f;
+    static constexpr float kSmoothS = 0.008f;          // MK2 pads, mouse
+    static constexpr float kSmoothLightpadS = 0.030f;  // the block sends moves every ~28 ms
+    static float smooth_s(Source s) { return s == Source::Lightpad ? kSmoothLightpadS : kSmoothS; }
     static constexpr float kMinAmount = 0.30f;  // a light touch still shows the effect
 
     // Selection (knob / encoder / keys). Wraps around.
@@ -91,6 +93,7 @@ public:
 private:
     int effect_ = 0;
     Source src_ = Source::None;
+    Source last_src_ = Source::None;  // keeps its smoothing after the lift
     bool hold_ = false;
     float tx_ = 0.5f, ty_ = 0.5f;  // target position
     float x_ = 0.5f, y_ = 0.5f;    // smoothed position

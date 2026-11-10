@@ -127,6 +127,19 @@ static void test_strobe_hits() {
     CHECK(!fx.update(0.001f).active);                    // no fade out
 }
 
+static void test_lightpad_smoothing() {
+    std::printf("lightpad smoothing\n");
+    TouchFx mouse, pad;
+    mouse.touch_down(Source::Mouse, 0.0f, 0.0f, 1.0f);
+    pad.touch_down(Source::Lightpad, 0.0f, 0.0f, 1.0f);
+    mouse.update(0.016f), pad.update(0.016f);
+    mouse.touch_move(Source::Mouse, 1.0f, 1.0f, 1.0f);
+    pad.touch_move(Source::Lightpad, 1.0f, 1.0f, 1.0f);
+    const Params m = mouse.update(0.016f), p = pad.update(0.016f);
+    CHECK(m.x > 0.8f);                                   // 8 ms: almost there after one frame
+    CHECK(p.x > 0.3f && p.x < 0.5f);                     // 30 ms: glides over the 28 ms gap
+}
+
 static void test_pads() {
     std::printf("MK2 pad points\n");
     const Point p1 = mk2_pad_point(1), p4 = mk2_pad_point(4), p13 = mk2_pad_point(13), p16 = mk2_pad_point(16);
@@ -143,6 +156,7 @@ int main() {
     test_hold();
     test_select_depth();
     test_strobe_hits();
+    test_lightpad_smoothing();
     test_pads();
     std::printf("\n%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;

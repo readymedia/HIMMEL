@@ -50,7 +50,7 @@ void TouchFx::select(int effect) {
 void TouchFx::touch_down(Source s, float x, float y, float pressure) {
     if (s == Source::None) return;
     const bool jump = src_ == Source::None;
-    src_ = s;
+    src_ = last_src_ = s;
     tx_ = clamp01(x);
     ty_ = clamp01(y);
     pressure_ = clamp01(pressure);
@@ -92,7 +92,7 @@ Params TouchFx::update(float dt) {
         x_ = tx_, y_ = ty_;
     } else {
         env_ = on ? std::min(1.0f, env_ + dt / kRampInS) : std::max(0.0f, env_ - dt / kRampOutS);
-        const float k = 1.0f - std::exp(-dt / kSmoothS);
+        const float k = 1.0f - std::exp(-dt / smooth_s(last_src_));
         x_ += (tx_ - x_) * k;
         y_ += (ty_ - y_) * k;
     }

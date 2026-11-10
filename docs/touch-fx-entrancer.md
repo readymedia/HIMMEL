@@ -227,21 +227,31 @@ weapon-2 session; details in its `weapons/README.md`):
   the **top** (USB-C pointing away). The weapon driver normalises x, y to
   0..1 over that range and flips y, so Touch FX gets y = 0 at the bottom, the
   same as the MK2 pads and the mouse.
-- The BLOCKS API strike velocity is almost always 1: **useless**. The usable
-  strike is the factory program's MPE note-on velocity (3..127), which it keeps
-  sending in API mode, or the peak z over the first few ms of a touch (the same
-  idea as the MK2's velocity window).
+- **Strike**: with Himmel's own LED program running the block sends no MPE.
+  The API's touch-start velocity (vz) is 1 for a slow press and up to 127 for
+  a quick tap, so it is a strike-*speed* signal: use it for hit effects
+  (Strobe), not as pressure.
+- **Pressure**: z ramps smoothly from 0 but already saturates at 255 at medium
+  pressure (block pressure sensitivity 64; lowering it is untried). Until that
+  is tuned, Touch FX's 30 %..100 % amount range uses only the light half of
+  the finger's travel.
+- **Rate**: touch moves arrive about every 28 ms (~36 Hz) while LED frames
+  stream. That is slower than a 60 fps frame, so Touch FX smooths Lightpad
+  touches over 30 ms (8 ms for the MK2 pads and the mouse) to avoid visible
+  steps.
 - Mode = button 0 down / up, works in API mode.
-- LEDs need Himmel's own LittleFoot renderer uploaded first; until then the
-  factory 4 × 4 pad display keeps running. The maximum LED frame rate is not
-  measured yet.
+- **LEDs**: Himmel's own 93-byte LittleFoot renderer runs on the block (the
+  factory 4 × 4 display is gone while it runs). A full 15 × 15 frame takes
+  about 12 ms from send to ACK; with diffs only (15–360 bytes) the block keeps
+  up with about 55–58 frames/s. So the ≤ 30 fps plan in section 4 has room.
 
 ### 3.1 One finger (the Entrancer gesture)
 
 - Touch down = effect on (amount ramps in over ~20 ms to avoid a hard pop
   unless the effect is a "hit" effect like Strobe).
 - **x → X parameter, y → Y parameter**, full 12-bit, lightly smoothed
-  (one-pole, ~5 ms; no smoothing for Strobe/Stutter hits).
+  (one-pole: 8 ms for MK2 pads and the mouse, 30 ms for the Lightpad, whose
+  moves arrive only every ~28 ms; no smoothing for Strobe/Stutter hits).
 - **Pressure → amount** (mix, or the effect's third parameter). This replaces
   the Entrancer's separate FX BALANCE knob, so one hand does all three. A per
   effect curve; a light touch is never zero (minimum 30 %) so a slide without
@@ -302,10 +312,10 @@ The Entrancer's backlight only changed colour. The Lightpad can draw state:
 
 LED frames are drawn by the Touch FX layer at ≤ 30 fps (to be checked on the
 real block; the LED path is a SysEx shared-data update, so it is slower than
-the MK2's HID). Only changed frames are sent. None of this shows until the
-weapon has uploaded its own LittleFoot LED program; before that the block
-shows its factory 4 × 4 pad display, so Touch FX must work without LED
-feedback (the MK2 screen and pad LEDs still show the state).
+the MK2's HID). Only changed frames are sent. Measured: the block takes
+55–58 diff frames/s, so 30 fps leaves room. If the weapon's LED program is
+not running (upload failed, block just plugged in), Touch FX must still work
+without LED feedback: the MK2 screen and pad LEDs show the state too.
 
 ---
 
@@ -453,7 +463,8 @@ Step 1 of the recommendation (2026-11-10):
 
 - `src/engine/include/himmel/engine/touch_fx.h` + `src/touch_fx.cpp`: the
   gesture logic (touch down / move / up per source, Hold, depth, pressure →
-  amount with a 30 % floor, 20 ms fade in, 60 ms fade out, 8 ms smoothing,
+  amount with a 30 % floor, 20 ms fade in, 60 ms fade out, 8 ms smoothing
+  (30 ms for the Lightpad),
   Strobe as a "hit" with no fades, a lost source lifts its finger). Pure code,
   tested by `touch_fx_tests.exe`.
 - `ps_touchfx` in `src/engine/render/shaders.h`: one pass over a copy of the
