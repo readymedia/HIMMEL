@@ -187,6 +187,8 @@ The facts below come from ROLI's `roli_blocks_basics` (ISC license).
 - The real MPE note layout.
 - Where the Mode button sits.
 - Touch rate and velocity scaling.
+- The highest full LED frame rate the block keeps up with (diff packets +
+  ACKs). Touch FX needs this number.
 
 ## Plan: how a generic weapon feeds Himmel (not wired yet)
 
