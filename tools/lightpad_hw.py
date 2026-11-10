@@ -1,18 +1,21 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 """
-Lightpad hardware probe (weapon no. 2, the real block)
-======================================================
+Lightpad hardware link (weapon no. 2, the real block)
+=====================================================
 
 Opens the real ROLI Lightpad Block over WinMM (part of Windows; ctypes, no
 new dependency), puts it in API mode and shows what it sends. It has the
 same interface as lightpad_sim.SimLightpad, so the live view, the MIDI monitor
 and the LocalHost handshake run unchanged on top of it.
 
-Read-only on purpose: it sends only the serial request, requestTopology,
-endAPIMode / beginAPIMode and pings. It never writes the block's shared data:
-on a real block that memory holds the LittleFoot program that draws the LEDs,
-so LED frames need our own renderer program first (the next step).
+The LocalHost on top of it (lightpad_sim.py) does the handshake, wipes the
+block's program memory, uploads Himmel's own LED renderer (lightpad_littlefoot.py,
+93 bytes) and then streams LED frames. Checked on the owner's Lightpad M
+(2026-11-10): the test pattern shows correctly, about 55-58 full frames per
+second, ~12 ms per frame from send to ACK. The program lives in RAM only:
+endAPIMode (sent when you stop) brings the factory display back (checked); a
+power cycle should too (not tested). Himmel never sends saveProgramAsDefault.
 
 Before you run it: plug the block in with USB (not Bluetooth) and close
 ROLI Connect / Dashboard (WinMM ports are exclusive).
@@ -99,7 +102,7 @@ class HwLightpad:
     """The real block. Same attributes/methods as SimLightpad that the live view uses."""
 
     kind = "hw"
-    leds_supported = False   # the LocalHost must not write shared data (see the docstring)
+    leds_supported = True
 
     def __init__(self):
         self.lock = threading.RLock()
@@ -161,7 +164,7 @@ class HwLightpad:
         mm.midiInStart(self.hin)
         self.port_names = (dict(ins)[i], dict(outs)[o])
         self.connected = True
-        self.notes = ["Real Lightpad on MIDI in %d / out %d (%s). Read-only probe: no LED writes yet." % (
+        self.notes = ["Real Lightpad on MIDI in %d / out %d (%s). Himmel drives the LEDs (own renderer, RAM only)." % (
             i, o, self.port_names[0])]
         self._event("ports opened")
         return True
@@ -289,10 +292,6 @@ class HwLightpad:
         if not self.connected:
             return
         body = L.unframe(msg)
-        if body is not None:
-            r = L.BitReader(body[1])
-            if r.get(7) == L.HOST_DATA:
-                return  # shared data = the block's program memory: not in this probe
         with self.lock:
             self.counts["to_device"] += 1
             self._log("host → block", msg, True)

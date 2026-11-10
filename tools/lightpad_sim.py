@@ -54,6 +54,8 @@ import sys
 import threading
 import time
 
+import lightpad_littlefoot as lf
+
 HEADER = bytes([0xF0, 0x00, 0x21, 0x10, 0x77])
 SERIAL_REQUEST = bytes([0xF0, 0x00, 0x21, 0x10, 0x78, 0x3F, 0xF7])
 SERIAL_HEADER = bytes([0xF0, 0x00, 0x21, 0x10, 0x78])
@@ -263,6 +265,18 @@ def decode_device(msg):
             for _ in range(nc):
                 r.get(7 + 5 + 7 + 5)
             ev.append({"type": "topology", "version": ver, "devices": devs})
+        elif t == 0x18:  # configMessage: 4-bit command; updates carry item 8 bit + value/min/max 32 bit
+            cmd = r.get(4)
+            if cmd in (4, 5) and r.left() >= 8 + 96:
+                item = r.get(8)
+                val, lo, hi = (r.get(32) for _ in range(3))
+                s32 = lambda v: v - (1 << 32) if v & 0x80000000 else v
+                ev.append({"type": "config", "cmd": cmd, "item": item, "value": s32(val), "min": s32(lo), "max": s32(hi)})
+                if cmd == 5:
+                    break  # user config metadata follows; not decoded
+            else:
+                ev.append({"type": "config", "cmd": cmd})
+                break
         elif t in (0x06, 0x07):  # deviceVersion / deviceName: index 7 bit, length 7 bit, 7-bit chars
             idx, n = r.get(7), r.get(7)
             text = "".join(chr(r.get(7)) for _ in range(min(n, r.left() // 7)))
@@ -357,6 +371,9 @@ class SimLightpad:
         self.api = False
         self.last_ping = 0.0
         self.data = bytearray(DATA_BLOCK)
+        self.factory = True        # the factory program draws until a host writes shared data
+        self._vm_key, self._vm_leds = None, []
+        self.last_pkt = 0
         self.fingers = {}          # pointer id -> dict(i, x, y, z, ...)
         self.button = False
         self.battery = 22          # 0..31
@@ -475,7 +492,7 @@ class SimLightpad:
             elif t in (HOST_FACTORY_RESET, HOST_BLOCK_RESET):
                 with self.lock:
                     self.data = bytearray(DATA_BLOCK)
-                    self.api = False
+                    self.api, self.factory = False, True
             else:
                 break  # config / firmware / name: not simulated
 
@@ -486,12 +503,13 @@ class SimLightpad:
                 self.api, self.last_ping = True, now
         elif cmd == CMD_END_API:
             with self.lock:
-                self.api = False
+                self.api, self.factory = False, True   # assumed: the block goes back to its own program
+                self.data = bytearray(DATA_BLOCK)
             self._lift_all()
         elif cmd == CMD_PING:
             with self.lock:
                 self.last_ping = now
-            self.send(self._packet([(DEV_ACK, 7), (0, 10)]))
+            self.send(self._packet([(DEV_ACK, 7), (self.last_pkt, 10)]))
         elif cmd == CMD_TOPOLOGY:
             items = [(DEV_TOPOLOGY, 7), (1, 8), (1, 7), (0, 8)]
             items += [(ord(c), 7) for c in SIM_SERIAL]
@@ -505,6 +523,8 @@ class SimLightpad:
         pkt = r.get(16)
         pos, last = 0, 0
         with self.lock:
+            self.factory = False
+            self.last_pkt = pkt & 0x3FF
             d = self.data
             while r.left() >= 3:
                 c = r.get(3)
@@ -544,7 +564,8 @@ class SimLightpad:
             time.sleep(0.1)
             with self.lock:
                 if self.api and time.time() - self.last_ping > API_PING_TIMEOUT:
-                    self.api = False
+                    self.api, self.factory = False, True
+                    self.data = bytearray(DATA_BLOCK)
                     self.log.append((time.strftime("%H:%M:%S"), "block", "",
                                      "no ping for 5 s: API mode ended, back to MIDI (MPE) mode", False))
 
@@ -640,14 +661,24 @@ class SimLightpad:
     def leds(self):
         """225 '#rrggbb' strings, row-major from the top-left."""
         with self.lock:
-            if self.api:
-                d = self.data
-                out = []
-                for i in range(GRID * GRID):
-                    v = d[2 * i] | d[2 * i + 1] << 8
-                    out.append("%02x%02x%02x" % ((v & 31) << 3, ((v >> 5) & 63) << 2, ((v >> 11) & 31) << 3))
-                return out
-            return self._note_mode_picture()
+            if self.factory:
+                return self._note_mode_picture()   # the factory program still draws
+            p = lf.parse_program(self.data)
+            if p is None:
+                return ["000000"] * (GRID * GRID)  # program memory wiped or half uploaded: dark
+            key = bytes(self.data[:p[0] + p[1]])
+        if key != self._vm_key:
+            # run the uploaded bytecode, as the block's VM would on every repaint
+            try:
+                vm = lf.MiniVM(key)
+                vm.call("initialise/v")
+                vm.call("repaint/v")
+                self._vm_leds = ["%02x%02x%02x" % c for c in vm.pixels]
+            except ValueError as e:
+                self._vm_leds = ["400000"] * (GRID * GRID)
+                self.notes = self.notes[:1] + ["LittleFoot error: %s" % e]
+            self._vm_key = key
+        return self._vm_leds
 
     def _note_mode_picture(self):
         """What the block shows on its own: 4 x 4 pads of 3 x 3 LEDs with 1-LED gaps (as seen on
@@ -672,6 +703,86 @@ class SimLightpad:
 
 
 # ---------------------------------------------------------------- the stand-in host
+class HeapSync:
+    """Keeps the block's shared data in step with a target, like ROLI's LittleFootRemoteHeap:
+    diff -> sharedDataChange packets -> wait for every ACK -> the target is confirmed.
+    Packets not ACKed within 250 ms are sent again (each packet starts at byte 0, so a
+    resend is harmless). Also measures what the LED frame rate costs."""
+
+    RESEND = 0.25
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.reset()
+
+    def reset(self):
+        with getattr(self, "lock", threading.Lock()):
+            self.confirmed = None              # None = unknown (after a handshake)
+            self.target = bytearray(DATA_BLOCK)
+            self.pending = None
+            self.inflight = {}                 # 10-bit packet index -> sysex
+            self.sent_at = 0.0
+            self.started = 0.0
+            self.index = 0
+            self.frames = 0                    # completed syncs
+            self.resends = 0
+            self.rtt_ms = 0.0
+            self.bytes_last = 0
+            self._fps_n, self._fps_t, self.fps = 0, time.time(), 0.0
+
+    def busy(self):
+        return bool(self.inflight)
+
+    def start(self, target):
+        with self.lock:
+            old = self.confirmed if self.confirmed is not None else bytes(b ^ 0xFF for b in target)
+            packets = host_data_changes(self.index + 1, old, target)
+            self.target = bytearray(target)
+            if not packets:
+                self.confirmed = bytearray(target)
+                return []
+            self.pending = bytearray(target)
+            self.inflight = {i: p for i, p in packets}
+            self.index = packets[-1][0]
+            self.sent_at = self.started = time.time()
+            self.bytes_last = sum(len(p) for _, p in packets)
+            return [p for _, p in packets]
+
+    def on_ack(self, idx):
+        """ACKs are cumulative (seen on a real Lightpad M): an ACK for packet n also covers every
+        packet sent before it in the same batch."""
+        with self.lock:
+            idx &= 0x3FF
+            if idx not in self.inflight:
+                return
+            for k in list(self.inflight):  # dict keeps sending order
+                del self.inflight[k]
+                if k == idx:
+                    break
+            if self.inflight:
+                return
+            now = time.time()
+            self.confirmed = self.pending
+            self.rtt_ms = round((now - self.started) * 1000, 1)
+            self.frames += 1
+            self._fps_n += 1
+            if now - self._fps_t >= 1.0:
+                self.fps = round(self._fps_n / (now - self._fps_t), 1)
+                self._fps_n, self._fps_t = 0, now
+
+    def due(self, now):
+        with self.lock:
+            if self.inflight and now - self.sent_at > self.RESEND:
+                self.sent_at = now
+                self.resends += len(self.inflight)
+                return list(self.inflight.values())
+            return []
+
+    def stats(self):
+        return {"frames": self.frames, "fps": self.fps, "sync_ms": self.rtt_ms,
+                "bytes": self.bytes_last, "resends": self.resends}
+
+
 class LocalHost:
     """The live view acting as the BLOCKS host (a Python sketch of Himmel's driver)."""
 
@@ -684,10 +795,11 @@ class LocalHost:
         self.state = "idle"
         self.serial = None
         self.battery = None
-        self.sent = bytearray(PIXEL_BYTES)  # what we believe the block holds
-        self.packet = 0
-        self.need_full = True
-        self.preview = None        # real block: the picture we would send (not sent yet)
+        self.sync = HeapSync()     # the block's shared data, kept in step with ACKs
+        self.stage = "handshake"   # handshake -> clear -> program -> frames
+        self.program = lf.build_bitmap_program()
+        self.preview = None        # the last picture sent (shown on the drawing for the real block)
+        self.last_pic = 0.0
         self.next_ping = 0.0
         self.fingers = {}          # touch index -> (x, y, z) 0..1, from decoded block messages
         self.glow = [[0.0, 0.0, 0.0] for _ in range(GRID * GRID)]
@@ -709,6 +821,7 @@ class LocalHost:
                     self.battery = e["devices"][0]["battery"]
                 elif e["type"] == "ack":
                     self.acks += 1
+                    self.sync.on_ack(e["packet"])
                 elif e["type"] == "touch":
                     if e["phase"] == "end":
                         self.fingers.pop(e["i"], None)
@@ -719,19 +832,21 @@ class LocalHost:
 
     def loop(self):
         while not self.sim.closed:
-            time.sleep(0.04)
+            time.sleep(0.005)  # fast loop: a new LED frame goes out as soon as the last one is ACKed
             try:
                 self.step()
             except Exception as ex:  # a drawing bug must never stop the host loop
                 self.state = "error: %s" % ex
 
+    def restart(self):
+        self.stage = "handshake"
+        self.sync.reset()
+
     def step(self):
         sim = self.sim
         if self.quiet():
             self.state = "engine is the host" if sim.engine_active() else "host unplugged (MIDI mode)"
-            self.need_full = True
-            if not self.enabled and sim.api:
-                pass  # no pings: the block times out by itself after 5 s, like the real one
+            self.restart()
             return
         now = time.time()
         if not sim.api:
@@ -740,26 +855,47 @@ class LocalHost:
             sim.receive(host_command(CMD_TOPOLOGY))
             sim.receive(host_command(CMD_END_API))
             sim.receive(host_command(CMD_BEGIN_API))
-            self.need_full = True
+            self.restart()
+            self.stage = "clear"
             self.next_ping = now + PING_INTERVAL
             return
-        self.state = "API mode, pinging"
         if now >= self.next_ping:
             self.next_ping = now + PING_INTERVAL
             sim.receive(host_command(CMD_PING))
-        if not getattr(sim, "leds_supported", True):
-            self.preview = self.picture(now)  # shown on the drawing only
-            return  # the real block: no LED writes until our renderer program is on it
-        target = pixels_to_bytes(self.picture(now))
-        old = bytes(b ^ 0xFF for b in target) if self.need_full else self.sent
-        packets = host_data_changes(self.packet + 1, old, target)
-        for idx, p in packets:
+        for p in self.sync.due(now):       # packets not ACKed in time are sent again
             sim.receive(p)
-            self.packet = idx
-        self.sent = target
-        self.need_full = False
+        if self.sync.busy():
+            return
+        n = len(self.program)
+        if self.stage == "clear":
+            # like ROLI's host: wipe the whole shared data (the factory program stops), then upload
+            self.state = "API mode: clearing the block's program memory"
+            self._send(bytearray(DATA_BLOCK))
+            self.stage = "program"
+        elif self.stage == "program":
+            self.state = "API mode: uploading the LED renderer (%d bytes)" % n
+            t = bytearray(DATA_BLOCK)
+            t[:n] = self.program
+            self._send(t)
+            self.stage = "frames"
+        else:
+            self.state = "API mode: our renderer runs, sending LED frames"
+            if now - self.last_pic < 0.015:   # at most ~66 pictures a second
+                return
+            dt = now - self.last_pic if self.last_pic else 0.04
+            self.last_pic = now
+            pic = self.picture(now, dt)
+            self.preview = pic
+            t = bytearray(self.sync.target)
+            t[n:n + PIXEL_BYTES] = pixels_to_bytes(pic)
+            if t != self.sync.target:
+                self._send(t)
 
-    def picture(self, now):
+    def _send(self, target):
+        for p in self.sync.start(target):
+            self.sim.receive(p)
+
+    def picture(self, now, dt=0.04):
         with self.lock:
             fingers = dict(self.fingers)
             pal = self.palette
@@ -796,12 +932,12 @@ class LocalHost:
         base = pal / 6.0
         for i, cell in enumerate(self.glow):
             for k in range(3):
-                cell[k] *= 0.82
+                cell[k] *= 0.82 ** (dt / 0.04)   # same fade speed at any frame rate
         for idx, (fx, fy, fz) in fingers.items():
             h = (base + idx * 0.13) % 1.0
             cr, cg, cb = colorsys.hsv_to_rgb(h, 0.85, 1.0)
-            rad = 1.0 + 3.5 * fz
-            cx, cy = fx * (GRID - 1), fy * (GRID - 1)
+            rad = 0.9 + 1.8 * fz             # about one pad of the factory layout at full pressure
+            cx, cy = fx * GRID - 0.5, fy * GRID - 0.5   # surface units -> LED centres
             for y in range(max(0, int(cy - rad - 1)), min(GRID, int(cy + rad + 2))):
                 for x in range(max(0, int(cx - rad - 1)), min(GRID, int(cx + rad + 2))):
                     d = math.hypot(x - cx, y - cy)
@@ -845,7 +981,8 @@ class LightpadLive:
             "api": api,
             "mode_name": "API mode (BLOCKS SysEx)" if api else "MIDI mode (MPE)",
             "host": {"state": h.state, "mode": h.mode, "enabled": h.enabled, "serial": h.serial,
-                     "battery": h.battery, "acks": h.acks},
+                     "battery": h.battery, "acks": h.acks, "stage": h.stage, "led": h.sync.stats(),
+                     "program_bytes": len(h.program)},
             "leds": (["%02x%02x%02x" % p for p in h.preview] if hw and h.preview else s.leds()),
             "led_preview": hw,
             "fingers": fingers,
@@ -943,7 +1080,18 @@ def selftest():
     fill = pixels_to_bytes([(255, 0, 0)] * (GRID * GRID))
     for _, pk in host_data_changes(20, small, fill):
         s.receive(pk)
-    check("solid fill (run-length)", bytes(s.data[:PIXEL_BYTES]) == bytes(fill) and s.leds()[0] == "f80000")
+    check("solid fill (run-length)", bytes(s.data[:PIXEL_BYTES]) == bytes(fill))
+    s.close()
+    # the whole host path: handshake, wipe, renderer upload, frames; the block runs the bytecode
+    s = SimLightpad()
+    h = LocalHost(s)
+    h.mode = "test"
+    t_end = time.time() + 3
+    while time.time() < t_end and h.sync.frames < 3:
+        time.sleep(0.05)
+    leds = s.leds()
+    check("host uploads the renderer and the block draws the test pattern (red/green/blue/white corners)",
+          (leds[0], leds[14], leds[210], leds[224]) == ("f80000", "00fc00", "0000f8", "f8fcf8"))
     s.close()
     print("selftest", "passed" if ok else "FAILED")
     return ok

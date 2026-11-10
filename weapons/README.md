@@ -20,7 +20,7 @@ A weapon has up to four parts:
 | No. | Weapon | Kind | Profile | Simulator | Status |
 |---|---|---|---|---|---|
 | 1 | **MK2** (Maschine MK2) | USB HID: 16 pads, 8 knobs, encoder, 48 buttons, two 1-bit screens | [`mk2.weapon.json`](mk2.weapon.json) | [`tools/mk2_sim.py`](../tools/mk2_sim.py) | Map verified on hardware, C++ driver done |
-| 2 | **Lightpad** (ROLI Lightpad Block / Block M) | USB-MIDI: multi-touch surface (x, y, pressure per finger), 15 × 15 RGB LEDs, one Mode button | [`lightpad.weapon.json`](lightpad.weapon.json) | [`tools/lightpad_sim.py`](../tools/lightpad_sim.py) | Simulated, and read-only probe checked on the owner's Lightpad M (2026-11-10): touch, multi-touch, Mode button, orientation, factory note map. LEDs not written yet |
+| 2 | **Lightpad** (ROLI Lightpad Block / Block M) | USB-MIDI: multi-touch surface (x, y, pressure per finger), 15 × 15 RGB LEDs, one Mode button | [`lightpad.weapon.json`](lightpad.weapon.json) | [`tools/lightpad_sim.py`](../tools/lightpad_sim.py) | Simulated, and played on the owner's Lightpad M (2026-11-10): touch, multi-touch, Mode button, orientation, factory note map, **and Himmel's own LED program** (~55 frames/s) |
 
 ## The live view: one tool for every weapon
 
@@ -161,9 +161,11 @@ The facts below come from ROLI's `roli_blocks_basics` (ISC license).
 - **LEDs:** 15 × 15 pixels as RGB565 in the block's shared data. A tiny
   LittleFoot program running on the block draws them (ROLI's
   `BitmapLEDProgram`).
-  - The simulator skips the program and shows bytes 0–449.
-  - **On hardware the renderer program must be uploaded first.** blocksd
-    documents how.
+  - Himmel uploads its own 93-byte renderer, assembled by
+    `tools/lightpad_littlefoot.py` (no LittleFoot compiler needed). The
+    pixel heap then sits right after the program.
+  - The simulator runs the uploaded bytecode in a small Python VM, so it shows
+    what the real block would draw.
 
 ### The simulator
 
@@ -183,10 +185,14 @@ The facts below come from ROLI's `roli_blocks_basics` (ISC license).
 
 ### Checked on the owner's block (2026-11-10)
 
-`tools/lightpad_hw.py` is a read-only probe over WinMM (ctypes, no new
+`tools/lightpad_hw.py` talks to the real block over WinMM (ctypes, no new
 dependency). In the live view press **Use the real block**; on the console run
-`python tools/lightpad_hw.py [seconds]`. It does the handshake and pings, and
-never writes the block's shared data.
+`python tools/lightpad_hw.py [seconds]`. The same `LocalHost` as in the
+simulator runs on top of it:
+1. the handshake and pings;
+2. wipe the block's program memory (the factory display stops);
+3. upload Himmel's renderer;
+4. stream LED frames.
 
 The owner's block is a **Lightpad Block M**:
 - serial `LPM…`, firmware 1.1.0;
@@ -220,12 +226,29 @@ What we saw:
     time.
   - The simulator now plays the same notes and also sends MPE in API mode.
 
-Still open:
-- **LEDs.** The factory program keeps drawing until we upload our own renderer
-  (LittleFoot). After that, measure the highest full LED frame rate the block
-  keeps up with (diff packets + ACKs); Touch FX needs this number.
-- **Touch rate.** Not measured yet. Moves seemed to arrive as fast as the
-  finger moved.
+**Himmel's own LEDs on the block (checked by the owner, 2026-11-10):**
+- **Pictures.** The test pattern shows correctly (red top-left, green
+  top-right, blue bottom-left, white bottom-right). Touch glow follows the
+  fingers with no visible delay. Mode changes the colour family.
+- **Frame rate:** about **55–58 full 15 × 15 frames per second**.
+  - About 12 ms from send to ACK.
+  - 15–360 bytes per frame (only the changes are sent).
+  - No resends.
+  - Our host caps it at ~66 pictures a second.
+- **ACKs are cumulative.** When several packets go out together, the block
+  ACKs only the last one. `HeapSync` treats an ACK as covering everything
+  sent before it.
+- **Letting go.** `endAPIMode`, sent when Himmel lets go, brings the factory
+  4 × 4 display back. A power cycle should too (not tested). The program
+  lives in RAM; Himmel never sends `saveProgramAsDefault`.
+- **No MPE with our program.** Only the API touch messages arrive.
+  - `vz` at touch start is 1 for a slow press and up to 127 for a quick tap.
+  - z ramps smoothly from 0 but reaches 255 at medium pressure. The block's
+    config (read with `requestConfig`, message 0x10 command 1) has pressure
+    sensitivity 64, velocity sensitivity 50 and z tracking 1, the same with
+    our program as with the factory one.
+  - A lower pressure sensitivity may give more range. That is not tried yet.
+- **Touch moves** arrive every ~28 ms (~36 a second) while LED frames stream.
 
 ## Plan: how a generic weapon feeds Himmel (not wired yet)
 

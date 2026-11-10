@@ -124,8 +124,8 @@ The details are in the mockup (`docs/vj-mockup.html`).
       the browser 2026-11-10: multi-touch, LED feedback, test pattern, MPE
       fallback, MK2 + Simulate unchanged.
     - Engine sim link for it: UDP 127.0.0.1:8767 (not used by the C++ side yet).
-    - `tools/lightpad_hw.py`: read-only WinMM probe (ctypes), the same
-      interface as the sim. Live view: **Use the real block**. Checked
+    - `tools/lightpad_hw.py`: WinMM link (ctypes), the same interface as
+      the sim. Live view: **Use the real block**. Checked
       2026-11-10:
       - touches 0x13/0x11/0x15, fingers from 1, x/y about 146..3953;
       - y = 0 at the top with USB-C pointing away from you;
@@ -133,11 +133,19 @@ The details are in the mockup (`docs/vj-mockup.html`).
       - API `vz` strike is useless: velocity comes from the MPE note-on,
         which the factory program keeps sending in API mode;
       - factory layout 4x4 pads, notes 36..51 from the bottom-left.
-      - It never writes shared data: on hardware that is the factory
-        LittleFoot program.
-    - Next: upload our own LittleFoot LED renderer and measure the LED frame
-      rate, then the generic weapon driver/shared block (plan in
-      `weapons/README.md`).
+    - **Himmel drives the Lightpad LEDs (checked 2026-11-10).**
+      `tools/lightpad_littlefoot.py` hand-assembles a 93-byte LittleFoot
+      renderer (15x15 RGB565 heap -> fillPixel). It has its own MiniVM that
+      the simulator runs.
+      - LocalHost: wipe the program memory, upload, stream frames through
+        `HeapSync` (ACKs are cumulative).
+      - ~55-58 full frames/s, ~12 ms send->ACK.
+      - endAPIMode brings the factory display back. RAM only; never
+        saveProgramAsDefault.
+      - With our program there is no MPE. z saturates at medium pressure
+        (pressure sensitivity config 64). Touch moves come every ~28 ms.
+    - Next: try a lower pressure sensitivity for more z range, then the
+      generic weapon driver/shared block (plan in `weapons/README.md`).
 - **Visual mapping is the way to work with the controller. Keep it and build on
   it** (the owner wants graphical tools, not terminal tables):
   - `tools/mk2_live.py` + `tools/mk2_live.html`: a browser live view of the MK2

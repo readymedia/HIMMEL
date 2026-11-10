@@ -138,10 +138,11 @@
     <div id="gHostInfo" class="mono small"></div>
   </div>
   <div class="card" style="grid-column: 1 / -1" id="gHwCard">
-    <h2>Real block (hardware probe, read-only)</h2>
+    <h2>Real block</h2>
     <div class="row"><button id="gHw">Use the real block</button>
       <span class="help">Plug it in with USB and close ROLI Connect / Dashboard. The probe enters API mode and
-        pings; it does not write the LEDs yet (that needs our renderer program on the block).</span></div>
+        pings, uploads Himmel's own LED program (RAM only) and streams the LED pictures chosen above. Stop and the
+        block goes back to its factory display.</span></div>
     <div class="help">Check: touch each corner. The ring on the drawing must land in the same corner.
       Press the Mode button: <b>M</b> must light up.</div>
     <div id="gHwInfo" class="mono small"></div>
@@ -664,7 +665,6 @@ function renderGeneric(s) {
   const st = s.stats || {};
   const rng = k => st[k] && st[k][0] !== null ? `${st[k][0]}..${st[k][1]}` : "-";
   document.getElementById("gHwInfo").textContent = s.hardware ?
-    "LEDs on the drawing = a preview of what Himmel would send; the block itself is not written yet.\n" +
     `serial ${st.serial || "-"}   battery ${st.battery || "-"}   ping ACKs ${st.acks ?? 0}\n` +
     `touch messages ${st.touch_msgs ?? 0} (${st.rate ?? 0}/s now)   x seen ${rng("x")}   y seen ${rng("y")}   z seen ${rng("z")}\n` +
     `strike velocity (vz) of the last touches: ${(st.vz_start || []).join(", ") || "-"}   MPE notes ${st.mpe_notes ?? 0}\n` +
@@ -683,7 +683,10 @@ function renderGeneric(s) {
   document.querySelectorAll("#gLed button").forEach(b => b.classList.toggle("on", b.dataset.m === h.mode));
   document.getElementById("gHost").checked = h.enabled !== false;
   document.getElementById("gHostInfo").textContent =
-    `host: ${h.state || "-"}\nblock serial: ${h.serial || "-"}   battery: ${h.battery ?? "-"} / 31   LED packets ACKed: ${h.acks ?? 0}`;
+    `host: ${h.state || "-"}\nblock serial: ${h.serial || "-"}   battery: ${h.battery ?? "-"} / 31   ACKs: ${h.acks ?? 0}\n` +
+    `LEDs: ${h.stage === "frames" ? "our renderer runs" : (h.stage || "-")} (${h.program_bytes ?? "-"} bytes)   ` +
+    `frames confirmed ${h.led ? h.led.frames : 0}, ${h.led ? h.led.fps : 0}/s, ${h.led ? h.led.sync_ms : "-"} ms send→ACK, ` +
+    `${h.led ? h.led.bytes : 0} bytes last frame, ${h.led ? h.led.resends : 0} resends`;
   const k = s.counts || {};
   document.getElementById("gStatus").textContent = [
     (s.notes || []).join(" / "),
