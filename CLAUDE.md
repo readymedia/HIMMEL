@@ -310,6 +310,16 @@ The details are in the mockup (`docs/vj-mockup.html`).
      pressure = amount), mouse drag on an output (keys 1-9, H = hold).
      `touch_fx_check.exe` renders them to PNG and times them. Next: Lightpad
      as the touch source + its LED feedback.
+   - **Weapon no. 3: Entrancer, simulated (2026-11-10, checked in the browser +
+     engine window):** `python tools/entrancer_live.py` (http://127.0.0.1:8770,
+     launch config `entrancer-live`) draws the unit from
+     `weapons/entrancer.weapon.json` and plays it with the mouse or the real
+     Lightpad as its pad. It sends the real unit's MIDI (CC 12/13/92, program
+     change) + Himmel-only CCs 102-108 over UDP 127.0.0.1:8768 to
+     `himmel_render` (`EntrancerLink` + `entrancer::Mapper`, tests
+     `entrancer_tests.exe`). HOLD, PAD MOTION, MUTE/FREEZE, TAP, memories work.
+     The owner owns a real unit: next is a WinMM MIDI input into the same
+     Mapper. Details: `docs/entrancer-weapon.md`.
    - Latency test: **Sampling** on the MK2. The canvas flips black/white every
      0.7 s, the camera (pointed at an output) reports when it sees it; 16 runs,
      median/min/max on the MK2 screen and in the log ("LOOP" = Present() ->

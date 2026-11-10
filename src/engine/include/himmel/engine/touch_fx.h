@@ -40,7 +40,7 @@ const EffectInfo& info(int effect);
 
 // Where a touch came from. Only the source that put the finger down can lift
 // it, and a lost source lifts its own finger.
-enum class Source : uint8_t { None, Mk2Pads, Mouse, Lightpad };
+enum class Source : uint8_t { None, Mk2Pads, Mouse, Lightpad, Entrancer };
 
 // What the renderer reads every frame.
 struct Params {
@@ -56,7 +56,10 @@ public:
     static constexpr float kRampOutS = 0.060f;
     static constexpr float kSmoothS = 0.008f;          // MK2 pads, mouse
     static constexpr float kSmoothLightpadS = 0.030f;  // the block sends moves every ~28 ms
-    static float smooth_s(Source s) { return s == Source::Lightpad ? kSmoothLightpadS : kSmoothS; }
+    // The Entrancer link (7-bit steps, often a Lightpad behind it) glides like the Lightpad.
+    static float smooth_s(Source s) {
+        return s == Source::Lightpad || s == Source::Entrancer ? kSmoothLightpadS : kSmoothS;
+    }
     static constexpr float kMinAmount = 0.30f;  // a light touch still shows the effect
     // Lightpad z (sensitivity 127) still reaches 255 on a hard press: a soft
     // curve keeps the top of the amount range for really pressing.

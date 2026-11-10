@@ -177,7 +177,12 @@ effect's two parameters, pressure is how much; lift and it fades out, unless
   finger lights in the effect's colour.
 - **Mouse (no controller needed):** drag on any output window. Keys `1`–`9`
   choose the effect, `H` toggles Hold.
-- **Lightpad Block:** planned (weapon no. 2).
+- **Lightpad Block:** planned as a direct source (weapon no. 2). Today it can
+  play Touch FX as the pad of the simulated Entrancer.
+- **Entrancer (simulated):** `python tools/entrancer_live.py`, then open
+  http://127.0.0.1:8770 while the engine runs. A drawn X/Y effects unit with
+  HOLD, PAD MOTION, FREEZE, TAP and memories; the mouse or a real Lightpad is
+  its pad. See [entrancer-weapon.md](entrancer-weapon.md).
 
 See all nine without starting the engine: `build\bin\Release\touch_fx_check.exe`
 writes PNGs to `tools/_screens/touchfx/` and prints the GPU time per effect.

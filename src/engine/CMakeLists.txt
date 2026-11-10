@@ -1,8 +1,8 @@
 # Engine skeleton: supervisor (himmel.exe) + render process (himmel_render.exe).
 
-add_library(himmel_engine_shared STATIC src/engine_shared.cpp src/clip_player.cpp src/camera_capture.cpp src/touch_fx.cpp)
+add_library(himmel_engine_shared STATIC src/engine_shared.cpp src/clip_player.cpp src/camera_capture.cpp src/touch_fx.cpp src/entrancer.cpp src/entrancer_link.cpp)
 target_include_directories(himmel_engine_shared PUBLIC include)
-target_link_libraries(himmel_engine_shared PUBLIC himmel_media PRIVATE d3d11 mfplat mf mfreadwrite mfuuid ole32)
+target_link_libraries(himmel_engine_shared PUBLIC himmel_media PRIVATE d3d11 mfplat mf mfreadwrite mfuuid ole32 ws2_32)
 
 add_executable(himmel_render render/render_main.cpp)
 target_link_libraries(himmel_render PRIVATE himmel_engine_shared himmel_mk2 d3d11 dxgi d3dcompiler winmm)
@@ -28,3 +28,10 @@ foreach(t touch_fx_tests touch_fx_check)
         target_compile_options(${t} PRIVATE /W4 /permissive- /utf-8)
     endif()
 endforeach()
+
+add_executable(entrancer_tests ${PROJECT_SOURCE_DIR}/tests/engine/entrancer_tests.cpp)
+target_link_libraries(entrancer_tests PRIVATE himmel_engine_shared)
+add_test(NAME entrancer_tests COMMAND entrancer_tests)
+if(MSVC)
+    target_compile_options(entrancer_tests PRIVATE /W4 /permissive- /utf-8)
+endif()

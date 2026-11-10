@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entrancer Sim</title>
+<style>
+  :root {
+    --bg: #101113; --panel: #1c1d20; --edge: #2a2b2f; --btn: #3b3d42; --btn-text: #d8d9dc;
+    --label: #9a9ca3; --on: #f4f4f4; --knob: #26272b; --seg: #ff4a2e; --seg-off: #3a1510;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--btn-text); font: 13px/1.4 "Segoe UI", system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 20px; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; letter-spacing: .5px; }
+  .pill { padding: 3px 10px; border-radius: 99px; background: #26272b; font-size: 12px; }
+  .pill.ok { background: #143d27; color: #7ff0b0; } .pill.bad { background: #4a1719; color: #ffb3b5; }
+  .pill.lp { background: #2b2350; color: #c8b8ff; }
+  button.tool { background: #2c2e33; color: var(--btn-text); border: 1px solid #3a3c42; border-radius: 6px;
+                padding: 5px 10px; cursor: pointer; font: inherit; }
+  button.tool.on { background: #4b3a99; border-color: #6b55d6; color: #fff; }
+  main { display: flex; gap: 20px; padding: 0 20px 20px; flex-wrap: wrap; align-items: flex-start; }
+  #stage { position: relative; transform-origin: 0 0; flex: none; }
+  #panel { position: absolute; left: 0; top: 0; background: var(--panel); border: 1px solid var(--edge);
+           border-radius: 14px; box-shadow: 0 20px 60px #0008; touch-action: none; user-select: none; }
+  .brand { position: absolute; left: 22px; top: 10px; font-weight: 800; font-size: 15px; letter-spacing: 1px; }
+  .sec { position: absolute; font-size: 9px; font-weight: 700; color: var(--label); letter-spacing: .5px;
+         border-bottom: 1px solid #44464c; padding-bottom: 2px; }
+  .c { position: absolute; cursor: pointer; }
+  .lab { position: absolute; font-size: 8.5px; font-weight: 700; color: var(--label); text-align: center;
+         white-space: pre; line-height: 1.1; pointer-events: none; }
+  .b { background: var(--btn); border-radius: 4px; color: var(--btn-text); font-size: 9px; font-weight: 700;
+       display: flex; align-items: center; justify-content: center; text-align: center; white-space: pre;
+       line-height: 1.05; box-shadow: inset 0 -2px 0 #0006; }
+  .b.on { background: var(--on); color: #111; box-shadow: 0 0 12px #fff8; }
+  .b.stored::after { content: ""; position: absolute; right: 4px; top: 4px; width: 5px; height: 5px;
+                     border-radius: 50%; background: #3ddc84; }
+  .knob { border-radius: 50%; background: radial-gradient(circle at 40% 35%, #4a4c52, var(--knob) 70%);
+          border: 2px solid #c9cbd1; }
+  .knob .ind { position: absolute; left: 50%; top: 8%; width: 2px; height: 40%; margin-left: -1px;
+               background: #fff; transform-origin: 50% 105%; border-radius: 1px; }
+  .enc { border-style: dashed; }
+  .led { border-radius: 50%; background: #333; border: 1px solid #000; }
+  .disp { background: #120605; border: 2px solid #000; border-radius: 4px; display: flex; align-items: center;
+          justify-content: center; font: 700 44px/1 "Consolas", "Courier New", monospace; color: var(--seg);
+          text-shadow: 0 0 10px #ff4a2e99; letter-spacing: 4px; }
+  .lever { background: #111214; border: 1px solid #000; border-radius: 6px; }
+  .lever .pos { position: absolute; font-size: 8px; font-weight: 700; color: var(--label); display: flex;
+                align-items: center; justify-content: center; text-align: center; }
+  .lever .pos.on { color: #fff; }
+  .lever .stick { position: absolute; background: linear-gradient(#e8e9ec, #9a9ca3); border-radius: 3px;
+                  box-shadow: 0 2px 4px #000a; transition: left .06s, top .06s; pointer-events: none; }
+  .pad { border-radius: 8px; border: 2px solid #000; overflow: hidden; cursor: crosshair; }
+  .pad .dot { position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%;
+              border: 2px solid #fff; box-shadow: 0 0 18px #fff; pointer-events: none; }
+  .pad .hint { position: absolute; left: 10px; bottom: 8px; font-size: 10px; color: #fff9; pointer-events: none; }
+  aside { flex: 1; min-width: 260px; max-width: 420px; }
+  aside h2 { font-size: 12px; color: var(--label); margin: 14px 0 6px; letter-spacing: .5px; }
+  #lp { display: grid; grid-template-columns: repeat(15, 1fr); gap: 2px; width: 240px; padding: 8px;
+        background: #000; border-radius: 12px; }
+  #lp div { aspect-ratio: 1; border-radius: 2px; background: #111; }
+  .kv { display: grid; grid-template-columns: 120px 1fr; gap: 2px 8px; font-size: 12px; }
+  .kv span:nth-child(odd) { color: var(--label); }
+  .help { font-size: 12px; color: var(--label); }
+  .help b { color: var(--btn-text); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Entrancer Sim</h1>
+  <span id="engine" class="pill bad">engine: not found</span>
+  <button id="lpbtn" class="tool">Use the real Lightpad as the pad</button>
+  <span id="lpstate" class="pill">Lightpad: off</span>
+</header>
+<main>
+  <div id="stage"><div id="panel"></div></div>
+  <aside>
+    <h2>THE PAD'S LIGHT (what the Lightpad shows)</h2>
+    <div id="lp"></div>
+    <h2>NOW</h2>
+    <div class="kv" id="kv"></div>
+    <h2>HOW TO PLAY</h2>
+    <div class="help">
+      <p><b>Pad:</b> drag with the mouse (Shift = light touch), or press <b>Use the real Lightpad</b> and play the block.
+        X and Y move the effect; on most programs Y is <b>how much</b>, as on the real unit. The block's Mode button = HOLD.</p>
+      <p><b>PROGRAM / BPM:</b> drag or scroll the big knob (00–99). After <b>TAP/BPM</b> the same knob sets the tempo for 5 s.</p>
+      <p><b>HOLD</b> keeps the effect at the last position when you let go. <b>PAD MOTION</b> (lever up): touch to record up to 6 s,
+        let go and it loops. <b>MUTE/FREEZE</b> (lever down, hold it): freezes the picture.</p>
+      <p><b>Memories 1–8:</b> press to recall; hold <b>FUNCTION</b> + a key for 2 s to store.
+        <b>AUDIO</b> on the left lever: the pad leaves the video alone.</p>
+      <p>The engine: <code>himmel_render.exe</code> listens on UDP 8768. Sampling (SAMPLE, REC) is not in Himmel yet.</p>
+    </div>
+  </aside>
+</main>
+<script>
+"use strict";
+let W = null, S = null;
+const els = {};
+const post = (d) => fetch("/", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(d)});
+
+function hsv(h, s, v) {
+  const f = (n) => { const k = (n + h * 6) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
+  return [f(5), f(3), f(1)];
+}
+const rgb = (c) => `rgb(${c.map((v) => Math.round(v * 255)).join(",")})`;
+
+function el(tag, cls, parent, style) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  Object.assign(e.style, style || {});
+  parent.appendChild(e);
+  return e;
+}
+const px = (v) => v + "px";
+
+function drag(e, target, onMove, onEnd) {
+  target.setPointerCapture(e.pointerId);
+  const move = (ev) => onMove(ev);
+  const up = (ev) => { target.removeEventListener("pointermove", move); target.removeEventListener("pointerup", up);
+                       target.removeEventListener("pointercancel", up); if (onEnd) onEnd(ev); };
+  target.addEventListener("pointermove", move);
+  target.addEventListener("pointerup", up);
+  target.addEventListener("pointercancel", up);
+}
+
+function build() {
+  const p = document.getElementById("panel");
+  p.style.width = px(W.panel.w);
+  p.style.height = px(W.panel.h);
+  el("div", "brand", p).textContent = W.badge;
+  for (const s of W.sections || []) el("div", "sec", p, {left: px(s.x), top: px(s.y), width: px(s.w)}).textContent = s.label;
+  for (const c of W.controls) {
+    let e;
+    if (c.kind === "knob" || c.kind === "encoder") {
+      e = el("div", "c knob" + (c.kind === "encoder" ? " enc" : ""), p,
+             {left: px(c.x - c.r), top: px(c.y - c.r), width: px(2 * c.r), height: px(2 * c.r)});
+      el("div", "ind", e);
+      el("div", "lab", p, {left: px(c.x - 50), top: px(c.y + c.r + 4), width: "100px"}).textContent = c.label;
+      if (c.kind === "knob") {
+        e.addEventListener("pointerdown", (ev) => {
+          const y0 = ev.clientY, v0 = S ? S[c.control] : 0.5;
+          drag(ev, e, (m) => post({control: c.control, value: Math.max(0, Math.min(1, v0 + (y0 - m.clientY) / 150))}));
+        });
+        e.addEventListener("wheel", (ev) => { ev.preventDefault();
+          post({control: c.control, value: Math.max(0, Math.min(1, (S ? S[c.control] : .5) - Math.sign(ev.deltaY) * 0.04))}); });
+      } else {
+        let acc = 0;
+        e.addEventListener("pointerdown", (ev) => {
+          let y = ev.clientY;
+          drag(ev, e, (m) => { acc += (y - m.clientY) / 8; y = m.clientY;
+            const st = Math.trunc(acc); if (st) { acc -= st; post({control: c.control, steps: st}); } });
+        });
+        e.addEventListener("wheel", (ev) => { ev.preventDefault(); post({control: c.control, steps: -Math.sign(ev.deltaY)}); });
+      }
+    } else if (c.kind === "button") {
+      e = el("div", "c b", p, {left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h)});
+      e.textContent = c.label;
+      e.addEventListener("pointerdown", (ev) => { e.setPointerCapture(ev.pointerId); post({control: c.control, n: c.n, down: true}); });
+      const up = () => post({control: c.control, n: c.n, down: false});
+      e.addEventListener("pointerup", up);
+      e.addEventListener("pointercancel", up);
+    } else if (c.kind === "led") {
+      e = el("div", "c led", p, {left: px(c.x - c.r), top: px(c.y - c.r), width: px(2 * c.r), height: px(2 * c.r)});
+      el("div", "lab", p, {left: px(c.x + c.r + 4), top: px(c.y - 5), textAlign: "left"}).textContent = c.label;
+    } else if (c.kind === "display") {
+      e = el("div", "c disp", p, {left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h), cursor: "default"});
+    } else if (c.kind === "lever3h" || c.kind === "lever3v") {
+      const v = c.kind === "lever3v";
+      e = el("div", "c lever", p, {left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h)});
+      e.pos = [];
+      c.positions.forEach((name, i) => {
+        const q = el("div", "pos", e, v ? {left: "0", width: "100%", top: px(i * c.h / 3), height: px(c.h / 3)}
+                                       : {top: "0", height: "100%", left: px(i * c.w / 3), width: px(c.w / 3)});
+        q.textContent = c.labels[i];
+        if (v) Object.assign(q.style, {left: px(c.w + 4), width: "90px", justifyContent: "flex-start", textAlign: "left"});
+        q.dataset.value = name;
+        e.pos.push(q);
+      });
+      if (!v) for (const [i, q] of e.pos.entries()) q.style.top = px(c.h + 2), q.style.height = "12px";
+      e.stick = el("div", "stick", e, v ? {left: px(6), width: px(c.w - 12), height: px(c.h / 3 - 8)}
+                                         : {top: px(6), height: px(c.h - 12), width: px(c.w / 3 - 8)});
+      e.addEventListener("pointerdown", (ev) => {
+        const r = e.getBoundingClientRect();
+        const f = v ? (ev.clientY - r.top) / r.height : (ev.clientX - r.left) / r.width;
+        const name = c.positions[Math.max(0, Math.min(2, Math.floor(f * 3)))];
+        post({control: c.control, value: name});
+        if (v && name === "freeze") {     // MUTE/FREEZE springs back when let go
+          e.setPointerCapture(ev.pointerId);
+          const up = () => { post({control: c.control, value: "center"}); e.removeEventListener("pointerup", up); };
+          e.addEventListener("pointerup", up);
+        }
+      });
+      el("div", "lab", p, v ? {left: px(c.x - 10), top: px(c.y - 14), width: px(c.w + 20)}
+                            : {left: px(c.x - 10), top: px(c.y - 14), width: px(c.w + 20)}).textContent = v ? "" : "CONTROL SELECT";
+    } else if (c.kind === "surface") {
+      e = el("div", "c pad", p, {left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h)});
+      e.dot = el("div", "dot", e, {display: "none"});
+      el("div", "hint", e).textContent = "TOUCH PAD — drag (Shift = light touch)";
+      const send = (ev, phase) => {
+        const r = e.getBoundingClientRect();
+        const x = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
+        const y = Math.max(0, Math.min(1, 1 - (ev.clientY - r.top) / r.height));
+        const z = ev.shiftKey ? 0.35 : (ev.pressure > 0 && ev.pressure !== 0.5 ? ev.pressure : 1);
+        post({control: "pad", phase, x, y, z});
+      };
+      e.addEventListener("pointerdown", (ev) => { send(ev, "start"); drag(ev, e, (m) => send(m, "move"), (u) => send(u, "end")); });
+    }
+    if (e) els[c.name] = {e, c};
+  }
+  const lp = document.getElementById("lp");
+  for (let i = 0; i < 225; i++) el("div", "", lp);
+  fit();
+}
+
+function fit() {
+  const st = document.getElementById("stage");
+  const avail = Math.min(window.innerWidth - 40, 760);
+  const k = Math.min(1.2, avail / W.panel.w);
+  st.style.transform = `scale(${k})`;
+  st.style.width = px(W.panel.w * k);
+  st.style.height = px(W.panel.h * k);
+}
+window.addEventListener("resize", () => W && fit());
+
+function render() {
+  if (!S || !W) return;
+  for (const {e, c} of Object.values(els)) {
+    if (c.kind === "knob") e.firstChild.style.transform = `rotate(${-135 + 270 * S[c.control]}deg)`;
+    else if (c.kind === "encoder") e.firstChild.style.transform = `rotate(${(S.tap_mode ? S.bpm : S.program) * 18}deg)`;
+    else if (c.kind === "display") e.textContent = S.display;
+    else if (c.kind === "button") {
+      const on = c.control === "hold" ? S.hold : c.control === "function" ? S.function
+               : c.control === "tap" ? S.tap_mode : false;
+      e.classList.toggle("on", on);
+      if (c.control === "memory") e.classList.toggle("stored", S.memories[c.n - 1]);
+    } else if (c.kind === "led") {
+      const on = c.name === "Peak" ? false : false;   // no audio, no second video input in Himmel
+      e.style.background = on ? c.on_color : "#333";
+    } else if (c.kind === "lever3h" || c.kind === "lever3v") {
+      const v = c.kind === "lever3v";
+      const val = c.control === "control_select" ? S.control : S.lever;
+      const i = c.positions.indexOf(val);
+      for (const q of e.pos) q.classList.toggle("on", q.dataset.value === val);
+      if (v) e.stick.style.top = px(i * c.h / 3 + 4);
+      else e.stick.style.left = px(i * c.w / 3 + 4);
+    } else if (c.kind === "surface") {
+      const col = padColour(S.x, S.y, S.touch);
+      e.style.background = S.control === "audio" ? "#0b0b10"
+        : `radial-gradient(circle at ${S.x * 100}% ${(1 - S.y) * 100}%, ${rgb(col.map((v) => Math.min(1, v * 1.6)))}, ${rgb(col)} 60%)`;
+      e.dot.style.display = S.touch ? "block" : "none";
+      e.dot.style.left = (S.x * 100) + "%";
+      e.dot.style.top = ((1 - S.y) * 100) + "%";
+    }
+  }
+  const leds = S.lightpad.leds || [];
+  const cells = document.getElementById("lp").children;
+  for (let i = 0; i < 225; i++) cells[i].style.background = leds[i] ? "#" + leds[i] : "#111";
+  const eng = document.getElementById("engine");
+  if (S.engine) {
+    eng.className = "pill ok";
+    eng.textContent = `playing Himmel: ${S.engine.effect.replace("_", " ")}${S.engine.on === "1" ? " ON" : ""}` +
+                      `${S.engine.freeze === "1" ? " · FROZEN" : ""}`;
+  } else {
+    eng.className = "pill bad";
+    eng.textContent = "engine: not found (start himmel_render.exe)";
+  }
+  const lp = S.lightpad;
+  document.getElementById("lpbtn").classList.toggle("on", lp.on);
+  const ls = document.getElementById("lpstate");
+  ls.className = "pill" + (lp.on ? (lp.connected ? " lp" : " bad") : "");
+  ls.textContent = lp.on ? (lp.connected ? `Lightpad: ${lp.state}` : `Lightpad: ${(lp.notes || []).join(" ") || "connecting…"}`)
+                         : (lp.error || "Lightpad: off (mouse plays the pad)");
+  document.getElementById("kv").innerHTML = [
+    ["Program", String(S.program).padStart(2, "0")],
+    ["Himmel effect", S.engine_effect ? S.engine_effect.replace("_", " ") : "–"],
+    ["Pad", S.touch ? `X ${S.x.toFixed(2)}  Y ${S.y.toFixed(2)}  P ${S.z.toFixed(2)}` : "not touched"],
+    ["Played by", S.lightpad_finger ? "Lightpad" : S.mouse ? "mouse" : S.motion_playing ? "PAD MOTION loop" : S.touch ? "HOLD" : "–"],
+    ["FX balance", Math.round(S.fx_balance * 100) + " %"],
+    ["Tempo", S.bpm + " BPM"],
+    ["Pad motion", S.motion_len ? S.motion_len.toFixed(1) + " s recorded" : "empty"],
+    ["Sent to engine", S.out_bytes + " bytes"],
+  ].map(([k, v]) => `<span>${k}</span><span>${v}</span>`).join("");
+}
+
+function padColour(x, y, lit) {    // same as Entrancer.pad_colour in tools/entrancer_sim.py
+  const h = (S.program * 0.071 + x * 0.35) % 1;
+  return hsv(h, 0.85, lit ? 0.35 + 0.65 * y : 0.12);
+}
+
+document.getElementById("lpbtn").addEventListener("click", () => post({lightpad: !(S && S.lightpad.on)}));
+
+async function poll() {
+  try { S = await (await fetch("/state")).json(); render(); } catch (e) { /* server restarting */ }
+  setTimeout(poll, 33);
+}
+(async () => { W = await (await fetch("/weapon")).json(); build(); poll(); })();
+</script>
+</body>
+</html>

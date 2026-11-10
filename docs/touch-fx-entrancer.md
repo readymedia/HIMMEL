@@ -352,6 +352,9 @@ Interfaces:
 
 ## 6. If the owner has a real Entrancer
 
+(He does. A simulated unit that sends the real unit's MIDI now plays the
+engine, with the Lightpad as its pad: [entrancer-weapon.md](entrancer-weapon.md).)
+
 It could be a weapon of its own, cheaply:
 
 - **MIDI weapon**: pad X = CC 12, Y = CC 13, touch = CC 92, program change

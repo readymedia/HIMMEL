@@ -14,7 +14,9 @@
 // * Touch FX (docs/touch-fx-entrancer.md): one effect pass over the whole
 //   canvas, played by one finger. Knob page 4 on the MK2 (pads = X/Y surface,
 //   pressure = amount), or the mouse on any output window (drag = finger,
-//   1-9 = effect, H = hold).
+//   1-9 = effect, H = hold), or an Entrancer-style unit over MIDI: the simulator
+//   (tools/entrancer_live.py) on UDP 127.0.0.1:8768 (--entrancer-port N,
+//   --no-entrancer). See docs/entrancer-weapon.md.
 // * Publishes a heartbeat + frame stats in "Local\HimmelEngine" for the
 //   supervisor. Exits with code 3 if the GPU device is lost (the supervisor
 //   restarts it).
@@ -49,6 +51,8 @@
 #include "himmel/engine/camera_capture.h"
 #include "himmel/engine/clip_player.h"
 #include "himmel/engine/engine_shared.h"
+#include "himmel/engine/entrancer.h"
+#include "himmel/engine/entrancer_link.h"
 #include "himmel/engine/touch_fx.h"
 #include "himmel/mk2/output.h"
 #include "himmel/mk2/pages.h"
@@ -89,6 +93,7 @@ struct Config {
     bool camera = true;              // --no-camera
     std::string camera_name;         // --camera NAME (part of the name)
     int camera_index = -1;           // --camera-index N
+    int entrancer_port = himmel::engine::kEntrancerPort;  // --entrancer-port N, 0 = off (--no-entrancer)
 };
 
 // Default playlist: all .mov files under the nearest "media" folder above the exe.
@@ -130,6 +135,8 @@ Config parse_args(int argc, char** argv) {
         else if (a == "--no-camera") c.camera = false;
         else if (a == "--camera") c.camera_name = next();
         else if (a == "--camera-index") c.camera_index = std::atoi(next().c_str());
+        else if (a == "--entrancer-port") c.entrancer_port = std::clamp(std::atoi(next().c_str()), 0, 65535);
+        else if (a == "--no-entrancer") c.entrancer_port = 0;
         else if (a == "--size") {
             const std::string s = next();
             int w = 0, h = 0;
@@ -231,6 +238,7 @@ struct Gpu {
     // Touch FX: a copy of the canvas to read from, and the last output (Trails).
     ComPtr<ID3D11Texture2D> fx_src, fx_prev;
     ComPtr<ID3D11ShaderResourceView> fx_src_srv, fx_prev_srv;
+    ComPtr<ID3D11Texture2D> frozen;  // Entrancer MUTE/FREEZE: the picture kept while frozen
     int canvas_w = 0, canvas_h = 0;
     char adapter[128] = "";
 };
@@ -321,7 +329,7 @@ void make_canvas(Gpu& g, int w, int h) {
     g.canvas.Reset();
     g.canvas_rtv.Reset();
     g.canvas_srv.Reset();
-    g.fx_src.Reset(), g.fx_prev.Reset(), g.fx_src_srv.Reset(), g.fx_prev_srv.Reset();
+    g.fx_src.Reset(), g.fx_prev.Reset(), g.fx_src_srv.Reset(), g.fx_prev_srv.Reset(), g.frozen.Reset();
     D3D11_TEXTURE2D_DESC td{};
     td.Width = static_cast<UINT>(w);
     td.Height = static_cast<UINT>(h);
@@ -335,6 +343,7 @@ void make_canvas(Gpu& g, int w, int h) {
     td.BindFlags = D3D11_BIND_SHADER_RESOURCE;  // copy targets only
     g.dev->CreateTexture2D(&td, nullptr, &g.fx_src);
     g.dev->CreateTexture2D(&td, nullptr, &g.fx_prev);
+    g.dev->CreateTexture2D(&td, nullptr, &g.frozen);
     g.dev->CreateShaderResourceView(g.fx_src.Get(), nullptr, &g.fx_src_srv);
     g.dev->CreateShaderResourceView(g.fx_prev.Get(), nullptr, &g.fx_prev_srv);
     g.canvas_w = w;
@@ -855,6 +864,19 @@ int main(int argc, char** argv) {
     constexpr int kLatRuns = 16;
 
     Mk2Link mk2link;
+
+    // Entrancer-style unit (simulator now, the real one over MIDI later).
+    std::unique_ptr<himmel::engine::EntrancerLink> elink;
+    if (cfg.entrancer_port) {
+        elink = std::make_unique<himmel::engine::EntrancerLink>(static_cast<uint16_t>(cfg.entrancer_port));
+        if (elink->ok()) log("entrancer: listening on UDP 127.0.0.1:%d", cfg.entrancer_port);
+        else log("entrancer: UDP port %d is busy, no Entrancer input", cfg.entrancer_port), elink.reset();
+    }
+    himmel::engine::entrancer::Mapper emap;
+    bool entrancer_alive = false, was_frozen = false;
+    double fx_beats = 0.0;
+    std::array<uint8_t, 1024> midi_buf{};
+
     const uint64_t t0 = now_us();
     uint64_t last_frame = t0, stats_start = t0, frames = 0, stat_frames = 0, overlay_next = 0;
     double interval_sum = 0, interval_max = 0, lat_sum = 0;
@@ -902,6 +924,20 @@ int main(int argc, char** argv) {
             mk2_was_alive = mk2_alive;
             overlay_next = 0;
         }
+        // Entrancer: its MIDI bytes become Touch FX. Quiet for 1 s = lost (the
+        // simulator sends active sensing every 250 ms).
+        if (elink) {
+            for (size_t nb; (nb = elink->read(midi_buf.data(), midi_buf.size())) > 0;) emap.feed(midi_buf.data(), nb, g_touch);
+            const uint64_t rx = elink->last_rx_us();
+            const bool alive = rx && t - std::min(t, rx) < 1000000;
+            if (alive != entrancer_alive) {
+                if (!alive) emap.lost(g_touch);
+                set_msg(alive ? "Entrancer connected" : "Entrancer lost");
+                entrancer_alive = alive;
+            }
+        }
+        fx_beats += dt * emap.state().bpm / 60.0;  // 120 BPM until the Entrancer sends a tempo
+
         // Knob 7: pad fade time, 2 s (left) .. 0.03 s (right), exponential.
         const float fade = std::exp(-static_cast<float>(dt) / pad_fade_s(g_params.knob[6]));
         for (auto& p : g_params.pad) p = p * fade < 0.002f ? 0.0f : p * fade;
@@ -1182,7 +1218,7 @@ int main(int argc, char** argv) {
             TouchFxCB fcb{};
             fcb.x = fxp.x, fcb.y = fxp.y, fcb.mix = fxp.mix, fcb.time = static_cast<float>(secs);
             fcb.effect = static_cast<float>(fxp.effect);
-            fcb.beat = static_cast<float>(secs * 2.0);  // fake 120 BPM until there is a tempo source
+            fcb.beat = static_cast<float>(std::fmod(fx_beats, 4096.0));  // 120 BPM or the Entrancer's tempo
             fcb.w = static_cast<float>(g.canvas_w), fcb.h = static_cast<float>(g.canvas_h);
             if (SUCCEEDED(g.ctx->Map(g.cb_touchfx.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &ms))) {
                 std::memcpy(ms.pData, &fcb, sizeof(fcb));
@@ -1206,6 +1242,18 @@ int main(int argc, char** argv) {
             trails_live = trails;
         } else {
             trails_live = false;
+        }
+
+        // 4e. Entrancer MUTE/FREEZE: keep showing the picture from the moment it was pressed.
+        const bool freeze = entrancer_alive && emap.state().freeze && !lat.active;
+        if (freeze || was_frozen) g.ctx->OMSetRenderTargets(0, nullptr, nullptr);
+        if (freeze && !was_frozen) g.ctx->CopyResource(g.frozen.Get(), g.canvas.Get());
+        if (freeze) g.ctx->CopyResource(g.canvas.Get(), g.frozen.Get());
+        was_frozen = freeze;
+        if (elink) {
+            const auto& es2 = emap.state();
+            elink->set_status(himmel::engine::EntrancerLink::pack_status(
+                es2.program, fxp.effect, fxp.active, g_touch.hold(), freeze, es2.video_off, es2.bpm));
         }
 
         // 5. Each output shows its part of the canvas (+ status overlay).
