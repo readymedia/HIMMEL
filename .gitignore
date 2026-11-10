@@ -9,4 +9,4 @@ build/
 out/
 
 # Clips and media (large, never in git)
-media/
+/media/
