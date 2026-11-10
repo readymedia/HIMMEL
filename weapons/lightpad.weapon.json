@@ -1,0 +1,54 @@
+{
+  "format": "himmel-weapon/1",
+  "id": "lightpad",
+  "name": "Lightpad",
+  "badge": "◎ HIMMEL · LIGHTPAD",
+  "hardware": {
+    "maker": "ROLI",
+    "model": "Lightpad Block (also Lightpad Block M)",
+    "usb": "2af4:0900",
+    "note": "Class-compliant USB-MIDI (and BLE MIDI). Works with the hardware; not affiliated with ROLI or Luminary. Discontinued, second-hand only."
+  },
+  "driver": "midi-blocks",
+  "protocol": {
+    "transport": "USB-MIDI (WinMM on Windows; ports are exclusive, close ROLI Connect / Dashboard)",
+    "standalone": "MPE: one channel per finger, note on/off, pitch bend (x), CC74 (y), channel pressure (z)",
+    "api": "BLOCKS SysEx F0 00 21 10 77 <index> <7-bit packed bits> <checksum> F7; host pings every 400 ms",
+    "touch": { "x_bits": 12, "y_bits": 12, "z_bits": 8, "velocity_bits": 8, "origin": "top-left with the USB-C port pointing away from you (checked 2026-11-10)" },
+    "leds": "15 x 15 RGB565 bitmap in the block's shared data (needs a LittleFoot renderer on hardware)"
+  },
+  "map": null,
+  "status": "simulated; read-only probe checked on the owner's Lightpad M 2026-11-10 (touch, Mode, orientation, factory notes); LEDs not written yet",
+  "panel": {
+    "w": 600,
+    "h": 620
+  },
+  "screens": [],
+  "deco": [
+    { "kind": "body", "x": 60, "y": 52, "w": 480, "h": 480, "r": 26 },
+    { "kind": "dna", "x": 210, "y": 52, "edge": "top" },
+    { "kind": "dna", "x": 390, "y": 52, "edge": "top" },
+    { "kind": "dna", "x": 210, "y": 532, "edge": "bottom" },
+    { "kind": "dna", "x": 390, "y": 532, "edge": "bottom" },
+    { "kind": "dna", "x": 60, "y": 202, "edge": "left" },
+    { "kind": "dna", "x": 60, "y": 382, "edge": "left" },
+    { "kind": "dna", "x": 540, "y": 202, "edge": "right" },
+    { "kind": "dna", "x": 540, "y": 382, "edge": "right" },
+    { "kind": "port", "x": 278, "y": 44, "w": 44, "h": 8, "label": "USB-C" },
+    { "kind": "port", "x": 52, "y": 440, "w": 8, "h": 30, "label": "POWER" }
+  ],
+  "sections": [
+    { "label": "SURFACE · 15 × 15 LEDS · MULTI-TOUCH X / Y / PRESSURE", "x": 60, "y": 552, "w": 480 }
+  ],
+  "controls": [
+    {
+      "name": "Surface",
+      "kind": "surface",
+      "x": 92, "y": 84, "w": 416, "h": 416,
+      "grid": { "cols": 15, "rows": 15 },
+      "max_touches": 16,
+      "range": { "x": 4095, "y": 4095, "z": 255 }
+    },
+    { "name": "Mode", "kind": "button", "x": 46, "y": 104, "w": 14, "h": 56, "label": "M", "on_color": "#ffffff" }
+  ]
+}

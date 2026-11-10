@@ -108,7 +108,59 @@ The details are in the mockup (`docs/vj-mockup.html`).
     Windows gotcha: every datagram sent while nobody listens comes back as a
     queued WSAECONNRESET; the Python receiver must drain them without sleeping
     (Python cannot switch SIO_UDP_CONNRESET off).
-  - Next: a generic MIDI weapon.
+  - **Weapon no. 2 = ROLI Lightpad Block (owner's choice 2026-11-10; he owns
+    one: a Lightpad **Block M**, firmware 1.1.0, USB `2af4:0900`, WinMM ports
+    "ROLI Lightpad BLOCK" in 0 / out 1).** Simulated, plus a read-only hardware
+    probe checked on his block. Details, protocol and findings: `weapons/README.md`.
+    - Profile `weapons/lightpad.weapon.json` adds the kinds `surface` (multi-touch
+      + 15x15 LED grid) and `deco`.
+    - `tools/lightpad_sim.py`: the BLOCKS SysEx codec (from ROLI's ISC
+      reference code), the simulated block (API mode + MPE fallback) and a
+      `LocalHost` that does the handshake, pings and LED frames.
+      `--selftest` checks the round trips.
+    - Live view: the weapon picker or `?weapon=lightpad`. Run
+      `mk2_live.py --port 8775 --weapon lightpad` next to a running MK2 Live
+      (`--weapon` other than mk2 leaves the MK2 hardware alone). Checked in
+      the browser 2026-11-10: multi-touch, LED feedback, test pattern, MPE
+      fallback, MK2 + Simulate unchanged.
+    - Engine sim link for it: UDP 127.0.0.1:8767 (not used by the C++ side yet).
+    - `tools/lightpad_hw.py`: WinMM link (ctypes), the same interface as
+      the sim. Live view: **Use the real block**. Checked
+      2026-11-10:
+      - touches 0x13/0x11/0x15, fingers from 1, x/y about 146..3953;
+      - y = 0 at the top with USB-C pointing away from you;
+      - Mode = button 0;
+      - API `vz` strike is useless: velocity comes from the MPE note-on,
+        which the factory program keeps sending in API mode;
+      - factory layout 4x4 pads, notes 36..51 from the bottom-left.
+    - **Himmel drives the Lightpad LEDs (checked 2026-11-10).**
+      `tools/lightpad_littlefoot.py` hand-assembles a 93-byte LittleFoot
+      renderer (15x15 RGB565 heap -> fillPixel). It has its own MiniVM that
+      the simulator runs.
+      - LocalHost: wipe the program memory, upload, stream frames through
+        `HeapSync` (ACKs are cumulative).
+      - ~55-58 full frames/s, ~12 ms send->ACK.
+      - endAPIMode brings the factory display back. RAM only; never
+        saveProgramAsDefault.
+      - With our program there is no MPE. Touch moves come every ~28 ms.
+      - **Pressure sensitivity (config 13): higher = longer span from light to full
+        pressure (more z range).** The
+        owner chose 127 (`HIMMEL_CONFIG`; block default 64).
+        - Config values persist on the block. LocalHost.let_go() stops the
+          host loop, restores the block's value and waits for confirmation.
+        - A leftover 127 from a killed run is treated as ours and restored
+          to 64.
+    - **Games (easter eggs): `tools/lightpad_games.py`**, played by the owner on
+      the block. They are Rally (paddle duel, 2 players or vs Himmel), Brick
+      Burst and Star Swarm.
+      - Hold Mode ~1 s for the next game; a short press = launch / fire /
+        restart. The live view has buttons.
+      - Gotchas found:
+        - The packet counter must wrap 1023 -> 0.
+        - With our renderer the firmware sends no button messages, so the
+          renderer forwards them with sendMessageToHost (program event 0x28).
+    - Next: the generic weapon driver/shared block (plan in
+      `weapons/README.md`).
 - **Visual mapping is the way to work with the controller. Keep it and build on
   it** (the owner wants graphical tools, not terminal tables):
   - `tools/mk2_live.py` + `tools/mk2_live.html`: a browser live view of the MK2
