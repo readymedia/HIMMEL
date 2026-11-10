@@ -2,6 +2,8 @@ __pycache__/
 *.pyc
 *.tmp
 maschine_mk2_map.bak.json
+nuvj_map.bak.json
+nuvj_map.json.tmp
 tools/_screens/
 
 # C++ build output

@@ -1,0 +1,639 @@
+{
+ "format": "himmel-weapon/1",
+ "id": "nuvj",
+ "name": "NuVJ",
+ "badge": "◎ HIMMEL · VJ",
+ "hardware": {
+  "maker": "Numark (software by ArKaos)",
+  "model": "NuVJ (2008)",
+  "usb": "to be read from the owner's unit",
+  "note": "Class-compliant USB-MIDI, bus powered (or 6 V 1 A DC). Works with the hardware; not affiliated with Numark or ArKaos."
+ },
+ "driver": "midi-nuvj",
+ "page": "nuvj_live.html",
+ "protocol": {
+  "transport": "USB-MIDI (WinMM on Windows; ports are exclusive, close the NuVJ / GrandVJ software)",
+  "input": "buttons and pads = note on/off, knobs = CC (absolute), BANK and jog wheels = CC (relative), speed faders and crossfader = pitch bend on three channels, front switches = CC 18 / note 33. Starting table from a public forum post (see THIRD_PARTY_NOTICES.md); every entry is checked on the owner's unit and saved in nuvj_map.json.",
+  "leds": "not documented; first guess: note on with the button's own note number lights its LED (velocity = brightness or on/off). Checked with the LED probe in the live view.",
+  "lcd": "blue backlit LCD; the NuVJ software writes values to it. Protocol not documented; not known yet."
+ },
+ "map": "nuvj_map.json",
+ "status": "simulated from the public note table; hardware probe ready, not yet checked on the owner's unit",
+ "panel": {
+  "w": 940,
+  "h": 930
+ },
+ "screens": [
+  {
+   "id": "lcd",
+   "kind": "lcd",
+   "x": 347,
+   "y": 70,
+   "w": 246,
+   "h": 140,
+   "text_cols": 16,
+   "text_rows": 2,
+   "note": "size and protocol not known yet"
+  }
+ ],
+ "deco": [
+  {
+   "kind": "body",
+   "x": 30,
+   "y": 30,
+   "w": 880,
+   "h": 790,
+   "r": 18
+  },
+  {
+   "kind": "port",
+   "x": 380,
+   "y": 22,
+   "w": 30,
+   "h": 10,
+   "label": "USB"
+  },
+  {
+   "kind": "port",
+   "x": 300,
+   "y": 22,
+   "w": 20,
+   "h": 10,
+   "label": "6V DC"
+  },
+  {
+   "kind": "body",
+   "x": 30,
+   "y": 836,
+   "w": 880,
+   "h": 84,
+   "r": 10
+  },
+  {
+   "kind": "panel",
+   "x": 335,
+   "y": 236,
+   "w": 270,
+   "h": 230,
+   "r": 8
+  },
+  {
+   "kind": "panel",
+   "x": 335,
+   "y": 480,
+   "w": 270,
+   "h": 240,
+   "r": 8
+  }
+ ],
+ "sections": [
+  {
+   "label": "DECK A",
+   "x": 70,
+   "y": 46,
+   "w": 250
+  },
+  {
+   "label": "DECK B",
+   "x": 620,
+   "y": 46,
+   "w": 250
+  },
+  {
+   "label": "MASTER",
+   "x": 345,
+   "y": 240,
+   "w": 250
+  },
+  {
+   "label": "SPEED",
+   "x": 450,
+   "y": 488,
+   "w": 40
+  },
+  {
+   "label": "FRONT EDGE (switches you reach from the front)",
+   "x": 60,
+   "y": 846,
+   "w": 300
+  }
+ ],
+ "controls": [
+  {
+   "name": "A Bank",
+   "kind": "encoder",
+   "x": 114,
+   "y": 143,
+   "r": 17,
+   "label": "BANK",
+   "range": 128
+  },
+  {
+   "name": "A PMTR1",
+   "kind": "knob",
+   "x": 198,
+   "y": 143,
+   "r": 17,
+   "label": "PMTR 1",
+   "range": 128
+  },
+  {
+   "name": "A PMTR2",
+   "kind": "knob",
+   "x": 282,
+   "y": 143,
+   "r": 17,
+   "label": "PMTR 2",
+   "range": 128
+  },
+  {
+   "name": "A Latch",
+   "kind": "button",
+   "x": 90,
+   "y": 192,
+   "w": 48,
+   "h": 22,
+   "label": "LATCH",
+   "led_color": "#4aa8ff"
+  },
+  {
+   "name": "A Auto",
+   "kind": "button",
+   "x": 174,
+   "y": 192,
+   "w": 48,
+   "h": 22,
+   "label": "AUTO",
+   "led_color": "#4aa8ff"
+  },
+  {
+   "name": "A Sync",
+   "kind": "button",
+   "x": 258,
+   "y": 192,
+   "w": 48,
+   "h": 22,
+   "label": "SYNC",
+   "led_color": "#4aa8ff"
+  },
+  {
+   "name": "A Pad 7",
+   "kind": "pad",
+   "n": 7,
+   "x": 89,
+   "y": 261,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 7",
+   "range": 127
+  },
+  {
+   "name": "A Pad 8",
+   "kind": "pad",
+   "n": 8,
+   "x": 171,
+   "y": 261,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 8",
+   "range": 127
+  },
+  {
+   "name": "A Pad 9",
+   "kind": "pad",
+   "n": 9,
+   "x": 254,
+   "y": 261,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 9",
+   "range": 127
+  },
+  {
+   "name": "A Pad 4",
+   "kind": "pad",
+   "n": 4,
+   "x": 89,
+   "y": 343,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 4",
+   "range": 127
+  },
+  {
+   "name": "A Pad 5",
+   "kind": "pad",
+   "n": 5,
+   "x": 171,
+   "y": 343,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 5",
+   "range": 127
+  },
+  {
+   "name": "A Pad 6",
+   "kind": "pad",
+   "n": 6,
+   "x": 254,
+   "y": 343,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 6",
+   "range": 127
+  },
+  {
+   "name": "A Pad 1",
+   "kind": "pad",
+   "n": 1,
+   "x": 89,
+   "y": 425,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 1",
+   "range": 127
+  },
+  {
+   "name": "A Pad 2",
+   "kind": "pad",
+   "n": 2,
+   "x": 171,
+   "y": 425,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 2",
+   "range": 127
+  },
+  {
+   "name": "A Pad 3",
+   "kind": "pad",
+   "n": 3,
+   "x": 254,
+   "y": 425,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 3",
+   "range": 127
+  },
+  {
+   "name": "A Jog",
+   "kind": "wheel",
+   "x": 186,
+   "y": 610,
+   "r": 92,
+   "label": "",
+   "range": 128
+  },
+  {
+   "name": "A Scratch",
+   "kind": "button",
+   "x": 88,
+   "y": 722,
+   "w": 52,
+   "h": 26,
+   "label": "SCRATCH",
+   "led_color": "#4aa8ff"
+  },
+  {
+   "name": "B Bank",
+   "kind": "encoder",
+   "x": 658,
+   "y": 143,
+   "r": 17,
+   "label": "BANK",
+   "range": 128
+  },
+  {
+   "name": "B PMTR1",
+   "kind": "knob",
+   "x": 742,
+   "y": 143,
+   "r": 17,
+   "label": "PMTR 1",
+   "range": 128
+  },
+  {
+   "name": "B PMTR2",
+   "kind": "knob",
+   "x": 826,
+   "y": 143,
+   "r": 17,
+   "label": "PMTR 2",
+   "range": 128
+  },
+  {
+   "name": "B Latch",
+   "kind": "button",
+   "x": 634,
+   "y": 192,
+   "w": 48,
+   "h": 22,
+   "label": "LATCH",
+   "led_color": "#4aa8ff"
+  },
+  {
+   "name": "B Auto",
+   "kind": "button",
+   "x": 718,
+   "y": 192,
+   "w": 48,
+   "h": 22,
+   "label": "AUTO",
+   "led_color": "#4aa8ff"
+  },
+  {
+   "name": "B Sync",
+   "kind": "button",
+   "x": 802,
+   "y": 192,
+   "w": 48,
+   "h": 22,
+   "label": "SYNC",
+   "led_color": "#4aa8ff"
+  },
+  {
+   "name": "B Pad 7",
+   "kind": "pad",
+   "n": 7,
+   "x": 622,
+   "y": 261,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 7",
+   "range": 127
+  },
+  {
+   "name": "B Pad 8",
+   "kind": "pad",
+   "n": 8,
+   "x": 705,
+   "y": 261,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 8",
+   "range": 127
+  },
+  {
+   "name": "B Pad 9",
+   "kind": "pad",
+   "n": 9,
+   "x": 787,
+   "y": 261,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 9",
+   "range": 127
+  },
+  {
+   "name": "B Pad 4",
+   "kind": "pad",
+   "n": 4,
+   "x": 622,
+   "y": 343,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 4",
+   "range": 127
+  },
+  {
+   "name": "B Pad 5",
+   "kind": "pad",
+   "n": 5,
+   "x": 705,
+   "y": 343,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 5",
+   "range": 127
+  },
+  {
+   "name": "B Pad 6",
+   "kind": "pad",
+   "n": 6,
+   "x": 787,
+   "y": 343,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 6",
+   "range": 127
+  },
+  {
+   "name": "B Pad 1",
+   "kind": "pad",
+   "n": 1,
+   "x": 622,
+   "y": 425,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 1",
+   "range": 127
+  },
+  {
+   "name": "B Pad 2",
+   "kind": "pad",
+   "n": 2,
+   "x": 705,
+   "y": 425,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 2",
+   "range": 127
+  },
+  {
+   "name": "B Pad 3",
+   "kind": "pad",
+   "n": 3,
+   "x": 787,
+   "y": 425,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 3",
+   "range": 127
+  },
+  {
+   "name": "B Jog",
+   "kind": "wheel",
+   "x": 754,
+   "y": 610,
+   "r": 92,
+   "label": "",
+   "range": 128
+  },
+  {
+   "name": "B Scratch",
+   "kind": "button",
+   "x": 800,
+   "y": 722,
+   "w": 52,
+   "h": 26,
+   "label": "SCRATCH",
+   "led_color": "#4aa8ff"
+  },
+  {
+   "name": "Insta A",
+   "kind": "button",
+   "x": 272,
+   "y": 752,
+   "w": 56,
+   "h": 32,
+   "label": "INSTA A",
+   "led_color": "#4aa8ff"
+  },
+  {
+   "name": "Insta B",
+   "kind": "button",
+   "x": 612,
+   "y": 752,
+   "w": 56,
+   "h": 32,
+   "label": "INSTA B",
+   "led_color": "#4aa8ff"
+  },
+  {
+   "name": "FX Level",
+   "kind": "knob",
+   "x": 395,
+   "y": 282,
+   "r": 17,
+   "label": "FX LEVEL",
+   "range": 128
+  },
+  {
+   "name": "Master FX",
+   "kind": "button",
+   "x": 445,
+   "y": 272,
+   "w": 50,
+   "h": 20,
+   "label": "MASTER FX",
+   "led_color": "#4aa8ff"
+  },
+  {
+   "name": "Master FX Select",
+   "kind": "knob",
+   "x": 545,
+   "y": 282,
+   "r": 17,
+   "label": "MASTER FX",
+   "range": 128
+  },
+  {
+   "name": "Master PMTR1",
+   "kind": "knob",
+   "x": 395,
+   "y": 354,
+   "r": 17,
+   "label": "PMTR 1",
+   "range": 128
+  },
+  {
+   "name": "Insta Black",
+   "kind": "button",
+   "x": 445,
+   "y": 340,
+   "w": 50,
+   "h": 28,
+   "label": "INSTA\nBLACK",
+   "led_color": "#4aa8ff"
+  },
+  {
+   "name": "Contrast",
+   "kind": "knob",
+   "x": 545,
+   "y": 354,
+   "r": 17,
+   "label": "CONTRAST",
+   "range": 128
+  },
+  {
+   "name": "Master PMTR2",
+   "kind": "knob",
+   "x": 395,
+   "y": 426,
+   "r": 17,
+   "label": "PMTR 2",
+   "range": 128
+  },
+  {
+   "name": "BPM Tap",
+   "kind": "button",
+   "x": 445,
+   "y": 412,
+   "w": 50,
+   "h": 28,
+   "label": "BPM TAP",
+   "led_color": "#4aa8ff"
+  },
+  {
+   "name": "Bright",
+   "kind": "knob",
+   "x": 545,
+   "y": 426,
+   "r": 17,
+   "label": "BRIGHT",
+   "range": 128
+  },
+  {
+   "name": "A Speed",
+   "kind": "fader",
+   "orient": "v",
+   "x": 425,
+   "y": 520,
+   "len": 170,
+   "label": "A",
+   "range": 16383
+  },
+  {
+   "name": "B Speed",
+   "kind": "fader",
+   "orient": "v",
+   "x": 515,
+   "y": 520,
+   "len": 170,
+   "label": "B",
+   "range": 16383
+  },
+  {
+   "name": "Crossfader",
+   "kind": "fader",
+   "orient": "h",
+   "x": 355,
+   "y": 768,
+   "len": 230,
+   "label": "",
+   "range": 16383
+  },
+  {
+   "name": "Fader Mode",
+   "kind": "switch",
+   "x": 560,
+   "y": 880,
+   "positions": [
+    "A",
+    "B",
+    "C"
+   ],
+   "label": "FADER MODE"
+  },
+  {
+   "name": "Auto Fade Speed",
+   "kind": "knob",
+   "x": 690,
+   "y": 878,
+   "r": 13,
+   "label": "AUTO FADE\nINSTANT · SLOW",
+   "range": 128
+  },
+  {
+   "name": "Fader Start",
+   "kind": "switch",
+   "x": 810,
+   "y": 880,
+   "positions": [
+    "OFF",
+    "ON"
+   ],
+   "label": "FADER START"
+  }
+ ]
+}

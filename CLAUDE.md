@@ -161,6 +161,13 @@ The details are in the mockup (`docs/vj-mockup.html`).
           renderer forwards them with sendMessageToHost (program event 0x28).
     - Next: the generic weapon driver/shared block (plan in
       `weapons/README.md`).
+  - **Weapon no. 5 = the owner's Numark NuVJ (2008, USB-MIDI), started 2026-11-10.**
+    Profile `weapons/nuvj.weapon.json` (kinds `fader`, `wheel`, `switch`, LCD screen),
+    `tools/nuvj_sim.py` (starting MIDI table from a public forum post, simulator,
+    WinMM link, click-then-move map learning into `nuvj_map.json`, LED host + probe),
+    own page `tools/nuvj_live.html` (`mk2_live.py --port 8777 --weapon nuvj`,
+    launch config `nuvj-live`). Simulator checked in the browser; **not yet checked
+    on the owner's unit** (map, LEDs). LCD protocol unknown. Details: `weapons/README.md`.
 - **Visual mapping is the way to work with the controller. Keep it and build on
   it** (the owner wants graphical tools, not terminal tables):
   - `tools/mk2_live.py` + `tools/mk2_live.html`: a browser live view of the MK2

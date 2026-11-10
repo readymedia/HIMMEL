@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NuVJ Live</title>
+<!-- Weapon no. 5 (NuVJ). Served by tools/mk2_live.py for ?weapon=nuvj; talks to tools/nuvj_sim.py
+     through /weapon?id=nuvj, /wevents?id=nuvj and /wcmd?id=nuvj. The drawing comes from weapons/nuvj.weapon.json. -->
+<style>
+  :root {
+    --bg: #101113; --panel: #1c1d20; --edge: #2a2b2f; --btn: #2e3036; --btn-text: #d8d9dc; --label: #9a9ca3;
+    --seen: #3ddc84; --learn: #ff9d2e; --missing: #e5484d; --led: #4aa8ff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--btn-text); font: 13px/1.4 "Segoe UI", system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 20px; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; }
+  .pill { padding: 3px 10px; border-radius: 99px; background: #26272b; font-size: 12px; }
+  .pill.ok { background: #143d27; color: #7ff0b0; } .pill.bad { background: #4a1719; color: #ffb3b5; }
+  .pill.sim { background: #2b2350; color: #c8b8ff; }
+  button, select, input { background: #2c2e33; color: var(--btn-text); border: 1px solid #3a3c42; border-radius: 6px;
+           padding: 5px 10px; font: inherit; }
+  button { cursor: pointer; } button:hover { background: #383a40; }
+  button.on { background: #3b5bdb; border-color: #4c6ef5; color: #fff; }
+  button.hwon { background: #4b3a99; border-color: #6b55d6; color: #fff; }
+  .progress { width: 180px; height: 8px; background: #26272b; border-radius: 4px; overflow: hidden; }
+  .progress > div { height: 100%; background: var(--seen); width: 0; transition: width .2s; }
+  #wrap { padding: 0 20px; }
+  #stage { position: relative; transform-origin: 0 0; }
+  #panel { position: absolute; left: 0; top: 0; }
+  .brand { position: absolute; font-weight: 800; font-size: 15px; letter-spacing: 1px; }
+  .sec { position: absolute; font-size: 9px; font-weight: 700; color: var(--label); letter-spacing: .5px; }
+  .rule { position: absolute; height: 1px; background: #44464c; }
+  .body { position: absolute; background: #141518; border: 1px solid #2c2d32; box-shadow: inset 0 2px 0 #ffffff10, 0 14px 40px #0007; }
+  .inset { position: absolute; background: #0f1012; border: 1px solid #2a2b30; }
+  .port { position: absolute; background: #050506; border: 1px solid #3a3a40; border-radius: 2px; }
+  .port span { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); font-size: 7px; color: var(--label); white-space: nowrap; }
+  .c { position: absolute; user-select: none; touch-action: none; }
+  body.sim .c { cursor: grab; } body.hw .c { cursor: pointer; }
+  .lbl { position: absolute; font-size: 7.5px; font-weight: 700; color: var(--label); text-align: center; white-space: pre; line-height: 1.1;
+         transform: translateX(-50%); pointer-events: none; }
+  .b { background: var(--btn); border-radius: 4px; color: var(--btn-text); font-size: 7.5px; font-weight: 700; white-space: pre;
+       display: flex; align-items: center; justify-content: center; text-align: center; line-height: 1.05;
+       box-shadow: inset 0 -2px 0 #0007, 0 0 0 1px #45474e; transition: background .04s, box-shadow .04s; }
+  .b.held { box-shadow: 0 0 0 2px #fff, inset 0 -2px 0 #0007; }
+  .pad { background: #d9dadd; border-radius: 6px; box-shadow: inset 0 -4px 0 #0003, 0 0 0 2px #0b0b0d; color: #333;
+         font-size: 7px; font-weight: 700; display: flex; align-items: flex-end; justify-content: flex-start; padding: 3px 5px; }
+  .pad .bar { position: absolute; left: 8px; right: 8px; top: 16px; height: 4px; border-radius: 2px; background: #00000022; }
+  .pad.held { transform: translateY(1px); box-shadow: 0 0 0 2px #fff, inset 0 -2px 0 #0003; }
+  .knob { border-radius: 50%; background: radial-gradient(circle at 40% 35%, #4a4c52, #1f2024 70%); border: 2px solid #0a0a0b;
+          box-shadow: 0 0 0 1px #50525a; }
+  .knob .ind { position: absolute; left: 50%; top: 6%; width: 2px; height: 42%; margin-left: -1px; background: #fff;
+               transform-origin: 50% 105%; border-radius: 1px; }
+  .knob.enc { background: repeating-conic-gradient(#2a2b30 0 6deg, #1a1b1f 6deg 12deg); }
+  .knob.flash { box-shadow: 0 0 0 1px #50525a, 0 0 12px #fff8; }
+  .val { position: absolute; font-size: 8px; color: var(--label); transform: translateX(-50%); white-space: nowrap; pointer-events: none; }
+  .wheel { border-radius: 50%; background: radial-gradient(circle, #2a2b30 0 46%, #0c0c0e 47% 49%, #1b1c20 50%);
+           box-shadow: 0 0 0 3px #0a0a0b, 0 0 0 5px #3a3b40, inset 0 0 20px #000; }
+  .wheel .dimple { position: absolute; width: 22%; height: 22%; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #3a3b42, #111);
+                   left: 39%; top: 12%; }
+  .wheel .rot { position: absolute; inset: 0; border-radius: 50%; }
+  .wheel.flash { box-shadow: 0 0 0 3px #0a0a0b, 0 0 0 5px #8ab8ff, inset 0 0 20px #000; }
+  .track { position: absolute; background: #050506; border-radius: 3px; box-shadow: inset 0 0 0 1px #34353b; }
+  .cap { position: absolute; background: linear-gradient(#e8e9ec, #8d8f95); border-radius: 3px; box-shadow: 0 2px 4px #000a; }
+  .cap::after { content: ""; position: absolute; background: #111; }
+  .cap.v::after { left: 2px; right: 2px; top: 50%; height: 2px; margin-top: -1px; }
+  .cap.h::after { top: 2px; bottom: 2px; left: 50%; width: 2px; margin-left: -1px; }
+  .tick { position: absolute; background: #3a3b40; }
+  .switch { background: #050506; border-radius: 10px; box-shadow: inset 0 0 0 1px #3a3b40; }
+  .switch .nub { position: absolute; top: 2px; width: 16px; height: 12px; border-radius: 6px; background: linear-gradient(#ddd, #888); transition: left .08s; }
+  .swl { position: absolute; font-size: 7px; color: var(--label); transform: translateX(-50%); pointer-events: none; }
+  .lcd { position: absolute; background: #1131a8; border: 3px solid #050506; border-radius: 4px; box-shadow: inset 0 0 18px #000a, 0 0 18px #2d6bff33; }
+  .lcd canvas { width: 100%; height: 100%; display: block; }
+  .c.seen::after { content: ""; position: absolute; right: -3px; top: -3px; width: 7px; height: 7px; border-radius: 50%;
+                   background: var(--seen); box-shadow: 0 0 0 2px var(--panel); }
+  .c.learn { outline: 2px solid var(--learn); outline-offset: 3px; animation: pulse .7s infinite alternate; }
+  @keyframes pulse { from { outline-color: var(--learn); } to { outline-color: transparent; } }
+  body.hw .c.missing { outline: 1.5px dashed var(--missing); outline-offset: 2px; }
+  #below { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 12px 20px 30px; max-width: 1200px; }
+  .card { background: #17181b; border: 1px solid #26272b; border-radius: 8px; padding: 10px 12px; }
+  .card h2 { font-size: 12px; margin: 0 0 6px; color: var(--label); font-weight: 600; }
+  .card h3 { font-size: 12px; margin: 10px 0 4px; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 5px 0; }
+  .help { color: var(--label); font-size: 12px; }
+  .mono { font: 12px/1.5 Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
+  table { border-collapse: collapse; width: 100%; font: 11px/1.45 Consolas, monospace; }
+  td, th { padding: 1px 8px 1px 0; text-align: left; vertical-align: top; white-space: nowrap; }
+  th { color: var(--label); font-weight: 600; }
+  td.hex { color: #7f838c; }
+  tr.up td.dir { color: #7ff0b0; } tr.down td.dir { color: #c8b8ff; } tr.probe td.dir { color: #ffcf7a; }
+  .chips span { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 7px; border-radius: 99px; background: #26272b; font-size: 11px; cursor: pointer; }
+  .chips span:hover { background: #3a3c42; }
+  .full { grid-column: 1 / -1; }
+  @media (max-width: 860px) { #below { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body class="sim">
+<header>
+  <select id="weaponPick" title="Weapon: the controller to show"></select>
+  <h1 id="title">NuVJ Live</h1>
+  <span id="conn" class="pill">connecting…</span>
+  <button id="hwBtn" title="Open the real NuVJ over USB-MIDI">Use the real NuVJ</button>
+  <span id="mapCount" class="pill">map</span>
+  <div class="progress" title="controls seen on the real NuVJ"><div id="bar"></div></div>
+</header>
+<div id="wrap"><div id="stage"><div id="panel"></div></div></div>
+<div id="below">
+  <div class="card">
+    <h2>Play it</h2>
+    <div class="help" id="help"></div>
+  </div>
+  <div class="card">
+    <h2>Host (the live view standing in for Himmel) · LEDs</h2>
+    <div class="row" id="ledModes"></div>
+    <div class="help">
+      <b>Himmel</b>: what Himmel would light: latch / auto / sync / master FX / insta black as toggles, the playing pad per
+      deck, BPM Tap blinking on the beat. <b>Follow</b>: a LED lights while you hold its button. The LEDs are driven
+      with note-on messages (the button's own note); this is the first guess for the real NuVJ, checked with the LED
+      probe below.</div>
+    <div id="hostInfo" class="mono"></div>
+  </div>
+  <div class="card full" id="hwCard">
+    <h2>Real NuVJ: probe, map and LEDs</h2>
+    <div class="help">Plug the NuVJ in with USB and close the NuVJ / GrandVJ software (Windows lets one program use a MIDI
+      port). Press <b>Use the real NuVJ</b>. The probe only listens until the host sends LED notes.</div>
+    <div class="row"><label>MIDI port <select id="portPick"><option value="">auto (name has NuVJ / Numark)</option></select></label>
+      <button id="portGo">Open this port</button></div>
+    <div id="hwInfo" class="mono"></div>
+    <h3>1 · Touch every control</h3>
+    <div class="help">The drawing follows the real NuVJ. A green dot = seen on the hardware. A dashed red outline = not in
+      the map. <b>Wrong control moves?</b> Click the right one in the drawing, then move the real one (turn endless knobs
+      and jog wheels <b>clockwise</b>; walk a switch through all its positions). The map is saved to
+      <code>nuvj_map.json</code> (backup <code>.bak.json</code>). Esc cancels.</div>
+    <div id="learnMsg" class="mono" style="color:#ffcf7a"></div>
+    <div class="row"><b>Not seen yet:</b></div><div id="missing" class="chips"></div>
+    <div class="row"><b>MIDI not in the map:</b> <span id="unmapped" class="mono">-</span></div>
+    <div class="row"><button id="verifyBtn">All seen: mark the map verified ✓</button><button id="resetSeen">Reset seen</button></div>
+    <h3>2 · LEDs</h3>
+    <div class="help">Pick an LED mode above and watch the device, or use the probe: every button note on channel / velocity below.</div>
+    <div class="row">
+      <label>channel <select id="lpCh"></select></label>
+      <label>velocity <input id="lpVel" type="number" min="0" max="127" value="127" style="width:64px"></label>
+      <button id="lpGo">Light all with this</button><button id="lpOff">Probe off</button>
+    </div>
+    <div class="row">What do you see? <button data-r="note on = LED on/off, any velocity">They light (on/off)</button>
+      <button data-r="note on velocity = brightness">Brightness follows velocity</button>
+      <button data-r="no LEDs with note on">Nothing lights</button>
+      <span id="ledResult" class="mono"></span></div>
+    <h3>3 · LCD</h3>
+    <div class="help">The NuVJ software writes values to the LCD; how is not published. On the simulator the LCD shows what
+      Himmel would write. On the device it keeps saying its own startup text until we know the protocol.</div>
+  </div>
+  <div class="card">
+    <h2>Himmel events (what the engine would get)</h2>
+    <table id="events"></table>
+  </div>
+  <div class="card">
+    <h2>Wire map (what each control sends)</h2>
+    <div style="max-height: 320px; overflow: auto"><table id="wire"></table></div>
+  </div>
+  <div class="card full">
+    <h2>MIDI monitor</h2>
+    <div class="row"><label><input type="checkbox" id="noise"> Show LED messages (host → device)</label></div>
+    <table id="log"></table>
+  </div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const esc = t => String(t).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+const post = o => fetch("/wcmd?id=nuvj", { method: "POST", body: JSON.stringify(o) }).catch(() => {});
+const simIn = o => post({ sim_input: o });
+const panel = $("panel");
+let W = null, S = null;
+const els = {};
+function add(html, cls, style, parent = panel) {
+  const d = document.createElement("div"); d.className = cls; Object.assign(d.style, style); d.innerHTML = html;
+  parent.appendChild(d); return d;
+}
+const px = v => v + "px";
+
+// ---------- drawing, from weapons/nuvj.weapon.json ----------
+function build(w) {
+  W = w;
+  panel.style.width = px(w.panel.w); panel.style.height = px(w.panel.h);
+  for (const d of w.deco || []) {
+    if (d.kind === "body") add("", "body", { left: px(d.x), top: px(d.y), width: px(d.w), height: px(d.h), borderRadius: px(d.r || 0) });
+    else if (d.kind === "panel") add("", "inset", { left: px(d.x), top: px(d.y), width: px(d.w), height: px(d.h), borderRadius: px(d.r || 0) });
+    else if (d.kind === "port") add(`<span>${esc(d.label)}</span>`, "port", { left: px(d.x), top: px(d.y), width: px(d.w), height: px(d.h) });
+  }
+  for (const s of w.sections || []) {
+    add(esc(s.label), "sec", { left: px(s.x), top: px(s.y) });
+    add("", "rule", { left: px(s.x), top: px(s.y + 12), width: px(s.w) });
+  }
+  add(esc(w.badge || w.name), "brand", { left: px(w.panel.w / 2), top: px(40), fontSize: "13px", transform: "translateX(-50%)" });
+  for (const s of w.screens || []) {
+    const d = add('<canvas width="320" height="180"></canvas>', "lcd", { left: px(s.x), top: px(s.y), width: px(s.w), height: px(s.h) });
+    s.ctx = d.firstChild.getContext("2d"); W.lcd = s;
+  }
+  for (const c of w.controls) {
+    let d;
+    if (c.kind === "button") {
+      d = add(esc(c.label), "c b", { left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h) });
+    } else if (c.kind === "pad") {
+      d = add(`<div class="bar"></div>${esc(c.label)}`, "c pad", { left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h) });
+    } else if (c.kind === "knob" || c.kind === "encoder") {
+      d = add('<div class="ind"></div>', "c knob" + (c.kind === "encoder" ? " enc" : ""), { left: px(c.x - c.r), top: px(c.y - c.r), width: px(2 * c.r), height: px(2 * c.r) });
+      add(esc(c.label), "lbl", { left: px(c.x), top: px(c.y + c.r + 3) });
+      c.v = add("", "val", { left: px(c.x), top: px(c.y - c.r - 12) });
+    } else if (c.kind === "wheel") {
+      d = add('<div class="rot"><div class="dimple"></div></div>', "c wheel", { left: px(c.x - c.r), top: px(c.y - c.r), width: px(2 * c.r), height: px(2 * c.r) });
+      c.v = add("", "val", { left: px(c.x), top: px(c.y + c.r + 6) });
+    } else if (c.kind === "fader") {
+      const v = c.orient === "v", L = c.len;
+      d = add("", "c", v ? { left: px(c.x - 16), top: px(c.y), width: px(32), height: px(L) } : { left: px(c.x), top: px(c.y - 16), width: px(L), height: px(32) });
+      for (let i = 0; i <= 10; i++) add("", "tick", v ? { left: px(i % 5 ? 4 : 0), top: px(i * L / 10), width: px(i % 5 ? 24 : 32), height: "1px" }
+                                                       : { top: px(i % 5 ? 4 : 0), left: px(i * L / 10), height: px(i % 5 ? 24 : 32), width: "1px" }, d);
+      add("", "track", v ? { left: px(13), top: 0, width: px(6), height: px(L) } : { top: px(13), left: 0, height: px(6), width: px(L) }, d);
+      c.cap = add("", "cap " + (v ? "v" : "h"), v ? { left: px(3), width: px(26), height: px(16) } : { top: px(3), height: px(26), width: px(16) }, d);
+      if (c.label) add(esc(c.label), "lbl", v ? { left: px(c.x), top: px(c.y + L + 6) } : { left: px(c.x + L / 2), top: px(c.y + 20) });
+      c.v = add("", "val", v ? { left: px(c.x), top: px(c.y - 14) } : { left: px(c.x + L / 2), top: px(c.y - 30) });
+    } else if (c.kind === "switch") {
+      const n = c.positions.length, wd = 16 + 18 * (n - 1) + 4;
+      d = add('<div class="nub"></div>', "c switch", { left: px(c.x - wd / 2), top: px(c.y - 8), width: px(wd), height: px(16) });
+      c.positions.forEach((p, i) => add(esc(p), "swl", { left: px(c.x - wd / 2 + 2 + 8 + 18 * i), top: px(c.y + 10) }));
+      add(esc(c.label), "lbl", { left: px(c.x), top: px(c.y - 22) });
+    } else continue;
+    d.title = c.name;
+    c.el = d; els[c.name] = c;
+    wire(c);
+  }
+  fit();
+}
+
+// ---------- input: simulator = the drawing is the controller; hardware = click to learn ----------
+function hw() { return S && S.hardware; }
+function wire(c) {
+  const el = c.el;
+  el.addEventListener("click", () => { if (hw()) post({ learn: c.name }); });
+  el.addEventListener("pointerdown", e => {
+    if (hw()) return;
+    e.preventDefault();
+    try { el.setPointerCapture(e.pointerId); } catch (_) { /* synthetic or already released pointer */ }
+    c.drag = { x: e.clientX, y: e.clientY, a: null };
+    if (c.kind === "button" || c.kind === "pad") simIn({ name: c.name, down: true });
+    else if (c.kind === "fader") faderTo(c, e);
+    else if (c.kind === "switch") simIn({ name: c.name, pos: ((S.values[c.name] || 0) + 1) % c.positions.length });
+    else if (c.kind === "wheel") c.drag.a = wheelAngle(c, e);
+  });
+  el.addEventListener("pointermove", e => {
+    if (hw() || !c.drag || !el.hasPointerCapture(e.pointerId)) return;
+    if (c.kind === "fader") faderTo(c, e);
+    else if (c.kind === "knob") {
+      const n = Math.trunc((c.drag.y - e.clientY) / 2);
+      if (n) { c.drag.y -= n * 2; simIn({ name: c.name, delta: n }); }
+    } else if (c.kind === "encoder") {
+      const n = Math.trunc((c.drag.y - e.clientY) / 10);
+      if (n) { c.drag.y -= n * 10; simIn({ name: c.name, delta: n }); }
+    } else if (c.kind === "wheel") {
+      const a = wheelAngle(c, e);
+      let da = a - c.drag.a; if (da > 180) da -= 360; if (da < -180) da += 360;
+      const per = 360 / (c.range || 128), n = Math.trunc(da / per);
+      if (n) { c.drag.a += n * per; simIn({ name: c.name, delta: n }); }
+    }
+  });
+  const up = () => {
+    if (hw() || !c.drag) return;
+    c.drag = null;
+    if (c.kind === "button" || c.kind === "pad") simIn({ name: c.name, down: false });
+  };
+  el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
+  el.addEventListener("wheel", e => {
+    if (hw() || !["knob", "encoder", "wheel", "fader"].includes(c.kind)) return;
+    e.preventDefault();
+    const s = e.deltaY < 0 ? 1 : -1;
+    if (c.kind === "fader") simIn({ name: c.name, value: Math.max(0, Math.min(16383, (S.values[c.name] || 0) + s * 512)) });
+    else simIn({ name: c.name, delta: s * (c.kind === "knob" ? 4 : c.kind === "wheel" ? 3 : 1) });
+  }, { passive: false });
+}
+function wheelAngle(c, e) {
+  const r = c.el.getBoundingClientRect();
+  return Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)) * 180 / Math.PI;
+}
+function faderTo(c, e) {
+  const r = c.el.getBoundingClientRect();
+  const k = c.orient === "v" ? 1 - (e.clientY - r.top) / r.height : (e.clientX - r.left) / r.width;
+  const v = Math.round(Math.max(0, Math.min(1, k)) * 16383);
+  const now = performance.now();
+  if (now - (c.lastSend || 0) > 15 || v === 0 || v === 16383) { c.lastSend = now; simIn({ name: c.name, value: v }); }
+}
+window.addEventListener("blur", () => { if (!hw()) simIn({ release_all: true }); });
+window.addEventListener("pagehide", () => navigator.sendBeacon("/wcmd?id=nuvj", JSON.stringify({ sim_input: { release_all: true } })));
+document.addEventListener("keydown", e => { if (e.key === "Escape") post({ learn: "" }); });
+
+function fit() {
+  if (!W) return;
+  const pw = W.panel.w + 2, ph = W.panel.h + 2;
+  const s = Math.max(0.45, Math.min((window.innerWidth - 40) / pw, (window.innerHeight - 70) / ph, 1.4));
+  const st = $("stage");
+  st.style.transform = `scale(${s})`; st.style.width = px(pw); st.style.height = px(ph);
+  $("wrap").style.height = px(ph * s + 8);
+}
+window.addEventListener("resize", fit);
+
+// ---------- LCD: dot-matrix text ----------
+function drawLcd(lines, note) {
+  const s = W && W.lcd; if (!s) return;
+  const g = s.ctx, cw = g.canvas.width, ch = g.canvas.height;
+  g.fillStyle = "#1131a8"; g.fillRect(0, 0, cw, ch);
+  const cols = s.text_cols || 16, rows = s.text_rows || 2;
+  const cellW = (cw - 20) / cols, cellH = (ch - 40) / rows;
+  g.font = `bold ${Math.floor(cellH * 0.62)}px Consolas, monospace`; g.textBaseline = "middle";
+  for (let r = 0; r < rows; r++) {
+    const t = (lines[r] || "").padEnd(cols).slice(0, cols);
+    for (let k = 0; k < cols; k++) {
+      const x = 10 + k * cellW, y = 12 + r * cellH;
+      g.fillStyle = "#1a3fc2"; g.fillRect(x + 1, y + 2, cellW - 2, cellH - 4);
+      g.fillStyle = "#e9f0ff"; g.fillText(t[k], x + cellW * 0.18, y + cellH / 2);
+    }
+  }
+  g.fillStyle = "#9fb4ff"; g.font = "11px Segoe UI"; g.fillText(note, 10, ch - 12);
+}
+
+// ---------- render a snapshot ----------
+const ledCss = (c, v) => { const n = parseInt((c.led_color || "#4aa8ff").slice(1), 16), a = 0.35 + 0.65 * v / 127;
+  return [`rgba(${n >> 16},${n >> 8 & 255},${n & 255},${a})`, `0 0 ${6 + 14 * v / 127}px rgba(${n >> 16},${n >> 8 & 255},${n & 255},${a})`]; };
+let lastVal = {}, flash = {}, lastLogKey = "", lastWireKey = "", lastMissKey = "";
+function render(s) {
+  S = s;
+  document.body.classList.toggle("sim", !s.hardware);
+  document.body.classList.toggle("hw", !!s.hardware);
+  const conn = $("conn");
+  conn.textContent = s.hardware ? (s.connected ? "NuVJ hardware · " + (s.ports[0] || "") : "NuVJ not found") : "NuVJ simulated";
+  conn.className = "pill " + (s.hardware ? (s.connected ? "ok" : "bad") : "sim");
+  const hb = $("hwBtn"); hb.textContent = s.hardware ? "■ Back to the simulator" : "Use the real NuVJ"; hb.classList.toggle("hwon", !!s.hardware);
+  const mp = s.map, seen = new Set(mp.seen), mapped = new Set(mp.mapped), held = new Set(s.held), leds = s.leds || {};
+  $("mapCount").textContent = `${seen.size} / ${mp.total} seen on hardware` + (mp.verified ? ` ✓ verified ${mp.verified}` : "");
+  $("bar").style.width = (100 * seen.size / mp.total) + "%";
+  const now = performance.now();
+  for (const c of Object.values(els)) {
+    const cl = c.el.classList, v = s.values[c.name];
+    cl.toggle("seen", seen.has(c.name));
+    cl.toggle("missing", !mapped.has(c.name));
+    cl.toggle("learn", s.learn === c.name);
+    if (v !== undefined && lastVal[c.name] !== undefined && v !== lastVal[c.name]) flash[c.name] = now;
+    lastVal[c.name] = v;
+    const fl = now - (flash[c.name] || 0) < 250;
+    if (c.kind === "button" || c.kind === "pad") {
+      cl.toggle("held", held.has(c.name));
+      const lv = leds[c.name] || 0;
+      if (lv) { const [bg, sh] = ledCss(c, lv); c.el.style.background = c.kind === "pad" ? `linear-gradient(${bg}, #d9dadd 140%)` : bg;
+                c.el.style.boxShadow = (held.has(c.name) ? "0 0 0 2px #fff, " : "") + sh; c.el.style.color = "#06121f"; }
+      else { c.el.style.background = ""; c.el.style.boxShadow = ""; c.el.style.color = ""; }
+    } else if (c.kind === "knob") {
+      c.el.firstChild.style.transform = `rotate(${-135 + 270 * (v || 0) / 127}deg)`;
+      c.v.textContent = v === undefined ? "" : v; cl.toggle("flash", fl);
+    } else if (c.kind === "encoder" || c.kind === "wheel") {
+      (c.kind === "wheel" ? c.el.firstChild : c.el.firstChild).style.transform = `rotate(${(v || 0) / (c.range || 128) * 360}deg)`;
+      c.v.textContent = c.kind === "encoder" ? `bank ${((s.host[c.name[0]] || {}).bank ?? 0) + 1}` : `${v || 0} ticks`;
+      cl.toggle("flash", fl);
+    } else if (c.kind === "fader") {
+      const k = (v ?? 8192) / 16383;
+      if (c.orient === "v") c.cap.style.top = px((1 - k) * (c.len - 16)); else c.cap.style.left = px(k * (c.len - 16));
+      c.v.textContent = v ?? "";
+    } else if (c.kind === "switch") {
+      c.el.firstChild.style.left = px(2 + 18 * (v || 0));
+    }
+  }
+  drawLcd(s.lcd || [], s.hardware ? "drawing: what Himmel would write (device LCD protocol unknown)" : "simulated: what Himmel would write");
+  // host card
+  const h = s.host;
+  const lm = $("ledModes");
+  if (lm.dataset.k !== h.modes.join()) {
+    lm.dataset.k = h.modes.join();
+    const names = { himmel: "Himmel", follow: "Follow", all: "All on", chase: "Chase", off: "LEDs off" };
+    lm.innerHTML = h.modes.map(m => `<button data-m="${m}">${names[m] || m}</button>`).join("");
+    lm.querySelectorAll("button").forEach(b => b.onclick = () => post({ led_mode: b.dataset.m }));
+  }
+  lm.querySelectorAll("button").forEach(b => b.classList.toggle("on", !h.probe && b.dataset.m === h.mode));
+  const tg = Object.entries(h.toggles).filter(([, on]) => on).map(([n]) => n).join(", ") || "-";
+  $("hostInfo").textContent = `deck A: bank ${h.A.bank + 1}, pad ${h.A.pad ?? "-"}, jog ${h.A.jog}    deck B: bank ${h.B.bank + 1}, pad ${h.B.pad ?? "-"}, jog ${h.B.jog}\n` +
+    `crossfader ${Math.round(100 * h.xf / 16383)}% B    tempo ${h.bpm} BPM (tap BPM Tap)\non: ${tg}` +
+    (h.probe ? `\nLED probe: every button note on channel ${h.probe.ch + 1}, velocity ${h.probe.vel}` : "");
+  // hardware card
+  const st = s.stats || {};
+  $("hwInfo").textContent = (s.notes || []).join("\n") + (s.hardware ? `\nmessages from the NuVJ: ${st.msgs ?? 0} (${st.rate ?? 0}/s)` +
+    (Object.keys(s.ranges || {}).length ? "\nranges seen: " + Object.entries(s.ranges).map(([n, r]) => `${n} ${r[0]}..${r[1]}`).join(", ") : "") : "");
+  if (s.port_list) {
+    const pp = $("portPick"), key = JSON.stringify(s.port_list.in);
+    if (pp.dataset.k !== key) {
+      pp.dataset.k = key;
+      pp.innerHTML = '<option value="">auto (name has NuVJ / Numark)</option>' + s.port_list.in.map(([i, n]) => `<option value="${i}">in ${i}: ${esc(n)}</option>`).join("");
+    }
+  }
+  $("learnMsg").textContent = s.learn_msg || "";
+  const miss = Object.keys(els).filter(n => !seen.has(n)), mk = miss.join("|");
+  if (mk !== lastMissKey) {
+    lastMissKey = mk;
+    $("missing").innerHTML = miss.length ? miss.map(n => `<span>${esc(n)}</span>`).join("") : "All controls seen ✓";
+    $("missing").querySelectorAll("span").forEach(sp => sp.onclick = () => post({ learn: sp.textContent }));
+  }
+  $("unmapped").textContent = (s.unmapped || []).join("  |  ") || "-";
+  $("verifyBtn").disabled = miss.length > 0;
+  $("ledResult").textContent = mp.leds && mp.leds.checked ? `saved: ${mp.leds.how} (${mp.leds.checked})` : "";
+  // events
+  $("events").innerHTML = "<tr><th>time</th><th>control</th><th>event</th></tr>" + (s.events || []).slice().reverse().map(([t, n, ev]) =>
+    `<tr><td>${esc(t)}</td><td>${esc(n)}</td><td>${esc(evText(ev))}</td></tr>`).join("");
+  const wk = JSON.stringify(mp.wire) + mp.learned.join();
+  if (wk !== lastWireKey) {
+    lastWireKey = wk;
+    const learned = new Set(mp.learned);
+    $("wire").innerHTML = "<tr><th>control</th><th>MIDI</th><th>source</th></tr>" + Object.entries(mp.wire).map(([n, w]) =>
+      `<tr><td>${esc(n)}</td><td>${esc(w)}</td><td>${learned.has(n) ? "learned" : "forum table"}</td></tr>`).join("");
+  }
+  const log = s.log || [], lk = log.map(r => r[0] + r[2]).join("|");
+  if (lk !== lastLogKey) {
+    lastLogKey = lk;
+    $("log").innerHTML = log.slice().reverse().map(([t, dir, hex, text]) =>
+      `<tr class="${dir.startsWith("device") ? "up" : dir === "probe" ? "probe" : "down"}"><td>${esc(t)}</td><td class="dir">${esc(dir)}</td>` +
+      `<td>${esc(text)}</td><td class="hex">${esc(hex)}</td></tr>`).join("") || "<tr><td>-</td></tr>";
+  }
+}
+function evText(ev) {
+  if (!ev) return "";
+  return ev.kind === "down" ? `ButtonDown (vel ${ev.vel})` : ev.kind === "up" ? "ButtonUp" : ev.kind === "value" ? `Knob value ${ev.value}` :
+    ev.kind === "delta" ? `KnobDelta ${ev.delta > 0 ? "+" : ""}${ev.delta}` : ev.kind === "fader" ? `Fader ${ev.value} / 16383` :
+    ev.kind === "switch" ? `Switch position ${ev.pos}` : JSON.stringify(ev);
+}
+
+$("hwBtn").onclick = () => post({ hardware: !hw() });
+$("portGo").onclick = () => post({ hardware: true, port: $("portPick").value === "" ? null : +$("portPick").value });
+$("verifyBtn").onclick = () => post({ verify: true });
+$("resetSeen").onclick = () => { if (confirm("Clear all 'seen' marks?")) post({ reset_seen: true }); };
+$("noise").onchange = e => post({ show_noise: e.target.checked });
+for (let i = 1; i <= 16; i++) $("lpCh").insertAdjacentHTML("beforeend", `<option value="${i - 1}">${i}</option>`);
+$("lpGo").onclick = () => post({ led_probe: { ch: +$("lpCh").value, vel: +$("lpVel").value } });
+$("lpOff").onclick = () => post({ led_probe: null });
+document.querySelectorAll("[data-r]").forEach(b => b.onclick = () => post({ led_result: b.dataset.r }));
+$("help").innerHTML = "<b>Simulator:</b> the drawing is the NuVJ. <b>Buttons and pads:</b> hold the mouse. " +
+  "<b>Knobs:</b> drag up/down or scroll. <b>BANK:</b> endless, drag or scroll one step at a time. " +
+  "<b>Jog wheels:</b> drag around the wheel (hold SCRATCH for scratch). <b>Faders and crossfader:</b> drag the cap. " +
+  "<b>Front switches:</b> click to step. Every move sends the NuVJ's own MIDI bytes (see the monitor).<br>" +
+  "<b>Real NuVJ:</b> clicks on the drawing learn instead of play.";
+
+// weapon picker (same list as the MK2 page)
+fetch("/weapons").then(r => r.json()).then(list => {
+  const pick = $("weaponPick");
+  for (const w of list.weapons) { const o = document.createElement("option"); o.value = w.id; o.textContent = "⚔ " + w.name + (w.playable ? "" : " (drawing only)"); pick.appendChild(o); }
+  pick.value = "nuvj";
+  pick.onchange = () => { location.search = "?weapon=" + encodeURIComponent(pick.value); };
+});
+fetch("/weapon?id=nuvj").then(r => r.json()).then(w => {
+  build(w);
+  post({ sim_input: { release_all: true } });
+  const es = new EventSource("/wevents?id=nuvj");
+  es.onmessage = e => render(JSON.parse(e.data));
+  es.onerror = () => { $("conn").textContent = "server not running"; $("conn").className = "pill bad"; };
+});
+</script>
+</body>
+</html>

@@ -21,6 +21,7 @@ A weapon has up to four parts:
 |---|---|---|---|---|---|
 | 1 | **MK2** (Maschine MK2) | USB HID: 16 pads, 8 knobs, encoder, 48 buttons, two 1-bit screens | [`mk2.weapon.json`](mk2.weapon.json) | [`tools/mk2_sim.py`](../tools/mk2_sim.py) | Map verified on hardware, C++ driver done |
 | 2 | **Lightpad** (ROLI Lightpad Block / Block M) | USB-MIDI: multi-touch surface (x, y, pressure per finger), 15 × 15 RGB LEDs, one Mode button | [`lightpad.weapon.json`](lightpad.weapon.json) | [`tools/lightpad_sim.py`](../tools/lightpad_sim.py) | Simulated, and played on the owner's Lightpad M (2026-11-10): touch, multi-touch, Mode button, orientation, factory note map, **and Himmel's own LED program** (~55 frames/s) |
+| 5 | **NuVJ** (Numark NuVJ, 2008) | USB-MIDI: 2 × 9 pads, 2 jog wheels, 2 speed faders, crossfader, 12 knobs, 2 BANK encoders, 19 LED buttons, front switches, blue LCD | [`nuvj.weapon.json`](nuvj.weapon.json) | [`tools/nuvj_sim.py`](../tools/nuvj_sim.py) | Simulated from a public note table; hardware probe, map learning and LED probe ready. Not yet checked on the owner's unit |
 
 ## The live view: one tool for every weapon
 
@@ -78,6 +79,11 @@ the device.
 - `kind: "surface"` (weapon no. 2): a multi-touch area with an LED grid under it.
   Extra keys: `grid: {cols, rows}`, `max_touches`, `range: {x, y, z}` (raw
   units on the wire). Touches are reported per finger with x, y and pressure.
+- Weapon no. 5 (NuVJ) adds `fader` (`orient` `v`/`h`, `len`, 14-bit `range`), `wheel`
+  (a jog wheel: endless, relative), `switch` (`positions`), screens of `kind: "lcd"`
+  (`text_cols` × `text_rows`) and `deco` kind `panel` (an inset area). A profile may
+  name its own page (`"page": "nuvj_live.html"` in `tools/`); the live view serves
+  it at `/?weapon=<id>`.
 - `deco` (optional): drawing only, never a control. `body` is the device
   outline (`r` = corner radius), `dna` is a connector dot at `x, y`, and `port`
   is a socket or switch the protocol cannot see, with a small label.
@@ -308,6 +314,121 @@ It writes frame strips to `tools/_screens/`.
   - That arrives as a program event (message 0x28: three 32-bit ints).
   - The decoder turns it back into a button event.
   - The renderer is now 117 bytes.
+
+## Weapon no. 5: the NuVJ
+
+The owner's **Numark NuVJ** (2008, made for ArKaos' NuVJ software) is a
+two-deck VJ controller. It is a class-compliant USB-MIDI device, powered by USB
+or 6 V DC. The drawing (`nuvj.weapon.json`, badge "HIMMEL · VJ") was made from
+the owner's photos and the Numark manuals.
+
+```
+python tools/mk2_live.py --port 8777 --weapon nuvj        then open http://127.0.0.1:8777
+python tools/nuvj_sim.py --selftest                       every control round-trips through its MIDI bytes
+python tools/nuvj_sim.py --ports                          the MIDI ports Windows sees
+```
+
+The NuVJ has its own page (`tools/nuvj_live.html`), served by the same live
+view. It needs faders, a crossfader, jog wheels, switches and an LCD, which the
+other weapons do not have.
+
+### Controls (51)
+
+| Area | Controls | MIDI (starting table, checked on hardware) |
+|---|---|---|
+| Deck A / B | BANK (endless), PMTR 1, PMTR 2 | CC 14/15 relative, CC 0/1, CC 2/3 |
+| | LATCH, AUTO, SYNC (LED buttons) | notes 8/9, 4/5, 6/7 |
+| | 9 pads (PAD 1 bottom left … PAD 9 top right, LEDs) | A: notes 24 26 28 / 18 20 22 / 12 14 16, B: the same + 1 |
+| | jog wheel, SCRATCH | CC 17/16 relative, notes 0/1 |
+| | SPEED fader | pitch bend ch 1 / ch 2 |
+| Mix | crossfader, INSTA A, INSTA B | pitch bend ch 3, notes 10, 11 |
+| Master | FX LEVEL, MASTER FX (select), PMTR 1, PMTR 2, CONTRAST, BRIGHT | CC 8, 9, 4, 5, 6, 7 |
+| | MASTER FX, INSTA BLACK, BPM TAP (LED buttons) | notes 30, 31, 32 |
+| Front edge | FADER MODE (A/B/C), AUTO FADE SPEED, FADER START (on/off) | CC 18 = 1/2/0, CC 13, note 33 = 0/65 |
+| Display | blue LCD | written by the host software; protocol not published |
+
+The table comes from a NuVJ owner's public forum post (credited in
+`THIRD_PARTY_NOTICES.md`). Until a control is learned on the owner's unit it is
+only a guess. The map file `nuvj_map.json` (repo root) holds the result:
+channel, number, absolute / relative, the direction of clockwise, and the
+switch values.
+
+### How it is built
+
+- **Simulator** (`SimNuVJ`): the drawing is the controller. Buttons and pads
+  are held with the mouse. Knobs: drag or scroll. BANK: one step at a time.
+  Jog wheels: drag around the wheel. Faders: drag the cap. Switches: click to
+  step. Each move sends the bytes the map says the real NuVJ sends, and the
+  MIDI monitor shows them.
+- **Real device** (`HwNuVJ`): WinMM through the ctypes bindings in
+  `lightpad_hw.py`, so no new dependency. It finds a port whose name contains
+  "NuVJ" or "Numark", or uses the one you pick. It reconnects after a cable
+  pull, and never sends SysEx.
+- **Map learning**: click a control in the drawing, then move the real one.
+  - Endless knobs and jog wheels: turn them clockwise, so the direction is
+    learned too.
+  - Switches: walk them through every position.
+  - A message can belong to one control only.
+  - "Seen" is only ticked by real input. **Mark verified** is enabled when all
+    51 controls are seen.
+- **LEDs** (`NuvjHost`): the live view stands in for Himmel.
+  - Modes:
+    - **Himmel**: toggles, the playing pad per deck, BPM TAP blinking on the
+      beat;
+    - Follow;
+    - All on;
+    - Chase;
+    - Off.
+  - The first guess is that a note-on with the button's own note number lights
+    its LED.
+  - The **LED probe** lights every button note on a chosen channel and
+    velocity. The owner records what the device does, and that is saved in
+    the map.
+- **LCD**: the simulator shows what Himmel would write (16 × 2 text). The real
+  LCD protocol is not published (the NuVJ / GrandVJ software drive it), so
+  Himmel does not write to it yet.
+
+### NuVJ events in Himmel's event model
+
+The NuVJ uses the generic weapon plan below: one driver process (WinMM), a
+shared block, and the same 16-byte `Event`. `id` = the control's index in the
+profile.
+
+| NuVJ input | Himmel event | Notes |
+|---|---|---|
+| Button / pad note on, note off | `ButtonDown` / `ButtonUp`, or `PadHit` / `PadRelease` for pads | The pads send no pressure: velocity is a fixed 127, so `PadHit` carries full intensity. |
+| Absolute knob CC (PMTR, FX LEVEL, CONTRAST, BRIGHT, AUTO FADE SPEED) | `KnobDelta`, `raw` = the 0..127 value | Absolute knobs: the driver sends the new value and the delta. The engine can soft-take-over (pick up) after a page change. |
+| BANK, jog wheel (relative CC) | `KnobDelta` (±n ticks) | Direction from the learned `cw` flag. |
+| SPEED faders, crossfader (pitch bend) | new `Fader` event: `value` 0..16383 | 14-bit, smooth enough for a crossfade. |
+| FADER MODE, FADER START | new `Switch` event: `value` = position | Sent once on change. The driver asks for nothing at start, so the engine learns the position on the first move. |
+| LED out | the engine writes an LED level per control; the driver sends a note on with velocity 0/127 for each change | |
+| LCD out | later, when the protocol is known | |
+
+### What each control could do in Himmel
+
+| Control | In Himmel |
+|---|---|
+| Crossfader | Deck A ↔ deck B mix (the deck / layer mixer). |
+| INSTA A / INSTA B | Hold = cut to that deck, with an auto fade at the AUTO FADE SPEED. |
+| SPEED faders | Clip speed per deck, −2..+2×, centre = 1×. |
+| Jog wheel | Nudge speed; with SCRATCH held, scrub the clip (HAP frames are random-access). |
+| Pads 1–9 | The 9 clips of the deck's current bank. Velocity → intensity. LED = playing clip. |
+| BANK | Step through the deck's banks (a Himmel bank of clips); the LCD shows the bank. |
+| PMTR 1 / 2 (deck) | The two main parameters of the deck's effect chain. |
+| LATCH / AUTO / SYNC | Latch = clips keep playing after the pad is released; Auto = Smart Random inside the bank; Sync = the deck's clip follows the beat (BPM). |
+| Master FX section | MASTER FX knob = choose the master effect, button = on/off, FX LEVEL = wet/dry, PMTR 1/2 = its parameters. |
+| CONTRAST / BRIGHT | Output contrast and brightness. |
+| INSTA BLACK | The show's blackout (toggle, LED on while black). |
+| BPM TAP | Tap tempo for Himmel's beat clock; hold 3 s = back to the audio-detected BPM. |
+| FADER START + FADER MODE | Crossfader start: moving away from one side fires the other deck's selected cue (A/B/C = cue, scene or Smart Random). |
+
+### Still to do with the owner
+
+1. Plug the NuVJ in and press **Use the real NuVJ**. Touch every control; fix
+   any differences by learning; mark the map verified.
+2. Run the LED probe and save what the LEDs do.
+3. LCD: find the protocol, if the owner has the NuVJ or GrandVJ software, by
+   watching what it sends. Until then, Himmel leaves the LCD alone.
 
 ## Plan: how a generic weapon feeds Himmel (not wired yet)
 
