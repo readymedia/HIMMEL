@@ -265,6 +265,50 @@ What we saw:
     one.
 - **Touch moves** arrive every ~28 ms (~36 a second) while LED frames stream.
 
+### Games on the Lightpad (easter eggs, 2026-11-10)
+
+`tools/lightpad_games.py` has three small games. They are drawn by the host,
+so they run on the simulated block and on the real one alike. The owner played
+all three on his block.
+
+**Rally (paddle duel)**
+- A finger in the lower half moves the bottom paddle, and one in the upper
+  half moves the top paddle, so two people can play.
+- If nobody touches the top half, Himmel plays the top paddle.
+- First to 5 wins.
+
+**Brick Burst**
+- Slide the paddle with a finger, and press harder for a wider paddle.
+- Tap or press Mode to launch the ball, then clear the bricks.
+
+**Star Swarm**
+- The ship follows your finger and fires while you touch; press harder to
+  fire faster.
+- The swarm sways and dives. It shares its name with the MK2 screen game.
+
+**On the block**
+- **Hold Mode ~1 s** to walk touch glow → Rally → Brick Burst → Star Swarm.
+  The game's letter is shown when it starts.
+- A short press launches, fires or restarts.
+- After game over, a tap restarts the game; otherwise it restarts by itself
+  after 4 s.
+
+**In the live view** there is a button for each game.
+
+To check the games without hardware, run `python tools/lightpad_games.py --png`.
+It writes frame strips to `tools/_screens/`.
+
+**What we learned while playing:**
+- **The packet counter wraps at 1023 → 0.** Sending 1024 makes the real
+  block ignore every LED packet after ~20 s of play.
+- **Buttons with our renderer.** While our renderer runs, the firmware stops
+  sending button messages. The renderer therefore has
+  `handleButtonDown/Up(index)`, which call `sendMessageToHost(1, index,
+  down)`.
+  - That arrives as a program event (message 0x28: three 32-bit ints).
+  - The decoder turns it back into a button event.
+  - The renderer is now 117 bytes.
+
 ## Plan: how a generic weapon feeds Himmel (not wired yet)
 
 Today `mk2_controller.exe` owns `Local\HimmelMk2`:

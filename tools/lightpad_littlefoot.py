@@ -36,6 +36,7 @@ import struct
 import sys
 
 GRID = 15
+BUTTON_EVENT = 1     # first int of our sendMessageToHost(1, button index, down) messages
 PIXEL_BYTES = GRID * GRID * 2
 
 OPS = {name: i for i, name in enumerate((
@@ -127,6 +128,17 @@ def build_bitmap_program(heap_bytes=PIXEL_BYTES):
     a.op("callNative", function_id("setStatusOverlayActive/vb"))
     a.op("retVoid", 0)
     funcs.append(("initialise/v", a))
+    # --- handleButtonDown(index) / handleButtonUp(index) ---
+    # With our program on the block, the firmware no longer sends button messages to the host
+    # (seen on a Lightpad M), so the program forwards them: sendMessageToHost(1, index, down).
+    for sig, down in (("handleButtonDown/vi", 1), ("handleButtonUp/vi", 0)):
+        a = Asm()                             # entry: [index, ret]
+        a.push(down)                          # third argument (pushed first)
+        a.dup_depth(2)                        # second: index
+        a.push(BUTTON_EVENT)                  # first: what this message is
+        a.op("callNative", function_id("sendMessageToHost/viii"))
+        a.op("retVoid", 1)
+        funcs.append((sig, a))
     # --- repaint() ---  local i is the only stack slot under the work items
     a = Asm()
     a.op("pushMultiple0", 1)              # i = 0             [ret, i]
@@ -206,6 +218,7 @@ class MiniVM:
         self.heap = bytes(block[self.size:self.size + self.heap_size])
         self.pixels = [(0, 0, 0)] * (GRID * GRID)
         self.overlay = True
+        self.to_host = []        # sendMessageToHost calls: (a, b, c)
 
     def heap_bits(self, start, n):
         if start + n > 8 * len(self.heap):
@@ -222,17 +235,23 @@ class MiniVM:
             if 0 <= x < GRID and 0 <= y < GRID:
                 self.pixels[y * GRID + x] = ((c >> 16) & 255, (c >> 8) & 255, c & 255)
             return 0, 3, True
+        if fid == function_id("sendMessageToHost/viii"):
+            self.to_host.append(tuple(args[:3]))
+            return 0, 3, True
         if fid == function_id("setStatusOverlayActive/vb"):
             self.overlay = bool(args[0])
             return 0, 1, True
         raise ValueError("unknown native function %d" % fid)
 
-    def call(self, signature):
+    def call(self, signature, *args):
         fid = function_id(signature)
         if fid not in self.funcs:
             return False
         pc = self.funcs[fid]
-        stack = [0]          # list end = top; the reference VM keeps tos in a register, same thing
+        # list end = top (the reference VM keeps tos in a register, same thing). Like
+        # FunctionExecutionContext: 0, then the arguments (first argument nearest the top), then the
+        # return address 0.
+        stack = [0] + list(reversed(args)) + [0]
         prog = self.prog
         for _ in range(self.MAX_OPS):
             if pc >= self.size:
@@ -284,7 +303,8 @@ class MiniVM:
                 stack.append(self.heap_bits(start, n))
             elif name == "callNative":
                 n_args = {function_id("makeARGB/iiiii"): 4, function_id("fillPixel/viii"): 3,
-                          function_id("setStatusOverlayActive/vb"): 1}.get(arg, 0)
+                          function_id("setStatusOverlayActive/vb"): 1,
+                          function_id("sendMessageToHost/viii"): 3}.get(arg, 0)
                 args = [stack[-1 - k] for k in range(n_args)]   # first argument on top
                 res, n, void = self.native(arg, args)
                 del stack[len(stack) - n:]
@@ -308,6 +328,11 @@ def selftest():
     vm.call("repaint/v")
     good = vm.pixels == want and not vm.overlay
     print(("ok   " if good else "FAIL ") + "MiniVM draws the heap exactly (225 pixels), overlay off")
+    vm.call("handleButtonDown/vi", 0)
+    vm.call("handleButtonUp/vi", 0)
+    b = vm.to_host == [(BUTTON_EVENT, 0, 1), (BUTTON_EVENT, 0, 0)]
+    print(("ok   " if b else "FAIL ") + "Mode button forwarded to the host: %s" % vm.to_host)
+    good = good and b
     print("function ids: repaint %d, fillPixel %d, makeARGB %d" % (
         function_id("repaint/v"), function_id("fillPixel/viii"), function_id("makeARGB/iiiii")))
     print("program:", prog.hex(" "))

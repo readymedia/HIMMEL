@@ -54,6 +54,7 @@ import sys
 import threading
 import time
 
+import lightpad_games as games
 import lightpad_littlefoot as lf
 
 HEADER = bytes([0xF0, 0x00, 0x21, 0x10, 0x77])
@@ -192,7 +193,8 @@ def host_data_changes(packet_index, old, new):
     if pos >= n:
         return out
     while pos < n:
-        w = BitWriter().put(HOST_DATA, 7).put(packet_index & 0xFFFF, 16)
+        packet_index &= 0x3FF  # the counter wraps at 1023 -> 0 (maxPacketCounter); 1024 hangs a real block
+        w = BitWriter().put(HOST_DATA, 7).put(packet_index, 16)
         _skip(w, pos)
         last = 0
         while pos < n and w.n < MAX_PACKET_BITS:
@@ -288,6 +290,13 @@ def decode_device(msg):
             for _ in range(nc):
                 r.get(7 + 5 + 7 + 5)
             ev.append({"type": "topology", "version": ver, "devices": devs})
+        elif t == 0x28:  # programEventMessage: three 32-bit ints from sendMessageToHost
+            vals = [r.get(32) for _ in range(3)]
+            vals = [v - (1 << 32) if v & 0x80000000 else v for v in vals]
+            if vals[0] == lf.BUTTON_EVENT:  # our renderer forwards the Mode button this way
+                ev.append({"type": "button", "down": bool(vals[2]), "id": vals[1], "t": ts, "via": "program"})
+            else:
+                ev.append({"type": "program", "values": vals})
         elif t == 0x18:  # configMessage: 4-bit command; updates carry item 8 bit + value/min/max 32 bit
             cmd = r.get(4)
             if cmd in (4, 5) and r.left() >= 8 + 96:
@@ -359,7 +368,10 @@ def describe(msg, to_device):
                 out.append("touch %s #%d x=%d y=%d z=%d%s" % (e["phase"], e["i"], e["x"], e["y"], e["z"],
                                                              " vz=%d" % e["vz"] if "vz" in e else ""))
             elif e["type"] == "button":
-                out.append("button %d %s" % (e["id"], "down" if e["down"] else "up"))
+                out.append("button %d %s%s" % (e["id"], "down" if e["down"] else "up",
+                                               " (via our program)" if e.get("via") else ""))
+            elif e["type"] == "program":
+                out.append("program event %s" % e["values"])
             elif e["type"] == "ack":
                 out.append("ACK %d" % e["packet"])
             elif e["type"] in ("version", "name"):
@@ -687,8 +699,22 @@ class SimLightpad:
                 return
             self.button = down
             api = self.api
-        if api:
+        if not api:
+            return
+        with self.lock:
+            prog = None if self.factory else lf.parse_program(self.data)
+            block = bytes(self.data[:prog[0] + prog[1]]) if prog else None
+        if block is None:
             self.send(self._packet([(BUTTON_DOWN if down else BUTTON_UP, 7), (0, 5), (MODE_BUTTON, 12)]))
+            return
+        # a host program is loaded: the firmware calls its handler instead (as on the real block)
+        try:
+            vm = lf.MiniVM(block)
+            vm.call("handleButtonDown/vi" if down else "handleButtonUp/vi", MODE_BUTTON)
+        except ValueError:
+            return
+        for a, b, c in vm.to_host:
+            self.send(self._packet([(0x28, 7), (a & 0xFFFFFFFF, 32), (b & 0xFFFFFFFF, 32), (c & 0xFFFFFFFF, 32)]))
 
     def _lift_all(self):
         with self.lock:
@@ -780,7 +806,7 @@ class HeapSync:
     def start(self, target):
         with self.lock:
             old = self.confirmed if self.confirmed is not None else bytes(b ^ 0xFF for b in target)
-            packets = host_data_changes(self.index + 1, old, target)
+            packets = host_data_changes((self.index + 1) & 0x3FF, old, target)
             self.target = bytearray(target)
             if not packets:
                 self.confirmed = bytearray(target)
@@ -830,7 +856,8 @@ class HeapSync:
 class LocalHost:
     """The live view acting as the BLOCKS host (a Python sketch of Himmel's driver)."""
 
-    MODES = ("touch", "rainbow", "test", "off")
+    MODES = ("touch", "rainbow", "test", "off", "rally", "brick", "swarm")
+    LONG_PRESS = 0.9            # hold Mode this long: next game (the easter egg)
 
     def __init__(self, sim):
         self.sim = sim
@@ -853,6 +880,13 @@ class LocalHost:
         self.fingers = {}          # touch index -> (x, y, z) 0..1, from decoded block messages
         self.glow = [[0.0, 0.0, 0.0] for _ in range(GRID * GRID)]
         self.palette = 0
+        self.game = None           # the running game object (lightpad_games), or None
+        self.game_key = None
+        self.taps = []             # touch starts since the last picture: (x, y, z)
+        self.mode_short = False    # a short Mode press since the last picture
+        self.button_down_at = None
+        self.long_fired = False
+        self.title_until = 0.0
         self.acks = 0
         self.lock = threading.Lock()
         sim.listeners.append(self.on_block)
@@ -876,8 +910,18 @@ class LocalHost:
                         self.fingers.pop(e["i"], None)
                     else:
                         self.fingers[e["i"]] = (e["x"] / 4095, e["y"] / 4095, e["z"] / 255)
+                    if e["phase"] == "start":
+                        self.taps.append(self.fingers[e["i"]])
                 elif e["type"] == "button" and e["down"]:
-                    self.palette = (self.palette + 1) % 6
+                    self.button_down_at, self.long_fired = time.time(), False
+                elif e["type"] == "button":
+                    held = time.time() - (self.button_down_at or time.time())
+                    self.button_down_at = None
+                    if not self.long_fired and held < self.LONG_PRESS:
+                        if self.mode in games.GAMES:
+                            self.mode_short = True          # launch / fire / restart
+                        else:
+                            self.palette = (self.palette + 1) % 6
                 elif e["type"] == "config" and "item" in e:
                     self.config[e["item"]] = [e["value"], e["min"], e["max"]]
                     v = e["value"]
@@ -995,7 +1039,23 @@ class LocalHost:
         with self.lock:
             fingers = dict(self.fingers)
             pal = self.palette
+            taps, self.taps = self.taps, []
+            short, self.mode_short = self.mode_short, False
+            if self.button_down_at and not self.long_fired and now - self.button_down_at >= self.LONG_PRESS:
+                self.long_fired = True              # easter egg: long Mode press = next game
+                ring = games.RING
+                self.mode = ring[(ring.index(self.mode) + 1) % len(ring)] if self.mode in ring else ring[1]
         px = []
+        if self.mode in games.GAMES:
+            if self.game_key != self.mode:
+                self.game, self.game_key = games.GAMES[self.mode](), self.mode
+                self.title_until = now + 0.8
+                taps, short = [], False
+            if now < self.title_until:              # the game's letter for a moment
+                return games.title(self.game.letter, games.hsv(pal / 6.0, 0.6, 1.0))
+            self.game.update(min(dt, 0.1), games.Input(fingers, taps, short))
+            return self.game.draw()
+        self.game_key = None
         if self.mode == "off":
             return [(0, 0, 0)] * (GRID * GRID)
         if self.mode == "test":

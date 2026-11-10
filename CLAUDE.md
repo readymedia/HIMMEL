@@ -150,6 +150,15 @@ The details are in the mockup (`docs/vj-mockup.html`).
           host loop, restores the block's value and waits for confirmation.
         - A leftover 127 from a killed run is treated as ours and restored
           to 64.
+    - **Games (easter eggs): `tools/lightpad_games.py`**, played by the owner on
+      the block. They are Rally (paddle duel, 2 players or vs Himmel), Brick
+      Burst and Star Swarm.
+      - Hold Mode ~1 s for the next game; a short press = launch / fire /
+        restart. The live view has buttons.
+      - Gotchas found:
+        - The packet counter must wrap 1023 -> 0.
+        - With our renderer the firmware sends no button messages, so the
+          renderer forwards them with sendMessageToHost (program event 0x28).
     - Next: the generic weapon driver/shared block (plan in
       `weapons/README.md`).
 - **Visual mapping is the way to work with the controller. Keep it and build on

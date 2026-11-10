@@ -132,6 +132,15 @@
       <button data-m="test">Test pattern</button>
       <button data-m="off">LEDs off</button>
     </div>
+    <div class="row seg" id="gGames">
+      <button data-m="rally">★ Rally</button>
+      <button data-m="brick">★ Brick Burst</button>
+      <button data-m="swarm">★ Star Swarm</button>
+    </div>
+    <div class="help">Games (easter eggs): on the block, <b>hold Mode ~1 s</b> for the next game; a short Mode
+      press launches, fires or restarts. <b>Rally:</b> a finger in the lower half moves the bottom paddle, one in
+      the upper half the top paddle (or Himmel plays it). <b>Brick Burst:</b> slide the paddle, press harder for a
+      wider one, tap to launch. <b>Star Swarm:</b> slide the ship, touch to fire (harder = faster).</div>
     <div class="row"><label><input type="checkbox" id="gHost" checked> Host plugged in (pings every 400 ms)</label></div>
     <div class="help">Unplug the host and the block drops back to MIDI mode (MPE) after 5 s without a ping,
       like the real one. The LEDs you see are decoded from the SysEx the host sent to the block.</div>
@@ -568,7 +577,7 @@ function startGeneric(wid) {
     es.onmessage = e => renderGeneric(JSON.parse(e.data));
     es.onerror = () => { const c = document.getElementById("conn"); c.textContent = "server not running"; c.className = "pill bad"; };
   }).catch(e => { document.getElementById("gStatus").textContent = "Could not load the weapon profile: " + e; });
-  document.querySelectorAll("#gLed button").forEach(b => b.onclick = () => gpost({ led_mode: b.dataset.m }));
+  document.querySelectorAll("#gLed button, #gGames button").forEach(b => b.onclick = () => gpost({ led_mode: b.dataset.m }));
   document.getElementById("gHost").onchange = e => gpost({ host_enabled: e.target.checked });
   document.getElementById("gNoise").onchange = e => gpost({ show_noise: e.target.checked });
   document.getElementById("gHw").onclick = () => gpost({ hardware: !(G && G.hardware) });
@@ -692,7 +701,7 @@ function renderGeneric(s) {
     }
   }
   const h = s.host || {};
-  document.querySelectorAll("#gLed button").forEach(b => b.classList.toggle("on", b.dataset.m === h.mode));
+  document.querySelectorAll("#gLed button, #gGames button").forEach(b => b.classList.toggle("on", b.dataset.m === h.mode));
   document.getElementById("gHost").checked = h.enabled !== false;
   document.getElementById("gHostInfo").textContent =
     `host: ${h.state || "-"}\nblock serial: ${h.serial || "-"}   battery: ${h.battery ?? "-"} / 31   ACKs: ${h.acks ?? 0}\n` +
