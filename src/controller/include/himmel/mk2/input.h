@@ -49,6 +49,9 @@ struct PadConfig {
     float gamma = 0.8f;
     int aftertouch_step = 16;  // send PadPressure when it moved this much
     uint32_t aftertouch_interval_us = 4000;
+    // After a release the pad rebounds: seen on the MK2 as a second, weak hit
+    // 2-9 ms after the release (2026-11-10). No new onset on that pad for this long.
+    uint32_t retrigger_holdoff_us = 25000;
 };
 
 // Velocity from the highest pressure in the window (spec 5.4).
@@ -69,6 +72,7 @@ private:
         int window_max = 0;
         int last_sent = 0;
         uint64_t t_last_sent = 0;
+        uint64_t t_release = 0;  // kept across hits (retrigger hold-off)
     };
     Map map_;
     PadConfig cfg_;

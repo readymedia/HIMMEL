@@ -154,6 +154,10 @@ parameter range (delta / 1000). While a knob turns, a report arrives every
   **The peak value is useless for velocity**: a soft hit that you then press
   through reaches the same peak (~2500) as a medium hit, only 80–280 ms later.
   What separates soft / medium / hard is how fast the pressure rises.
+- **Release rebound [seen on the MK2, 2026-11-10]**: right after a release the
+  pad can bounce back above the onset level for a few ms, which gave a second,
+  weak hit 2–9 ms later (e.g. vel 55 then 7). No new onset is accepted on the
+  same pad for **25 ms** after its release (`PadConfig::retrigger_holdoff_us`).
   Keep `window_ms = 4`, `full = 3300`, `gamma = 0.8` as settings (per show), so
   the feel can be tuned without code changes.
 - After the hit, `PadPressure` (aftertouch) carries the pressure, so a slow,

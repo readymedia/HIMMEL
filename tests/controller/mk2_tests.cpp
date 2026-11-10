@@ -9,6 +9,7 @@
 #include "himmel/mk2/input.h"
 #include "himmel/mk2/map.h"
 #include "himmel/mk2/output.h"
+#include "himmel/mk2/pages.h"
 #include "himmel/mk2/shared.h"
 
 using namespace himmel::mk2;
@@ -165,6 +166,21 @@ static void test_pads() {
         auto ev = run_curve(t, 2, c);
         CHECK(ev.empty());
     }
+    {  // release rebound (seen on the MK2): weak bump 2-9 ms after release -> no second hit
+        PadTracker t(default_map(), cfg);
+        std::vector<std::pair<double, int>> c;
+        for (double ms = 0; ms < 120; ms += 1.333) {
+            int p = 0;
+            if (ms < 40) p = 1500;                   // the real hit
+            else if (ms >= 45 && ms < 52) p = 400;   // rebound after the release at 40 ms
+            else if (ms >= 90 && ms < 110) p = 2000; // a real second hit 50 ms later
+            c.push_back({ms, p});
+        }
+        auto ev = run_curve(t, 6, c);
+        int hits = 0;
+        for (auto& e : ev) hits += e.type == EventType::PadHit;
+        CHECK(hits == 2);
+    }
     {  // the hit fires ~4 ms after onset, not later
         PadTracker t(default_map(), cfg);
         auto ev = run_curve(t, 1, ramp(2400, 2.0, 50));
@@ -246,6 +262,88 @@ static void test_ring_and_seqlock() {
     CHECK(b.buttons[3] == 77);
 }
 
+static void test_pages() {
+    std::printf("screen pages: knob columns, text, lists, dither, meters\n");
+    using namespace himmel::mk2::ui;
+    // Knob columns tile each screen without gaps and hold their knob centre.
+    for (int side = 0; side < 2; ++side) {
+        CHECK(kKnobColumn(side * 4).x0 == side * kScreenW);
+        CHECK(kKnobColumn(side * 4 + 3).x1 == (side + 1) * kScreenW);
+        for (int k = side * 4; k < side * 4 + 3; ++k) CHECK(kKnobColumn(k).x1 == kKnobColumn(k + 1).x0);
+    }
+    for (int k = 0; k < kKnobs; ++k) CHECK(kKnobColumn(k).x0 <= kKnobX[k] && kKnobX[k] < kKnobColumn(k).x1);
+    // The longest labels we use must fit their column (1 px margin, 0 at the edge).
+    for (int k = 0; k < kKnobs; ++k) {
+        const Column col = kKnobColumn(k);
+        const int w = col.width() - (col.x0 % kScreenW ? 1 : 0) - (col.x1 % kScreenW ? 1 : 0);
+        CHECK(text_width("RGB SPLIT") <= w || k % 4 == 0);  // knob 1 and 5 columns fit 8 characters
+        CHECK(text_width("FEEDBACK") <= w);
+    }
+    CHECK(text_width("A") == 5 && text_width("AB") == 11 && text_width("AB", 2) == 22);
+
+    Screen c;
+    text_in(c, 0, 30, 0, "ABCDEFGHIJ");  // 5 characters = 29 px fit, the 6th not
+    bool beyond = false;
+    for (int x = 30; x < 60; ++x)
+        for (int y = 0; y < 7; ++y) beyond |= c.get(x, y);
+    CHECK(!beyond);
+
+    // Header stays on its own screen.
+    c.clear();
+    Header h;
+    h.left.set("A VERY LONG DECK NAME THAT DOES NOT FIT AT ALL");
+    h.right.set("P1 CORE FX");
+    draw_header(c, 0, h, 1.0f);
+    bool spill = false;
+    for (int y = 0; y < kScreenH; ++y) spill |= c.get(kScreenW, y) || c.get(kScreenW + 5, y);
+    CHECK(!spill);
+    CHECK(c.get(0, 0) && c.get(255, 8));
+
+    // Lists keep the selection visible and centred where possible.
+    CHECK(list_first_row(4, 3) == 0);
+    CHECK(list_first_row(32, 0) == 0);
+    CHECK(list_first_row(32, 11) == 8);
+    CHECK(list_first_row(32, 31) == 32 - kListRows);
+    ListModel l;
+    l.count = 32;
+    l.selected = 11;
+    for (int i = 0; i < 32; ++i) l.items[i].set("ITEM");
+    c.clear();
+    draw_list(c, 1, l);
+    const int sel_y = kHeaderH + 1 + (11 - 8) * kRowH;
+    CHECK(c.get(kScreenW + 200, sel_y + 4) && !c.get(kScreenW + 200, sel_y + kRowH + 4));
+    CHECK(!c.get(200, sel_y + 4));  // left screen untouched
+
+    // Bayer dither: mid grey lights exactly half the pixels.
+    std::array<uint8_t, 16 * 16> grey;
+    grey.fill(128);
+    c.clear();
+    blit_dithered(c, 0, 0, 16, 16, grey.data(), 16);
+    int lit = 0;
+    for (int y = 0; y < 16; ++y)
+        for (int x = 0; x < 16; ++x) lit += c.get(x, y);
+    CHECK(lit == 128);
+
+    // Meter: half level fills half the inner width.
+    c.clear();
+    draw_meter_h(c, 0, 0, 104, 8, 0.5f);
+    int filled = 0;
+    for (int x = 2; x < 102; ++x) filled += c.get(x, 4);
+    CHECK(filled == 50);
+
+    // Touched knob column is inverted; others are not.
+    PerformModel pm;
+    pm.knobs[1].label.set("ZOOM");
+    pm.touched = 1;
+    draw_perform(c, pm);
+    CHECK(c.get(kKnobColumn(1).x0 + 1, 40));
+    CHECK(!c.get(kKnobColumn(2).x0 + 1, 40));
+
+    // Str never overflows.
+    Str<5> s("HELLO WORLD");
+    CHECK(s.view() == "HELL");
+}
+
 int main() {
     test_map_file_matches_default();
     test_bad_map_is_rejected();
@@ -255,6 +353,7 @@ int main() {
     test_led_reports();
     test_screen();
     test_ring_and_seqlock();
+    test_pages();
     std::printf("\n%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

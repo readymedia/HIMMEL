@@ -96,8 +96,8 @@ void PadTracker::process(const std::array<uint16_t, kPads>& by_hw_id, uint64_t t
         };
         switch (s.phase) {
             case Phase::Idle:
-                if (pr > floor + cfg_.onset) {
-                    s = {Phase::Window, t, pr, 0, 0};
+                if (pr > floor + cfg_.onset && (s.t_release == 0 || t - s.t_release >= cfg_.retrigger_holdoff_us)) {
+                    s = {Phase::Window, t, pr, 0, 0, s.t_release};
                 }
                 break;
             case Phase::Window:
@@ -106,6 +106,7 @@ void PadTracker::process(const std::array<uint16_t, kPads>& by_hw_id, uint64_t t
                     if (s.window_max >= floor + cfg_.confirm) {
                         hit();
                         out.push({t, EventType::PadRelease, id, 0, 0, 0});
+                        s.t_release = t;
                     }
                     s.phase = Phase::Idle;
                 } else if (t - s.t_onset >= cfg_.window_us) {
@@ -121,6 +122,7 @@ void PadTracker::process(const std::array<uint16_t, kPads>& by_hw_id, uint64_t t
                 if (released) {
                     out.push({t, EventType::PadRelease, id, 0, 0, 0});
                     s.phase = Phase::Idle;
+                    s.t_release = t;
                 } else if (std::abs(pr - s.last_sent) >= cfg_.aftertouch_step &&
                            t - s.t_last_sent >= cfg_.aftertouch_interval_us) {
                     out.push({t, EventType::PadPressure, id, static_cast<int16_t>(pr), static_cast<uint16_t>(pr), 0});

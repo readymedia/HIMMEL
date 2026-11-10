@@ -178,9 +178,18 @@ The details are in the mockup (`docs/vj-mockup.html`).
      `cmake --build build --config Release`; run `build\bin\Release\mk2_tests.exe`.
      hidapi 0.14.0 and nlohmann/json 3.11.3 come via FetchContent.
    - Close MK2 Live before running `mk2_controller` (both open the device).
-3. **Screen driver for the 1-bit displays**: the protocol and format are proven
-   (`tools/mk2_screens.py`). Still to do: the real page layouts (aligned to the
-   knob positions), meters, dithered images, and the C++ port in the controller.
+3. ~~Screen pages for the 1-bit displays.~~ **Done 2026-11-10, checked on the MK2.**
+   - `src/controller/include/himmel/mk2/pages.h` + `src/pages.cpp`: pure drawing
+     (no Windows, no heap) of small model structs onto a 512x64 canvas:
+     Perform (8 knob slots over the physical knobs, `kKnobX` / `kKnobColumn`),
+     list (browser, system menu), detail with dithered thumbnail, audio meters +
+     spectrum, big message, knob-align calibration page.
+   - Label room: knobs 1 and 5 fit 8 characters, the others 9+.
+   - `mk2_pages_check.exe` renders every page to PNG in `tools/_screens/cpp`
+     (no hardware); `mk2_pages_demo.exe` drives the pages live from the MK2
+     (stand-in for the engine; run `mk2_controller.exe` first).
+   - The app renders pages and writes the screens via the shared block; the
+     controller only sends strips that changed.
 4. **Engine skeleton**:
    - the supervisor starts the render process;
    - the render process opens 1–N outputs;

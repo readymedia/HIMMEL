@@ -2,6 +2,7 @@
 // small 1-bit canvas with the 5x7 font (port of tools/mk2_screens.py).
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <string_view>
@@ -68,6 +69,15 @@ struct Canvas {
         fill(x, y + h - 1, w, 1, on);
         fill(x, y, 1, h, on);
         fill(x + w - 1, y, 1, h, on);
+    }
+    void invert(int x, int y, int w, int h) {
+        for (int yy = std::max(y, 0); yy < std::min(y + h, H); ++yy)
+            for (int xx = std::max(x, 0); xx < std::min(x + w, W); ++xx)
+                buf[yy * (W / 8) + (xx >> 3)] ^= static_cast<uint8_t>(0x80 >> (xx & 7));
+    }
+    bool get(int x, int y) const {
+        if (x < 0 || y < 0 || x >= W || y >= H) return false;
+        return (buf[y * (W / 8) + (x >> 3)] >> (7 - (x & 7))) & 1;
     }
     int text(int x, int y, std::string_view s, bool on = true, int scale = 1);
     // Split a 512-wide canvas into the two screens.
