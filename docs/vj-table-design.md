@@ -476,7 +476,11 @@ content and layout, not production code).
   item presets and ready-made tables. Drop an item near a cable and it is
   patched into it (auto-cabling).
 - **Top bar**: patch revision, GPU total vs budget, master clock, PANIC.
-- In ImGui: one canvas child window with its own pan / zoom; items drawn with
+- **First in the browser** (decided 2026-11-10): a page in the live view
+  (`tools/mk2_live.py`), which already draws weapons from their profiles,
+  runs the simulators and talks to the engine over UDP. The mockup is its
+  starting point.
+- Later in ImGui: one canvas child window with its own pan / zoom; items drawn with
   `ImDrawList` from their profiles; cables with `AddBezierCubic`; thumbnails
   from the shared atlas as `ImTextureID`s.
 
@@ -533,7 +537,7 @@ V-4 classic table played from the MK2.
 **M2: the table view.** First as a page in the existing browser live view
 (`tools/mk2_live.py` already draws the weapons from their profiles and talks
 to the engine), so the owner can lay out and patch a table early; then the
-same in the Dear ImGui GUI. **[owner]** for the browser-first step.
+same in the Dear ImGui GUI. **Decided (owner, 2026-11-10): browser first.**
 **M3:** all V-4 effects and transitions, the simulated and the real V-4
 playing the V-4 box, monitors, room view with keystone. **M4:** groups, item
 presets, Smart Random over parameters, ISF pedals.
@@ -550,7 +554,8 @@ presets, Smart Random over parameters, ISF pedals.
    (a GUI crash never changes the show).
 3. **No DLL plug-ins in the renderer**; user effects are ISF pedals.
 4. **RGBA8 by default**, 16-bit float only where an item asks.
-5. **Browser table view first** (in the live view), ImGui later.
+5. ~~Browser table view first~~ **Decided 2026-11-10: yes, browser first**
+   (in the live view), Dear ImGui later.
 6. **Names and format**: "table" / "item" / "pedal" / "Himmel strip",
    `himmel-table/1`, items drawn as "HIMMEL · V4". The format becomes public
    (MIT, open repo), so changing it later means migrations.
