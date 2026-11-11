@@ -17,9 +17,16 @@ flowchart LR
     CLIPS[("HAP clips<br/>media/")]
     SHM1[/"Local\HimmelMk2<br/>events, LEDs, screens"/]
     SHM2[/"Local\HimmelEngine<br/>heartbeat, stats"/]
+    WPN["weapon_blocks.exe / weapon_nuvj.exe<br/>one per weapon"]
+    DEV(("Lightpad, LUMI, NuVJ<br/>USB-MIDI"))
+    SHM3[/"Local\HimmelWeapon&lt;N&gt;<br/>events, LEDs, pixels, display"/]
 
     SUP -- "start, restart,<br/>kill if hung" --> CTL
     SUP -- "start, restart,<br/>kill if hung" --> REN
+    SUP -- "start, restart,<br/>kill if hung" --> WPN
+    WPN <--> DEV
+    WPN <--> SHM3
+    REN <--> SHM3
     CTL <--> MK2
     CTL <--> SHM1
     REN <--> SHM1
@@ -35,7 +42,8 @@ flowchart LR
 |---|---|---|
 | `himmel.exe` | Starts the others in a job object, watches their heartbeats, restarts them (0.25 s, doubling to 10 s if they keep dying), kills one that has been silent for 2 s, logs everything. | The job object closes all children; start it again. (Run it from a service or a watchdog for unattended installs.) |
 | `mk2_controller.exe` | Owns the MK2: reads it at ~750 Hz, publishes events, sends LEDs and screens, reconnects when the cable is pulled. | The renderer keeps playing; it shows "MK2 OFF" and picks the controller up again when it is back (~0.3 s). |
-| `himmel_render.exe` | Outputs, canvas, test card, clips, camera, MK2 control. | The supervisor restarts it within a second. |
+| `weapon_blocks.exe lightpad\|lumi`, `weapon_nuvj.exe` | One per weapon (`weapons/README.md`): owns the device over WinMM, publishes events, sends LEDs / pixels / LCD, reconnects. Lets go of the device (settings back, LEDs off) on Ctrl+C or the supervisor's stop request. | The renderer keeps playing and picks the weapon up again. |
+| `himmel_render.exe` | Outputs, canvas, test card, clips, camera, MK2 and weapon control. | The supervisor restarts it within a second. |
 | Later: GUI, workers, bridges | Operator GUI (Dear ImGui), import/analysis workers, sync bridges (Ableton Link, Pro DJ Link). | Same rule: the output keeps going. |
 
 ## Shared memory
@@ -53,6 +61,17 @@ can open them; a restarted process re-opens the same block and carries on.
 - **LED state** and the **two 256×64 screens** behind seqlocks: the app writes
   whole states, the controller sends only what changed.
 - **Status**: connected, heartbeat, counters, last message.
+
+**`Local\HimmelWeapon<N>`** (`src/controller/include/himmel/weapon/shared.h`), one
+per weapon slot (default slot = the weapon's number):
+
+- The same rings (16-byte events; new types TouchStart/Move/End, Fader, Switch)
+  and seqlock outputs as the MK2 block, plus a **header** naming the weapon, its
+  profile and what each control does (role, knob slot, pad numbers), so the
+  renderer needs no weapon-specific code.
+- Outputs: LED levels per control, RGB pixels (Lightpad 15 × 15, LUMI 24), a
+  segment-display model (NuVJ LCD).
+- Status: connected, heartbeat, counters, battery, ACK timing, stop request.
 
 **`Local\HimmelEngine`** (`src/engine/include/himmel/engine/engine_shared.h`):
 heartbeat, fps, frame times, late frames, input → present latency, stop request.
@@ -115,6 +134,15 @@ flowchart LR
   re-trigger hold-off against release rebound.
 - Knobs and the encoder are absolute and wrap; the controller turns them into deltas.
 
+## Inside a weapon driver
+
+One thread: read MIDI (WinMM callback → queue, or UDP for `--sim`), decode,
+publish events, and at least every millisecond run the timers. For BLOCKS the
+ping is checked before any LED packet, so it never waits behind LED traffic;
+LED frames go as `sharedDataChange` diffs only after the last frame is ACKed.
+The run loop (`driver.h`) reopens the device when the port disappears or the
+simulator goes quiet.
+
 ## Rendering
 
 - Direct3D 11, one **flip-model swap chain per output** with the waitable
@@ -132,10 +160,13 @@ flowchart LR
 src/controller/   himmel_mk2 library: map, input parsing + pad tracker, LED/screen reports,
                   shared memory, controller threads, screen pages (pages.h)
                   app/: mk2_controller, mk2_monitor, mk2_pages_demo, mk2_pages_check
+                  himmel_weapon library (src/weapon/): weapon shared block, MIDI links,
+                  driver run loop, BLOCKS codec + session, NuVJ codec + session
+                  app/: weapon_blocks, weapon_nuvj, weapon_monitor
 src/media/        himmel_media: MOV reader, HAP decoder; tools/hap_probe
 src/engine/       engine_shared (status block), clip_player, camera_capture,
                   render/ (himmel_render + shaders), supervisor/ (himmel)
-tests/            controller/mk2_tests.cpp, media/media_tests.cpp
+tests/            controller/mk2_tests.cpp, controller/weapon_tests.cpp, media/media_tests.cpp
 tools/            Python: MK2 live view + mapper, screen prototypes and fun modes, measurements
 ```
 

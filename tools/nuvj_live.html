@@ -668,6 +668,11 @@ function render(s) {
     for (const id of ["alpha", "bpm", "preset", "last", "data"]) if (!has(id)) wired[id] = id === "last" || id === "data" ? null : "";
     wired.lit = (wired.lit || []).filter(has);
   }
+  if (s.engine && !s.seg_hunt) {   // Himmel's engine drives the NuVJ: draw the segments it really sent
+    const seg = (lw0.segs || "").match(/../g)?.map(x => parseInt(x, 16)) || [];
+    const keys = Object.entries(s.lcd_segments || {}).filter(([, v]) => v.length && v.every(b => (seg[b[0]] || 0) & b[1])).map(([k]) => k);
+    wired = { text: lw0.text, keys };
+  }
   if (s.seg_hunt) {   // the hunt: its text row, and whatever this bit (or byte) is already saved as
     const h = s.seg_hunt, saved = Object.entries(s.lcd_segments || {})
       .filter(([k, v]) => v.some(b => b[0] === h.byte && (h.whole || b[1] === (1 << h.bit)))).map(([k]) => k);

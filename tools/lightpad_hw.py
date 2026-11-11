@@ -11,7 +11,7 @@ and the LocalHost handshake run unchanged on top of it.
 
 The LocalHost on top of it (lightpad_sim.py) does the handshake, wipes the
 block's program memory, uploads Himmel's own LED renderer (lightpad_littlefoot.py,
-93 bytes) and then streams LED frames. Checked on the owner's Lightpad M
+117 bytes) and then streams LED frames. Checked on the owner's Lightpad M
 (2026-11-10): the test pattern shows correctly, about 55-58 full frames per
 second, ~12 ms per frame from send to ACK. The program lives in RAM only:
 endAPIMode (sent when you stop) brings the factory display back (checked); a

@@ -48,6 +48,13 @@ enum class EventType : uint8_t {
     PadRelease,    // id = pad 1..16
     Connected,
     Disconnected,
+    // Added for the other weapons (Local\HimmelWeapon<N>, himmel/weapon/shared.h).
+    // The MK2 never sends these; the values above never change.
+    TouchStart,    // id = finger 0..31, value = x 0..4095, raw = y 0..4095, reserved = z | strike << 8
+    TouchMove,     // same fields
+    TouchEnd,      // id = finger, value / raw = last x / y
+    Fader,         // id = control index (profile), value = 0..16383
+    Switch,        // id = control index (profile), value = position 0..n-1
 };
 
 // 16 bytes, trivially copyable: lives in shared-memory rings.

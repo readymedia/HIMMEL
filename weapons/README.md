@@ -20,9 +20,9 @@ A weapon has up to four parts:
 | No. | Weapon | Kind | Profile | Simulator | Status |
 |---|---|---|---|---|---|
 | 1 | **MK2** (Maschine MK2) | USB HID: 16 pads, 8 knobs, encoder, 48 buttons, two 1-bit screens | [`mk2.weapon.json`](mk2.weapon.json) | [`tools/mk2_sim.py`](../tools/mk2_sim.py) | Map verified on hardware, C++ driver done |
-| 3 | **LUMI Keys** (ROLI LUMI Keys) | USB-MIDI, BLOCKS family: 24 keys with strike velocity, pressure and glide, one RGB LED per key, Mode / Octave − / Octave + | [`lumi.weapon.json`](lumi.weapon.json) | [`tools/lumi_sim.py`](../tools/lumi_sim.py) | Simulated, and checked on the owner's LUMI (firmware 1.3.8, 2026-11-10): keys, velocity, buttons, **Himmel's own key LEDs** |
-| 2 | **Lightpad** (ROLI Lightpad Block / Block M) | USB-MIDI: multi-touch surface (x, y, pressure per finger), 15 × 15 RGB LEDs, one Mode button | [`lightpad.weapon.json`](lightpad.weapon.json) | [`tools/lightpad_sim.py`](../tools/lightpad_sim.py) | Simulated, and played on the owner's Lightpad M (2026-11-10): touch, multi-touch, Mode button, orientation, factory note map, **and Himmel's own LED program** (~55 frames/s) |
-| 5 | **NuVJ** (Numark NuVJ, 2008) | USB-MIDI: 2 × 9 pads, 2 jog wheels, 2 speed faders, crossfader, 12 knobs, 2 push BANK encoders, 31 LEDs, front switches, blue segment LCD (feedback by SysEx) | [`nuvj.weapon.json`](nuvj.weapon.json) | [`tools/nuvj_sim.py`](../tools/nuvj_sim.py) | **Checked on the owner's unit (2026-11-11)**: map of all 53 controls verified, 31 LEDs, LCD text and the whole segment map (camera mapper); protocol in [`docs/nuvj-protocol.md`](../docs/nuvj-protocol.md) |
+| 3 | **LUMI Keys** (ROLI LUMI Keys) | USB-MIDI, BLOCKS family: 24 keys with strike velocity, pressure and glide, one RGB LED per key, Mode / Octave − / Octave + | [`lumi.weapon.json`](lumi.weapon.json) | [`tools/lumi_sim.py`](../tools/lumi_sim.py) | Simulated, and checked on the owner's LUMI (firmware 1.3.8, 2026-11-10): keys, velocity, buttons, **Himmel's own key LEDs**. C++ driver `weapon_blocks.exe lumi` (checked with the simulator) |
+| 2 | **Lightpad** (ROLI Lightpad Block / Block M) | USB-MIDI: multi-touch surface (x, y, pressure per finger), 15 × 15 RGB LEDs, one Mode button | [`lightpad.weapon.json`](lightpad.weapon.json) | [`tools/lightpad_sim.py`](../tools/lightpad_sim.py) | Simulated, and played on the owner's Lightpad M (2026-11-10): touch, multi-touch, Mode button, orientation, factory note map, **and Himmel's own LED program** (~55 frames/s). C++ driver `weapon_blocks.exe lightpad` (checked with the simulator) |
+| 5 | **NuVJ** (Numark NuVJ, 2008) | USB-MIDI: 2 × 9 pads, 2 jog wheels, 2 speed faders, crossfader, 12 knobs, 2 push BANK encoders, 31 LEDs, front switches, blue segment LCD (feedback by SysEx) | [`nuvj.weapon.json`](nuvj.weapon.json) | [`tools/nuvj_sim.py`](../tools/nuvj_sim.py) | **Checked on the owner's unit (2026-11-11)**: map of all 53 controls verified, 31 LEDs, LCD text and the whole segment map (camera mapper); protocol in [`docs/nuvj-protocol.md`](../docs/nuvj-protocol.md). C++ driver `weapon_nuvj.exe` (checked with the simulator) |
 
 ## The live view: one tool for every weapon
 
@@ -118,6 +118,11 @@ Himmel"). Everything between the reports and the engine is the code that runs
 with the real MK2. Stop simulating and the controller reports the MK2 lost
 after 1 s; the engine keeps running, as with a pulled cable.
 
+`himmel.exe --sim` also starts the Lightpad, LUMI and NuVJ drivers in sim mode.
+Open their live views (`--weapon lightpad` / `lumi` / `nuvj`, each on its own
+port) and they play the engine too; see
+[How a generic weapon feeds Himmel](#how-a-generic-weapon-feeds-himmel-wired-2026-11-11).
+
 ## Weapon no. 2: the Lightpad (simulated)
 
 The owner chose the Lightpad Block on 2026-11-10. He owns one, so it can be
@@ -168,7 +173,7 @@ The facts below come from ROLI's `roli_blocks_basics` (ISC license).
 - **LEDs:** 15 × 15 pixels as RGB565 in the block's shared data. A tiny
   LittleFoot program running on the block draws them (ROLI's
   `BitmapLEDProgram`).
-  - Himmel uploads its own 93-byte renderer, assembled by
+  - Himmel uploads its own 117-byte renderer (121 for the LUMI), assembled by
     `tools/lightpad_littlefoot.py` (no LittleFoot compiler needed). The
     pixel heap then sits right after the program.
   - The simulator runs the uploaded bytecode in a small Python VM, so it shows
@@ -532,8 +537,9 @@ names. It runs on its own, or next to the controller view.
 
 ### NuVJ events in Himmel's event model
 
-The NuVJ uses the generic weapon plan below: one driver process (WinMM), a
-shared block, and the same 16-byte `Event`. `id` = the control's index in the
+The NuVJ uses the generic weapon driver below (`weapon_nuvj.exe`): one driver
+process (WinMM), a shared block, and the same 16-byte `Event`. The simulated
+NuVJ talks to it over UDP 127.0.0.1:8774. `id` = the control's index in the
 profile.
 
 | NuVJ input | Himmel event | Notes |
@@ -633,46 +639,163 @@ They are in `tools/nuvj_games.py` (`INTROS`).
 - **Skip.** Any button ends the show.
 - **Without hardware.** `python tools/nuvj_games.py` also checks the shows.
 
-## Plan: how a generic weapon feeds Himmel (not wired yet)
+## How a generic weapon feeds Himmel (wired 2026-11-11)
 
-Today `mk2_controller.exe` owns `Local\HimmelMk2`:
-- event rings of 16-byte `Event`s (`src/controller/include/himmel/mk2/types.h`);
-- seqlock LED/screen outputs;
-- a status block.
+The Lightpad, the LUMI Keys and the NuVJ feed the C++ engine the same way the
+MK2 does: a driver process per weapon kind, a shared block per weapon, and the
+same 16-byte `Event`. The MK2 path is unchanged.
 
-Proposal for weapon no. 2 and later:
+```
+build\bin\Release\himmel.exe --sim -- --size 640x360          MK2 + Lightpad + LUMI + NuVJ, all simulated
+build\bin\Release\himmel.exe --weapons nuvj                   real hardware, only the NuVJ driver
+build\bin\Release\weapon_blocks.exe lightpad|lumi [--sim]     one driver on its own
+build\bin\Release\weapon_nuvj.exe [--sim]
+build\bin\Release\weapon_monitor.exe [--slot N] [--echo]      prints the events by control name
+build\bin\Release\weapon_monitor.exe --stop N                 asks a driver to let go and exit
+build\bin\Release\weapon_tests.exe                            codecs + shared block, no hardware
+```
 
-1. **One driver process per weapon kind.** It follows the same rules as the
-   MK2 controller: its own process, a heartbeat, reconnect, and `--sim` over
-   UDP. For the Lightpad that is `weapon_blocks.exe`:
-   - WinMM, which is part of Windows, so no new dependency;
-   - the sim link on port 8767.
-2. **One shared block per weapon slot**, `Local\HimmelWeapon<N>`.
-   - Same layout as `HimmelMk2`, so the engine reads every weapon the same way.
-   - Plus a header naming the weapon id and its profile.
-   - The MK2 stays as it is.
-3. **Events:** keep the 16-byte `Event` and add types. Nothing existing changes.
+### The pieces
 
-   | Device input | Event | Fields |
-   |---|---|---|
-   | Mode button (and any MIDI note/CC button) | `ButtonDown` / `ButtonUp` | `id` = control index from the profile |
-   | Touch start | new `TouchStart` | `id` = finger 0..31, `value` = x 0..4095, `raw` = y 0..4095, `reserved` = z (low byte) + strike velocity (high byte) |
-   | Touch move | new `TouchMove` | same fields |
-   | Touch end | new `TouchEnd` | `id` = finger |
-   | The same touch, seen as a pad | `PadHit` / `PadPressure` / `PadRelease` | The driver can also split the surface into zones (e.g. 4 × 4 = 16 "pads", velocity from the strike, pressure from z), so the engine's pad pages work unchanged. |
-   | MIDI CC (knob or fader on generic MIDI weapons) | `KnobDelta` | an absolute CC turned into a delta, like the MK2 knobs |
-   | Port appears / goes / API mode lost | `Connected` / `Disconnected` | |
+| Piece | Where | What |
+|---|---|---|
+| Shared block | `src/controller/include/himmel/weapon/shared.h` | `Local\HimmelWeapon<N>`. Same parts as `Local\HimmelMk2`: status, seqlock outputs, 4 event rings (ring 0 = the engine). Plus a **header**: weapon id, name, profile path, what it can do (`caps`), and per control a **role** and **knob slot** for the engine skeleton, and pad number → control. |
+| MIDI link | `himmel/weapon/midi.h` | WinMM (part of Windows, so no new dependency; SysEx that arrives in pieces is joined) or UDP for `--sim`. |
+| Run loop | `himmel/weapon/driver.h` | Open, run a session, heartbeat every loop, reopen when the port goes (checked every second) or the simulator stops sending. Stops on Ctrl+C or on `status.stop_request` (the supervisor sets it, so it also works without a console), and first lets go of the device. |
+| BLOCKS | `himmel/weapon/blocks.h`, `blocks_session.h` | Port of `lightpad_sim.py`, `lightpad_littlefoot.py` and `lumi_sim.py`: the codec, the `sharedDataChange` diff, HeapSync (cumulative ACKs, resend after 250 ms, the counter wraps 1023 → 0), the LittleFoot renderers (117 bytes for the Lightpad, 121 for the LUMI) and the session. |
+| NuVJ | `himmel/weapon/nuvj.h` | Port of `nuvj_sim.py`: feedback SysEx (`60`, `01`, `02`, `03`; `7B` is refused), the map and decoder, the LED bits, the LCD model → segment memory from `nuvj_map.json`. |
+| Drivers | `src/controller/app/weapon_*_main.cpp` | `weapon_blocks.exe lightpad\|lumi`, `weapon_nuvj.exe`, `weapon_monitor.exe`. |
 
-4. **Output.**
-   - The engine writes a whole LED frame (Lightpad: 225 RGB) into the seqlock
-     output.
-   - The driver diffs it into `sharedDataChange` packets.
-   - It keeps at most ~200 bytes waiting for ACKs, as ROLI's own host does, and
-     resends lost packets.
-   - Pings run on their own 400 ms timer, never behind LED traffic.
-5. **Hardware steps first** (with the owner):
-   - a small Python probe over WinMM (ctypes, no new dependency). It opens the
-     block, enters API mode, logs raw touches/buttons in the live view and
-     checks the x/y orientation;
-   - then the LittleFoot renderer upload for the LEDs;
-   - then a verified map.
+- **Slots.** By default the slot is the weapon's number (2 Lightpad, 3 LUMI,
+  5 NuVJ; up to 16). `--slot N` moves one.
+- **Supervisor.** It starts all three drivers unless told otherwise
+  (`--weapons LIST`, `--no-weapons`). A driver whose device is not plugged in
+  just waits for it.
+- **Sim links** (UDP 127.0.0.1): MK2 8766, Lightpad 8767, LUMI 8769,
+  **NuVJ 8774**.
+  - The Python simulators send every device message as one datagram there and
+    treat what comes back as MIDI from the host.
+  - While the engine talks, the live view's own host stays quiet and the
+    drawing shows what the engine sent.
+  - The simulated NuVJ also sends active sensing (`FE`) every 300 ms, so the
+    driver finds it before any control is touched.
+
+### Events
+
+`id` = the control's index in the profile (`weapons/<id>.weapon.json`,
+"controls" order), except for pads and touches.
+
+| Device input | Event | Fields |
+|---|---|---|
+| Button, push (all weapons) | `ButtonDown` / `ButtonUp` | `id` = control |
+| Lightpad touch | `TouchStart` / `TouchMove` / `TouchEnd` (new) | `id` = finger, `value` = x 0..4095, `raw` = y 0..4095 (0 = top, USB-C away from you), `reserved` = z \| strike vz << 8 |
+| Lightpad touch as a pad | `PadHit` / `PadPressure` / `PadRelease` | The surface as 4 × 4 zones, `id` = 1..16 (Pad 1 bottom-left). Velocity: see below. Pressure = z × 16. |
+| LUMI key | `PadHit` / `PadPressure` / `PadRelease` | `id` = key 1..24, velocity from the MPE note on, pressure = channel pressure × 32, `reserved` = control |
+| NuVJ pad | `PadHit` / `PadRelease` | `id` = A pads 1..9, B pads 10..18 (the number on the plate), `reserved` = control |
+| NuVJ endless knob (PMTR, FX LEVEL, ...) | `KnobDelta` | `value` in MK2 knob units (1000 = the whole range; one tick = ±16), `raw` = Himmel's 0..127 value |
+| NuVJ absolute knob (AUTO FADE SPEED) | `KnobDelta` | the delta in the same units, `raw` = 0..127 |
+| NuVJ BANK, MASTER FX select, jog | `EncoderDelta` | `value` = ticks, + = clockwise |
+| NuVJ faders, crossfader | `Fader` (new) | `value` 0..16383 (pitch bend; before init CC × 16383 / 127) |
+| NuVJ FADER MODE, FADER START | `Switch` (new) | `value` = position |
+| Device found / lost | `Connected` / `Disconnected` | |
+
+**Lightpad velocity** (measured on the owner's block, 2026-11-11). With
+pressure sensitivity 127, z rises over ~100 ms, so a soft touch starts at
+z = 0 and half of the hits came out at velocity 1. Now:
+- a first z of 48 or more (a firm strike) hits at once;
+- otherwise the hit waits for the next touch message (~28 ms later, at most
+  35 ms) and uses the highest z;
+- velocity = √(z / 255) × 127.
+On the block this gave velocities spread over 1..127.
+
+The LUMI's Octave buttons are plain buttons: Himmel does not change the
+octave, so key 1 is always the left key. Glide (pitch bend) and the LUMI's
+per-key BLOCKS touches are not used yet.
+
+### Outputs
+
+The engine writes whole states (one writer, seqlocks); the driver sends only
+what changed.
+
+- **`led[128]`**: levels 0..127 by control (NuVJ: on at 32 or more).
+- **`pixel[256][3]`**: RGB 0..255.
+  - Lightpad: 15 × 15 from the top-left. LUMI: one per key.
+  - The driver turns them into RGB565 heap bytes for Himmel's renderer.
+- **`display`**: a model of a small segment display (the NuVJ LCD).
+  - Dot-matrix text, 16-segment text, two digit groups (BPM "188", PRESET),
+    two 7-step wedges, and words / boxes as `nuvj::Mark` bits.
+  - `raw_mode` sends 64 raw bytes instead.
+- **Before the engine writes**, the driver shows something quiet of its own:
+  - BLOCKS: dim Himmel blue with the fingers / pressed keys;
+  - NuVJ: LEDs that follow the buttons, " HIMMEL " and "HIMMEL VJ" on the LCD.
+
+**BLOCKS timing**
+- Pings every 400 ms on their own timer, checked before any LED packet.
+- A new LED frame at most every 15 ms, and only when the last one is ACKed.
+- No SysEx from the block for 3 s: handshake again.
+- On let go: every config value Himmel changed is put back (pressure
+  sensitivity 13: 127 → the block's own value), waiting for the block to
+  confirm it; then `endAPIMode`.
+
+**NuVJ timing**
+- Init (`60`) on every connect.
+- LEDs, text and segments at ~30 Hz when they change, and all of it every 2 s.
+- On let go: LEDs off, LCD blank with "NuVJ" on the text row.
+- The start-up light shows of `nuvj_games.py` are not in the C++ driver yet.
+
+### What the engine skeleton does with them
+
+`himmel_render.exe` reads ring 0 of every slot it finds (checked every second).
+It uses only the header, so it knows no weapon by name.
+
+| Role | Lightpad | LUMI | NuVJ | Engine |
+|---|---|---|---|---|
+| knob slots 0..7 | | | A PMTR1, A PMTR2, A SPEED, B SPEED, B PMTR1, B PMTR2, FX LEVEL, crossfader (= master) | the 8 MK2 knob slots of the current page (faders set them absolutely) |
+| pads | 4 × 4 zones | 24 keys | 18 pads | flash the test card's 16 cells (pad n → cell (n-1) % 16); clip page: jump |
+| page next | Mode | Mode | MASTER FX | test card → clip → camera |
+| browse | | Octave − / + | BANK A / B, MASTER FX select | previous / next clip |
+| play | | | BPM TAP | pause / play the clip |
+| restart | | | BANK push | clip to the start |
+| mirror | | | INSTA BLACK | span / mirror (for now) |
+
+Back to the weapons:
+- pads, keys and zones flash with the pad fade;
+- the page / play / mirror LEDs show the state;
+- the Lightpad and the LUMI show the knob-1 hue, brighter per page;
+- the NuVJ LCD shows the page name, the clip name, the fps in "188", the page
+  under PRESET and the last turned knob in the LAST wedge.
+
+### Checked
+
+- **`weapon_tests.exe`: 122 checks.**
+  - Every codec byte for byte against the Python reference: pings, config,
+    both renderers, `sharedDataChange` packets including the 1023 → 0 wrap,
+    device messages, NuVJ feedback, LED bits, the segment memory from the
+    verified map, every NuVJ control kind.
+  - HeapSync, SysEx joining, and the shared block (events, seqlock outputs, a
+    restarted driver keeps the engine's outputs and rings).
+- **With the Python simulators (2026-11-11)**, all three drivers under
+  `himmel.exe --sim`:
+  - touches, keys, pads, knobs, jog, faders, switches and buttons reach the
+    renderer (input → present ~10 ms);
+  - pixels, LEDs and the LCD come back;
+  - a restarted simulator is found again;
+  - let go restores config 13 (confirmed by the block) and ends API mode.
+- **On the owner's hardware (2026-11-11): Lightpad M and NuVJ.**
+  - Lightpad (`weapon_blocks.exe lightpad`, then under `himmel.exe`): serial,
+    battery, renderer upload, touch, two fingers, Mode (as our program
+    event), the idle picture and the engine's pad flashes on the block.
+    920 LED frames, 0 resends, ~11 ms send → ACK. Let go: config 13 back to
+    64, confirmed, factory display back.
+  - NuVJ (`weapon_nuvj.exe`, then under `himmel.exe`): every control kind
+    (pads, buttons, PMTR, BANK, jogs, speed faders, crossfader, FADER MODE),
+    LEDs and the LCD text and 16-segment row.
+  - Engine: input → present 7–12 ms for both.
+  - **Two hosts on one NuVJ.** WinMM let a second program (an old NuVJ Live
+    with "drive" on) open the same NuVJ, and the two fought over the LEDs
+    (blinking LATCH / AUTO / SYNC, BPM TAP on the old host's beat). Close
+    NuVJ Live, or switch it to simulated, before Himmel runs.
+  - **The NuVJ draws the LAST / DATA wedges itself** when a speed fader or a
+    jog moves (LAST), and both wedges for the crossfader. Himmel's segment
+    memory paints over that on its next change or 2-second refresh.
+  - The LUMI was not plugged in: checked with the simulator only.
