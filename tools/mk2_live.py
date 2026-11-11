@@ -659,17 +659,24 @@ def _make_apc20(profile):
     return apc20_sim.Apc20Live(profile)
 
 
-GENERIC = {"lightpad": _make_lightpad, "lumi": _make_lumi, "apc20": _make_apc20}
+def _make_nuvj(profile):
+    import nuvj_sim
+    return nuvj_sim.NuvjLive(profile)
 
 
-def weapon_page(wid):
-    """A weapon whose profile names its own page ("page": "x.html" in tools/) gets that page at /."""
+GENERIC = {"lightpad": _make_lightpad, "lumi": _make_lumi, "nuvj": _make_nuvj, "apc20": _make_apc20}
+
+
+def weapon_page(wid, view=None):
+    """A weapon whose profile names its own page ("page": "x.html" in tools/) gets that page at /.
+    Extra views: "views": {"classic": "y.html"} -> /?weapon=id&view=classic."""
     p = weapon_path(wid) if wid and wid != "mk2" else None
     if p is None:
         return None
     try:
         with open(p, encoding="utf-8") as f:
-            page = json.load(f).get("page")
+            prof = json.load(f)
+            page = (prof.get("views") or {}).get(view) if view else prof.get("page")
     except (OSError, ValueError):
         return None
     if page and os.path.basename(page) == page and os.path.exists(os.path.join(HERE, page)):
@@ -757,8 +764,9 @@ class Handler(BaseHTTPRequestHandler):
             except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
                 return
         elif u.path in ("/", "/index.html") and weapon_page(
-                (parse_qs(u.query).get("weapon") or [DEFAULT_WEAPON])[0]):
-            with open(weapon_page((parse_qs(u.query).get("weapon") or [DEFAULT_WEAPON])[0]), "rb") as f:
+                (parse_qs(u.query).get("weapon") or [DEFAULT_WEAPON])[0], (parse_qs(u.query).get("view") or [None])[0]):
+            with open(weapon_page((parse_qs(u.query).get("weapon") or [DEFAULT_WEAPON])[0],
+                                  (parse_qs(u.query).get("view") or [None])[0]), "rb") as f:
                 body = f.read()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")

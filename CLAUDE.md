@@ -134,7 +134,7 @@ The details are in the mockup (`docs/vj-mockup.html`).
         which the factory program keeps sending in API mode;
       - factory layout 4x4 pads, notes 36..51 from the bottom-left.
     - **Himmel drives the Lightpad LEDs (checked 2026-11-10).**
-      `tools/lightpad_littlefoot.py` hand-assembles a 93-byte LittleFoot
+      `tools/lightpad_littlefoot.py` hand-assembles a 117-byte LittleFoot (121 for the LUMI)
       renderer (15x15 RGB565 heap -> fillPixel). It has its own MiniVM that
       the simulator runs.
       - LocalHost: wipe the program memory, upload, stream frames through
@@ -159,8 +159,7 @@ The details are in the mockup (`docs/vj-mockup.html`).
         - The packet counter must wrap 1023 -> 0.
         - With our renderer the firmware sends no button messages, so the
           renderer forwards them with sendMessageToHost (program event 0x28).
-    - Next: the generic weapon driver/shared block (plan in
-      `weapons/README.md`).
+    - C++ driver: `weapon_blocks.exe lightpad` (see "Generic weapon driver" below).
   - **Weapon no. 3 = ROLI LUMI Keys (owner's choice 2026-11-10; owner's
     unit: firmware 1.3.8, serial LKB…).** It is checked on the device: keys
     with velocity, buttons, and Himmel's own key LEDs.
@@ -177,6 +176,30 @@ The details are in the mockup (`docs/vj-mockup.html`).
       BLOCKS touch messages per key; they are not used yet.
     - Not done: a key map verified key by key, and games on the keys.
     - Weapon no. 4 = the Entrancer (the Touch FX session's branch).
+  - **Weapon no. 5 = the owner's Numark NuVJ (2008, USB-MIDI), started 2026-11-10.**
+    Profile `weapons/nuvj.weapon.json`, `tools/nuvj_sim.py`, own page
+    `tools/nuvj_live.html` (`mk2_live.py --port 8777 --weapon nuvj`, launch config
+    `nuvj-live`). **Protocol in `docs/nuvj-protocol.md`**, read from the owner's NuVJ
+    1.0 software (static analysis, never run): feedback SysEx `F0 00 01 3F 7F 20 cmd 00 len
+    data F7`. It covers init `60`, LCD text `01` (8 chars), segments `02` (64 bytes), LEDs `03`
+    (8 bytes, 31 bits) and contrast `7A`. Never send `7B` (stored). Simulator checked in
+    the browser. **Checked on the owner's unit 2026-11-11** (USB `15e4:0020`, WinMM
+    "NuVJ Controller" in 0 / out 1):
+    - `nuvj_map.json` verified (53 controls). The top knobs are endless; faders send
+      CC 10-12 before init and pitch bend ch 1-3 after it.
+    - All 31 LEDs work.
+    - LCD text works, and the whole segment map is learned with the camera mapper
+      (webcam in Chrome, LCD hunt panel). The layout is in `docs/nuvj-protocol.md`.
+    **Classic two-deck view** (owner's wish 2026-11-10, nostalgia): `?weapon=nuvj&view=classic`,
+    `tools/vj_classic.html` + model `tools/vj_classic.py`. It is the NuVJ software's workflow
+    in Himmel's own look: no logos or art, and nothing so close that it could cause trouble.
+    The GUI and the controller play the same model. 2D placeholder previews stand in until the
+    engine renders it.
+    **Jog Pong** (easter egg, `tools/nuvj_games.py`, played by the owner 2026-11-11): a three-lane
+    pong on the NuVJ's LCD, played with the jogs; hold both SCRATCH buttons to start or stop.
+    **Start-up shows** (`INTROS` in `tools/nuvj_games.py`, 2026-11-11): Boot sweep, Starburst and
+    Made by play on the LEDs and LCD when Himmel takes the NuVJ (random by default, or picked
+    in the live view); the ✦ buttons play them any time, and any button skips.
   - **Weapon no. 9 = Akai APC20, a secondary weapon (2026-11-11; owner's
     unit, UPC 0 825213 00251 7).** Simulated only: it needs its **12 V DC 2 A
     adapter** (not USB powered) and the owner has none yet.
@@ -341,8 +364,43 @@ The details are in the mockup (`docs/vj-mockup.html`).
      supervisor so a renderer restart shows black, not the desktop.
    - Dev PC note: the owner's dev laptop is a GTX 1070 with one screen, so
      outputs are tested as windows there; the show PC is the RTX 5090.
-5. Then: the ffmpeg/HAP import pipeline, audio analysis, the cue system, Smart
+5. **Generic weapon driver (2026-11-11; checked with the simulators, NOT yet on
+   the owner's Lightpad, LUMI and NuVJ).** The Lightpad, LUMI and NuVJ feed the
+   engine like the MK2. Details: `weapons/README.md`, "How a generic weapon feeds
+   Himmel".
+   - Shared block `Local\HimmelWeapon<N>` (`himmel/weapon/shared.h`), N = slot,
+     default = the weapon's number (2, 3, 5; up to 16). Same rings/seqlocks as the
+     MK2 block plus a header (weapon id, profile, caps, per-control role + knob
+     slot, pad -> control). Outputs: `led[128]` levels, `pixel[256]` RGB, `display`
+     (NuVJ LCD model). `status.stop_request` = let go and exit.
+   - `Event` stays 16 bytes; new types appended after Disconnected: TouchStart,
+     TouchMove, TouchEnd, Fader, Switch. Ids = profile control index; pads use pad
+     numbers 1..n with the control in `reserved`.
+   - Drivers (WinMM, no new dependency): `weapon_blocks.exe lightpad|lumi`
+     (handshake, renderer upload, HeapSync frames, pings on their own 400 ms timer,
+     config 13 restored and confirmed on let go, endAPIMode), `weapon_nuvj.exe`
+     (init, LEDs/text/segments on change + every 2 s, never `7B`). Both: heartbeat,
+     reconnect, `--sim` (UDP Lightpad 8767, LUMI 8769, **NuVJ 8774**: the Python
+     NuVJ sim got an engine link + active sensing every 300 ms), `--ports`, `--slot`.
+   - `weapon_monitor.exe [--slot N] [--echo] [--stop N]`; `weapon_tests.exe`
+     (122 checks, bytes compared with the Python reference).
+   - `himmel.exe` starts the three drivers (`--weapons LIST`, `--no-weapons`);
+     `--sim` puts them in sim mode too. The renderer reads ring 0 of every slot and
+     uses only the header roles (table in the README).
+   - Next: check on the owner's hardware (Lightpad velocity from the first z is
+     provisional), NuVJ start-up shows in C++, real mapping pages.
+6. Then: the ffmpeg/HAP import pipeline, audio analysis, the cue system, Smart
    Random and the GUI.
+7. **TODO (owner, 2026-11-10): the effect set, after the graphics engine is
+   ready.** Start from `docs/nuvj-effects.md`, "What Himmel takes from this":
+   - cheap single-pass effects (Kaleido, Mirror, RGB split, Tunnel, RotoZoom,
+     BPM strobe, Hue);
+   - feedback effects (Motion Blur, Larsen / Twirl);
+   - audio effects (Bass Zoom, EarthQuake);
+   - the mixer: copy modes, luma / chroma key, crossfade curves and mask wipes.
+   Each effect has two main parameters for PMTR 1 / 2 and knob pages, and some
+   parameters are speeds. Do not start before the engine's effect chain
+   exists.
 
 ## Open source (decided 2026-11-10)
 - Public repo: https://github.com/readymedia/HIMMEL, **MIT license**

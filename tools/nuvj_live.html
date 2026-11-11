@@ -1,0 +1,1086 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NuVJ Live</title>
+<!-- Weapon no. 5 (NuVJ). Served by tools/mk2_live.py for ?weapon=nuvj; talks to tools/nuvj_sim.py
+     through /weapon?id=nuvj, /wevents?id=nuvj and /wcmd?id=nuvj. The drawing comes from weapons/nuvj.weapon.json. -->
+<style>
+  :root {
+    --bg: #101113; --panel: #1c1d20; --edge: #2a2b2f; --btn: #2e3036; --btn-text: #d8d9dc; --label: #9a9ca3;
+    --seen: #3ddc84; --learn: #ff9d2e; --missing: #e5484d; --led: #4aa8ff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--btn-text); font: 13px/1.4 "Segoe UI", system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 20px; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; }
+  .pill { padding: 3px 10px; border-radius: 99px; background: #26272b; font-size: 12px; }
+  .pill.ok { background: #143d27; color: #7ff0b0; } .pill.bad { background: #4a1719; color: #ffb3b5; }
+  .pill.sim { background: #2b2350; color: #c8b8ff; }
+  button, select, input { background: #2c2e33; color: var(--btn-text); border: 1px solid #3a3c42; border-radius: 6px;
+           padding: 5px 10px; font: inherit; }
+  button { cursor: pointer; } button:hover { background: #383a40; }
+  button.on { background: #3b5bdb; border-color: #4c6ef5; color: #fff; }
+  button.hwon { background: #4b3a99; border-color: #6b55d6; color: #fff; }
+  .progress { width: 180px; height: 8px; background: #26272b; border-radius: 4px; overflow: hidden; }
+  .progress > div { height: 100%; background: var(--seen); width: 0; transition: width .2s; }
+  #wrap { padding: 0 20px; }
+  #stage { position: relative; transform-origin: 0 0; }
+  #panel { position: absolute; left: 0; top: 0; }
+  .brand { position: absolute; font-weight: 800; font-size: 15px; letter-spacing: 1px; }
+  .sec { position: absolute; font-size: 9px; font-weight: 700; color: var(--label); letter-spacing: .5px; }
+  .rule { position: absolute; height: 1px; background: #44464c; }
+  .body { position: absolute; background: linear-gradient(160deg, #1b1c20, #0b0b0d 60%); border: 3px solid #d7d8dc;
+          box-shadow: inset 0 0 0 2px #050506, inset 0 3px 0 #ffffff14, 0 18px 50px #000a; }
+  .inset { position: absolute; background: #08090a; border: 1.5px solid #5d5f66; box-shadow: inset 0 1px 0 #ffffff10; }
+  .plate { position: absolute; background: linear-gradient(170deg, #f2f3f5, #c9cbd0); border: 1px solid #8e9097;
+           box-shadow: inset 0 2px 0 #fff, inset 0 -2px 0 #0002, 0 2px 6px #000a; }
+  .silver { position: absolute; background: linear-gradient(180deg, #e3e4e7, #a7a9af); border: 1px solid #6e7077;
+            box-shadow: inset 0 1px 0 #fff, 0 1px 4px #000a; }
+  .plaque { position: absolute; transform: translateX(-50%); background: #ececee; color: #08090a; font: 900 10px/1 "Segoe UI", sans-serif;
+            letter-spacing: 1.5px; padding: 3px 8px 3px 9px; border-radius: 3px; box-shadow: 0 0 0 2px #08090a, 0 0 0 3px #8e9097; }
+  svg.deco { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+  .lbl.dark { color: #4b4d53; }
+  /* buttons as on the device: black rubber with two light strips, small grey caps, silver-framed caps */
+  .b.strip { background: linear-gradient(#26272b, #0c0c0e); box-shadow: 0 0 0 2px #050506, 0 2px 3px #000a, inset 0 1px 0 #ffffff1a; }
+  .strips { position: absolute; left: 14%; right: 14%; top: 26%; bottom: 26%; border-top: 3px solid #3a3c42; border-bottom: 3px solid #3a3c42;
+            border-radius: 2px; transition: border-color .04s, box-shadow .04s; }
+  .b.grey { background: linear-gradient(#7d7f86, #55575d); box-shadow: 0 0 0 1.5px #050506, inset 0 1px 0 #ffffff40; }
+  .b.silver { background: linear-gradient(#55575d, #2c2d32); box-shadow: 0 0 0 3px #c4c6cb, 0 0 0 4px #55575d, inset 0 1px 0 #ffffff30; }
+  .port { position: absolute; background: #050506; border: 1px solid #3a3a40; border-radius: 2px; }
+  .port span { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); font-size: 7px; color: var(--label); white-space: nowrap; }
+  .c { position: absolute; user-select: none; touch-action: none; }
+  body.sim .c { cursor: grab; } body.hw .c { cursor: pointer; }
+  .lbl { position: absolute; font-size: 7.5px; font-weight: 700; color: var(--label); text-align: center; white-space: pre; line-height: 1.1;
+         transform: translateX(-50%); pointer-events: none; }
+  .b { background: var(--btn); border-radius: 4px; color: var(--btn-text); font-size: 7.5px; font-weight: 700; white-space: pre;
+       display: flex; align-items: center; justify-content: center; text-align: center; line-height: 1.05;
+       box-shadow: inset 0 -2px 0 #0007, 0 0 0 1px #45474e; transition: background .04s, box-shadow .04s; }
+  .b.held { box-shadow: 0 0 0 2px #fff, inset 0 -2px 0 #0007; }
+  .pad { background: #d9dadd; border-radius: 6px; box-shadow: inset 0 -4px 0 #0003, 0 0 0 2px #0b0b0d; color: #333;
+         font-size: 7px; font-weight: 700; display: flex; align-items: flex-end; justify-content: flex-start; padding: 3px 5px; }
+  .pad .bar { position: absolute; left: 8px; right: 8px; top: 16px; height: 4px; border-radius: 2px; background: #00000022; }
+  .pad.held { transform: translateY(1px); box-shadow: 0 0 0 2px #fff, inset 0 -2px 0 #0003; }
+  .knob { border-radius: 50%; background: radial-gradient(circle at 40% 35%, #4a4c52, #1f2024 70%); border: 2px solid #0a0a0b;
+          box-shadow: 0 0 0 1px #50525a; }
+  .knob .ind { position: absolute; left: 50%; top: 6%; width: 2px; height: 42%; margin-left: -1px; background: #fff;
+               transform-origin: 50% 105%; border-radius: 1px; }
+  .knob.enc { background: repeating-conic-gradient(#2a2b30 0 6deg, #1a1b1f 6deg 12deg); }
+  .knob.flash { box-shadow: 0 0 0 1px #50525a, 0 0 12px #fff8; }
+  .knob.pushed { box-shadow: 0 0 0 3px #4aa8ff, 0 0 14px #4aa8ff; transform: scale(0.93); }
+  .lcd.hunting { cursor: crosshair; box-shadow: 0 0 0 2px #ff9d2e, 0 0 24px #ff9d2e55; }
+  .val { position: absolute; font-size: 8px; color: var(--label); transform: translateX(-50%); white-space: nowrap; pointer-events: none; }
+  .wheel { border-radius: 50%; background: #070708; box-shadow: 0 6px 14px #000c, 0 0 0 2px #050506; }
+  .wheel .rot { position: absolute; inset: 0; border-radius: 50%;
+                background: radial-gradient(circle, transparent 0 77%, #0006 78%),
+                            repeating-conic-gradient(#3b3c42 0 2.5deg, #121215 2.5deg 6deg); }
+  .wheel .face { position: absolute; inset: 9%; border-radius: 50%; background: radial-gradient(circle at 42% 35%, #34353b, #141518 70%);
+                 box-shadow: inset 0 2px 0 #ffffff14, 0 0 0 2px #050506; }
+  .wheel .dimple { position: absolute; width: 20%; height: 20%; border-radius: 50%; background: radial-gradient(circle at 60% 65%, #3a3b42, #0a0a0b 70%);
+                   left: 40%; top: 13%; box-shadow: inset 0 3px 5px #000; }
+  .wheel.flash { box-shadow: 0 0 0 3px #0a0a0b, 0 0 0 5px #8ab8ff, inset 0 0 20px #000; }
+  .track { position: absolute; background: #050506; border-radius: 3px; box-shadow: inset 0 0 0 1px #34353b; }
+  .cap { position: absolute; background: linear-gradient(#e8e9ec, #8d8f95); border-radius: 3px; box-shadow: 0 2px 4px #000a; }
+  .cap::after { content: ""; position: absolute; background: #111; }
+  .cap.v::after { left: 2px; right: 2px; top: 50%; height: 2px; margin-top: -1px; }
+  .cap.h::after { top: 2px; bottom: 2px; left: 50%; width: 2px; margin-left: -1px; }
+  .tick { position: absolute; background: #3a3b40; }
+  .switch { background: #050506; border-radius: 10px; box-shadow: inset 0 0 0 1px #3a3b40; }
+  .switch .nub { position: absolute; top: 2px; width: 16px; height: 12px; border-radius: 6px; background: linear-gradient(#ddd, #888); transition: left .08s; }
+  .swl { position: absolute; font-size: 7px; color: var(--label); transform: translateX(-50%); pointer-events: none; }
+  .lcd { position: absolute; background: #050506; border: 6px solid #050506; border-radius: 10px;
+         box-shadow: 0 0 0 1.5px #5d5f66, 0 0 24px #2d6bff2a; }
+  .lcd canvas { border-radius: 3px; }
+  .lcd canvas { width: 100%; height: 100%; display: block; }
+  .c.seen::after { content: ""; position: absolute; right: -3px; top: -3px; width: 7px; height: 7px; border-radius: 50%;
+                   background: var(--seen); box-shadow: 0 0 0 2px var(--panel); }
+  .c.learn { outline: 2px solid var(--learn); outline-offset: 3px; animation: pulse .7s infinite alternate; }
+  @keyframes pulse { from { outline-color: var(--learn); } to { outline-color: transparent; } }
+  body.hw .c.missing { outline: 1.5px dashed var(--missing); outline-offset: 2px; }
+  #below { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 12px 20px 30px; max-width: 1200px; }
+  .card { background: #17181b; border: 1px solid #26272b; border-radius: 8px; padding: 10px 12px; }
+  .card h2 { font-size: 12px; margin: 0 0 6px; color: var(--label); font-weight: 600; }
+  .card h3 { font-size: 12px; margin: 10px 0 4px; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 5px 0; }
+  .help { color: var(--label); font-size: 12px; }
+  .mono { font: 12px/1.5 Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
+  table { border-collapse: collapse; width: 100%; font: 11px/1.45 Consolas, monospace; }
+  td, th { padding: 1px 8px 1px 0; text-align: left; vertical-align: top; white-space: nowrap; }
+  th { color: var(--label); font-weight: 600; }
+  td.hex { color: #7f838c; }
+  tr.up td.dir { color: #7ff0b0; } tr.down td.dir { color: #c8b8ff; } tr.probe td.dir { color: #ffcf7a; }
+  .chips span { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 7px; border-radius: 99px; background: #26272b; font-size: 11px; cursor: pointer; }
+  .chips span:hover { background: #3a3c42; }
+  .full { grid-column: 1 / -1; }
+  @media (max-width: 860px) { #below { grid-template-columns: 1fr; } }
+  #hunt { position: fixed; right: 14px; top: 56px; width: min(900px, calc(100vw - 28px)); max-height: calc(100vh - 70px); overflow: auto; z-index: 50; display: none;
+          background: #17181bf2; border: 2px solid #ff9d2e; border-radius: 12px; padding: 10px 12px; box-shadow: 0 16px 50px #000c; }
+  body.hunting #hunt { display: block; }
+  #hunt .hh { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  #hunt #hLcd { width: 100%; border-radius: 8px; cursor: crosshair; background: #000; box-shadow: 0 0 0 4px #050506; }
+  #hunt .hsteps { margin: 8px 0 4px 18px; padding: 0; font-size: 12px; color: var(--label); }
+  #hunt .hsteps b { color: var(--btn-text); }
+  #hunt button.big { background: #ff9d2e; border-color: #ffb86b; color: #111; font-weight: 700; padding: 6px 16px; }
+  #hunt .small { font-size: 11px; color: var(--label); }
+  #hunt .camwrap { position: relative; display: none; margin-top: 6px; }
+  body.camon #hunt .camwrap { display: block; }
+  #hunt .camwrap video { width: 100%; display: block; border-radius: 6px; background: #000; }
+  #hunt .camwrap canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; cursor: crosshair; background: transparent; }
+  #hunt details summary { cursor: pointer; margin-top: 10px; }
+  body.camrun #camRun { opacity: .5; }
+  #hunt .hsaved { margin: 8px 0 2px; padding: 6px 10px; border-radius: 6px; font-weight: 600; background: #26272b; }
+  #hunt .hsaved.ok { background: #143d27; color: #7ff0b0; }
+  #hOpen { position: fixed; right: 14px; bottom: 14px; z-index: 49; background: #ff9d2e; color: #111; border-color: #ffb86b; font-weight: 700; }
+  body.hunting #hOpen { display: none; }
+</style>
+</head>
+<body class="sim">
+<header>
+  <select id="weaponPick" title="Weapon: the controller to show"></select>
+  <h1 id="title">NuVJ Live</h1>
+  <span id="conn" class="pill">connecting…</span>
+  <button id="hwBtn" title="Open the real NuVJ over USB-MIDI">Use the real NuVJ</button>
+  <span id="mapCount" class="pill">map</span>
+  <div class="progress" title="controls seen on the real NuVJ"><div id="bar"></div></div>
+</header>
+<div id="wrap"><div id="stage"><div id="panel"></div></div></div>
+<div id="hunt">
+  <div class="hh"><b>LCD hunt</b> <span id="hState" class="mono"></span><span style="flex:1"></span><button id="hClose" title="Stop the hunt">✕</button></div>
+  <canvas id="hLcd" width="1600" height="896" title="Click the part that lights on the NuVJ"></canvas>
+  <ol class="hsteps">
+    <li>Look at the <b>NuVJ's own screen</b>. Its top text row shows where we are, e.g. <code>SEG05.*</code>.</li>
+    <li>Does anything <b>else</b> light there? <b>Click the same place on this picture</b>. It is saved.</li>
+    <li>Then press <b>Next ▶</b>. Nothing lit? Just press <b>Next ▶</b>.</li>
+  </ol>
+  <div id="hSaved" class="hsaved"></div>
+  <div class="row"><button id="hPrev">◀ Back</button><button id="hNext" class="big">Next ▶</button>
+    <label title="Light a whole byte (7 segments) at a time: quick first pass"><input type="checkbox" id="hWhole"> 7 at a time</label>
+    <label><input type="checkbox" id="hAuto"> Auto (1.2 s)</label>
+    <button id="hForget" title="Forget what this bit is saved as">Forget this one</button></div>
+  <div class="row"><input type="text" id="hName" placeholder="Not in the picture? Say what and where" style="flex:1">
+    <button id="hSave">Save</button></div>
+  <div id="hFound" class="mono small"></div>
+  <div class="row"><b>Test the LCD:</b> line 1 <input type="text" id="tLine1" maxlength="8" value="HIMMEL" style="width:110px">
+    line 2 <input type="text" id="tLine2" maxlength="11" value="ABCDEFGHIJK" style="width:150px">
+    <button id="tShow">Show on the NuVJ (20 s)</button>
+    <button data-t="ABCDEFGHIJK">A-K</button><button data-t="LMNOPQRSTUV">L-V</button><button data-t="WXYZ0123456">W-6</button>
+    <button data-t="789+-*/%#?=">7-=</button></div>
+  <details id="camBox" open>
+    <summary><b>Camera mapper</b> - let a webcam watch the NuVJ screen and map every segment by itself</summary>
+    <ol class="hsteps">
+      <li>Point a webcam straight at the NuVJ's screen (close, sharp, no glare), pick it and press <b>Camera on</b>.</li>
+      <li>Click the <b>4 corners of the blue glass</b> in the camera picture: top-left, top-right, bottom-right,
+        bottom-left. Green outlines should then sit on the real segments. Not quite? <b>Drag the orange corners</b>
+        until they do (Alt + arrow keys nudge the last one by a pixel).</li>
+      <li>Press <b>Auto-map</b> and leave it (about 4-5 minutes). The NuVJ's text row stays blank meanwhile.</li>
+    </ol>
+    <div class="row"><select id="camSel" style="max-width:220px"></select><button id="camList" title="Look for cameras again (e.g. after starting OBS Virtual Camera)">↻</button><button id="camStart">Camera on</button>
+      <button id="camCal">Set corners again</button><button id="camRun" class="big">Auto-map</button><button id="camStop">Stop</button></div>
+    <div class="row small"><label>bytes <input id="camFrom" type="number" value="0" min="0" max="63" style="width:50px"></label>
+      <label>to <input id="camTo" type="number" value="63" min="0" max="63" style="width:50px"></label>
+      <label title="ms to wait after a change before the camera looks">settle <input id="camSettle" type="number" value="350" style="width:60px"></label>
+      <label title="how much brighter a pixel must get">threshold <input id="camThr" type="number" value="22" style="width:50px"></label>
+      <label title="share of a part that must light">cover <input id="camCover" type="number" value="0.18" step="0.02" style="width:60px"></label></div>
+    <div id="camInfo" class="mono small"></div>
+    <div class="camwrap"><video id="camVid" autoplay playsinline muted></video><canvas id="camOv"></canvas></div>
+  </details>
+</div>
+<button id="hOpen" title="Learn the NuVJ's LCD: light one part at a time and click it">LCD hunt</button>
+<div id="below">
+  <div class="card">
+    <h2>Play it</h2>
+    <div class="help" id="help"></div>
+  </div>
+  <div class="card">
+    <h2>Host (the live view standing in for Himmel) · LEDs</h2>
+    <div class="row" id="ledModes"></div>
+    <div class="help">
+      <b>Himmel</b>: what Himmel would light: latch / auto / sync / master FX / insta black as toggles, the playing pad per
+      deck, BPM Tap blinking on the beat. <b>Follow</b>: a LED lights while you hold its button. LEDs and LCD are sent
+      as the NuVJ's own feedback SysEx (<code>F0 00 01 3F 7F 20 …</code>, read from the NuVJ 1.0 software); the drawing
+      shows what the device was sent.</div>
+    <div class="row"><b>Start-up shows:</b>
+      <button data-intro="boot">✦ Boot sweep</button><button data-intro="starburst">✦ Starburst</button>
+      <button data-intro="madeby">✦ Made by</button>
+      <label>on connect <select id="introMode"><option value="random">random</option><option value="boot">Boot sweep</option>
+        <option value="starburst">Starburst</option><option value="madeby">Made by</option><option value="off">off</option></select></label></div>
+    <div class="row"><button id="gameBtn" title="A three-lane pong on the NuVJ's own LCD, played with the jog wheels">★ Jog Pong</button>
+      <span class="help">Easter egg: turn the jogs to move your paddle, push BANK (or SCRATCH) to serve, first to 5.
+        An idle side is played by Himmel. On the NuVJ: hold both SCRATCH buttons to start or stop.</span></div>
+    <div id="hostInfo" class="mono"></div>
+  </div>
+  <div class="card full" id="hwCard">
+    <h2>Real NuVJ: probe, map and LEDs</h2>
+    <div class="help">Plug the NuVJ in with USB and close the NuVJ / GrandVJ software (Windows lets one program use a MIDI
+      port). Press <b>Use the real NuVJ</b>. Himmel then sends the same init, LED and LCD messages as the NuVJ
+      software (never the stored-contrast command).</div>
+    <div class="row"><label>MIDI port <select id="portPick"><option value="">auto (name has NuVJ / Numark)</option></select></label>
+      <button id="portGo">Open this port</button></div>
+    <div id="hwInfo" class="mono"></div>
+    <div class="row"><button id="driveBtn">Let Himmel drive the LEDs and LCD</button>
+      <span class="help">Off = listen only: nothing is sent to the NuVJ.</span></div>
+    <h3>1 · Touch every control</h3>
+    <div class="help">The drawing follows the real NuVJ. A green dot = seen on the hardware. A dashed red outline = not in
+      the map. <b>Wrong control moves?</b> Click the right one in the drawing, then move the real one (turn endless knobs
+      and jog wheels <b>clockwise</b>; walk a switch through all its positions). The map is saved to
+      <code>nuvj_map.json</code> (backup <code>.bak.json</code>). Esc cancels.</div>
+    <div id="learnMsg" class="mono" style="color:#ffcf7a"></div>
+    <div class="row"><b>Not seen yet:</b></div><div id="missing" class="chips"></div>
+    <div class="row"><b>MIDI not in the map:</b> <span id="unmapped" class="mono">-</span></div>
+    <div class="row"><button id="verifyBtn">All seen: mark the map verified ✓</button><button id="resetSeen">Reset seen</button></div>
+    <h3>2 · LEDs</h3>
+    <div class="help">Try <b>All on</b> and <b>Chase</b> above, and <b>Follow</b> while you press buttons and pads: the LED
+      under your finger must light (31 LEDs: 18 pads, LATCH / AUTO / SYNC ×2, SCRATCH ×2, INSTA A/B, MASTER FX,
+      INSTA BLACK, BPM TAP).</div>
+    <div class="row"><button id="ledsOk">Every LED is right ✓</button><span id="ledResult" class="mono"></span></div>
+    <h3>3 · LCD</h3>
+    <div class="help">The LCD is a custom segment display: 8 dot-matrix characters (command <code>01</code>) and 64 bytes of
+      segment memory (command <code>02</code>). From the NuVJ software we know the text and where its 2-digit number
+      goes (drawn as the big digits). The rest (small digits, bar, icons) is learned with the <b>segment hunt</b>: it
+      lights one segment bit at a time and writes its number on the text row (e.g. <code>SEG23.4</code>). <b>Click the
+      part of the drawn LCD that lit up</b> (a digit segment, a bar block, an icon or a label) and it is saved in the
+      map. Nothing lit? Step on. Auto steps every 1.2 s.</div>
+    <div class="row">
+      <button id="shGo">Start segment hunt</button><button data-sstep="-1">◀ bit</button><button data-sstep="1">bit ▶</button>
+      <button data-sstep="7">byte ▶</button><label><input type="checkbox" id="shAuto"> Auto step</label><label><input type="checkbox" id="shWhole"> Whole bytes</label>
+      <button id="shStop">Stop</button><span id="shInfo" class="mono"></span>
+    </div>
+    <div class="row"><span class="help">Something lit that is not in the drawing? Say what and where:</span>
+      <input type="text" id="shName" placeholder="e.g. small text bottom right" style="flex:1;min-width:200px">
+      <button id="shSave">Save what lit</button>
+      <button id="shAll" title="Every segment on, for a photo of the whole glass">All segments on</button></div>
+    <div class="row"><label>LCD contrast (not stored) <input type="range" id="lcdC" min="0" max="99" value="50"></label>
+      <span id="lcdCV" class="mono"></span>
+      <button id="idBtn" title="F0 7E 7F 06 01 F7, from the MIDI standard; the NuVJ software sends it too">Ask the NuVJ who it is</button></div>
+    <div id="lcdModel" class="mono"></div>
+  </div>
+  <div class="card">
+    <h2>Himmel events (what the engine would get)</h2>
+    <table id="events"></table>
+  </div>
+  <div class="card">
+    <h2>Wire map (what each control sends)</h2>
+    <div style="max-height: 320px; overflow: auto"><table id="wire"></table></div>
+  </div>
+  <div class="card full">
+    <h2>MIDI monitor</h2>
+    <div class="row"><label><input type="checkbox" id="noise"> Show LED messages (host → device)</label></div>
+    <table id="log"></table>
+  </div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const esc = t => String(t).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+const post = o => fetch("/wcmd?id=nuvj", { method: "POST", body: JSON.stringify(o) }).catch(() => {});
+const simIn = o => post({ sim_input: o });
+const panel = $("panel");
+let W = null, S = null;
+const els = {};
+function add(html, cls, style, parent = panel) {
+  const d = document.createElement("div"); d.className = cls; Object.assign(d.style, style); d.innerHTML = html;
+  parent.appendChild(d); return d;
+}
+const px = v => v + "px";
+
+// ---------- drawing, from weapons/nuvj.weapon.json ----------
+function build(w) {
+  W = w;
+  panel.style.width = px(w.panel.w); panel.style.height = px(w.panel.h);
+  const box = d => ({ left: px(d.x), top: px(d.y), width: px(d.w), height: px(d.h), borderRadius: px(d.r || 0) });
+  const plates = (w.deco || []).filter(d => d.kind === "plate" || d.kind === "silver");
+  const onPlate = (x, y) => plates.some(p => x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h);
+  for (const d of w.deco || []) {
+    if (d.kind === "body") add("", "body", box(d));
+    else if (d.kind === "panel") add("", "inset", box(d));
+    else if (d.kind === "plate") add("", "plate", box(d));
+    else if (d.kind === "silver") add("", "silver", box(d));
+    else if (d.kind === "plaque") add(esc(d.text), "plaque", { left: px(d.x), top: px(d.y) });
+    else if (d.kind === "port") add(`<span>${esc(d.label)}</span>`, "port", { left: px(d.x), top: px(d.y), width: px(d.w), height: px(d.h) });
+    else if (d.kind === "line") {   // a printed line (from SCRATCH to the jog wheel)
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("class", "deco"); svg.setAttribute("width", w.panel.w); svg.setAttribute("height", w.panel.h);
+      svg.innerHTML = `<polyline points="${d.points.map(p => p.join(",")).join(" ")}" fill="none" stroke="#1d1e22" stroke-width="2.5" stroke-linejoin="round"/>`;
+      panel.appendChild(svg);
+    }
+  }
+  for (const s of w.sections || []) {
+    add(esc(s.label), "sec", { left: px(s.x), top: px(s.y) });
+    add("", "rule", { left: px(s.x), top: px(s.y + 12), width: px(s.w) });
+  }
+  add(esc(w.badge || w.name), "brand", { left: px(w.panel.w / 2), top: px(40), fontSize: "13px", transform: "translateX(-50%)" });
+  for (const s of w.screens || []) {
+    const [uw, uh] = s.units || [200, 108];
+    const d = add(`<canvas width="${uw * 4}" height="${uh * 4}"></canvas>`, "lcd", { left: px(s.x), top: px(s.y), width: px(s.w), height: px(s.h) });
+    s.ctx = d.firstChild.getContext("2d"); W.lcd = s; s.el = d;
+    d.addEventListener("click", e => lcdClick(e, d.firstChild));
+  }
+  for (const c of w.controls) {
+    let d;
+    if (c.kind === "push") continue;     // wired onto its knob below
+    if (c.kind === "button" || c.kind === "pad") {
+      const st = c.style || (c.kind === "pad" ? "strip" : "");
+      if (st) {   // the label is printed next to the button, as on the device
+        d = add(st === "strip" ? '<div class="strips"></div>' : "", "c b " + st, { left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h) });
+        const dark = onPlate(c.x + c.w / 2, c.y + c.h / 2);
+        const lab = (c.label || "").replace("\n", " ");
+        add(esc(lab), "lbl" + (dark ? " dark" : ""), c.kind === "pad" ? { left: px(c.x + c.w / 2), top: px(c.y - 11) } : { left: px(c.x + c.w / 2), top: px(c.y + c.h + 4) });
+      } else d = add(esc(c.label), "c b", { left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h) });
+    } else if (c.kind === "knob" || c.kind === "encoder") {
+      d = add('<div class="ind"></div>', "c knob" + (c.kind === "encoder" ? " enc" : ""), { left: px(c.x - c.r), top: px(c.y - c.r), width: px(2 * c.r), height: px(2 * c.r) });
+      add(esc(c.label), "lbl", { left: px(c.x), top: px(c.y + c.r + 3) });
+      c.v = add("", "val", { left: px(c.x), top: px(c.y - c.r - 12) });
+    } else if (c.kind === "wheel") {
+      d = add('<div class="rot"></div><div class="face"><div class="dimple"></div></div>', "c wheel", { left: px(c.x - c.r), top: px(c.y - c.r), width: px(2 * c.r), height: px(2 * c.r) });
+      c.v = add("", "val" , { left: px(c.x), top: px(c.y + c.r + 6), color: "#4b4d53" });
+    } else if (c.kind === "fader") {
+      const v = c.orient === "v", L = c.len;
+      d = add("", "c", v ? { left: px(c.x - 16), top: px(c.y), width: px(32), height: px(L) } : { left: px(c.x), top: px(c.y - 16), width: px(L), height: px(32) });
+      for (let i = 0; i <= 10; i++) add("", "tick", v ? { left: px(i % 5 ? 4 : 0), top: px(i * L / 10), width: px(i % 5 ? 24 : 32), height: "1px" }
+                                                       : { top: px(i % 5 ? 4 : 0), left: px(i * L / 10), height: px(i % 5 ? 24 : 32), width: "1px" }, d);
+      add("", "track", v ? { left: px(13), top: 0, width: px(6), height: px(L) } : { top: px(13), left: 0, height: px(6), width: px(L) }, d);
+      c.cap = add("", "cap " + (v ? "v" : "h"), v ? { left: px(3), width: px(26), height: px(16) } : { top: px(3), height: px(26), width: px(16) }, d);
+      if (c.label) add(esc(c.label), "lbl", v ? { left: px(c.x), top: px(c.y + L + 6) } : { left: px(c.x + L / 2), top: px(c.y + 20) });
+      c.v = add("", "val", v ? { left: px(c.x), top: px(c.y - 14) } : { left: px(c.x + L / 2), top: px(c.y - 30) });
+    } else if (c.kind === "switch") {
+      const n = c.positions.length, wd = 16 + 18 * (n - 1) + 4;
+      d = add('<div class="nub"></div>', "c switch", { left: px(c.x - wd / 2), top: px(c.y - 8), width: px(wd), height: px(16) });
+      c.positions.forEach((p, i) => add(esc(p), "swl", { left: px(c.x - wd / 2 + 2 + 8 + 18 * i), top: px(c.y + 10) }));
+      add(esc(c.label), "lbl", { left: px(c.x), top: px(c.y - 22) });
+    } else continue;
+    d.title = c.name;
+    c.el = d; els[c.name] = c;
+    wire(c);
+  }
+  for (const c of w.controls) if (c.kind === "push") {   // push of an endless knob: right-click / Alt+click it
+    const k = els[c.of];
+    if (k) { k.push = c; els[c.name] = Object.assign(c, { el: k.el, pushOf: k }); }
+  }
+  fit();
+}
+
+// ---------- input: simulator = the drawing is the controller; hardware = click to learn ----------
+function hw() { return S && S.hardware; }
+
+function wire(c) {
+  const el = c.el;
+  el.addEventListener("click", e => {
+    if (!hw()) return;
+    const push = c.push && (e.altKey || e.button === 1);
+    post({ learn: push ? c.push.name : c.name });
+  });
+  el.addEventListener("contextmenu", e => { if (c.push) { e.preventDefault(); if (hw()) post({ learn: c.push.name }); } });
+  el.addEventListener("pointerdown", e => {
+    if (hw()) return;
+    if (c.push && (e.button === 2 || e.button === 1 || e.altKey)) {   // push the endless knob
+      e.preventDefault(); c.pushDown = true; simIn({ name: c.push.name, down: true });
+      const upFn = () => { if (c.pushDown) { c.pushDown = false; simIn({ name: c.push.name, down: false }); } window.removeEventListener("pointerup", upFn); };
+      window.addEventListener("pointerup", upFn);
+      return;
+    }
+    e.preventDefault();
+    try { el.setPointerCapture(e.pointerId); } catch (_) { /* synthetic or already released pointer */ }
+    c.drag = { x: e.clientX, y: e.clientY, a: null };
+    if (c.kind === "button" || c.kind === "pad") simIn({ name: c.name, down: true });
+    else if (c.kind === "fader") faderTo(c, e);
+    else if (c.kind === "switch") simIn({ name: c.name, pos: ((S.values[c.name] || 0) + 1) % c.positions.length });
+    else if (c.kind === "wheel") c.drag.a = wheelAngle(c, e);
+  });
+  el.addEventListener("pointermove", e => {
+    if (hw() || !c.drag || !el.hasPointerCapture(e.pointerId)) return;
+    if (c.kind === "fader") faderTo(c, e);
+    else if (c.kind === "knob") {
+      const n = Math.trunc((c.drag.y - e.clientY) / 2);
+      if (n) { c.drag.y -= n * 2; simIn({ name: c.name, delta: n }); }
+    } else if (c.kind === "encoder") {
+      const n = Math.trunc((c.drag.y - e.clientY) / 10);
+      if (n) { c.drag.y -= n * 10; simIn({ name: c.name, delta: n }); }
+    } else if (c.kind === "wheel") {
+      const a = wheelAngle(c, e);
+      let da = a - c.drag.a; if (da > 180) da -= 360; if (da < -180) da += 360;
+      const per = 360 / (c.range || 128), n = Math.trunc(da / per);
+      if (n) { c.drag.a += n * per; simIn({ name: c.name, delta: n }); }
+    }
+  });
+  const up = () => {
+    if (hw() || !c.drag) return;
+    c.drag = null;
+    if (c.kind === "button" || c.kind === "pad") simIn({ name: c.name, down: false });
+  };
+  el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
+  el.addEventListener("wheel", e => {
+    if (hw() || !["knob", "encoder", "wheel", "fader"].includes(c.kind)) return;
+    e.preventDefault();
+    const s = e.deltaY < 0 ? 1 : -1;
+    if (c.kind === "fader") simIn({ name: c.name, value: Math.max(0, Math.min(16383, (S.values[c.name] || 0) + s * 512)) });
+    else simIn({ name: c.name, delta: s * (c.kind === "knob" ? 4 : c.kind === "wheel" ? 3 : 1) });
+  }, { passive: false });
+}
+function wheelAngle(c, e) {
+  const r = c.el.getBoundingClientRect();
+  return Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)) * 180 / Math.PI;
+}
+function faderTo(c, e) {
+  const r = c.el.getBoundingClientRect();
+  const k = c.orient === "v" ? 1 - (e.clientY - r.top) / r.height : (e.clientX - r.left) / r.width;
+  const v = Math.round(Math.max(0, Math.min(1, k)) * 16383);
+  const now = performance.now();
+  if (now - (c.lastSend || 0) > 15 || v === 0 || v === 16383) { c.lastSend = now; simIn({ name: c.name, value: v }); }
+}
+window.addEventListener("blur", () => { if (!hw()) simIn({ release_all: true }); });
+window.addEventListener("pagehide", () => navigator.sendBeacon("/wcmd?id=nuvj", JSON.stringify({ sim_input: { release_all: true } })));
+document.addEventListener("keydown", e => { if (e.key === "Escape") post({ learn: "" }); });
+
+function fit() {
+  if (!W) return;
+  const pw = W.panel.w + 2, ph = W.panel.h + 2;
+  const s = Math.max(0.45, Math.min((window.innerWidth - 40) / pw, (window.innerHeight - 70) / ph, 1.4));
+  const st = $("stage");
+  st.style.transform = `scale(${s})`; st.style.width = px(pw); st.style.height = px(ph);
+  $("wrap").style.height = px(ph * s + 8);
+}
+window.addEventListener("resize", fit);
+
+// ---------- LCD: the NuVJ's segment display (dot-matrix cells, 7-segment digits, bar, icons) ----------
+// Classic 5x7 font (the same public-domain shapes as tools/mk2_screens.py): 5 columns, bit 0 = top row.
+const FONT = {" ":"0000000000","!":"00005f0000","*":"2a1c7f1c2a","#":"147f147f14","(":"001c224100",")":"0041221c00",",":"0050300000","=":"1414141414","%":"2313086462","+":"08083e0808","-":"0808080808",".":"0060600000","/":"2010080402",
+  "0":"3e5149453e","1":"00427f4000","2":"4261514946","3":"2141454b31","4":"1814127f10","5":"2745454539","6":"3c4a494930","7":"0171090503",
+  "8":"3649494936","9":"064949291e",":":"0036360000","<":"0814224100",">":"0041221408","?":"0201510906","A":"7e1111117e","B":"7f49494936",
+  "C":"3e41414122","D":"7f4141221c","E":"7f49494941","F":"7f09090901","G":"3e4149497a","H":"7f0808087f","I":"00417f4100","J":"2040413f01",
+  "K":"7f08142241","L":"7f40404040","M":"7f020c027f","N":"7f0408107f","O":"3e4141413e","P":"7f09090906","Q":"3e4151215e","R":"7f09192946",
+  "S":"4649494931","T":"01017f0101","U":"3f4040403f","V":"1f2040201f","W":"3f4038403f","X":"6314081463","Y":"0708700807","Z":"6151494543","_":"4040404040"};
+const SEG7 = { "0": "abcdef", "1": "bc", "2": "abged", "3": "abgcd", "4": "fgbc", "5": "afgcd", "6": "afgedc", "7": "abc", "8": "abcdefg", "9": "abcdfg", "-": "g", " ": "" };
+// 16-segment cells (Himmel's own font). Segments: a1 a2 (top halves), b c (right), d1 d2 (bottom halves),
+// e f (left), g1 g2 (middle halves), h i j (upper diagonal-left, centre, diagonal-right), k l m (lower ones).
+const SEG16 = {
+  " ": "", "0": "a1 a2 b c d1 d2 e f j k", "1": "b c j", "2": "a1 a2 b g1 g2 e d1 d2", "3": "a1 a2 b g2 c d1 d2",
+  "4": "f g1 g2 b c", "5": "a1 a2 f g1 g2 c d1 d2", "6": "a1 a2 f e d1 d2 c g1 g2", "7": "a1 a2 b c", "8": "a1 a2 b c d1 d2 e f g1 g2",
+  "9": "a1 a2 b c d1 d2 f g1 g2", "A": "e f a1 a2 b c g1 g2", "B": "a1 a2 b c d1 d2 i l g2", "C": "a1 a2 f e d1 d2",
+  "D": "a1 a2 b c d1 d2 i l", "E": "a1 a2 f e d1 d2 g1", "F": "a1 a2 f e g1", "G": "a1 a2 f e d1 d2 c g2", "H": "f e b c g1 g2",
+  "I": "a1 a2 i l d1 d2", "J": "b c d1 d2 e", "K": "f e g1 j m", "L": "f e d1 d2", "M": "f e b c h j", "N": "f e b c h m",
+  "O": "a1 a2 b c d1 d2 e f", "P": "a1 a2 b f e g1 g2", "Q": "a1 a2 b c d1 d2 e f m", "R": "a1 a2 b f e g1 g2 m",
+  "S": "a1 a2 f g1 g2 c d1 d2", "T": "a1 a2 i l", "U": "f e d1 d2 c b", "V": "f e k j", "W": "f e b c k m", "X": "h j k m",
+  "Y": "h j l", "Z": "a1 a2 j k d1 d2", "-": "g1 g2", "+": "g1 g2 i l", "/": "j k", "*": "g1 g2 h i j k l m", ".": "d2",
+  "_": "d1 d2", "=": "g1 g2 d1 d2", "'": "i", ":": "i l", "%": "a1 f g1 i j k l g2 c d2", "?": "a1 a2 b g2 l", "#": "b c e f g1 g2 i l",
+};
+const SEG16_ALL = ["a1", "a2", "b", "c", "d1", "d2", "e", "f", "g1", "g2", "h", "i", "j", "k", "l", "m"];
+function seg16(g, x, y, w, h, segs, on, hits, prefix) {
+  const t = Math.max(0.9, w * 0.11), hh = h / 2, hw = w / 2, sk = w * 0.08;
+  const L = {   // each segment as a line (x0, y0, x1, y1), with a little italic skew
+    a1: [x + t, y, x + hw - t / 2, y], a2: [x + hw + t / 2, y, x + w - t, y],
+    b: [x + w, y + t, x + w - sk / 2, y + hh - t / 2], c: [x + w - sk / 2, y + hh + t / 2, x + w - sk, y + h - t],
+    d1: [x + t - sk, y + h, x + hw - t / 2 - sk, y + h], d2: [x + hw + t / 2 - sk, y + h, x + w - t - sk, y + h],
+    e: [x - sk / 2, y + hh + t / 2, x - sk, y + h - t], f: [x, y + t, x - sk / 2, y + hh - t / 2],
+    g1: [x + t - sk / 2, y + hh, x + hw - t / 2 - sk / 2, y + hh], g2: [x + hw + t / 2 - sk / 2, y + hh, x + w - t - sk / 2, y + hh],
+    h: [x + t * 1.2, y + t * 1.2, x + hw - t, y + hh - t], i: [x + hw, y + t, x + hw - sk / 2, y + hh - t / 2],
+    j: [x + w - t * 1.2, y + t * 1.2, x + hw + t, y + hh - t], k: [x + hw - t - sk / 2, y + hh + t, x + t * 1.2 - sk, y + h - t * 1.2],
+    l: [x + hw - sk / 2, y + hh + t / 2, x + hw - sk, y + h - t], m: [x + hw + t - sk / 2, y + hh + t, x + w - t * 1.2 - sk, y + h - t * 1.2],
+  };
+  g.lineWidth = t; g.lineCap = "round";
+  for (const k of SEG16_ALL) {
+    const [x0, y0, x1, y1] = L[k];
+    g.strokeStyle = on(segs.includes(k) || LCD_FORCE.has(prefix + k)); g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+    if (hits) hits.push({ key: prefix + k, x: Math.min(x0, x1) - t / 2, y: Math.min(y0, y1) - t / 2, w: Math.abs(x1 - x0) + t, h: Math.abs(y1 - y0) + t });
+  }
+}
+let LCD_FORCE = new Set();
+const LCD_BG = "#1f3fd0", LCD_ON = "#eef3ff", LCD_GHOST = "rgba(6, 10, 70, 0.20)";
+// The NuVJ's own glass (from the owner's photo with every segment on): words, an 8-character dot row, a
+// 2-digit PRESET number, a 3-digit number over "BPM", an 11-character 16-segment row, A/B/C/D boxes,
+// a "PRESS ENTER" box and two ramps (LAST, DATA). m = Himmel's LCD model: text, alpha, bpm, preset,
+// last, data (0..n) and lit (the ids of words and boxes that are on).
+function drawLcd(m, note) {
+  const s = W && W.lcd; if (!s) return;
+  const g = s.ctx, [uw, uh] = s.units || [200, 114], k = g.canvas.width / uw;
+  const grad = g.createLinearGradient(0, 0, 0, g.canvas.height);
+  grad.addColorStop(0, "#2a5cf0"); grad.addColorStop(1, "#1638c4");
+  g.fillStyle = grad; g.fillRect(0, 0, g.canvas.width, g.canvas.height);
+  g.save(); g.scale(k, k);
+  const on = b => b ? LCD_ON : LCD_GHOST;
+  const force = new Set([...(m.keys || []), ...(m.lit || [])]);   // parts forced on: the hunt's saved bit, and single segments a show or game lights
+  const lit = new Set([...(m.lit || []), ...force]);
+  LCD_FORCE = force;
+  const hits = s.hits = [];            // clickable parts (LCD units) for the segment hunt
+  g.textBaseline = "middle"; g.textAlign = "center";
+  for (const e of s.elements || []) {
+    if (e.kind === "dots") {           // a row of 5x7 dot-matrix cells (command 01)
+      const t = (m.text || "").padEnd(e.cells).slice(0, e.cells);
+      hits.push({ key: "text", x: e.x, y: e.y, w: e.cells * e.cw, h: e.ch });
+      const dw = e.cw * 0.8 / 5, dh = e.ch / 7;
+      for (let i = 0; i < e.cells; i++) {
+        const cols = FONT[t[i]] || FONT[t[i].toUpperCase()] || FONT["?"];
+        for (let cx = 0; cx < 5; cx++) {
+          const bits = parseInt(cols.substr(cx * 2, 2), 16);
+          for (let cy = 0; cy < 7; cy++) {
+            g.fillStyle = (bits >> cy & 1) ? "#ffd7ef" : "rgba(255, 120, 190, 0.16)";   // the dots are pinkish on the glass
+            g.fillRect(e.x + i * e.cw + cx * dw, e.y + cy * dh, dw * 0.78, dh * 0.78);
+          }
+        }
+      }
+    } else if (e.kind === "digits") {  // 7-segment digits; "half_first" = the first digit is only a "1"
+      const v = m[e.id] == null ? "" : String(m[e.id]), t = v.padStart(e.n).slice(-e.n);
+      for (let i = 0; i < e.n; i++) {
+        const segs = v === "" ? "" : SEG7[t[i]] ?? "";
+        if (e.half_first && i === 0) seg7(g, e.x - e.w * 0.55, e.y, e.w, e.h, segs.includes("b") ? "bc" : "", on, hits, `${e.id}.${i}.`, "bc");
+        else seg7(g, e.x + i * (e.w + 3) - (e.half_first ? e.w * 0.45 : 0), e.y, e.w, e.h, segs, on, hits, `${e.id}.${i}.`);
+      }
+    } else if (e.kind === "seg16") {   // 16-segment character cells
+      const t = String(m[e.id] || "").toUpperCase().padEnd(e.cells).slice(0, e.cells);
+      for (let i = 0; i < e.cells; i++) seg16(g, e.x + i * e.cw, e.y, e.cw * 0.78, e.ch, (SEG16[t[i]] ?? SEG16["?"]).split(" "), on, hits, `${e.id}.${i}.`);
+    } else if (e.kind === "ramp") {    // a rising wedge of n steps
+      const n = m[e.id] ?? -1;
+      for (let i = 0; i < e.n; i++) {
+        const sw = e.w / e.n, sh = e.h * (0.25 + 0.75 * (i + 1) / e.n);
+        g.fillStyle = on(i < n || force.has(`${e.id}.${i}`)); g.fillRect(e.x + i * sw, e.y + e.h - sh, sw * 0.62, sh);
+        hits.push({ key: `${e.id}.${i}`, x: e.x + i * sw, y: e.y + e.h - sh, w: sw * 0.62, h: sh });
+      }
+    } else if (e.kind === "wedge") {   // a wedge of n horizontal stripes, longest on top; the square edge on one side
+      const n = m[e.id] ?? -1, sh = e.h / e.n;
+      for (let i = 0; i < e.n; i++) {        // i = 0 is the bottom (shortest) stripe
+        const len = e.w * (i + 1) / e.n, y0 = e.y + e.h - (i + 1) * sh;
+        const x0 = e.edge === "right" ? e.x + e.w - len : e.x;
+        g.fillStyle = on(i < n || force.has(`${e.id}.${i}`)); g.fillRect(x0, y0, len, sh * 0.6);
+        hits.push({ key: `${e.id}.${i}`, x: x0, y: y0, w: len, h: sh * 0.6 });
+      }
+    } else if (e.kind === "box") {     // a box with dark text (lit = the box is on)
+      const b = lit.has(e.id), bt = lit.has(e.id + ".text");
+      g.fillStyle = on(b); g.fillRect(e.x, e.y, e.w, e.h);
+      g.fillStyle = bt ? (b ? "#1638c4" : LCD_ON) : b ? "#1638c4" : "rgba(6, 10, 70, 0.25)";
+      g.font = `bold ${e.h > 12 ? 5.5 : 6.5}px Segoe UI, sans-serif`;
+      const lines = e.text.split("\n");
+      lines.forEach((ln, i) => g.fillText(ln, e.x + e.w / 2, e.y + e.h * (i + 1) / (lines.length + 1)));
+      hits.push({ key: e.id, x: e.x, y: e.y, w: e.w, h: e.h });                        // the box (frame / fill)
+      hits.push({ key: e.id + ".text", x: e.x + e.w * 0.25, y: e.y + e.h * 0.2, w: e.w * 0.5, h: e.h * 0.6 });   // its letter / text
+    } else if (e.kind === "rule") {
+      g.fillStyle = on(lit.has(e.id)); g.fillRect(e.x, e.y, e.w, 1.2);
+      hits.push({ key: e.id, x: e.x, y: e.y - 1, w: e.w, h: 3 });
+    } else if (e.kind === "label") {   // a printed-style word that is itself a segment
+      const b = lit.has(e.id);
+      g.font = `600 ${e.size || 6}px Segoe UI, sans-serif`;
+      const tw = g.measureText(e.text).width;
+      if (e.inv) { g.fillStyle = on(b); g.fillRect(e.x - tw / 2 - 2, e.y - 3.5, tw + 4, 7);
+        g.fillStyle = lit.has(e.id + ".text") ? (b ? "#1638c4" : LCD_ON) : b ? "#1638c4" : "rgba(6, 10, 70, 0.3)"; }
+      else g.fillStyle = on(b);
+      g.fillText(e.text, e.x, e.y);
+      if (e.inv) {   // a tab: its background and its text are separate parts
+        hits.push({ key: e.id, x: e.x - tw / 2 - 2, y: e.y - 3.5, w: tw + 4, h: 7 });
+        hits.push({ key: e.id + ".text", x: e.x - tw / 3, y: e.y - 2, w: tw * 2 / 3, h: 4 });
+      } else hits.push({ key: e.id, x: e.x - tw / 2 - 1, y: e.y - 4, w: tw + 2, h: 8 });
+    }
+  }
+  g.restore();
+  s.ctx.canvas.title = note;
+}
+function seg7(g, x, y, w, h, segs, on, hits, prefix, only) {
+  const t = Math.max(1.6, w * 0.2), hh = h / 2, sk = w * 0.12;   // stroke, half height, italic skew
+  const S = {
+    a: [[x + t * 0.6 + sk, y], [x + w - t * 0.6 + sk, y], [x + w - t * 1.4 + sk, y + t], [x + t * 1.4 + sk, y + t]],
+    g: [[x + t * 0.7 + sk / 2, y + hh - t / 2], [x + w - t * 0.7 + sk / 2, y + hh - t / 2], [x + w - t * 0.7 + sk / 2, y + hh + t / 2], [x + t * 0.7 + sk / 2, y + hh + t / 2]],
+    d: [[x + t * 1.4, y + h - t], [x + w - t * 1.4, y + h - t], [x + w - t * 0.6, y + h], [x + t * 0.6, y + h]],
+    f: [[x + sk, y + t * 0.6], [x + t + sk, y + t * 1.4], [x + t + sk / 2, y + hh - t * 0.6], [x + sk / 2, y + hh - t * 0.2]],
+    b: [[x + w - t + sk, y + t * 1.4], [x + w + sk, y + t * 0.6], [x + w + sk / 2, y + hh - t * 0.2], [x + w - t + sk / 2, y + hh - t * 0.6]],
+    e: [[x + sk / 2, y + hh + t * 0.2], [x + t + sk / 2, y + hh + t * 0.6], [x + t, y + h - t * 1.4], [x, y + h - t * 0.6]],
+    c: [[x + w - t + sk / 2, y + hh + t * 0.6], [x + w + sk / 2, y + hh + t * 0.2], [x + w, y + h - t * 0.6], [x + w - t, y + h - t * 1.4]],
+  };
+  for (const [k, pts] of Object.entries(S)) {
+    if (only && !only.includes(k)) continue;
+    g.fillStyle = on(segs.includes(k) || LCD_FORCE.has(prefix + k)); g.beginPath(); pts.forEach(([px_, py], i) => i ? g.lineTo(px_, py) : g.moveTo(px_, py)); g.closePath(); g.fill();
+    if (hits) {
+      const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+      hits.push({ key: prefix + k, x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) });
+    }
+  }
+}
+
+// A click on the drawn LCD (the panel's or the big copy in the hunt panel) during the segment hunt:
+// the smallest part under the click, else the nearest within 8 LCD units, is what lit.
+function lcdClick(e, canvas) {
+  const s = W && W.lcd;
+  if (!S || !S.seg_hunt || !s || !s.hits) return;
+  const [uw, uh] = s.units || [200, 114], r = canvas.getBoundingClientRect();
+  const ux = (e.clientX - r.left) / r.width * uw, uy = (e.clientY - r.top) / r.height * uh;
+  let best = null, bd = 1e9;
+  for (const h of s.hits) {
+    const inside = ux >= h.x - 1 && ux <= h.x + h.w + 1 && uy >= h.y - 1 && uy <= h.y + h.h + 1;
+    const dist = inside ? h.w * h.h * 1e-3 : Math.hypot(ux - (h.x + h.w / 2), uy - (h.y + h.h / 2)) + 100;
+    if (dist < bd) { bd = dist; best = h; }
+  }
+  if (best && bd < 108) { post({ seg_assign: best.key }); huntFlash(best); }
+}
+let huntMark = null, huntSaved = [];
+function huntFlash(h) { huntMark = { h, t: performance.now() }; }
+
+// ---------- render a snapshot ----------
+const ledCss = (c, v) => { const n = parseInt((c.led_color || "#4aa8ff").slice(1), 16), a = 0.35 + 0.65 * v / 127;
+  return [`rgba(${n >> 16},${n >> 8 & 255},${n & 255},${a})`, `0 0 ${6 + 14 * v / 127}px rgba(${n >> 16},${n >> 8 & 255},${n & 255},${a})`]; };
+let lastVal = {}, flash = {}, lastLogKey = "", lastWireKey = "", lastMissKey = "";
+function render(s) {
+  S = s;
+  document.body.classList.toggle("sim", !s.hardware);
+  document.body.classList.toggle("hw", !!s.hardware);
+  const conn = $("conn");
+  conn.textContent = s.hardware ? (s.connected ? "NuVJ hardware · " + (s.ports[0] || "") : "NuVJ not found") : "NuVJ simulated";
+  conn.className = "pill " + (s.hardware ? (s.connected ? "ok" : "bad") : "sim");
+  const hb = $("hwBtn"); hb.textContent = s.hardware ? "■ Back to the simulator" : "Use the real NuVJ"; hb.classList.toggle("hwon", !!s.hardware);
+  const mp = s.map, seen = new Set(mp.seen), mapped = new Set(mp.mapped), held = new Set(s.held), leds = s.leds || {};
+  $("mapCount").textContent = `${seen.size} / ${mp.total} seen on hardware` + (mp.verified ? ` ✓ verified ${mp.verified}` : "");
+  $("bar").style.width = (100 * seen.size / mp.total) + "%";
+  const now = performance.now();
+  for (const c of Object.values(els)) {
+    if (c.kind === "push") continue;      // shown on its knob
+    const cl = c.el.classList, v = s.values[c.name];
+    if (c.push) cl.toggle("pushed", held.has(c.push.name));
+    cl.toggle("seen", seen.has(c.name));
+    cl.toggle("missing", !mapped.has(c.name));
+    cl.toggle("learn", s.learn === c.name);
+    if (v !== undefined && lastVal[c.name] !== undefined && v !== lastVal[c.name]) flash[c.name] = now;
+    lastVal[c.name] = v;
+    const fl = now - (flash[c.name] || 0) < 250;
+    if (c.kind === "button" || c.kind === "pad") {
+      cl.toggle("held", held.has(c.name));
+      const lv = leds[c.name] || 0;
+      const strips = c.el.querySelector(".strips");
+      if (strips) {   // black rubber: only the two light strips glow
+        if (lv) { const [bg, sh] = ledCss(c, lv); strips.style.borderColor = bg; strips.style.boxShadow = sh + ", inset " + sh; c.el.style.boxShadow = ""; }
+        else { strips.style.borderColor = ""; strips.style.boxShadow = ""; }
+      } else if (lv) { const [bg, sh] = ledCss(c, lv); c.el.style.background = bg; c.el.style.boxShadow = (c.style === "silver" ? "0 0 0 3px #c4c6cb, " : "") + sh; c.el.style.color = "#06121f"; }
+      else { c.el.style.background = ""; c.el.style.boxShadow = ""; c.el.style.color = ""; }
+    } else if (c.kind === "knob") {
+      c.el.firstChild.style.transform = `rotate(${-135 + 270 * (v || 0) / 127}deg)`;
+      c.v.textContent = v === undefined ? "" : v; cl.toggle("flash", fl);
+    } else if (c.kind === "encoder" || c.kind === "wheel") {
+      for (const part of c.el.children) part.style.transform = `rotate(${(v || 0) / (c.range || 128) * 360}deg)`;
+      c.v.textContent = c.kind === "encoder" ? `bank ${((s.host[c.name[0]] || {}).bank ?? 0) + 1}` : `${v || 0} ticks`;
+      cl.toggle("flash", fl);
+    } else if (c.kind === "fader") {
+      const k = (v ?? 8192) / 16383;
+      if (c.orient === "v") c.cap.style.top = px((1 - k) * (c.len - 16)); else c.cap.style.left = px(k * (c.len - 16));
+      c.v.textContent = v ?? "";
+    } else if (c.kind === "switch") {
+      c.el.firstChild.style.left = px(2 + 18 * (v || 0));
+    }
+  }
+  const lw0 = s.lcd_wire || {}; let wired = Object.assign({}, s.lcd || {});   // text and number as really sent
+  if (lw0.inited) wired.text = lw0.text;
+  if (s.hardware) {   // on the real NuVJ, draw only what the glass can show: the text and learned segments
+    const learned = Object.keys(s.lcd_segments || {});
+    const has = p => learned.some(k => k === p || k.startsWith(p + "."));
+    for (const id of ["alpha", "bpm", "preset", "last", "data"]) if (!has(id)) wired[id] = id === "last" || id === "data" ? null : "";
+    wired.lit = (wired.lit || []).filter(has);
+  }
+  if (s.engine && !s.seg_hunt) {   // Himmel's engine drives the NuVJ: draw the segments it really sent
+    const seg = (lw0.segs || "").match(/../g)?.map(x => parseInt(x, 16)) || [];
+    const keys = Object.entries(s.lcd_segments || {}).filter(([, v]) => v.length && v.every(b => (seg[b[0]] || 0) & b[1])).map(([k]) => k);
+    wired = { text: lw0.text, keys };
+  }
+  if (s.seg_hunt) {   // the hunt: its text row, and whatever this bit (or byte) is already saved as
+    const h = s.seg_hunt, saved = Object.entries(s.lcd_segments || {})
+      .filter(([k, v]) => v.some(b => b[0] === h.byte && (h.whole || b[1] === (1 << h.bit)))).map(([k]) => k);
+    wired = { text: wired.text, keys: saved };
+    huntSaved = saved;
+  }
+  drawLcd(wired, s.hardware ? "drawing: what Himmel would write (device LCD protocol unknown)" : "simulated: what Himmel would write");
+  // host card
+  const h = s.host;
+  const lm = $("ledModes");
+  if (lm.dataset.k !== h.modes.join()) {
+    lm.dataset.k = h.modes.join();
+    const names = { himmel: "Himmel", follow: "Follow", all: "All on", chase: "Chase", off: "LEDs off" };
+    lm.innerHTML = h.modes.map(m => `<button data-m="${m}">${names[m] || m}</button>`).join("");
+    lm.querySelectorAll("button").forEach(b => b.onclick = () => post({ led_mode: b.dataset.m }));
+  }
+  lm.querySelectorAll("button").forEach(b => b.classList.toggle("on", !h.probe && b.dataset.m === h.mode));
+  const tg = Object.entries(h.toggles).filter(([, on]) => on).map(([n]) => n).join(", ") || "-";
+  $("hostInfo").textContent = `deck A: bank ${h.A.bank + 1}, pad ${h.A.pad ?? "-"}, jog ${h.A.jog}    deck B: bank ${h.B.bank + 1}, pad ${h.B.pad ?? "-"}, jog ${h.B.jog}\n` +
+    `crossfader ${Math.round(100 * h.xf / 16383)}% B    tempo ${h.bpm} BPM (tap BPM Tap)\non: ${tg}` +
+    (h.probe ? `\nLED probe: every button note on channel ${h.probe.ch + 1}, velocity ${h.probe.vel}` : "");
+  // hardware card
+  const st = s.stats || {};
+  $("hwInfo").textContent = (s.notes || []).join("\n") + (s.hardware ? `\nmessages from the NuVJ: ${st.msgs ?? 0} (${st.rate ?? 0}/s)` +
+    (Object.keys(s.ranges || {}).length ? "\nranges seen: " + Object.entries(s.ranges).map(([n, r]) => `${n} ${r[0]}..${r[1]}`).join(", ") : "") : "");
+  if (s.port_list) {
+    const pp = $("portPick"), key = JSON.stringify(s.port_list.in);
+    if (pp.dataset.k !== key) {
+      pp.dataset.k = key;
+      pp.innerHTML = '<option value="">auto (name has NuVJ / Numark)</option>' + s.port_list.in.map(([i, n]) => `<option value="${i}">in ${i}: ${esc(n)}</option>`).join("");
+    }
+  }
+  $("learnMsg").textContent = s.learn_msg || "";
+  $("lcdModel").textContent = "LCD model now: " + JSON.stringify(s.lcd);
+  $("gameBtn").textContent = s.game === "Jog Pong" ? "■ Stop Jog Pong" : "★ Jog Pong";
+  if (document.activeElement !== $("introMode") && s.intro_mode) $("introMode").value = s.intro_mode;
+  $("gameBtn").classList.toggle("on", !!s.game);
+  $("idBtn").disabled = !s.hardware;
+  $("driveBtn").textContent = s.drive ? "■ Stop: listen only" : "Let Himmel drive the LEDs and LCD";
+  $("driveBtn").classList.toggle("hwon", !!s.drive); $("driveBtn").disabled = !s.hardware;
+  const sh = s.seg_hunt;
+  document.body.classList.toggle("hunting", !!sh);
+  if (sh) {
+    $("hState").textContent = sh.all ? "every segment on" : `byte ${sh.byte}${sh.whole ? " (all 7)" : " · bit " + sh.bit}`;
+    if (document.activeElement !== $("hWhole")) $("hWhole").checked = !!sh.whole;
+    const hs = $("hSaved");
+    hs.textContent = sh.whole ? "7 at a time: a click notes that this byte lights something (nothing is saved per part)"
+      : huntSaved.length ? "✓ Saved: this one lights " + huntSaved.join(", ") + " (lit on the picture)"
+      : "Not saved yet: click what lights on the NuVJ";
+    hs.classList.toggle("ok", !sh.whole && huntSaved.length > 0);
+    if (document.activeElement !== $("hAuto")) $("hAuto").checked = !!sh.auto;
+    const hc = $("hLcd"), hg = hc.getContext("2d"), src = W.lcd.ctx.canvas;
+    hg.drawImage(src, 0, 0, hc.width, hc.height);
+    if (huntMark && performance.now() - huntMark.t < 1500) {   // where the last click landed
+      const [uw, uh] = W.lcd.units || [200, 114], kx = hc.width / uw, ky = hc.height / uh, h = huntMark.h;
+      hg.strokeStyle = "#ff9d2e"; hg.lineWidth = 4; hg.strokeRect(h.x * kx - 4, h.y * ky - 4, h.w * kx + 8, h.h * ky + 8);
+    }
+    const segs = s.lcd_segments || {}, keys = Object.keys(segs);
+    $("hFound").textContent = (s.learn_msg ? s.learn_msg + "\n" : "") +
+      `learned: ${keys.length} part(s)` + (keys.length ? " - last: " + keys.slice(-6).join(", ") : "") +
+      (s.lcd_bytes_lit && s.lcd_bytes_lit.length ? `\nbytes that light something: ${s.lcd_bytes_lit.join(", ")}` : "");
+  }
+  if (W && W.lcd && W.lcd.el) W.lcd.el.classList.toggle("hunting", !!sh);
+  $("shInfo").textContent = sh ? `lighting byte ${sh.byte} ${sh.whole ? "(all 7 bits)" : "bit " + sh.bit}${sh.auto ? " (auto)" : ""} - click what lit on the LCD drawing` +
+    (s.lcd_bytes_lit && s.lcd_bytes_lit.length ? `; bytes that lit something: ${s.lcd_bytes_lit.join(", ")}` : "") : "";
+  if (sh && !$("shAuto").matches(":focus")) $("shAuto").checked = sh.auto;
+  const lw = s.lcd_wire || {};
+  $("lcdModel").textContent = `Himmel's LCD model: ${JSON.stringify(s.lcd)}\nsent to the glass: text "${lw.text ?? ""}", number ${lw.number ?? "-"}` +
+    `${lw.contrast != null ? ", contrast " + lw.contrast : ""}${lw.inited ? "" : " (no init yet)"}\nlearned segments: ` +
+    (Object.entries(s.lcd_segments || {}).map(([k, v]) => `${k}=${v[0]}/${v[1]}`).join(" ") || "none yet");
+  const miss = Object.keys(els).filter(n => !seen.has(n)), mk = miss.join("|");
+  if (mk !== lastMissKey) {
+    lastMissKey = mk;
+    $("missing").innerHTML = miss.length ? miss.map(n => `<span>${esc(n)}</span>`).join("") : "All controls seen ✓";
+    $("missing").querySelectorAll("span").forEach(sp => sp.onclick = () => post({ learn: sp.textContent }));
+  }
+  $("unmapped").textContent = (s.unmapped || []).join("  |  ") || "-";
+  $("verifyBtn").disabled = miss.length > 0;
+  $("ledResult").textContent = mp.leds && mp.leds.checked ? `checked on the NuVJ ${mp.leds.checked}` : "";
+  // events
+  $("events").innerHTML = "<tr><th>time</th><th>control</th><th>event</th></tr>" + (s.events || []).slice().reverse().map(([t, n, ev]) =>
+    `<tr><td>${esc(t)}</td><td>${esc(n)}</td><td>${esc(evText(ev))}</td></tr>`).join("");
+  const wk = JSON.stringify(mp.wire) + mp.learned.join();
+  if (wk !== lastWireKey) {
+    lastWireKey = wk;
+    const learned = new Set(mp.learned);
+    $("wire").innerHTML = "<tr><th>control</th><th>MIDI</th><th>source</th></tr>" + Object.entries(mp.wire).map(([n, w]) =>
+      `<tr><td>${esc(n)}</td><td>${esc(w)}</td><td>${learned.has(n) ? "learned" : "forum table"}</td></tr>`).join("");
+  }
+  const log = s.log || [], lk = log.map(r => r[0] + r[2]).join("|");
+  if (lk !== lastLogKey) {
+    lastLogKey = lk;
+    $("log").innerHTML = log.slice().reverse().map(([t, dir, hex, text]) =>
+      `<tr class="${dir.startsWith("device") ? "up" : dir === "probe" ? "probe" : "down"}"><td>${esc(t)}</td><td class="dir">${esc(dir)}</td>` +
+      `<td>${esc(text)}</td><td class="hex">${esc(hex)}</td></tr>`).join("") || "<tr><td>-</td></tr>";
+  }
+}
+function evText(ev) {
+  if (!ev) return "";
+  return ev.kind === "down" ? `ButtonDown (vel ${ev.vel})` : ev.kind === "up" ? "ButtonUp" : ev.kind === "value" ? `Knob value ${ev.value}` :
+    ev.kind === "delta" ? `KnobDelta ${ev.delta > 0 ? "+" : ""}${ev.delta}` : ev.kind === "fader" ? `Fader ${ev.value} / 16383` :
+    ev.kind === "switch" ? `Switch position ${ev.pos}` : JSON.stringify(ev);
+}
+
+$("hwBtn").onclick = () => post({ hardware: !hw() });
+$("portGo").onclick = () => post({ hardware: true, port: $("portPick").value === "" ? null : +$("portPick").value });
+$("verifyBtn").onclick = () => post({ verify: true });
+$("resetSeen").onclick = () => { if (confirm("Clear all 'seen' marks?")) post({ reset_seen: true }); };
+$("noise").onchange = e => post({ show_noise: e.target.checked });
+$("ledsOk").onclick = () => post({ leds_ok: true });
+$("shGo").onclick = () => post({ seg_hunt: { byte: 0, bit: 0, auto: $("shAuto").checked, whole: $("shWhole").checked } });
+$("shWhole").onchange = e => { if (S && S.seg_hunt) post({ seg_hunt: { whole: e.target.checked } }); };
+$("shStop").onclick = () => post({ seg_hunt: null });
+$("shSave").onclick = () => { const t = $("shName").value.trim(); if (t) { post({ seg_assign: "custom:" + t }); $("shName").value = ""; } };
+$("shAll").onclick = () => post({ seg_hunt: { all: true, auto: false } });
+$("shAuto").onchange = e => { if (S && S.seg_hunt) post({ seg_hunt: { auto: e.target.checked } }); };
+document.querySelectorAll("[data-sstep]").forEach(b => b.onclick = () => post({ seg_hunt: { step: +b.dataset.sstep, auto: false } }));
+$("lcdC").oninput = () => { $("lcdCV").textContent = $("lcdC").value; post({ contrast: +$("lcdC").value }); };
+$("idBtn").onclick = () => post({ identity: true });
+$("gameBtn").onclick = () => post({ game: S && S.game ? null : "pong" });
+document.querySelectorAll("[data-intro]").forEach(b => b.onclick = () => post({ game: b.dataset.intro }));
+$("introMode").onchange = e => post({ intro_mode: e.target.value });
+$("hOpen").onclick = () => post({ seg_hunt: { byte: 0, bit: 0, auto: false, whole: $("hWhole").checked } });
+$("hClose").onclick = () => post({ seg_hunt: null });
+$("hNext").onclick = () => post({ seg_hunt: { step: S && S.seg_hunt && S.seg_hunt.whole ? 7 : 1, auto: false } });
+$("hPrev").onclick = () => post({ seg_hunt: { step: S && S.seg_hunt && S.seg_hunt.whole ? -7 : -1, auto: false } });
+$("hWhole").onchange = e => post({ seg_hunt: { whole: e.target.checked } });
+$("hAuto").onchange = e => post({ seg_hunt: { auto: e.target.checked } });
+$("hSave").onclick = () => { const t = $("hName").value.trim(); if (t) { post({ seg_assign: "custom:" + t }); $("hName").value = ""; } };
+$("hName").onkeydown = e => { if (e.key === "Enter") $("hSave").click(); };
+$("hLcd").addEventListener("click", e => lcdClick(e, $("hLcd")));
+$("hForget").onclick = () => post({ seg_forget: true });
+$("tShow").onclick = () => post({ lcd_test: { alpha: $("tLine2").value, text: $("tLine1").value } });
+document.querySelectorAll("[data-t]").forEach(b => { if (b.closest("#hunt")) b.onclick = () => { $("tLine2").value = b.dataset.t; $("tShow").click(); }; });
+// ---------- camera mapper: a webcam watches the NuVJ's LCD and maps every segment bit by itself ----------
+// 1. Camera on (any webcam pointed at the NuVJ screen). 2. Click the 4 corners of the blue glass in the
+// picture: top-left, top-right, bottom-right, bottom-left. 3. Auto-map: for every byte, all segments off
+// (baseline); then each bit alone. What got brighter is mapped onto the drawn LCD and saved (seg_set).
+const CAM = { stream: null, corners: [], Hc2l: null, Hl2c: null, running: false, grid: null, last: null, parts: null };
+let GW = 400, GH = 225;       // the analysed crop (the glass, at the camera's own resolution, at most 960 wide)
+let CROP = { x: 0, y: 0, w: 1, h: 1 };
+function solve8(A, b) {        // Gaussian elimination for the 8x8 homography system
+  const n = 8, M = A.map((r, i) => [...r, b[i]]);
+  for (let c = 0; c < n; c++) {
+    let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    [M[c], M[p]] = [M[p], M[c]];
+    for (let r = 0; r < n; r++) if (r !== c) { const f = M[r][c] / M[c][c]; for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k]; }
+  }
+  return M.map((r, i) => r[n] / r[i]);
+}
+function homography(src, dst) {
+  const A = [], b = [];
+  for (let i = 0; i < 4; i++) {
+    const [x, y] = src[i], [u, v] = dst[i];
+    A.push([x, y, 1, 0, 0, 0, -u * x, -u * y]); b.push(u);
+    A.push([0, 0, 0, x, y, 1, -v * x, -v * y]); b.push(v);
+  }
+  return [...solve8(A, b), 1];
+}
+function hApply(H, x, y) { const w = H[6] * x + H[7] * y + 1; return [(H[0] * x + H[1] * y + H[2]) / w, (H[3] * x + H[4] * y + H[5]) / w]; }
+async function camList() {
+  try {
+    const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput");
+    const sel = $("camSel"), cur = sel.value;
+    sel.innerHTML = devs.map((d, i) => `<option value="${d.deviceId}">${esc(d.label || "camera " + (i + 1))}</option>`).join("");
+    if (cur) sel.value = cur;
+  } catch (e) { $("camInfo").textContent = "no camera list: " + e; }
+}
+async function camStart(keepCorners) {
+  try {
+    if (CAM.stream) { CAM.stopping = true; CAM.stream.getTracks().forEach(t => t.stop()); CAM.stopping = false; }
+    const id = $("camSel").value, size = { width: { ideal: 1920 }, height: { ideal: 1080 } };
+    CAM.stream = await navigator.mediaDevices.getUserMedia({ video: id ? Object.assign({ deviceId: { exact: id } }, size) : size });
+    const tr = CAM.stream.getVideoTracks()[0];
+    tr.onended = () => {               // the camera went away (another program took it, or the driver reset): start it again
+      if (CAM.stopping) return;
+      CAM.drops = (CAM.drops || 0) + 1;
+      camNote(`camera stopped (${CAM.drops}x) - starting it again…`);
+      setTimeout(() => camStart(true), 800);
+    };
+    tr.onmute = () => camNote("camera paused by the system (muted) - waiting…");
+    tr.onunmute = () => camNote("camera back");
+    $("camVid").srcObject = CAM.stream;
+    await $("camVid").play().catch(() => {});
+    document.body.classList.add("camon");
+    await camList();
+    if (!keepCorners || !CAM.Hc2l) {
+      CAM.corners = []; CAM.Hc2l = null;
+      camNote("Camera on (" + (tr.label || "camera") + "). Now click the 4 corners of the blue glass: top-left, top-right, bottom-right, bottom-left.");
+    } else { camCalibrated(); camNote("camera started again; the corners are kept"); }
+  } catch (e) { camNote("camera failed: " + e + " (allow the camera for this page; close other programs that use it, e.g. Teams or OBS)"); }
+}
+function camNote(t) { $("camInfo").textContent = t; }
+function camLive() {             // is a picture coming in?
+  const v = $("camVid"), tr = CAM.stream && CAM.stream.getVideoTracks()[0];
+  return !!(tr && tr.readyState === "live" && !tr.muted && v.videoWidth && v.readyState >= 2);
+}
+function vidPoint(e) {          // a click on the overlay -> a point in the video's own pixels
+  const v = $("camVid"), r = $("camOv").getBoundingClientRect();
+  return [(e.clientX - r.left) / r.width * v.videoWidth, (e.clientY - r.top) / r.height * v.videoHeight];
+}
+function camCalibrated() {
+  const [uw, uh] = W.lcd.units || [200, 112];
+  const L = [[0, 0], [uw, 0], [uw, uh], [0, uh]];
+  CAM.Hc2l = homography(CAM.corners, L); CAM.Hl2c = homography(L, CAM.corners);
+  // the crop: the glass's box in the video, plus a margin; analysed at full camera resolution
+  const v = $("camVid"), xs = CAM.corners.map(c => c[0]), ys = CAM.corners.map(c => c[1]);
+  const m = 0.04 * Math.max(...xs) - 0.04 * Math.min(...xs);
+  CROP.x = Math.max(0, Math.floor(Math.min(...xs) - m)); CROP.y = Math.max(0, Math.floor(Math.min(...ys) - m));
+  CROP.w = Math.min(v.videoWidth - CROP.x, Math.ceil(Math.max(...xs) + m) - CROP.x);
+  CROP.h = Math.min(v.videoHeight - CROP.y, Math.ceil(Math.max(...ys) + m) - CROP.y);
+  const k = Math.min(1, 960 / CROP.w); GW = Math.round(CROP.w * k); GH = Math.round(CROP.h * k);
+  grabCv.width = GW; grabCv.height = GH;
+  // every analysed pixel inside the glass, with its place on the LCD drawing
+  const sx = CROP.w / GW, sy = CROP.h / GH, idx = [], U = [], V = [];
+  for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
+    const [u, w] = hApply(CAM.Hc2l, CROP.x + (x + 0.5) * sx, CROP.y + (y + 0.5) * sy);
+    if (u >= 0 && u <= uw && w >= 0 && w <= uh) { idx.push(y * GW + x); U.push(u); V.push(w); }
+  }
+  const pxPerUnit = Math.sqrt(idx.length / (uw * uh));
+  CAM.grid = { idx, U, V, pxPerUnit };
+  $("camInfo").textContent = `Corners set: ${idx.length} camera pixels on the glass, ${pxPerUnit.toFixed(1)} per LCD unit` +
+    (pxPerUnit < 2.5 ? " - too few: zoom in or move the camera closer (aim for 3 or more)" : " - good") +
+    ". The outlines should sit on the real segments. Then press Auto-map. Bits you learned by hand are kept.";
+}
+// Click to place the 4 corners; afterwards drag any corner (the outlines follow) to make them fit.
+let camDrag = -1;
+function camHomOnly() {         // quick: only the two homographies (for the outlines while dragging)
+  const [uw, uh] = W.lcd.units || [200, 112], L = [[0, 0], [uw, 0], [uw, uh], [0, uh]];
+  CAM.Hc2l = homography(CAM.corners, L); CAM.Hl2c = homography(L, CAM.corners);
+}
+$("camOv").addEventListener("pointerdown", e => {
+  if (!CAM.stream || CAM.running) return;
+  const p = vidPoint(e), v = $("camVid"), r = $("camOv").getBoundingClientRect(), near = 28 * v.videoWidth / r.width;
+  if (CAM.corners.length === 4) {
+    let best = -1, bd = near;
+    CAM.corners.forEach((c, i) => { const d = Math.hypot(c[0] - p[0], c[1] - p[1]); if (d < bd) { bd = d; best = i; } });
+    if (best >= 0) { camDrag = best; CAM.nudge = best; $("camOv").setPointerCapture(e.pointerId); }
+    return;
+  }
+  CAM.corners.push(p);
+  if (CAM.corners.length === 4) camCalibrated();
+  else $("camInfo").textContent = `corner ${CAM.corners.length} of 4 set - next: ${["top-left", "top-right", "bottom-right", "bottom-left"][CAM.corners.length]}`;
+});
+$("camOv").addEventListener("pointermove", e => {
+  if (camDrag < 0) {            // show a move cursor over a corner
+    if (CAM.corners.length === 4) {
+      const p = vidPoint(e), v = $("camVid"), r = $("camOv").getBoundingClientRect(), near = 28 * v.videoWidth / r.width;
+      $("camOv").style.cursor = CAM.corners.some(c => Math.hypot(c[0] - p[0], c[1] - p[1]) < near) ? "move" : "crosshair";
+    }
+    return;
+  }
+  CAM.corners[camDrag] = vidPoint(e);
+  camHomOnly();
+});
+$("camOv").addEventListener("pointerup", () => { if (camDrag >= 0) { camDrag = -1; camCalibrated(); } });
+document.addEventListener("keydown", e => {   // arrow keys nudge the last dragged corner by one camera pixel
+  if (!CAM.Hc2l || CAM.running || CAM.nudge === undefined || document.activeElement.tagName === "INPUT") return;
+  const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+  if (!d || !e.altKey) return;
+  e.preventDefault();
+  const c = CAM.corners[CAM.nudge]; c[0] += d[0]; c[1] += d[1]; camCalibrated();
+});
+const grabCv = document.createElement("canvas"); grabCv.width = GW; grabCv.height = GH;
+const grabG = grabCv.getContext("2d", { willReadFrequently: true });
+async function grab(n = 3) {    // average luminance of n frames (waits while the camera is away)
+  for (let t = 0; !camLive() && CAM.running; t++) await new Promise(r => setTimeout(r, 200));
+  const out = new Float32Array(GW * GH);
+  for (let k = 0; k < n; k++) {
+    grabG.drawImage($("camVid"), CROP.x, CROP.y, CROP.w, CROP.h, 0, 0, GW, GH);
+    const d = grabG.getImageData(0, 0, GW, GH).data;
+    for (let i = 0, j = 0; j < out.length; i += 4, j++) out[j] += (d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11) / n;
+    await new Promise(r => setTimeout(r, 45));
+  }
+  return out;
+}
+let camSeq = 1;
+async function huntTo(o) {      // set the hunt and wait until the server shows it, then let the glass settle
+  const seq = ++camSeq;
+  post({ seg_hunt: Object.assign({ auto: false, whole: false, quiet: true, seq }, o) });
+  for (let t = 0; t < 60 && !(S.seg_hunt && S.seg_hunt.seq === seq); t++) await new Promise(r => setTimeout(r, 25));
+  await new Promise(r => setTimeout(r, +$("camSettle").value || 350));
+}
+function camParts() {           // the drawn LCD's clickable parts, with lines for the 16-segment cells
+  return (W.lcd.hits || []).filter(h => h.key !== "text").map(h => Object.assign({ area: Math.max(1, h.w * h.h) }, h));
+}
+function analyse(base, cur) {
+  const G = CAM.grid, diff = new Float32Array(G.idx.length);
+  let mx = 0;
+  for (let i = 0; i < G.idx.length; i++) { const dv = cur[G.idx[i]] - base[G.idx[i]]; diff[i] = dv; if (dv > mx) mx = dv; }
+  const thr = Math.max(+$("camThr").value || 22, mx * 0.45);
+  if (mx < (+$("camThr").value || 22)) return { keys: [], mx, lit: [] };
+  const count = new Map(), lit = [];
+  for (let i = 0; i < diff.length; i++) {
+    if (diff[i] < thr) continue;
+    const u = G.U[i], v = G.V[i];
+    lit.push([u, v]);
+    let best = null, bd = 1e9;      // the smallest part under the pixel, else the nearest within 2.5 units
+    for (const p of CAM.parts) {
+      const inside = u >= p.x - 0.8 && u <= p.x + p.w + 0.8 && v >= p.y - 0.8 && v <= p.y + p.h + 0.8;
+      const dd = inside ? p.area * 1e-3 : Math.hypot(u - (p.x + p.w / 2), v - (p.y + p.h / 2)) + 100;
+      if (dd < bd) { bd = dd; best = p; }
+    }
+    if (best && bd < 102.5) count.set(best.key, (count.get(best.key) || 0) + 1);
+  }
+  const ppu2 = G.pxPerUnit * G.pxPerUnit, keys = [];
+  for (const [k, n] of count) {
+    const p = CAM.parts.find(q => q.key === k), cover = n / Math.max(1, p.area * ppu2);
+    if (n >= 3 && cover >= +($("camCover").value || 0.18)) keys.push(k);
+  }
+  return { keys, mx, lit };
+}
+async function autoMap() {
+  if (!CAM.Hc2l) { $("camInfo").textContent = "Set the 4 corners first."; return; }
+  if (!S.hardware || !S.drive) { $("camInfo").textContent = "Use the real NuVJ and let Himmel drive it first."; return; }
+  CAM.running = true; document.body.classList.add("camrun");
+  const from = Math.max(0, Math.min(63, +$("camFrom").value || 0)), to = Math.max(from, Math.min(63, +$("camTo").value || 63));
+  let found = 0;
+  try {
+    for (let byte = from; byte <= to && CAM.running; byte++) {
+      await huntTo({ byte, bit: 0, blank: true });
+      const base = await grab(4);
+      CAM.parts = camParts();
+      for (let bit = 0; bit < 7 && CAM.running; bit++) {
+        await huntTo({ byte, bit });
+        const cur = await grab(3), r = analyse(base, cur);
+        CAM.last = { byte, bit, ...r };
+        post({ seg_set: { byte, bit, keys: r.keys } });
+        if (r.keys.length) found++;
+        $("camInfo").textContent = `byte ${byte} bit ${bit}: ${r.keys.join(", ") || "nothing"} (brightest change ${r.mx.toFixed(0)}) - ${found} bits light something so far`;
+      }
+    }
+    if (CAM.running) $("camInfo").textContent = `Done: ${found} bits light something. Check them with ◀ / ▶ in the hunt (the picture lights what is saved).`;
+  } finally {
+    CAM.running = false; document.body.classList.remove("camrun");
+    post({ seg_hunt: { byte: from, bit: 0, quiet: false } });
+  }
+}
+function camOverlay() {         // the camera picture: the drawn LCD's parts projected onto it, and the last result
+  const ov = $("camOv"), v = $("camVid");
+  if (!CAM.stream || !v.videoWidth) return;
+  if (ov.width !== v.videoWidth) { ov.width = v.videoWidth; ov.height = v.videoHeight; }
+  const g = ov.getContext("2d"); g.clearRect(0, 0, ov.width, ov.height);
+  g.lineWidth = 2;
+  const cr = Math.max(7, ov.width / 120);
+  for (const [i, c] of CAM.corners.entries()) {
+    g.fillStyle = i === CAM.nudge ? "#ffd27f" : "#ff9d2e"; g.beginPath(); g.arc(c[0], c[1], cr, 0, 7); g.fill();
+    g.strokeStyle = "#000"; g.lineWidth = 2; g.beginPath(); g.moveTo(c[0] - cr * 1.6, c[1]); g.lineTo(c[0] + cr * 1.6, c[1]); g.moveTo(c[0], c[1] - cr * 1.6); g.lineTo(c[0], c[1] + cr * 1.6); g.stroke();
+    g.font = `${cr * 2}px Segoe UI`; g.fillStyle = "#ff9d2e"; g.fillText(String(i + 1), c[0] + cr * 1.4, c[1] - cr * 1.4);
+  }
+  if (!CAM.Hl2c) return;
+  const lastKeys = new Set(CAM.last ? CAM.last.keys : []);
+  for (const h of (W.lcd.hits || [])) {
+    const pts = [[h.x, h.y], [h.x + h.w, h.y], [h.x + h.w, h.y + h.h], [h.x, h.y + h.h]].map(p => hApply(CAM.Hl2c, p[0], p[1]));
+    g.strokeStyle = lastKeys.has(h.key) ? "#ff9d2e" : "rgba(120, 255, 180, 0.45)"; g.lineWidth = lastKeys.has(h.key) ? 3 : 1;
+    g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.closePath(); g.stroke();
+  }
+  if (CAM.last) { g.fillStyle = "rgba(255, 60, 60, 0.8)"; for (const [u, w] of CAM.last.lit.slice(0, 3000)) { const [x, y] = hApply(CAM.Hl2c, u, w); g.fillRect(x - 1, y - 1, 2, 2); } }
+}
+setInterval(camOverlay, 120);
+$("camStart").onclick = () => camStart(false);
+$("camList").onclick = () => camList();
+setInterval(() => {             // a heartbeat line: frames are arriving, or not
+  if (!CAM.stream) return;
+  const v = $("camVid"), q = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality().totalVideoFrames : 0;
+  if (CAM.lastFrames !== undefined && q === CAM.lastFrames && !CAM.running) camNote("no new camera frames for 2 s - is another program using the camera?");
+  if (CAM.lastFrames !== undefined && q > CAM.lastFrames && !CAM.running && !CAM.Hc2l && CAM.corners.length === 0) {
+    // frames arrive: check that they are not all black (a camera held by another program often gives black frames)
+    grabG.drawImage(v, 0, 0, v.videoWidth, v.videoHeight, 0, 0, GW, GH);
+    const d = grabG.getImageData(0, 0, GW, GH).data; let sum = 0;
+    for (let i = 0; i < d.length; i += 16) sum += d[i] + d[i + 1] + d[i + 2];
+    if (sum / (d.length / 16) < 6) camNote("the camera sends only black frames - another program (OBS?) probably holds it. " +
+      "In OBS press 'Start Virtual Camera', press ↻ here and pick 'OBS Virtual Camera'.");
+  }
+  CAM.lastFrames = q;
+}, 2000);
+$("camRun").onclick = () => { if (!CAM.running) autoMap(); };
+$("camStop").onclick = () => { CAM.running = false; };
+$("camCal").onclick = () => { CAM.corners = []; CAM.Hc2l = CAM.Hl2c = null; $("camInfo").textContent = "Click the 4 corners of the blue glass: top-left, top-right, bottom-right, bottom-left."; };
+if (navigator.mediaDevices) camList();
+
+document.addEventListener("keydown", e => {   // arrow keys step the hunt
+  if (!S || !S.seg_hunt || document.activeElement === $("hName")) return;
+  if (e.key === "ArrowRight") { e.preventDefault(); $("hNext").click(); }
+  if (e.key === "ArrowLeft") { e.preventDefault(); $("hPrev").click(); }
+});
+$("driveBtn").onclick = () => post({ drive: !(S && S.drive) });
+$("help").innerHTML = "<b>Simulator:</b> the drawing is the NuVJ. <b>Buttons and pads:</b> hold the mouse. " +
+  "<b>Knobs:</b> drag up/down or scroll. <b>BANK and MASTER FX:</b> endless, drag or scroll one step at a time; " +
+  "<b>right-click (or Alt+click) BANK to push it</b>. " +
+  "<b>Jog wheels:</b> drag around the wheel (hold SCRATCH for scratch). <b>Faders and crossfader:</b> drag the cap. " +
+  "<b>Front switches:</b> click to step. Every move sends the NuVJ's own MIDI bytes (see the monitor).<br>" +
+  "<b>Real NuVJ:</b> clicks on the drawing learn instead of play.";
+
+// weapon picker (same list as the MK2 page)
+fetch("/weapons").then(r => r.json()).then(list => {
+  const pick = $("weaponPick");
+  for (const w of list.weapons) { const o = document.createElement("option"); o.value = w.id; o.textContent = "⚔ " + w.name + (w.playable ? "" : " (drawing only)"); pick.appendChild(o); }
+  pick.value = "nuvj";
+  pick.onchange = () => { location.search = "?weapon=" + encodeURIComponent(pick.value); };
+});
+fetch("/weapon?id=nuvj").then(r => r.json()).then(w => {
+  build(w);
+  post({ sim_input: { release_all: true } });
+  const es = new EventSource("/wevents?id=nuvj");
+  es.onmessage = e => render(JSON.parse(e.data));
+  es.onerror = () => { $("conn").textContent = "server not running"; $("conn").className = "pill bad"; };
+});
+</script>
+</body>
+</html>
