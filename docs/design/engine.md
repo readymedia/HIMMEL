@@ -1,6 +1,6 @@
 # Engine foundations
 
-Status: agreed direction (owner, voice call 2026-11-11), with details proposed
+Status: agreed direction (owner, voice call 2026-11-11), details approved 2026-11-11 (D42–D76)
 here. This page covers the render model, cost, latency, stability,
 inputs / outputs, tracking, add-ons and Overlay mode. What the engine
 skeleton already does is in `docs/architecture.md` and `CLAUDE.md`. This page

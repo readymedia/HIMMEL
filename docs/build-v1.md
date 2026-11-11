@@ -46,7 +46,7 @@ on the owner's unit (milestone M10); otherwise it is the first thing in 0.2.
 | Outputs: 1–3 screens or projectors, one canvas, simple edge blend, curtains, per-output black | Mesh warp, pen masks, 4–6 outputs |
 | Cameras (exists), Spout in / out | NDI, capture cards beyond Media Foundation, DeckLink |
 | MK2 full Perform mapping (v4), Lightpad Block (TOUCH / MIX / SCRUB) | LUMI, Ohm64, KPE1, generic MIDI learn |
-| GUI v1: Perform, clip editor, scene / kit editor, library, outputs, wizard (needs D43) | VJ table, two GUI screens, audience view |
+| GUI v1: Perform, clip editor, scene / kit editor, library, outputs, wizard (web app, D43) | VJ table, two GUI screens, audience view |
 | Live sampler | — (0.2) |
 
 ## 3. Milestones (in order; each ends merged to `main`)
@@ -62,13 +62,13 @@ from the MK2.
 | **M2** | ENGINE | Clip transport: playhead state machine, modes, in / out, inner loop, cue points, beat loop + catch-up, scratch, BPM time base, speed glide, trigger styles, beat snap, clip target incl. HIT layer, autopilot, layer transitions, warm cue frames | `design/clips-and-playback.md` §2–3, §10 | Unit tests per mode (no GPU); jump-to-cue visible on the next frame |
 | **M3** | SHOW | Show files: scenes, variations, kits (pad targets), macros, songs, setlist; save / recall / morph; undo stack (64) + reset-to-scene; dice / mutate / rotate v1 with locks | `design/perform.md` §2–3, `design/presets-and-shuffle.md` | Round-trip tests; recall of a 4-layer scene < 1 frame of hitch |
 | **M4** | CONTROL | MK2 Perform v4: focus, wheel TAKE, Top buttons, pages PLAY / CLIP / LAYER / FX / MIX, pads CLIPS / SLICE / LOOKS / FX PADS, PRESS, targets, HIT, screens | `design/perform.md`, `design/hardware-mapping.md` §3 | The owner plays a song from the MK2 alone; input → glass ≤ 3 frames (measured) |
-| **M5** | FX | Effect metadata (`press`, `scopes`, presets), 16 tier-1 effects (hue / sat, brightness / contrast, colorize, invert, posterize, mirror, kaleido, tile, rotozoom, zoom pulse, wave, shake, blur, glow, strobe, RGB split; plus trails and luma key if time allows), 6 generators, strobe / flash photosensitivity cap, PRESS + scope resolution in the engine | `design/effects-and-generators.md` | Each effect: PNG check + timing on the GTX 1070; strobe never exceeds the cap |
+| **M5** | FX | Effect metadata (`press`, `scopes`, presets), 16 tier-1 effects (hue / sat, brightness / contrast, colorize, invert, posterize, mirror, kaleido, tile, rotozoom, zoom pulse, wave, shake, blur, glow, strobe, RGB split; plus trails and luma key if time allows), 6 generators, the optional strobe / flash cap (off by default, D65), PRESS + scope resolution in the engine | `design/effects-and-generators.md` | Each effect: PNG check + timing on the GTX 1070; with the optional cap on, strobe never exceeds it |
 | **M6** | ENGINE + CONTROL | Outputs: 1–3 screens / projectors as one canvas, simple blend, layer places (FILL ALL / OUT n / FIT / FREE), curtains in the supervisor, black per output; Spout | `design/engine.md` §2.0, §4, `design/gui.md` §12 | Kill the renderer: the outputs show black, not the desktop, and come back < 2 s |
 | **M7** | MEDIA | Ingest: watch folder, ffmpeg → HAP (×4, chunks), thumbnails, analysis v1 (palette, brightness, motion, cuts, loop points, slices, bars, flicker), SQLite + sidecars, background throttling; MK2 `BROWSE` | `design/library-and-analysis.md` | 100 mixed clips import during a show without a late frame |
 | **M8** | AUDIO | WASAPI in, level + 3 bands + kick onset; tap tempo, MIDI clock in, internal clock, beat / bar phase for the whole engine | `design/music.md` | REACT on kick is visibly on time (AV offset test) |
 | **M9** | CONTROL | Lightpad Block C++ driver (TOUCH, MIX = fader, SCRUB) with LED feedback, `--sim` | `design/hardware-mapping.md` §5 | Block MIX fades the decks with soft takeover against the wheel |
 | **M10** | CONTROL | NuVJ as main weapon: driver from the branch, verified on the unit; wheel modes BEND / SCRATCH / FX WHEEL, trims, INSTA / auto fade, crossfader = PROGRAM | `design/perform.md` §5.2, `design/hardware-mapping.md` §4 | A song played from the NuVJ alone |
-| **M11** | GUI (after D43) | `himmel_ui` bridge; wizard; Perform (MK2 and NuVJ layouts); clip editor drawer; scene / kit editor; library; outputs | `design/gui.md`, mockups `gui-mockups/v4/` | The GUI can be killed and restarted mid-show with no change on the outputs |
+| **M11** | GUI (web app, D43) | `himmel_ui` bridge; wizard; Perform (MK2 and NuVJ layouts); clip editor drawer; scene / kit editor; library; outputs | `design/gui.md`, mockups `gui-mockups/v4/` | The GUI can be killed and restarted mid-show with no change on the outputs |
 | **M12** | QA | Soak and failure rig: 8 h soak, kill each process, unplug each USB device, missing file, GPU device-loss path, latency rig | `design/engine.md` §3 | All pass on the owner's dev laptop **and** the show PC; report in `docs/qa/` |
 
 M1–M3 can run in parallel once the command protocol is written (LEAD, first
@@ -83,16 +83,18 @@ day of M1). M5, M7 and M8 run in parallel with M2–M4.
    is validated (range, rate) before the engine sees it.
 4. A missing or broken clip shows its thumbnail-colour placeholder, never
    black and never a crash; the library marks it.
-5. Strobe / flash never exceed the show's photosensitivity cap.
+5. When a show switches on the optional flash cap (D65), strobe / flash never exceed it.
 6. Each milestone adds its failure tests to the QA rig.
 7. Every `GUESS:` is listed in the track handoff; every owner choice is a
    PROPOSED row in `decisions.md`.
 
 ## 5. Owner decisions that block or shape 0.1
 
-- **D43 GUI technology** (web app via `himmel_ui` proposed, Dear ImGui
-  fallback): blocks M11 only.
-- **D47 merge now:** blocks M0.
-- **D48, D61–D76** (wheel = TAKE, clip transport, pads, focus, scenes, NuVJ):
-  M2–M4 and M10 build them as written unless the owner changes them.
-- Ableton Link licensing (GPL bridge): 0.2, not blocking.
+**All decided by the owner on 2026-11-11** (D42–D76 in `decisions.md`):
+- D43: the GUI is a **local web app** through the `himmel_ui` bridge.
+- D47: merge all branches now (M0), then merge within 1–2 days.
+- D46: 4 layers per deck.
+- D76: this scope.
+- D48–D75: built as written. D65: **no flash cap by default**, an optional
+  per-show cap.
+- Still open, not blocking 0.1: Ableton Link licensing (GPL bridge, 0.2).

@@ -1,6 +1,6 @@
 # Hardware mapping (v3): main weapon, side arms, PREVIEW / PROGRAM
 
-Status: proposal for the owner, 2026-11-11 (v3, after the owner's feedback on
+Status: approved by the owner, 2026-11-11 (decisions D42–D76) (v3, after the owner's feedback on
 v2). This page goes with [`gui.md`](gui.md). **The GUI mimics the main weapon:
 it is laid out like the controller in front of you, so you know where to
 press and what will happen.** It is not a mirror of the device. Control names
@@ -84,7 +84,7 @@ crossfader), with soft takeover.
 |---|---|---|
 | `Top 1`–`Top 4` (over PREVIEW) | **What the dice may change**: CLIP, FX, COLOUR, MOTION (lit = free, dark = held) | LAYOUT, SOURCE, REACT, MOOD-drift |
 | `Top 5` (over PROGRAM) | **FREEZE** while held | Latch |
-| `Top 6` | **STROBE** while held (beat-locked, safe limits) | Latch |
+| `Top 6` | **STROBE** while held (beat-locked) | Latch |
 | `Top 7` | **BLACK** while held | Latch |
 | `Top 8` | **ASSIST** on / off | Autopilot |
 
@@ -148,8 +148,7 @@ and the output thumbnails show "next"), `MUTE` = mute the layer;
   `SHIFT` + pad = reverse from there, `NOTE REPEAT` + pad = retrigger
   (pressure = rate).
 - The per-pad noise floor (Pad 12) applies before velocity and pressure.
-- Strobe and flash PRESS ranges are capped by the show's photosensitivity
-  limit.
+- No flash-rate cap by default; an optional show setting can add one (D65).
 
 **Pad LEDs:**
 

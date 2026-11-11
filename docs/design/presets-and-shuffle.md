@@ -1,6 +1,6 @@
 # Presets, shuffle, scenes and cues
 
-Status: proposal for the owner, 2026-11-11. This is the heart of "fun to play":
+Status: approved by the owner, 2026-11-11 (decisions D42–D76). This is the heart of "fun to play":
 start from a library, roll looks until something is cool, keep it with one
 press, and fire saved looks back and forth. The hardware buttons are in
 [`hardware-mapping.md`](hardware-mapping.md) and the screens are in

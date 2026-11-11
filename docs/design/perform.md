@@ -247,7 +247,7 @@ pressure.
    dice into PREVIEW between songs, TAKE with the wheel or the fader. Any
    live find is one `REC` away from being a variation for next time.
 
-## 7. Decisions made here (to confirm, `decisions.md` D68–D76)
+## 7. Decisions made here (decided by the owner 2026-11-11, `decisions.md` D68–D76)
 
 | # | Decision |
 |---|---|

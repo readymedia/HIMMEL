@@ -288,7 +288,7 @@ MOTION is free.
 ## 7. Clip audio
 
 Himmel is visual. Clip audio is **ignored by default**. Optional later
-(PROPOSED D66): play clip audio to a chosen output for installations, with
+(D66, decided): play clip audio to a chosen output for installations, with
 volume per clip and per layer. Not in the gig path.
 
 ## 8. The MK2 pads as an instrument
@@ -322,7 +322,7 @@ this on 16 keys. So the pads do more than trigger:
 
   | Effect / thing | PRESS drives |
   |---|---|
-  | Strobe | Rate (1/4 → 1/32 beat) and brightness, capped by the safe limit |
+  | Strobe | Rate (1/4 → 1/32 beat) and brightness |
   | Flash | Strength |
   | Blur | Size |
   | RGB split | Distance |
@@ -338,9 +338,9 @@ this on 16 keys. So the pads do more than trigger:
 
 - So **a strobe on a clip gets faster and brighter the harder you press**,
   a blur opens as you squeeze, and a soft tap is a gentle accent.
-- **Safety:** the strobe and flash PRESS ranges are capped by the show's
-  photosensitivity limit (`GUESS:` default max 3 full flashes per second,
-  set in the show; overridable only with an explicit show setting).
+- **Flash rate (D65, owner):** no cap by default. A show can switch on an
+  optional cap (for example 3 flashes / s) for venues that require it; then
+  the strobe and flash PRESS ranges stop at that rate.
 - **Pad 12 is worn:** the per-pad noise floor and dead zone apply before
   velocity and pressure (`maschine_mk2_map.json`).
 

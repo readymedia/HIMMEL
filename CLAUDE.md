@@ -46,7 +46,7 @@ inside the app (UI, help, logs, code comments) is in **English**.
 | Controller | hidapi; libusb/WinUSB (Zadig) as fallback |
 | Data | SQLite (library, clip analysis incl. colors and mood) and JSON (shows, presets, themes, cues) |
 | ML (optional) | ONNX Runtime + DirectML (segmentation and keying for cameras) |
-| GUI | Separate process, **dark only** (D28). Proposed: local web app via a `himmel_ui` bridge; Dear ImGui as fallback (D43, pending) |
+| GUI | Separate process, **dark only** (D28). **Local web app via a `himmel_ui` bridge (D43, decided 2026-11-11)** |
 
 **TouchDesigner is not allowed.** Do not suggest it.
 
@@ -55,7 +55,7 @@ inside the app (UI, help, logs, code comments) is in **English**.
 crossfader → MAIN; PREVIEW (green) vs LIVE (red) everywhere; the GUI mimics
 the main weapon (MK2 or NuVJ), side arms (Block, LUMI, Ohm64) only add control;
 MK2: left screen/knobs 1–4/groups A–D = PREVIEW, right/5–8/E–H = PROGRAM, wheel
-= TAKE (proposed D48–D53); dice on knob 2 / `TRANSPORT < >`; scenes saved with `REC`;
+= TAKE (D48–D53); dice on knob 2 / `TRANSPORT < >`; scenes saved with `REC`;
 moods on a 4×4 energy × style map; clips analysed and tagged on import.
 Every clip has a full transport (loop, ping-pong, random, chop, step, scratch,
 in/out, cue points, beat loops); pads play PREVIEW or PROGRAM, pressure drives
@@ -64,7 +64,8 @@ the clip's effect, `PATTERN` twice = SLICE (`docs/design/clips-and-playback.md`)
 focus = last group pressed (PREP green / PLAY red), knobs 5–8 always live
 macros, songs → scenes (look + kit + macros), pads with layer targets, `ENTER`
 = next scene, live undo/reset; NuVJ: crossfader decides, wheels BEND /
-SCRATCH / FX.
+SCRATCH / FX. **All design decisions D42–D76 were confirmed by the owner on
+2026-11-11** (`docs/decisions.md`); D65: no flash cap by default.
 - **Show:** outputs, mapping (keystone, mesh warp, edge blend), cameras, banks,
   audio and sync sources.
 - **Bank:** clips and loops, with analysis (colors, motion, mood such as

@@ -1,6 +1,6 @@
 # Music in: inputs, signals and reactions
 
-Status: proposal for the owner, 2026-11-11. Goal: effects that react *well*
+Status: approved by the owner, 2026-11-11 (decisions D42–D76). Goal: effects that react *well*
 to the music from whatever source the venue gives you, and a tempo that never
 jumps.
 

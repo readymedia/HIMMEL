@@ -56,7 +56,7 @@ plan.
 | SHOW | S | Presets, shuffle, moods, cues | Phase 5 |
 | CONTROL | C | Weapons, mapping, Lightpad driver | Phases 0–2 |
 | AUDIO | A | Analysis, clocks, bridges | Phase 7 |
-| GUI | G | Web GUI and bridge | Phase 6 (once D43 is decided) |
+| GUI | G | Web GUI and bridge | Phase 6 (web GUI, D43 decided) |
 | QA | Q | Latency, soak, release checks | All along |
 
 ## 3. Timeline (weeks are estimates; ISO weeks 2026–27)
@@ -64,7 +64,7 @@ plan.
 | Week | L | E | F | M | S | C | A | G | Q |
 |---|---|---|---|---|---|---|---|---|---|
 | 46 (now) | **P0 merge**, interfaces | P1 design | — | — | — | P0 merge help | — | mockups v2 ✓ | latency test |
-| 47 | P1 command protocol | **P1 decks / layers / slots** | metadata | **P3 ingest** | model + formats | P1 mapping layer | — | wait for D43 | soak rig |
+| 47 | P1 command protocol | **P1 decks / layers / slots** | metadata | **P3 ingest** | model + formats | P1 mapping layer | — | bridge design | soak rig |
 | 48 | merges | P1 graph + previews, **P1c clip transport**, **P2 I/O** | **P4 tier 1** | P3 analysis | **P5 scenes / save** | P2 weapon block | **P7 audio** | **P6 bridge + wizard** | soak 2 h |
 | 49 | merges | P2 outputs, curtains, sampler | P4 tier 1 (+ time FX) | P3 DB + browse, loop analysis | P5 shuffle v1, variants | **P1c pads: SLICE, PRESS**, P8 Lightpad C++ | P7 clocks | P6 Perform v1 | soak 8 h |
 | 50 | | budget guard | P4 tier 2, ISF | starter library | P5 moods ×16 | P8 modes | Link / ProDJ bridges | P6 library + shuffle UI | latency rigs |
@@ -219,7 +219,7 @@ Spec: `design/clips-and-playback.md`.
 6. **Done when:** a beginner can make a good 16-scene bank in under
    2 minutes with `>` and `REC`.
 
-### Phase 6: GUI v1 (G, weeks 48–52; needs D43)
+### Phase 6: GUI v1 (G, weeks 48–52; web app, D43)
 
 1. The `himmel_ui` bridge (web app server + command / state relay + preview
    frames).
@@ -308,8 +308,8 @@ a file** (HAP / ProRes, a worker, never the render loop).
 | DMX / Art-Net in | A lighting desk drives looks, dimmer and FX (optional) |
 | Clip audio | Optional playback for installations (D66) |
 
-## 5. Open questions (see `decisions.md`)
+## 5. Decisions
 
-D42 mapping changes · D43 GUI technology · D44 Lightpad modes · D45 the 16
-moods · D46 layers per deck · D47 merge now · D61–D67 clip transport and
-pads · D68–D76 perform flow and the 0.1 scope.
+All open owner decisions (D42–D76) were settled on 2026-11-11; see
+`decisions.md`. Still open and not blocking 0.1: Ableton Link licensing (the
+GPL bridge, 0.2) and the optional ONNX dependency for type tags.

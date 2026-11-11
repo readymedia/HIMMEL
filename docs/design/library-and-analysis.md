@@ -1,6 +1,6 @@
 # Library, import and analysis
 
-Status: proposal for the owner, 2026-11-11. Goal: drop in clips and forget
+Status: approved by the owner, 2026-11-11 (decisions D42–D76). Goal: drop in clips and forget
 about formats. Everything is made show-ready and tagged in the background,
 including during a show, and the tags drive shuffle, moods and reactions
 ([`presets-and-shuffle.md`](presets-and-shuffle.md)).

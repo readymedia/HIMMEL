@@ -16,4 +16,5 @@ The v2 plan and design are written: `docs/roadmap.md`, `docs/design/*`, `docs/de
 - GUESS: the NuVJ mapping in `design/hardware-mapping.md` §4 is not checked on the unit.
 
 ## Open questions for the owner
+- 2026-11-11: D42–D76 all decided (web GUI, merge now, 4 layers, 0.1 scope, MK2/NuVJ perform flow; D65 = no flash cap by default). Next for LEAD: **M0 merge**.
 D42 mapping changes · D43 GUI tech · D44 Lightpad modes · D45 16 moods · D46 layers per deck · D47 merge now.

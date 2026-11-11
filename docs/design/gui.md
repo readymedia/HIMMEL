@@ -1,6 +1,6 @@
 # GUI specification (v3 + v4 perform flow: the GUI mimics the main weapon)
 
-Status: proposal for the owner, 2026-11-11.
+Status: approved by the owner, 2026-11-11 (decisions D42–D76).
 - **v4** (the basis for 0.1): the instrument flow in [`perform.md`](perform.md)
   (focus, kits and pad targets, songs and scenes, live undo, the NuVJ wheels)
   and the v4 artboards (§17). Where v3 text differs, v4 wins.
@@ -351,9 +351,9 @@ effects and output latency.
 - The Help menu (Getting started, Controller map, Effects reference,
   Troubleshooting) is built from the same descriptions as the code, so it
   never goes out of date.
-- **Safe mode** for strobe and flash is on by default for public shows
-  (photosensitivity limits). It is shown as a small "SAFE" badge on the top
-  bar.
+- **Flash cap** for strobe and flash is **off by default** (D65). A show can
+  switch it on (for example 3 flashes / s) for venues that require it; it is
+  then shown as a small "SAFE" badge on the top bar.
 - The status lights link to Troubleshooting pages.
 
 ## 8. Main weapon, side arms and the adaptive layout
