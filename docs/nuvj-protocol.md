@@ -16,8 +16,11 @@ class-compliant device with one MIDI in port and one MIDI out port.
 Credits are in [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md). The code
 is [`tools/nuvj_sim.py`](../tools/nuvj_sim.py).
 
-**Status:** this has not been checked on the owner's unit yet. The plan is to
-check it with the live view.
+**Status:** checked on the owner's unit on 2026-11-11:
+- the input map;
+- LEDs;
+- LCD text;
+- the whole segment map.
 
 ## Device → host (controls)
 
@@ -89,24 +92,45 @@ The software numbers its 9 cells from the top left, so cell 1 is PAD 7.
 
 ### LCD segments (`cmd 02`, 64 bytes)
 
-**What the software uses:**
-- Bytes `0x2E` and `0x36` are always 1.
-- A 2-digit number (0–99, the parameter value):
-  - tens in bytes `0x3D`/`0x3E`;
-  - units in bytes `0x3B`/`0x3C`.
-- Each digit is two bytes:
+Mapped on the owner's unit on 2026-11-11, with a camera and his checks. The
+map is in `nuvj_map.json` (`lcd_segments`, described in `lcd_layout`).
 
-  | Byte | Segments |
-  |---|---|
-  | first | b = `0x02`, c = `0x08` |
-  | second | a = `0x01`, f = `0x02`, g = `0x04`, e = `0x08`, d = `0x10` |
+- **Bits.** Each byte uses bits 0–4 (`0x01`–`0x10`).
+- **The glass** (from a photo with every segment on): the parts below.
+  Command `01` drives the 8-character dot-matrix row; the 64 bytes drive
+  everything else.
 
-  So "07" is `0A 1B` (0) and `0A 01` (7).
+| Bytes | What |
+|---|---|
+| 0 | the words LAST (0x01) and DATA (0x02) |
+| 1, 2 | the LAST wedge, 7 stripes from the bottom: byte 1 bits 0–4, byte 2 bits 0–1 |
+| 3, 4 | the DATA wedge, the same way |
+| 5 | the words FULL (0x01) and 16 LEVELS (0x02) |
+| 6 | the A, B, C and D boxes (0x01, 0x02, 0x04, 0x08) |
+| 7, 8 | the box letters (camera: C = 7/0x04, D = 7/0x08) and PRESS ENTER (8/0x10) |
+| 10–14 | the "188" digits over BPM: units 10/11, tens 12/13, the leading "1" in byte 14 (b = 0x02, c = 0x08) |
+| 16–58 | the 11 16-segment characters: 3 bytes each, starting at 16, 19, 24, 27, 32, 35, 40, 43, 48, 51, 56 |
+| 22 | the rule (0x01), PROG (0x02), NOTE (0x04), AFT (0x08), CTRL (0x10) |
+| 30 | BPM (0x01), MIDI CH (0x02, 0x04) |
+| 38 | PAGE (0x01), PRESET (0x02), PROGRAM CHANGE (0x04, one segment), GLOBAL (0x08), EDIT (0x10) |
+| 59–62 | the PRESET digits: units 59/60, tens 61/62 |
 
-**What is not known yet:** the other segments (small digits, bar, icons,
-labels). We learn them on the owner's unit with the **segment hunt** in the
-live view:
-1. It lights one bit at a time.
-2. It writes `SEGbb.b` on the text row.
-3. The owner clicks the part of the drawn LCD that lit up.
-4. The result is saved in `nuvj_map.json` under `lcd_segments`.
+**7-segment digits** use two bytes, with the lower byte for the rightmost digit:
+- first byte: b = `0x02`, c = `0x08`;
+- second byte: a = `0x01`, f = `0x02`, g = `0x04`, e = `0x08`, d = `0x10`.
+
+This is the NuVJ software's own encoding. "07" is `0A 1B` (0) and `0A 01` (7).
+
+**A 16-segment character** uses 15 bits. The top bar is one segment, even
+though it is drawn as two halves.
+
+| byte | 0x01 | 0x02 | 0x04 | 0x08 | 0x10 |
+|---|---|---|---|---|---|
+| +0 | bottom right half (d2) | diagonal lower right (m) | centre lower (l) | bottom left half (d1) | left lower (e) |
+| +1 | right lower (c) | middle right (g2) | diagonal lower left (k) | middle left (g1) | left upper (f) |
+| +2 | right upper (b) | diagonal upper right (j) | centre upper (i) | top bar (a) | diagonal upper left (h) |
+
+Checked by showing text on the device ("HIMMEL VJ 5", owner).
+
+The software also sets bytes `0x2E` and `0x36` to 1 on every update. Himmel
+does not need them.

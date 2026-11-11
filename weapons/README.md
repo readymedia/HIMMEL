@@ -21,7 +21,7 @@ A weapon has up to four parts:
 |---|---|---|---|---|---|
 | 1 | **MK2** (Maschine MK2) | USB HID: 16 pads, 8 knobs, encoder, 48 buttons, two 1-bit screens | [`mk2.weapon.json`](mk2.weapon.json) | [`tools/mk2_sim.py`](../tools/mk2_sim.py) | Map verified on hardware, C++ driver done |
 | 2 | **Lightpad** (ROLI Lightpad Block / Block M) | USB-MIDI: multi-touch surface (x, y, pressure per finger), 15 × 15 RGB LEDs, one Mode button | [`lightpad.weapon.json`](lightpad.weapon.json) | [`tools/lightpad_sim.py`](../tools/lightpad_sim.py) | Simulated, and played on the owner's Lightpad M (2026-11-10): touch, multi-touch, Mode button, orientation, factory note map, **and Himmel's own LED program** (~55 frames/s) |
-| 5 | **NuVJ** (Numark NuVJ, 2008) | USB-MIDI: 2 × 9 pads, 2 jog wheels, 2 speed faders, crossfader, 12 knobs, 2 push BANK encoders, 31 LEDs, front switches, blue segment LCD (feedback by SysEx) | [`nuvj.weapon.json`](nuvj.weapon.json) | [`tools/nuvj_sim.py`](../tools/nuvj_sim.py) | Simulated with the real protocol (read from the NuVJ software, [`docs/nuvj-protocol.md`](../docs/nuvj-protocol.md)); hardware probe, map learning and segment hunt ready. Not yet checked on the owner's unit |
+| 5 | **NuVJ** (Numark NuVJ, 2008) | USB-MIDI: 2 × 9 pads, 2 jog wheels, 2 speed faders, crossfader, 12 knobs, 2 push BANK encoders, 31 LEDs, front switches, blue segment LCD (feedback by SysEx) | [`nuvj.weapon.json`](nuvj.weapon.json) | [`tools/nuvj_sim.py`](../tools/nuvj_sim.py) | **Checked on the owner's unit (2026-11-11)**: map of all 53 controls verified, 31 LEDs, LCD text and the whole segment map (camera mapper); protocol in [`docs/nuvj-protocol.md`](../docs/nuvj-protocol.md) |
 
 ## The live view: one tool for every weapon
 
@@ -484,18 +484,33 @@ profile.
 | BPM TAP | Tap tempo for Himmel's beat clock (LED on the beat); hold 3 s = back to the audio-detected BPM. |
 | FADER START + FADER MODE | Crossfader start: moving away from one side fires the other deck's selected cue (A/B/C = cue, scene or Smart Random). |
 
-### Still to do with the owner
+### Checked on the owner's unit (2026-11-11)
 
-1. Plug the NuVJ in and press **Use the real NuVJ**.
-2. Touch every control, fix any differences by learning, and mark the map
-   verified.
-3. LEDs: check All on, Chase and Follow, then press **Every LED is right**.
-4. LCD:
-   - check the text and the big number;
-   - run the segment hunt for the rest;
-   - try the contrast slider.
-5. Press **Ask the NuVJ who it is** to read the identity reply (maker id,
-   firmware).
+- **Device.** USB `15e4:0020`; WinMM ports "NuVJ Controller" (in 0, out 1).
+- **Map verified.** All 53 controls are in `nuvj_map.json`.
+  - The 12 top knobs are endless (1 / 127 per tick); Himmel keeps a 0..127
+    value.
+  - Before init the faders send CC 10 / 11 / 12. After Himmel's init they
+    send pitch bend on channels 1–3, and the device reports where its faders
+    and switches are.
+  - The BANK knobs can be pushed (notes 2 and 3).
+- **LEDs.** All 31 work with the `03` bits.
+- **LCD.**
+  - Text (`01`) works.
+  - The segment memory (`02`) is fully mapped: wedges, words, boxes, the
+    188 and PRESET digits, and 11 16-segment characters (15 bits each).
+  - Checked with test text.
+- **How the LCD was mapped: the camera mapper** in the live view's LCD
+  hunt.
+  1. A webcam (here DroidCam) looks at the glass, and the four corners are
+     set by click and drag.
+  2. Each bit is lit on its own while the camera watches.
+  3. The structure found that way was confirmed with a few photos of single
+     bits.
+  4. Bits learned by hand are protected from the camera.
+
+  The browser pane in the Claude app cannot use the camera, so the mapper
+  runs in Chrome.
 
 ## Plan: how a generic weapon feeds Himmel (not wired yet)
 

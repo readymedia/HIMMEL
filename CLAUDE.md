@@ -168,8 +168,13 @@ The details are in the mockup (`docs/vj-mockup.html`).
     1.0 software (static analysis, never run): feedback SysEx `F0 00 01 3F 7F 20 cmd 00 len
     data F7`. It covers init `60`, LCD text `01` (8 chars), segments `02` (64 bytes), LEDs `03`
     (8 bytes, 31 bits) and contrast `7A`. Never send `7B` (stored). Simulator checked in
-    the browser. **Not yet checked on the owner's unit.** Map learning and the LCD segment
-    hunt (click the lit part of the drawn LCD) are ready for it.
+    the browser. **Checked on the owner's unit 2026-11-11** (USB `15e4:0020`, WinMM
+    "NuVJ Controller" in 0 / out 1):
+    - `nuvj_map.json` verified (53 controls). The top knobs are endless; faders send
+      CC 10-12 before init and pitch bend ch 1-3 after it.
+    - All 31 LEDs work.
+    - LCD text works, and the whole segment map is learned with the camera mapper
+      (webcam in Chrome, LCD hunt panel). The layout is in `docs/nuvj-protocol.md`.
     **Classic two-deck view** (owner's wish 2026-11-10, nostalgia): `?weapon=nuvj&view=classic`,
     `tools/vj_classic.html` + model `tools/vj_classic.py`. It is the NuVJ software's workflow
     in Himmel's own look: no logos or art, and nothing so close that it could cause trouble.
