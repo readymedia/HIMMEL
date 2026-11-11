@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Himmel v3 – Clip editor and pads (SLICE, PRESS)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0D10}
+.mono{font-family:'JetBrains Mono',monospace}
+.lbl{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#9AA4B2;font-weight:800}
+button{cursor:pointer;font-family:Inter}
+</style>
+</helmet>
+<div style="min-height:900px;width:100%;box-sizing:border-box;background:#0B0D10;color:#E8ECF1;font-family:Inter,system-ui,sans-serif;display:flex;flex-direction:column;gap:14px;padding:20px 28px">
+
+<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+<b style="letter-spacing:.2em">HIMMEL</b>
+<span style="font-size:12px;font-weight:800;padding:4px 10px;border-radius:12px;background:{{ sideBg }};color:#0B0D10">{{ sideLabel }}</span>
+<span style="font-size:13px;color:#C9D1DB">Layer {{ layerName }} · clip <b>neon_tunnel_04</b> · 128 BPM · analysed: <span style="color:#7EE2A0">loopable</span>, 8 beats, 11 cuts</span>
+<span style="flex:1"></span>
+<button onClick="{{ toPrev }}" style="height:30px;padding:0 12px;border-radius:6px;border:{{ bPrev }};background:#12161C;color:#E8ECF1;font-weight:800;font-size:12px">GROUP B · PREVIEW</button>
+<button onClick="{{ toProg }}" style="height:30px;padding:0 12px;border-radius:6px;border:{{ bProg }};background:#12161C;color:#E8ECF1;font-weight:800;font-size:12px">GROUP F · LIVE EDIT</button>
+</div>
+<sc-if value="{{ isProg }}" hint-placeholder-val="{{ false }}"><div style="height:6px;border-radius:3px;background:#FF3B30"></div></sc-if>
+
+<div style="display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px">
+
+<div style="display:flex;flex-direction:column;gap:12px">
+<div style="background:#12161C;border:1px solid #2A313A;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;justify-content:space-between"><span class="lbl">Timeline · in / out · cue points · slices</span><span class="mono" style="font-size:12px;color:#9AA4B2">{{ rangeText }}</span></div>
+<div style="position:relative;height:96px;border-radius:6px;overflow:hidden;background:linear-gradient(90deg,#1d0f3a,#3b1a6e 20%,#0d3b66 40%,#1aa3a3 55%,#5a1e7a 70%,#ff2e88 85%,#1d0f3a)">
+<sc-for list="{{ slices }}" as="s" hint-placeholder-count="16"><div style="{{ s.st }}"></div></sc-for>
+<div style="{{ dimL }}"></div><div style="{{ dimR }}"></div>
+<div style="{{ inBr }}"></div><div style="{{ outBr }}"></div>
+<sc-for list="{{ cues }}" as="c" hint-placeholder-count="4"><span style="{{ c.st }}">{{ c.t }}</span></sc-for>
+<div style="{{ head }}"></div>
+</div>
+<div style="height:22px;display:flex;align-items:flex-end;gap:2px">
+<sc-for list="{{ motion }}" as="m" hint-placeholder-count="40"><div style="{{ m }}"></div></sc-for>
+</div>
+<div style="font-size:12px;color:#9AA4B2">Motion curve from import. Brackets snap to beats and to the analysed cuts. SHIFT + drag = move the range. Ghost playhead = catch-up position.</div>
+</div>
+
+<div style="background:#12161C;border:1px solid #2A313A;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px">
+<span class="lbl">Transport (MK2 CLIP page: knob 1 IN · 2 OUT · 3 MODE · 4 SPEED)</span>
+<div style="display:flex;gap:6px;flex-wrap:wrap">
+<sc-for list="{{ modes }}" as="m" hint-placeholder-count="7"><button onClick="{{ m.on }}" style="{{ m.st }}">{{ m.t }}</button></sc-for>
+</div>
+<div style="font-size:13px;color:#C9D1DB">{{ modeHelp }}</div>
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">
+<div style="background:#1B2027;border-radius:8px;padding:8px"><div class="lbl">Time base</div><div style="font-weight:800;margin-top:4px">BPM · 8 beats</div></div>
+<div style="background:#1B2027;border-radius:8px;padding:8px"><div class="lbl">Trigger</div><div style="font-weight:800;margin-top:4px">NORMAL · restart</div></div>
+<div style="background:#1B2027;border-radius:8px;padding:8px"><div class="lbl">Fade in / out</div><div style="font-weight:800;margin-top:4px">0 / 1 beat</div></div>
+<div style="background:#1B2027;border-radius:8px;padding:8px"><div class="lbl">Autopilot</div><div style="font-weight:800;margin-top:4px">NEXT after 4</div></div>
+</div>
+</div>
+
+<div style="background:#12161C;border:1px solid #2A313A;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;justify-content:space-between;align-items:center"><span class="lbl">Effects on this clip · levels and scopes</span>
+<span style="display:flex;gap:6px"><span style="font-size:12px;color:#9AA4B2">Variants</span>
+<sc-for list="{{ variants }}" as="v" hint-placeholder-count="4"><button onClick="{{ v.on }}" style="{{ v.st }}">{{ v.t }}</button></sc-for></span></div>
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">
+<sc-for list="{{ fx }}" as="f" hint-placeholder-count="4">
+<div style="background:#1B2027;border-radius:8px;padding:9px;display:flex;flex-direction:column;gap:5px;border:{{ f.bd }}">
+<div style="display:flex;justify-content:space-between"><b style="font-size:14px">{{ f.n }}</b><span style="font-size:10px;font-weight:800;padding:2px 6px;border-radius:4px;background:#2A313A;color:#C9D1DB">{{ f.lvl }}</span></div>
+<div style="font-size:12px;color:#C9D1DB">{{ f.p }}</div>
+<div style="font-size:11px;color:#B78CFF">{{ f.sc }}</div>
+</div>
+</sc-for>
+</div>
+<div style="font-size:12px;color:#9AA4B2">Badges: none = this slot · L = per look / scene · G = global (all strobes share it) · ~ = moving (LFO / REACT). Right-click a tile or SHIFT + SELECT + knob to change.</div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:12px">
+<div style="background:#12161C;border:1px solid #2A313A;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;justify-content:space-between"><span class="lbl">Pads · SLICE (PATTERN ×2)</span><span style="font-size:12px;color:{{ sideCol }};font-weight:800">{{ padTarget }}</span></div>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:7px">
+<sc-for list="{{ pads }}" as="p" hint-placeholder-count="16"><button onClick="{{ p.on }}" style="{{ p.st }}">{{ p.t }}</button></sc-for>
+</div>
+<div style="font-size:12px;color:#9AA4B2">Click a pad = jump. Pad 1 is bottom-left, as on the MK2. Lit range = in / out; white = playhead.</div>
+</div>
+
+<div style="background:#12161C;border:1px solid #2A313A;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px">
+<span class="lbl">Press harder (simulated aftertouch)</span>
+<div style="display:flex;gap:6px">
+<sc-for list="{{ press }}" as="q" hint-placeholder-count="5"><button onClick="{{ q.on }}" style="{{ q.st }}">{{ q.t }}</button></sc-for>
+</div>
+<div style="display:flex;justify-content:space-between;font-size:13px"><span>Beat loop on the held slice</span><b class="mono">{{ loopLen }}</b></div>
+<div style="display:flex;justify-content:space-between;font-size:13px"><span>PRESS → Strobe rate</span><b class="mono">{{ strobeRate }}</b></div>
+<div style="height:10px;border-radius:5px;background:#1B2027;overflow:hidden"><div style="{{ pressBar }}"></div></div>
+<div style="font-size:12px;color:#9AA4B2">Capped by the show's flash limit (3 / s). Release = catch-up: the clip lands where it would have been.</div>
+</div>
+
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:5px;font-size:12px;color:#C9D1DB">
+<span class="lbl">Gestures</span>
+<span>Hold A + tap B = in / out · two held = ping-pong</span>
+<span>REC + pad = store cue · ERASE + pad = clear</span>
+<span>SOLO + clip pad = HIT over PROGRAM</span>
+<span>REC held + empty pad = sample 4 beats</span>
+<span>SELECT + wheel = scratch</span>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+constructor(props) { super(props); this.state = { prog: false, mode: 'CHOP', slice: 5, inS: 2, outS: 11, p: 2, variant: 'B' }; }
+renderVals() {
+const st = this.state, prog = st.prog;
+const sideC = prog ? '#FF3B30' : '#30D158';
+const pct = i => (100 * i / 16).toFixed(2) + '%';
+const slices = [];
+for (let i = 1; i < 16; i++) slices.push({ st: 'position:absolute;top:0;bottom:0;left:' + pct(i) + ';width:1px;background:rgba(255,255,255,' + (i % 4 === 0 ? '.35' : '.12') + ')' });
+const cueAt = [0, 4, 9, 13];
+const cues = cueAt.map((c, k) => ({ t: String(k + 1), st: 'position:absolute;top:4px;left:calc(' + pct(c) + ' + 3px);font:800 10px Inter;background:#B78CFF;color:#0B0D10;padding:1px 5px;border-radius:3px' }));
+const motion = [];
+for (let i = 0; i < 40; i++) { const h = 4 + Math.round(16 * Math.abs(Math.sin(i * 0.7) * Math.cos(i * 0.23))); motion.push('flex:1;height:' + h + 'px;background:#3A434F;border-radius:1px'); }
+const rates = ['1/4', '1/8', '1/16', '1/16 (cap)', '1/16 (cap)'];
+const modeList = [
+ ['LOOP', 'In → out, jump back to in.'],
+ ['PING-PONG', 'In → out → in. Hides the cut on footage that does not loop.'],
+ ['ONCE', 'Plays once: HOLD the last frame, EJECT (fade out) or NEXT clip.'],
+ ['RANDOM', 'Jumps to a random point every 1 beat, within 2 beats of where it is, then plays on.'],
+ ['CHOP', 'Plays a random slice of the in / out range every 1/2 beat. Seeded, so a saved look repeats.'],
+ ['STEP', 'Stop-motion: holds a frame and steps 3 frames on every 1/8 beat.'],
+ ['SCRATCH', 'The playhead follows the wheel, the jog or the Block, and nothing else.']];
+const modes = modeList.map(m => ({ t: m[0], on: () => this.setState({ mode: m[0] }), st: 'height:32px;padding:0 12px;border-radius:7px;font-weight:800;font-size:12px;color:' + (st.mode === m[0] ? '#0B0D10' : '#E8ECF1') + ';background:' + (st.mode === m[0] ? sideC : '#1B2027') + ';border:1px solid #2A313A' }));
+const help = modeList.find(m => m[0] === st.mode)[1];
+// pad order: pad 1 bottom-left
+const pads = [];
+for (let row = 3; row >= 0; row--) for (let col = 0; col < 4; col++) {
+  const i = row * 4 + col; const inR = i >= st.inS && i <= st.outS; const cur = i === st.slice; const isCue = cueAt.indexOf(i) >= 0;
+  const bg = cur ? '#FFFFFF' : (inR ? (prog ? 'rgba(255,59,48,.55)' : 'rgba(48,209,88,.45)') : '#1B2027');
+  const ring = cur ? '0 0 0 ' + (2 + st.p * 2) + 'px rgba(183,140,255,.8)' : 'none';
+  pads.push({ t: String(i + 1) + (isCue ? ' •' : ''), on: () => this.setState({ slice: i }), st: 'height:58px;border-radius:7px;border:1px solid #2A313A;font-weight:800;font-size:13px;color:' + (cur ? '#0B0D10' : '#E8ECF1') + ';background:' + bg + ';box-shadow:' + ring });
+}
+const press = [0, 1, 2, 3, 4].map(k => ({ t: ['tap', 'soft', 'mid', 'hard', 'full'][k], on: () => this.setState({ p: k }), st: 'flex:1;height:30px;border-radius:6px;font-weight:800;font-size:12px;border:1px solid #2A313A;color:' + (st.p === k ? '#0B0D10' : '#E8ECF1') + ';background:' + (st.p === k ? '#B78CFF' : '#1B2027') }));
+const fxSets = {
+ A: [['Strobe', 'rate 1/8 · white', 'G rate · PRESS', 'CLIP'], ['Kaleido', '6 segments · turn', '~ turn (LFO 2 bars)', 'CLIP'], ['Hue', '+40°', 'L per look', 'LAYER'], ['Glow', '0.3', '—', 'MASTER']],
+ B: [['Strobe', 'rate 1/16 · palette', 'G rate · PRESS', 'CLIP'], ['RGB split', 'distance 12', '~ kick (REACT)', 'CLIP'], ['Mirror', 'X axis', 'L per look', 'LAYER'], ['Glow', '0.3', '—', 'MASTER']],
+ C: [['Blur', 'size 4', 'PRESS', 'CLIP'], ['Tunnel', 'depth 0.6', '~ bass (REACT)', 'CLIP'], ['Duotone', 'violet / cyan', 'L per look', 'LAYER'], ['Glow', '0.3', '—', 'MASTER']],
+ D: [['Step', '3 frames · 1/8', '—', 'CLIP'], ['Pixelate', 'size 8', 'PRESS', 'CLIP'], ['Posterize', '4 levels', 'L per look', 'LAYER'], ['Glow', '0.3', '—', 'MASTER']] };
+const fx = fxSets[st.variant].map((f, k) => ({ n: f[0], p: f[1], sc: f[2], lvl: f[3], bd: k === 0 ? '1px solid #B78CFF' : '1px solid #2A313A' }));
+const variants = ['A', 'B', 'C', 'D'].map(v => ({ t: v, on: () => this.setState({ variant: v }), st: 'width:28px;height:24px;border-radius:5px;font-weight:800;font-size:12px;border:1px solid #2A313A;color:' + (st.variant === v ? '#0B0D10' : '#E8ECF1') + ';background:' + (st.variant === v ? '#B78CFF' : '#1B2027') }));
+return {
+isProg: prog, sideBg: sideC, sideCol: sideC, sideLabel: prog ? 'PROGRAM · LIVE EDIT' : 'PREVIEW',
+layerName: prog ? 'F (live)' : 'B (preview)',
+padTarget: prog ? 'acting on PROGRAM, on the beat' : 'acting on PREVIEW, at once',
+bPrev: prog ? '1px solid #3A434F' : '2px solid #30D158', bProg: prog ? '2px solid #FF3B30' : '1px solid #3A434F',
+toPrev: () => this.setState({ prog: false }), toProg: () => this.setState({ prog: true }),
+slices: slices, cues: cues, motion: motion,
+dimL: 'position:absolute;top:0;bottom:0;left:0;width:' + pct(st.inS) + ';background:rgba(11,13,16,.7)',
+dimR: 'position:absolute;top:0;bottom:0;right:0;width:' + pct(15 - st.outS) + ';background:rgba(11,13,16,.7)',
+inBr: 'position:absolute;top:0;bottom:0;left:' + pct(st.inS) + ';width:6px;border:3px solid ' + sideC + ';border-right:none;box-sizing:border-box',
+outBr: 'position:absolute;top:0;bottom:0;left:calc(' + pct(st.outS + 1) + ' - 6px);width:6px;border:3px solid ' + sideC + ';border-left:none;box-sizing:border-box',
+head: 'position:absolute;top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 8px #fff;left:calc(' + pct(st.slice) + ' + ' + (8 + st.p * 3) + 'px)',
+rangeText: 'IN slice ' + (st.inS + 1) + ' · OUT slice ' + (st.outS + 1) + ' · ' + ((st.outS - st.inS + 1) / 2) + ' beats',
+modes: modes, modeHelp: help, pads: pads, press: press,
+loopLen: ['jump only', '1 beat', '1/2 beat', '1/4 beat', '1/16 beat'][st.p],
+strobeRate: rates[st.p],
+pressBar: 'height:100%;width:' + (12 + st.p * 22) + '%;background:linear-gradient(90deg,#B78CFF,#FF3B30)',
+fx: fx, variants: variants
+};
+}
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Himmel v2 – Shuffle, scenes and cues</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0D10}
+.mono{font-family:'JetBrains Mono',monospace}
+.chip{font-family:'JetBrains Mono',monospace;font-size:11px;color:#C9D1DB;border:1px solid #3A434F;border-radius:4px;padding:1px 5px;white-space:nowrap;background:#0F1318}
+.lbl{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#9AA4B2;font-weight:600}
+</style>
+</helmet>
+<div style="min-height:900px;width:100%;box-sizing:border-box;background:#0B0D10;color:#E8ECF1;font-family:Inter,system-ui,sans-serif;display:flex;flex-direction:column;gap:14px;padding:22px 32px">
+<div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap"><h1 style="margin:0;font-size:30px;font-weight:800">Shuffle → keep → fire</h1><span style="color:#9AA4B2;font-size:14px">Roll looks until something is cool, save it in one press, fire saved looks back and forth.</span></div>
+
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="lbl">Scope</span>
+<span style="padding:5px 10px;border-radius:6px;border:1px solid #3A434F;color:#9AA4B2;font-size:13px">CLIP</span><span style="color:#5C6673">›</span><span style="padding:5px 10px;border-radius:6px;border:1px solid #3A434F;color:#9AA4B2;font-size:13px">LAYER A1 <span class="chip">GROUP A</span></span><span style="color:#5C6673">›</span><span style="padding:5px 10px;border-radius:6px;background:#B78CFF;color:#160C26;font-weight:800;font-size:13px">DECK A <span class="chip" style="background:#D2B8FF;border-color:#160C26;color:#160C26">ALL</span></span><span style="color:#5C6673">›</span><span style="padding:5px 10px;border-radius:6px;border:1px solid #3A434F;color:#9AA4B2;font-size:13px">MASTER</span><span style="color:#5C6673">›</span><span style="padding:5px 10px;border-radius:6px;border:1px solid #3A434F;color:#9AA4B2;font-size:13px">OUTPUT</span>
+<div style="flex:1"></div><span style="font-size:13px;color:#9AA4B2">Rolls land on <b style="color:#30D158">PREVIEW</b>. Then <span class="chip">PLAY</span> = TAKE.</span></div>
+<div style="display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px">
+<button style="height:54px;border-radius:8px;border:2px solid #B78CFF;background:#221A33;color:#E9DDFF;font:800 13px Inter">CLIP<br><span class="chip">TOP 1</span></button>
+<button style="height:54px;border-radius:8px;border:2px solid #B78CFF;background:#221A33;color:#E9DDFF;font:800 13px Inter">SOURCE<br><span class="chip">TOP 2</span></button>
+<button style="height:54px;border-radius:8px;border:2px solid #B78CFF;background:#221A33;color:#E9DDFF;font:800 13px Inter">FX<br><span class="chip">TOP 3</span></button>
+<button style="height:54px;border-radius:8px;border:1px solid #2A313A;background:#0F1318;color:#5C6673;font:800 13px Inter">COLOUR · LOCKED<br><span class="chip">TOP 4</span></button>
+<button style="height:54px;border-radius:8px;border:2px solid #B78CFF;background:#221A33;color:#E9DDFF;font:800 13px Inter">MOTION<br><span class="chip">TOP 5</span></button>
+<button style="height:54px;border-radius:8px;border:2px solid #B78CFF;background:#221A33;color:#E9DDFF;font:800 13px Inter">LAYOUT<br><span class="chip">TOP 6</span></button>
+<button style="height:54px;border-radius:8px;border:1px solid #2A313A;background:#0F1318;color:#5C6673;font:800 13px Inter">REACT · LOCKED<br><span class="chip">TOP 7</span></button>
+<button style="height:54px;border-radius:8px;border:2px solid #B78CFF;background:#221A33;color:#E9DDFF;font:800 13px Inter">MOOD drift<br><span class="chip">TOP 8</span></button>
+</div>
+<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+<span class="chip">◀ TRANSPORT &lt;</span>
+<div style="display:flex;gap:6px;flex:1;min-width:300px;overflow-x:auto">
+<div style="width:110px;flex:none"><div style="height:62px;border-radius:5px;background:linear-gradient(135deg,#102030,#2EC5FF);opacity:.55"></div><div class="mono" style="font-size:10px;color:#9AA4B2">#19</div></div>
+<div style="width:110px;flex:none"><div style="height:62px;border-radius:5px;background:linear-gradient(135deg,#300,#FF3B30);opacity:.6"></div><div class="mono" style="font-size:10px;color:#9AA4B2">#20</div></div>
+<div style="width:110px;flex:none"><div style="height:62px;border-radius:5px;background:linear-gradient(135deg,#301040,#B78CFF);position:relative"><span style="position:absolute;right:4px;top:2px;color:#FFD60A">★</span></div><div class="mono" style="font-size:10px;color:#FFD60A">#21 saved → pad 7</div></div>
+<div style="width:110px;flex:none"><div style="height:62px;border-radius:5px;background:linear-gradient(135deg,#123,#0B3A55,#BFE9FF);opacity:.8"></div><div class="mono" style="font-size:10px;color:#9AA4B2">#22</div></div>
+<div style="width:110px;flex:none"><div style="height:62px;border-radius:5px;background:radial-gradient(circle at 30% 40%,#2EC5FF,#05121C 70%);outline:3px solid #B78CFF"></div><div class="mono" style="font-size:10px;color:#E9DDFF">#23 now · seed 9F3A…</div></div>
+<div style="width:110px;flex:none"><div style="height:62px;border-radius:5px;border:2px dashed #5B3E8F;display:flex;align-items:center;justify-content:center;color:#B78CFF;font-weight:800">NEW ▶</div><div class="mono" style="font-size:10px;color:#9AA4B2">next roll</div></div>
+</div>
+<span class="chip">TRANSPORT &gt; ▶</span>
+</div>
+<div style="display:flex;gap:10px;flex-wrap:wrap">
+<button style="flex:2;min-width:200px;height:56px;border-radius:10px;border:2px solid #B78CFF;background:#2A1C44;color:#F2EAFF;font:900 18px Inter;letter-spacing:.12em">ROLL ▶ <span class="chip">TRANSPORT &gt;</span></button>
+<button style="flex:1;min-width:160px;height:56px;border-radius:10px;border:1px solid #5B3E8F;background:#1B2027;color:#D2B8FF;font:800 15px Inter">MUTATE ±20 % <span class="chip">SHIFT+&gt;</span></button>
+<button style="flex:1;min-width:160px;height:56px;border-radius:10px;border:1px solid #7A2420;background:#1B2027;color:#FFB4AE;font:800 15px Inter">SAVE ● <span class="chip">REC</span></button>
+<button style="flex:1;min-width:160px;height:56px;border-radius:10px;border:2px solid #FF3B30;background:#3A0D0A;color:#FFE1DE;font:900 15px Inter">TAKE ▶ <span class="chip">PLAY</span></button>
+</div>
+</div>
+
+<div style="display:flex;gap:14px;flex-wrap:wrap">
+<div style="flex:1 1 380px;min-width:0;background:#14181D;border:1px solid #2A313A;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:8px"><span class="lbl">Mood map</span><div style="flex:1"></div><span class="chip">SHIFT+PATTERN</span><span class="chip">BLOCK: MOOD mode</span></div>
+<div style="display:grid;grid-template-columns:auto repeat(4,minmax(0,1fr));gap:6px;font-size:12px;align-items:stretch">
+<span></span><span style="color:#9AA4B2;text-align:center;font-size:11px">organic · warm</span><span style="color:#9AA4B2;text-align:center;font-size:11px">soft</span><span style="color:#9AA4B2;text-align:center;font-size:11px">graphic</span><span style="color:#9AA4B2;text-align:center;font-size:11px">synthetic · cold</span>
+<span style="color:#9AA4B2;font-size:11px;align-self:center">PEAK</span><span style="background:#5A1030;border-radius:6px;padding:10px 6px;font-weight:700">Rave Kaos</span><span style="background:#5A4410;border-radius:6px;padding:10px 6px;font-weight:700">Disco Prisme</span><span style="background:#2A3A20;border-radius:6px;padding:10px 6px;font-weight:700">Industri Glitch</span><span style="background:#4A0E0E;border-radius:6px;padding:10px 6px;font-weight:700;outline:3px solid #B78CFF">Techno Bunker</span>
+<span style="color:#9AA4B2;font-size:11px;align-self:center">BUILD</span><span style="background:#4A3A10;border-radius:6px;padding:10px 6px;font-weight:700">Grafitti Gate</span><span style="background:#3A1A4A;border-radius:6px;padding:10px 6px;font-weight:700">Deep House Glow</span><span style="background:#40104A;border-radius:6px;padding:10px 6px;font-weight:700">Synthwave Neon</span><span style="background:#2A2D33;border-radius:6px;padding:10px 6px;font-weight:700">Minimal Mono</span>
+<span style="color:#9AA4B2;font-size:11px;align-self:center">GROOVE</span><span style="background:#1F3A1A;border-radius:6px;padding:10px 6px;font-weight:700">Organic</span><span style="background:#5A2A10;border-radius:6px;padding:10px 6px;font-weight:700">Sunset</span><span style="background:#3A2A20;border-radius:6px;padding:10px 6px;font-weight:700">Retro Tape</span><span style="background:#102A3A;border-radius:6px;padding:10px 6px;font-weight:700">Data Pulse</span>
+<span style="color:#9AA4B2;font-size:11px;align-self:center">CALM</span><span style="background:#0E2A3A;border-radius:6px;padding:10px 6px;font-weight:700">Ocean &amp; Ambient</span><span style="background:#3A2A10;border-radius:6px;padding:10px 6px;font-weight:700">Lounge Drift</span><span style="background:#202028;border-radius:6px;padding:10px 6px;font-weight:700">Ink &amp; Smoke</span><span style="background:#101830;border-radius:6px;padding:10px 6px;font-weight:700">Night Drive</span>
+</div>
+<div style="font-size:12px;color:#9AA4B2">Hold one mood + tap another = take its palette. Rolls draw clips and effects that fit the mood, the clip tags, the music energy and the GPU budget.</div>
+</div>
+
+<div style="flex:1 1 320px;min-width:0;background:#14181D;border:1px solid #2A313A;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:8px"><span class="lbl">Scene bank 2</span><div style="flex:1"></div><button style="height:32px;padding:0 10px;border-radius:6px;border:1px solid #5B3E8F;background:#221A33;color:#E9DDFF;font:700 12px Inter">Fill bank from mood</button></div>
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px">
+<span style="height:46px;border-radius:6px;background:#FF3B6B"></span><span style="height:46px;border-radius:6px;background:#E8ECF1"></span><span style="height:46px;border-radius:6px;background:#FF9F1C"></span><span style="height:46px;border-radius:6px;border:1px dashed #3A434F"></span>
+<span style="height:46px;border-radius:6px;background:#B78CFF"></span><span style="height:46px;border-radius:6px;background:#2EC5FF"></span><span style="height:46px;border-radius:6px;background:#FFB347;box-shadow:0 0 0 3px #FF3B30"></span><span style="height:46px;border-radius:6px;border:2px solid #FF3B30;display:flex;align-items:center;justify-content:center;font-size:11px;color:#FF9A93;font-weight:800">REC…</span>
+<span style="height:46px;border-radius:6px;background:#7A4FC0"></span><span style="height:46px;border-radius:6px;background:#1E8FB8;box-shadow:0 0 0 3px #30D158"></span><span style="height:46px;border-radius:6px;background:#B86A10"></span><span style="height:46px;border-radius:6px;background:#5A3A99"></span>
+<span style="height:46px;border-radius:6px;background:#203A52"></span><span style="height:46px;border-radius:6px;background:#3A2A55"></span><span style="height:46px;border-radius:6px;background:#4A3010"></span><span style="height:46px;border-radius:6px;border:1px dashed #3A434F"></span>
+</div>
+<div style="font-size:12px;color:#9AA4B2;line-height:1.6">Red ring = LIVE, green ring = PREVIEW. Ping-pong: load 7 → TAKE → load 10 → TAKE → <span class="chip">RESTART</span> cuts back. Hold a pad = morph (1 s = 1 bar, 2 s = 4 bars).</div>
+</div>
+
+<div style="flex:1 1 320px;min-width:0;background:#14181D;border:1px solid #2A313A;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;align-items:center;gap:8px"><span class="lbl">Song: Opening · cues</span><div style="flex:1"></div><span class="chip">STEP</span></div>
+<div style="display:flex;flex-direction:column;gap:5px;font-size:13px">
+<div style="display:flex;gap:8px;align-items:center;padding:6px 8px;background:#1B2027;border-radius:6px;color:#9AA4B2"><span class="mono">1</span><span style="flex:1">Calm intro · scene 13</span><span>manual</span></div>
+<div style="display:flex;gap:8px;align-items:center;padding:6px 8px;background:#3A0D0A;border:1px solid #FF3B30;border-radius:6px"><span class="mono">2</span><span style="flex:1">Groove · scene 6</span><span>after 16 bars</span><span style="color:#FF6B61;font-weight:800">LIVE</span></div>
+<div style="display:flex;gap:8px;align-items:center;padding:6px 8px;background:#0E2A16;border:1px solid #30D158;border-radius:6px"><span class="mono">3</span><span style="flex:1">Build · rule: energy 4, cold</span><span>timecode 01:12:30</span><span style="color:#30D158;font-weight:800">NEXT · 8 bars</span></div>
+<div style="display:flex;gap:8px;align-items:center;padding:6px 8px;background:#1B2027;border-radius:6px"><span class="mono">4</span><span style="flex:1">Drop · scene 2 + flash</span><span>on drop</span></div>
+<div style="display:flex;gap:8px;align-items:center;padding:6px 8px;background:#1B2027;border-radius:6px"><span class="mono">5</span><span style="flex:1">Break · scene 14</span><span>after 32 bars</span></div>
+</div>
+<div style="font-size:12px;color:#9AA4B2">Free play between cues. <span class="chip">ENTER</span> = GO. Assist suggests at builds and drops.</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

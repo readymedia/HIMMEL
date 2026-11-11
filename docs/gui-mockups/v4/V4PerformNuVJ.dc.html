@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Himmel v4 – Perform with the NuVJ (turntable style)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0D10}
+.mono{font-family:'JetBrains Mono',monospace}
+.lbl{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#9AA4B2;font-weight:800}
+.hw{font-family:'JetBrains Mono',monospace;font-size:10px;color:#9AA4B2;border:1px solid #2A313A;border-radius:4px;padding:1px 5px}
+button{cursor:pointer;font-family:Inter}
+</style>
+</helmet>
+<div style="min-height:900px;width:100%;box-sizing:border-box;background:#0B0D10;color:#E8ECF1;font-family:Inter,system-ui,sans-serif;display:flex;flex-direction:column;gap:12px;padding:16px 22px">
+
+<div style="display:flex;align-items:center;gap:12px">
+<b style="letter-spacing:.2em">HIMMEL</b><span style="font-size:12px;color:#9AA4B2">MAIN = NuVJ</span>
+<span style="font-size:13px">Song 3 <b>Nightdrive</b> · scene 2 live</span>
+<span style="flex:1"></span>
+<span style="font-size:12px;color:#C9D1DB">No focus here: <b>the crossfader decides</b> which deck is PROGRAM</span>
+<span style="font-weight:800">126.0 BPM</span><span class="hw">BPM TAP</span>
+</div>
+
+<div style="display:grid;grid-template-columns:minmax(0,1fr) 330px minmax(0,1fr);gap:16px;flex:1">
+
+<div style="{{ A_frame }}">
+<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:18px">DECK {{ A_id }}</b><span style="{{ A_tallySt }}">{{ A_tally }}</span></div>
+<div style="position:relative;aspect-ratio:16/9;border-radius:8px;overflow:hidden;{{ A_mon }}"><span style="position:absolute;left:8px;bottom:6px;font:800 11px Inter;background:rgba(0,0,0,.55);padding:2px 7px;border-radius:4px">{{ A_clip }}</span></div>
+<div style="display:flex;gap:14px;align-items:center">
+<div style="{{ A_ring }}"><div style="{{ A_needle }}"></div><div style="width:120px;height:120px;border-radius:50%;background:#0B0D10;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;z-index:1"><span class="lbl">wheel</span><b style="font-size:16px">{{ A_modeName }}</b><span style="font-size:10px;color:#9AA4B2;text-align:center;padding:0 8px">{{ A_modeHint }}</span></div></div>
+<div style="display:flex;flex-direction:column;gap:6px;flex:1">
+<button onClick="{{ A_cycle }}" style="{{ A_scrBtn }}">SCRATCH · {{ A_ledName }}</button>
+<div style="font-size:11px;color:#C9D1DB;line-height:1.45">Hold a pad + wheel = trim in point<br>Hold SYNC + wheel = beat loop<br>Hold LATCH + pad = load scene 1–9</div>
+<div style="display:flex;gap:5px"><span class="hw">LATCH</span><span class="hw">AUTO = dice</span><span class="hw">SYNC</span></div>
+</div>
+<div style="width:34px;height:150px;border-radius:6px;background:#14181D;border:1px solid #2A313A;position:relative"><div style="position:absolute;left:3px;right:3px;top:58px;height:14px;border-radius:3px;background:#E8ECF1"></div><span style="position:absolute;bottom:-16px;left:0;right:0;text-align:center;font-size:9px;color:#9AA4B2">SPEED</span></div>
+</div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+<sc-for list="{{ A_pads }}" as="p" hint-placeholder-count="9"><div style="{{ p.st }}"><span style="position:absolute;left:5px;bottom:4px;font:800 10px Inter;text-shadow:0 1px 2px #000">{{ p.n }}</span><span style="position:absolute;right:4px;top:3px;font:800 9px Inter;color:#9AA4B2">{{ p.k }}</span></div></sc-for>
+</div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+<div style="background:#14181D;border-radius:7px;padding:6px"><div class="lbl">BANK</div><b style="font-size:12px">Water 2/9</b></div>
+<div style="background:#14181D;border-radius:7px;padding:6px"><div class="lbl">PMTR 1</div><b style="font-size:12px">{{ A_p1 }}</b></div>
+<div style="background:#14181D;border-radius:7px;padding:6px"><div class="lbl">PMTR 2</div><b style="font-size:12px">{{ A_p2 }}</b></div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:10px;background:#12161C;border:1px solid #2A313A;border-radius:12px;padding:12px">
+<span class="lbl">MASTER · PROGRAM</span>
+<div style="position:relative;aspect-ratio:16/9;border-radius:8px;overflow:hidden;border:3px solid #FF3B30;{{ progMon }}"></div>
+<div style="background:#1a2a1a;border-radius:6px;padding:8px;text-align:center;font:600 18px 'JetBrains Mono';color:#B8F5C8;letter-spacing:.15em">{{ lcd }}</div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+<div style="background:#14181D;border-radius:7px;padding:6px"><div class="lbl">FX LEVEL</div><b>0.4</b></div>
+<div style="background:#14181D;border-radius:7px;padding:6px"><div class="lbl">MASTER FX</div><b>Glow</b></div>
+<div style="background:#14181D;border-radius:7px;padding:6px"><div class="lbl">BRIGHT</div><b>1.0</b></div>
+</div>
+<div style="display:flex;gap:6px">
+<button onClick="{{ instaA }}" style="flex:1;height:34px;border-radius:7px;border:1px solid #2A313A;background:#1B2027;color:#E8ECF1;font-weight:800;font-size:12px">INSTA A</button>
+<button onClick="{{ instaBlack }}" style="flex:1;height:34px;border-radius:7px;border:1px solid #2A313A;background:#000;color:#E8ECF1;font-weight:800;font-size:12px">INSTA BLACK</button>
+<button onClick="{{ instaB }}" style="flex:1;height:34px;border-radius:7px;border:1px solid #2A313A;background:#1B2027;color:#E8ECF1;font-weight:800;font-size:12px">INSTA B</button>
+</div>
+<div style="display:flex;justify-content:space-between;font-size:11px;color:#C9D1DB"><span>AUTO FADE <b>2 beats</b></span><span>FADER MODE <b>A smooth</b></span><span>FADER START <b>on</b></span></div>
+<div style="margin-top:auto;display:flex;flex-direction:column;gap:6px">
+<span class="lbl">Crossfader (click a position)</span>
+<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px"><sc-for list="{{ xf }}" as="x" hint-placeholder-count="5"><button onClick="{{ x.on }}" style="{{ x.st }}">{{ x.t }}</button></sc-for></div>
+<div style="height:16px;border-radius:8px;background:linear-gradient(90deg,#2EC5FF,#FF9F1C);position:relative"><div style="{{ knob }}"></div></div>
+<span style="font-size:11px;color:#9AA4B2">Past the middle, the red frame moves to the other deck: it becomes PROGRAM, the other one PREVIEW (prepare there).</span>
+</div>
+</div>
+
+<div style="{{ B_frame }}">
+<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:18px">DECK {{ B_id }}</b><span style="{{ B_tallySt }}">{{ B_tally }}</span></div>
+<div style="position:relative;aspect-ratio:16/9;border-radius:8px;overflow:hidden;{{ B_mon }}"><span style="position:absolute;left:8px;bottom:6px;font:800 11px Inter;background:rgba(0,0,0,.55);padding:2px 7px;border-radius:4px">{{ B_clip }}</span></div>
+<div style="display:flex;gap:14px;align-items:center">
+<div style="{{ B_ring }}"><div style="{{ B_needle }}"></div><div style="width:120px;height:120px;border-radius:50%;background:#0B0D10;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;z-index:1"><span class="lbl">wheel</span><b style="font-size:16px">{{ B_modeName }}</b><span style="font-size:10px;color:#9AA4B2;text-align:center;padding:0 8px">{{ B_modeHint }}</span></div></div>
+<div style="display:flex;flex-direction:column;gap:6px;flex:1">
+<button onClick="{{ B_cycle }}" style="{{ B_scrBtn }}">SCRATCH · {{ B_ledName }}</button>
+<div style="font-size:11px;color:#C9D1DB;line-height:1.45">Both wheels + crossfader = juggle: scratch both decks, cut with the fader</div>
+<div style="display:flex;gap:5px"><span class="hw">LATCH</span><span class="hw">AUTO = dice</span><span class="hw">SYNC</span></div>
+</div>
+<div style="width:34px;height:150px;border-radius:6px;background:#14181D;border:1px solid #2A313A;position:relative"><div style="position:absolute;left:3px;right:3px;top:68px;height:14px;border-radius:3px;background:#E8ECF1"></div><span style="position:absolute;bottom:-16px;left:0;right:0;text-align:center;font-size:9px;color:#9AA4B2">SPEED</span></div>
+</div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+<sc-for list="{{ B_pads }}" as="p" hint-placeholder-count="9"><div style="{{ p.st }}"><span style="position:absolute;left:5px;bottom:4px;font:800 10px Inter;text-shadow:0 1px 2px #000">{{ p.n }}</span><span style="position:absolute;right:4px;top:3px;font:800 9px Inter;color:#9AA4B2">{{ p.k }}</span></div></sc-for>
+</div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+<div style="background:#14181D;border-radius:7px;padding:6px"><div class="lbl">BANK</div><b style="font-size:12px">Neon 4/9</b></div>
+<div style="background:#14181D;border-radius:7px;padding:6px"><div class="lbl">PMTR 1</div><b style="font-size:12px">{{ B_p1 }}</b></div>
+<div style="background:#14181D;border-radius:7px;padding:6px"><div class="lbl">PMTR 2</div><b style="font-size:12px">{{ B_p2 }}</b></div>
+</div>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+constructor(props) { super(props); this.state = { xf: 1, mA: 1, mB: 0 }; }
+renderVals() {
+const st = this.state;
+const pos = [0, 0.3, 0.5, 0.7, 1][st.xf]; // 0 = full A
+const progA = pos < 0.5, mid = pos === 0.5;
+const modes = [['BEND', 'nudge speed · scrub when paused', 'off'], ['SCRATCH', 'drag like vinyl · let go = catch-up', 'lit'], ['FX WHEEL', 'sweep main FX · springs back', 'blink']];
+const deck = (id) => {
+  const isA = id === 'A', prog = mid ? false : (isA ? progA : !progA);
+  const m = modes[isA ? st.mA : st.mB];
+  const col = prog ? '#FF3B30' : '#30D158';
+  const ringCol = m[0] === 'SCRATCH' ? '#E8ECF1' : m[0] === 'FX WHEEL' ? '#B78CFF' : '#2EC5FF';
+  const names = isA ? ['Ocean', 'Ink', 'Reef', 'Waves', 'Ice', 'Rain', 'Mist', 'Deep', 'Foam'] : ['Neon', 'Lines', 'Grid', 'Tunnel', 'Lasers', 'City', 'Pulse', 'Rings', 'Flash'];
+  const hue = isA ? 190 : 320;
+  const pads = names.map((n, i) => ({ n: n, k: String([7, 8, 9, 4, 5, 6, 1, 2, 3][i]), st: 'position:relative;height:52px;border-radius:7px;overflow:hidden;border:' + (i === 4 ? '2px solid ' + col : '1px solid #2A313A') + ';background:linear-gradient(135deg,hsl(' + (hue + i * 9) + ',55%,14%),hsl(' + (hue + i * 12) + ',70%,' + (32 + i * 2) + '%))' }));
+  return { id: id, tally: mid ? 'BOTH 50%' : (prog ? 'PROGRAM' : 'PREVIEW · prepare'),
+    tallySt: 'font-size:11px;font-weight:900;padding:3px 9px;border-radius:10px;color:#0B0D10;background:' + (mid ? '#E8ECF1' : col),
+    frame: 'display:flex;flex-direction:column;gap:10px;border-radius:12px;padding:12px;background:#12161C;border:' + (mid ? '2px solid #E8ECF1' : '3px solid ' + col),
+    mon: 'background:' + (isA ? 'linear-gradient(120deg,#0b2a3a,#145a6e 50%,#2b8a8a)' : 'linear-gradient(120deg,#1d0f3a,#5a1e7a 55%,#ff2e88)'),
+    clip: (isA ? 'Ice' : 'Lasers') + ' · in 2 → out 9 beats',
+    ring: 'position:relative;width:150px;height:150px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;background:conic-gradient(from 40deg,' + ringCol + ' 0 62%,#1B2027 62% 100%)',
+    needle: 'position:absolute;left:73px;top:0;width:4px;height:75px;transform-origin:2px 75px;transform:rotate(' + (isA ? 150 : 210) + 'deg);background:#fff;border-radius:2px;z-index:2',
+    modeName: m[0], modeHint: m[1], ledName: 'LED ' + m[2],
+    scrBtn: 'height:34px;border-radius:7px;font-weight:800;font-size:12px;border:1px solid #2A313A;color:' + (m[2] === 'off' ? '#E8ECF1' : '#0B0D10') + ';background:' + (m[2] === 'off' ? '#1B2027' : m[2] === 'lit' ? '#E8ECF1' : '#B78CFF'),
+    cycle: () => this.setState(isA ? { mA: (st.mA + 1) % 3 } : { mB: (st.mB + 1) % 3 }),
+    p1: isA ? 'Kaleido 6' : 'RGB 12', p2: isA ? 'turn 0.2' : 'angle 40°', pads: pads };
+};
+const pref = (k, o) => { const r = {}; for (const x in o) r[k + '_' + x] = o[x]; return r; };
+const xf = ['A', '', '|', '', 'B'].map((t, i) => ({ t: t || '·', on: () => this.setState({ xf: i }), st: 'height:26px;border-radius:5px;border:1px solid #2A313A;font-weight:800;font-size:11px;color:' + (st.xf === i ? '#0B0D10' : '#E8ECF1') + ';background:' + (st.xf === i ? '#E8ECF1' : '#1B2027') }));
+return {
+...pref('A', deck('A')), ...pref('B', deck('B')), xf: xf,
+knob: 'position:absolute;top:-4px;width:18px;height:24px;border-radius:4px;background:#fff;left:calc(' + (pos * 100) + '% - 9px)',
+progMon: 'background:' + (mid ? 'linear-gradient(120deg,#145a6e,#5a1e7a)' : progA ? 'linear-gradient(120deg,#0b2a3a,#145a6e 50%,#2b8a8a)' : 'linear-gradient(120deg,#1d0f3a,#5a1e7a 55%,#ff2e88)'),
+lcd: mid ? 'MIX 50' : (progA ? 'VERSE A' : 'BUILD'),
+instaA: () => this.setState({ xf: 0 }), instaB: () => this.setState({ xf: 4 }), instaBlack: () => this.setState({ xf: 2 })
+};
+}
+}
+</script>
+</body>
+</html>

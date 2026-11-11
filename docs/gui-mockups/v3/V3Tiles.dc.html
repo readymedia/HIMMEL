@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Himmel v3 – Knob tiles</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0D10}
+.hw{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;color:#8C96A3}
+.lbl{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#9AA4B2;font-weight:700}
+</style>
+</helmet>
+<div style="min-height:900px;width:100%;box-sizing:border-box;background:#0B0D10;color:#E8ECF1;font-family:Inter,system-ui,sans-serif;display:flex;flex-direction:column;gap:14px;padding:20px 28px">
+<div style="display:flex;flex-direction:column;gap:4px"><h1 style="margin:0;font-size:30px;font-weight:900">No knobs on screen. Tiles that show what turning will do.</h1>
+<span style="font-size:14px;color:#9AA4B2">Each tile sits exactly above its physical knob. The middle is now; the faded edges are what you get if you turn left or right. The thin bar is the value. Under the PREVIEW screen they change the preview; under the PROGRAM screen they change what is live.</span></div>
+
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">
+<div style="background:#14181D;border:1px solid #234A30;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;justify-content:space-between"><b>SCROLL</b><span class="hw">KNOB 1 · preview</span></div>
+<div style="height:110px;display:flex;gap:4px;align-items:center"><span style="flex:1;height:60px;border-radius:4px;background:linear-gradient(135deg,#102030,#2EC5FF);opacity:.35"></span><span style="flex:1;height:72px;border-radius:4px;background:linear-gradient(135deg,#123,#1E8FB8);opacity:.6"></span><span style="flex:1.8;height:100px;border-radius:5px;background:linear-gradient(135deg,#0B3A55,#2EC5FF);outline:3px solid #30D158"></span><span style="flex:1;height:72px;border-radius:4px;background:radial-gradient(circle,#BFE9FF,#123);opacity:.6"></span><span style="flex:1;height:60px;border-radius:4px;background:linear-gradient(0deg,#123,#2EC5FF);opacity:.35"></span></div>
+<div style="font-size:13px;color:#C9D1DB">A film strip. Turn = the next clip slides in and loads into the selected preview layer at once. Safe: it is only preview.</div>
+</div>
+<div style="background:#14181D;border:1px solid #234A30;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;justify-content:space-between"><b>DICE</b><span class="hw">KNOB 2 · preview</span></div>
+<div style="height:110px;position:relative"><span style="position:absolute;left:6%;top:24px;width:40%;height:62px;border-radius:4px;background:#301040;opacity:.45;transform:rotate(-8deg)"></span><span style="position:absolute;left:26%;top:12px;width:48%;height:80px;border-radius:5px;background:linear-gradient(135deg,#0B3A55,#2EC5FF);outline:3px solid #B78CFF"></span><span style="position:absolute;right:4%;top:24px;width:30%;height:62px;border-radius:4px;border:2px dashed #6A4FA0;display:flex;align-items:center;justify-content:center;color:#B78CFF;font-weight:900">NEW</span></div>
+<div style="font-size:13px;color:#C9D1DB">A deck of cards. Right = roll a new look (inside the mood, with your locks). Left = back through history. Same as transport ◀ ▶.</div>
+</div>
+<div style="background:#14181D;border:1px solid #234A30;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;justify-content:space-between"><b>EFFECT AMOUNT</b><span class="hw">KNOB 3 · preview</span></div>
+<div style="height:110px;display:flex;gap:4px"><span style="flex:1;border-radius:4px;background:#0B3A55;opacity:.5"></span><span style="flex:2;border-radius:5px;background:repeating-conic-gradient(from 0deg at 50% 50%,#2EC5FF 0 30deg,#0B3A55 30deg 60deg);outline:3px solid #30D158"></span><span style="flex:1;border-radius:4px;background:repeating-conic-gradient(from 0deg at 50% 50%,#2EC5FF 0 8deg,#0B3A55 8deg 16deg);opacity:.5"></span></div>
+<div style="font-size:13px;color:#C9D1DB">Before ◀ now ▶ more. The tile is the effect itself on your clip, so you see kaleido get more segments as you turn.</div>
+</div>
+<div style="background:#14181D;border:1px solid #234A30;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;justify-content:space-between"><b>SPEED</b><span class="hw">KNOB 4 · preview</span></div>
+<div style="height:110px;border-radius:5px;background:repeating-linear-gradient(90deg,#2EC5FF 0 3px,#0B3A55 3px 12px);position:relative;outline:3px solid #30D158"><span style="position:absolute;left:8px;bottom:6px;font:700 22px 'JetBrains Mono'">×1.5</span><span style="position:absolute;right:8px;top:6px;font-size:11px;color:#BFE9FF">½ · 1 · 1½ · 2 · 4 · on the beat</span></div>
+<div style="font-size:13px;color:#C9D1DB">Streaks stretch with speed. Steps snap to musical values when GRID is on; Shift + turn = free.</div>
+</div>
+
+<div style="background:#14181D;border:1px solid #4A2220;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;justify-content:space-between"><b>INTENSITY</b><span class="hw">KNOB 5 · program</span></div>
+<div style="height:110px;display:flex;gap:4px;align-items:flex-end;outline:3px solid #FF3B30;border-radius:5px;padding:6px;box-sizing:border-box"><span style="flex:1;height:20%;background:#FF9F1C"></span><span style="flex:1;height:35%;background:#FF9F1C"></span><span style="flex:1;height:55%;background:#FF9F1C"></span><span style="flex:1;height:75%;background:#FF6B30"></span><span style="flex:1;height:92%;background:#3A434F"></span><span style="flex:1;height:100%;background:#3A434F"></span></div>
+<div style="font-size:13px;color:#C9D1DB">The energy macro on what is live: speed, contrast, cut rate, strobe level, all at once, within limits that look good.</div>
+</div>
+<div style="background:#14181D;border:1px solid #4A2220;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;justify-content:space-between"><b>COLOUR</b><span class="hw">KNOB 6 · program</span></div>
+<div style="height:110px;display:flex;align-items:center;justify-content:center"><span style="width:100px;height:100px;border-radius:50%;background:conic-gradient(#f33,#f93,#ff3,#3f6,#3cf,#36f,#c3f,#f33);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px #FF3B30"><span style="width:66px;height:66px;border-radius:50%;background:radial-gradient(#FFB347,#5A2A00)"></span></span></div>
+<div style="font-size:13px;color:#C9D1DB">A colour ring around the live picture. Turn = the palette turns. Pushed fully left = the clips' own colours.</div>
+</div>
+<div style="background:#14181D;border:1px solid #4A2220;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;justify-content:space-between"><b>SPACE</b><span class="hw">KNOB 7 · program</span></div>
+<div style="height:110px;border-radius:5px;background:radial-gradient(circle,#FFB347 0 8%,transparent 9%),repeating-radial-gradient(circle,#5A2A00 0 6px,#FF9F1C 6px 8px);outline:3px solid #FF3B30"></div>
+<div style="font-size:13px;color:#C9D1DB">Left = mirror and tiles, middle = flat, right = tunnel and zoom. One knob for the "space" of the picture.</div>
+</div>
+<div style="background:#14181D;border:1px solid #4A2220;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;justify-content:space-between"><b>MASTER FX</b><span class="hw">KNOB 8 · program</span></div>
+<div style="height:110px;border-radius:5px;background:linear-gradient(90deg,#5A2A00 0 40%,#FFE1B0 40% 41%,transparent 41%),repeating-linear-gradient(0deg,#FF9F1C 0 2px,#3A1A00 2px 6px);outline:3px solid #FF3B30;position:relative"><span style="position:absolute;left:6px;top:4px;font-size:11px">dry</span><span style="position:absolute;right:6px;top:4px;font-size:11px">GLOW 40 %</span></div>
+<div style="font-size:13px;color:#C9D1DB">A wipe: left of the line is without, right is with. Turn = move the line. Shift + turn = choose the master effect.</div>
+</div>
+</div>
+
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;gap:10px;align-items:center"><span class="lbl">Other pages</span><span class="hw">PAGE ◀ ▶</span><span style="font-size:13px;color:#9AA4B2">Same rule: left four act on the selected preview layer, right four on program.</span></div>
+<div style="display:grid;grid-template-columns:120px repeat(8,minmax(0,1fr));gap:6px;font-size:12px;align-items:center">
+<b>PLAY</b><span>Scroll clips</span><span>Dice</span><span>FX amount</span><span>Speed</span><span style="color:#FFB4AE">Intensity</span><span style="color:#FFB4AE">Colour</span><span style="color:#FFB4AE">Space</span><span style="color:#FFB4AE">Master FX</span>
+<b>LAYER</b><span>Opacity</span><span>Blend (scroll)</span><span>Zoom</span><span>Position</span><span style="color:#FFB4AE">Prog. layer E</span><span style="color:#FFB4AE">F</span><span style="color:#FFB4AE">G</span><span style="color:#FFB4AE">H opacity</span>
+<b>FX</b><span>Choose (scroll)</span><span>Param 1</span><span>Param 2</span><span>Audio link</span><span style="color:#FFB4AE">Master FX choose</span><span style="color:#FFB4AE">Param 1</span><span style="color:#FFB4AE">Param 2</span><span style="color:#FFB4AE">Mix</span>
+<b>MIX</b><span>Fade time</span><span>Curve</span><span>Preview dim</span><span>Transition (scroll)</span><span style="color:#FFB4AE">Master dim</span><span style="color:#FFB4AE">Out 1–3</span><span style="color:#FFB4AE">Out 4</span><span style="color:#FFB4AE">Safe limit</span>
+<b>REACT</b><span>Reacts to (scroll)</span><span>Amount</span><span>Attack</span><span>Release</span><span style="color:#FFB4AE">REACT macro</span><span style="color:#FFB4AE">Bass</span><span style="color:#FFB4AE">Mid</span><span style="color:#FFB4AE">High</span>
+</div>
+<div style="font-size:12px;color:#6B7684">"Scroll" tiles are film strips or word strips; value tiles are pictures with a bar. The knob you last turned lights its tile white for 1 s (MK2 knobs are not touch-sensitive), so your eye finds it at once.</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

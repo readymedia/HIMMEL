@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Himmel v4 – Sound in and the reaction editor</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0D10}
+.lbl{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#9AA4B2;font-weight:800}
+.hw{font-family:'JetBrains Mono',monospace;font-size:10px;color:#9AA4B2;border:1px solid #2A313A;border-radius:4px;padding:1px 5px}
+.mono{font-family:'JetBrains Mono',monospace}
+button{cursor:pointer;font-family:Inter}
+</style>
+</helmet>
+<div style="min-height:900px;width:100%;box-sizing:border-box;background:#0B0D10;color:#E8ECF1;font-family:Inter,system-ui,sans-serif;display:flex;flex-direction:column;gap:12px;padding:16px 22px">
+
+<div style="display:flex;align-items:center;gap:10px">
+<b style="letter-spacing:.2em">HIMMEL</b><span style="font-size:13px;color:#9AA4B2">SOUND · every effect moves with the music</span>
+<span style="flex:1"></span>
+<span style="display:flex;align-items:center;gap:6px;font-weight:800"><span style="width:10px;height:10px;border-radius:50%;background:#30D158;box-shadow:0 0 8px #30D158"></span>hearing music</span>
+<span class="hw">126.0 BPM · tap</span>
+</div>
+
+<div style="display:grid;grid-template-columns:330px minmax(0,1fr) 330px;gap:14px;flex:1">
+
+<div style="background:#12161C;border:1px solid #2A313A;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px">
+<span class="lbl">Sound in</span>
+<div style="display:flex;flex-direction:column;gap:6px"><sc-for list="{{ inputs }}" as="i" hint-placeholder-count="3"><button onClick="{{ i.on }}" style="{{ i.st }}"><b style="font-size:13px">{{ i.t }}</b><span style="font-size:11px;color:#9AA4B2">{{ i.sub }}</span></button></sc-for></div>
+<div style="display:flex;justify-content:space-between;font-size:12px"><span>Auto gain</span><b style="color:#30D158">ON</b></div>
+<div style="display:flex;justify-content:space-between;font-size:12px"><span>Noise gate</span><b>-52 dB</b></div>
+<div style="display:flex;justify-content:space-between;font-size:12px"><span>AV offset</span><b>38 ms</b> <span class="hw">flash test</span></div>
+<span class="lbl" style="margin-top:4px">Signals (live)</span>
+<sc-for list="{{ meters }}" as="m" hint-placeholder-count="10"><div style="display:grid;grid-template-columns:60px 1fr;gap:8px;align-items:center;font-size:11px"><span style="color:#C9D1DB">{{ m.n }}</span><div style="height:8px;border-radius:4px;background:#1B2027;overflow:hidden"><div style="{{ m.bar }}"></div></div></div></sc-for>
+<div style="font-size:11px;color:#9AA4B2">0.1: mic, line in, sound on this PC (WASAPI). ASIO and BPM-from-audio in 0.2.</div>
+</div>
+
+<div style="background:#12161C;border:1px solid #2A313A;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;justify-content:space-between;align-items:center"><span class="lbl">Reaction editor · Zoom pulse › AMOUNT (layer E, live)</span><span class="hw">SHIFT + AUTO WRITE + knob 6</span></div>
+<span class="lbl">Signal</span>
+<div style="display:flex;gap:5px;flex-wrap:wrap"><sc-for list="{{ signals }}" as="s" hint-placeholder-count="12"><button onClick="{{ s.on }}" style="{{ s.st }}">{{ s.t }}</button></sc-for></div>
+<span class="lbl">Mode</span>
+<div style="display:flex;gap:5px"><sc-for list="{{ modes }}" as="m" hint-placeholder-count="3"><button onClick="{{ m.on }}" style="{{ m.st }}">{{ m.t }}</button></sc-for><span style="font-size:12px;color:#C9D1DB;margin-left:8px;align-self:center">{{ modeHelp }}</span></div>
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">
+<sc-for list="{{ knobs }}" as="k" hint-placeholder-count="8"><div style="background:#1B2027;border-radius:8px;padding:8px"><div class="lbl">{{ k.n }}</div><b style="font-size:15px">{{ k.v }}</b><div style="height:4px;border-radius:2px;background:#0B0D10;margin-top:6px;overflow:hidden"><div style="{{ k.bar }}"></div></div></div></sc-for>
+</div>
+<span class="lbl">Input → parameter (last 4 bars)</span>
+<div style="position:relative;height:150px;background:#0E1116;border-radius:8px;overflow:hidden">
+<sc-for list="{{ graph }}" as="g" hint-placeholder-count="64"><div style="{{ g }}"></div></sc-for>
+<div style="position:absolute;left:0;right:0;top:40px;border-top:1px dashed #FF9F1C66"></div><span style="position:absolute;right:6px;top:26px;font-size:10px;color:#FF9F1C">threshold</span>
+<span style="position:absolute;left:8px;top:6px;font-size:10px;color:#9AA4B2">grey = signal · violet = AMOUNT after the reaction</span>
+</div>
+<div style="display:flex;gap:6px"><span class="hw">Copy reaction</span><span class="hw">Paste to all effects on this layer</span><span class="hw">Reset to the effect's default</span><span class="hw">Scope: SLOT · L · G</span></div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:12px">
+<div style="background:#12161C;border:1px solid #2A313A;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:6px">
+<span class="lbl">Every effect has a default reaction</span>
+<sc-for list="{{ defaults }}" as="d" hint-placeholder-count="9"><div style="display:flex;justify-content:space-between;font-size:12px"><span>{{ d.e }}</span><span class="mono" style="color:#B78CFF">{{ d.r }}</span></div></sc-for>
+<span style="font-size:11px;color:#9AA4B2;margin-top:4px">Any parameter can get its own. REACT macro scales them all (linked to energy by default).</span>
+</div>
+<div style="background:#12161C;border:1px solid #2A313A;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:6px">
+<span class="lbl">MK2 screens (reaction page)</span>
+<div class="mono" style="background:#1d3b8a;color:#dfe9ff;border-radius:4px;padding:6px;font-size:10px;line-height:1.5;white-space:pre">{{ mk2L }}</div>
+<div class="mono" style="background:#1d3b8a;color:#dfe9ff;border-radius:4px;padding:6px;font-size:10px;line-height:1.5;white-space:pre">{{ mk2R }}</div>
+</div>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+constructor(props) { super(props); this.state = { input: 1, sig: 'kick', mode: 'ADD' }; }
+renderVals() {
+const st = this.state;
+const ins = [['Microphone', 'room sound · auto gain'], ['Line in 1–2', 'from the DJ mixer'], ['Sound on this PC', 'loopback: rekordbox, Spotify …']];
+const inputs = ins.map((x, i) => ({ t: x[0], sub: x[1], on: () => this.setState({ input: i }), st: 'display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:8px;color:#E8ECF1;background:#1B2027;border:' + (st.input === i ? '2px solid #30D158' : '1px solid #2A313A') }));
+const lv = { level: 0.72, bass: 0.81, mid: 0.55, high: 0.38, kick: 0.92, snare: 0.2, hat: 0.6, onset: 0.7, energy: 0.66, beat: 0.9 };
+const meters = Object.keys(lv).map(k => ({ n: k, bar: 'height:100%;width:' + Math.round(lv[k] * 100) + '%;background:' + (k === st.sig ? '#B78CFF' : '#3A6F8F') }));
+const sigs = ['level', 'bass', 'mid', 'high', 'band 12', 'kick', 'snare', 'hat', 'onset', 'beat', 'bar', 'energy'];
+const signals = sigs.map(x => ({ t: x, on: () => this.setState({ sig: x }), st: 'height:28px;padding:0 9px;border-radius:6px;font-weight:800;font-size:11px;border:1px solid #2A313A;color:' + (st.sig === x ? '#0B0D10' : '#E8ECF1') + ';background:' + (st.sig === x ? '#B78CFF' : '#1B2027') }));
+const mh = { ADD: 'On top of the knob value', FOLLOW: 'The signal replaces the knob inside the range', TRIGGER: 'Fires on onsets, held for HOLD, on the grid' };
+const modes = Object.keys(mh).map(x => ({ t: x, on: () => this.setState({ mode: x }), st: 'height:28px;padding:0 10px;border-radius:6px;font-weight:800;font-size:11px;border:1px solid #2A313A;color:' + (st.mode === x ? '#0B0D10' : '#E8ECF1') + ';background:' + (st.mode === x ? '#E8ECF1' : '#1B2027') }));
+const kv = [['AMOUNT', '+65 %', 65], ['RANGE', '0.1 → 0.8', 70], ['ATTACK', '5 ms', 5], ['RELEASE', '180 ms', 30], ['THRESHOLD', '0.35', 35], ['CURVE', 'soft', 50], ['QUANTISE', st.mode === 'TRIGGER' ? '1/8' : 'off', st.mode === 'TRIGGER' ? 40 : 0], ['HOLD', st.mode === 'TRIGGER' ? '1/4 beat' : '—', st.mode === 'TRIGGER' ? 25 : 0]];
+const knobs = kv.map(k => ({ n: k[0], v: k[1], bar: 'height:100%;width:' + k[2] + '%;background:#B78CFF' }));
+const graph = [];
+const seed = st.sig.length * 7 + st.input;
+for (let i = 0; i < 32; i++) {
+  const hit = (i % 4 === 0) ? 1 : 0;
+  let sig = st.sig === 'kick' || st.sig === 'beat' ? (hit ? 0.95 : 0.12 + 0.08 * ((i * seed) % 3)) : 0.3 + 0.5 * Math.abs(Math.sin((i + seed) * 0.6));
+  const above = Math.max(0, sig - 0.35) / 0.65;
+  let out = st.mode === 'TRIGGER' ? (above > 0.2 ? 0.85 : 0.1) : st.mode === 'FOLLOW' ? 0.1 + 0.7 * above : 0.25 + 0.55 * above;
+  const x = (i * 100 / 32).toFixed(2);
+  graph.push('position:absolute;bottom:0;left:' + x + '%;width:1.2%;height:' + Math.round(sig * 130) + 'px;background:#3A434F');
+  graph.push('position:absolute;bottom:0;left:calc(' + x + '% + 1.3%);width:1.2%;height:' + Math.round(out * 130) + 'px;background:#B78CFF');
+}
+const defaults = [['Zoom pulse', 'kick → amount'], ['Strobe', 'beat → trigger'], ['Displace', 'bass → amount'], ['Hue', 'mid → turn'], ['Kaleido', 'mid → turn'], ['RGB split', 'kick → distance'], ['Stutter', 'hat → trigger'], ['Glow', 'energy → amount'], ['Spectrum gen.', 'spectrum → bars']].map(d => ({ e: d[0], r: d[1] }));
+return { inputs: inputs, meters: meters, signals: signals, modes: modes, modeHelp: mh[st.mode], knobs: knobs, graph: graph, defaults: defaults,
+mk2L: 'REACT  ZOOM PULSE>AMOUNT\n' + st.sig.toUpperCase().padEnd(8) + ' +65%    5ms     180ms\nSIGNAL   AMOUNT   ATTACK   RELEASE',
+mk2R: 'MODE ' + st.mode + '   LIVE E\n0.35     SOFT     ' + (st.mode === 'TRIGGER' ? '1/8 ' : 'OFF ') + '    ' + (st.mode === 'TRIGGER' ? '1/4' : '-') + '\nTHRESH   CURVE    QUANT    HOLD' };
+}
+}
+</script>
+</body>
+</html>

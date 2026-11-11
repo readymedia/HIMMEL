@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Himmel v4 – Song, scene and kit editor</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0D10}
+.lbl{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#9AA4B2;font-weight:800}
+.hw{font-family:'JetBrains Mono',monospace;font-size:10px;color:#9AA4B2;border:1px solid #2A313A;border-radius:4px;padding:1px 5px}
+button{cursor:pointer;font-family:Inter}
+</style>
+</helmet>
+<div style="min-height:900px;width:100%;box-sizing:border-box;background:#0B0D10;color:#E8ECF1;font-family:Inter,system-ui,sans-serif;display:flex;flex-direction:column;gap:12px;padding:16px 22px">
+
+<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+<b style="letter-spacing:.2em">HIMMEL</b><span style="font-size:13px;color:#9AA4B2">BUILD › SHOW</span>
+<span style="flex:1"></span>
+<span style="font-size:12px;padding:5px 10px;border-radius:14px;background:#1B2027">1 Prepare the song</span><span style="color:#9AA4B2">→</span>
+<span style="font-size:12px;padding:5px 10px;border-radius:14px;background:#30D158;color:#0B0D10;font-weight:800">2 Rehearse on PREVIEW</span><span style="color:#9AA4B2">→</span>
+<span style="font-size:12px;padding:5px 10px;border-radius:14px;background:#1B2027">3 Play: ENTER + pads + macros</span>
+</div>
+
+<div style="display:grid;grid-template-columns:260px minmax(0,1fr) 420px;gap:14px;flex:1">
+
+<div style="background:#12161C;border:1px solid #2A313A;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px">
+<span class="lbl">Setlist</span>
+<div style="font-size:13px;color:#9AA4B2">1 Warmup · 2 Glass · <b style="color:#E8ECF1">3 Nightdrive</b> · 4 Pulse …</div>
+<span class="lbl" style="margin-top:6px">Scenes in "Nightdrive"</span>
+<sc-for list="{{ scenes }}" as="c" hint-placeholder-count="6"><button onClick="{{ c.on }}" style="{{ c.st }}"><span style="width:40px;height:24px;border-radius:4px;{{ c.th }}"></span><span style="display:flex;flex-direction:column;align-items:flex-start"><b style="font-size:13px">{{ c.n }}</b><span style="font-size:10px;color:#9AA4B2">{{ c.sub }}</span></span></button></sc-for>
+<div style="display:flex;gap:6px;margin-top:4px"><span class="hw">+ dice + keep</span><span class="hw">Fill song from mood</span></div>
+</div>
+
+<div style="background:#12161C;border:1px solid #2A313A;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:18px">{{ sceneName }}</b><span style="display:flex;gap:5px"><span class="hw">variations 4a 4b</span><span class="hw">Rehearse = load to PREVIEW</span></span></div>
+<div style="position:relative;aspect-ratio:16/7;border-radius:8px;overflow:hidden;border:3px solid #30D158;{{ sceneThumb }}"><span style="position:absolute;left:8px;top:6px;font:800 11px Inter;background:#30D158;color:#0B0D10;padding:2px 7px;border-radius:4px">PREVIEW · rehearsing</span></div>
+<span class="lbl">Layers</span>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+<div style="background:#14181D;border-radius:8px;padding:8px"><b style="font-size:12px">L1 Neon tunnel</b><div style="font-size:11px;color:#9AA4B2">PING-PONG · 8 beats · FILL ALL</div></div>
+<div style="background:#14181D;border-radius:8px;padding:8px"><b style="font-size:12px">L2 Lines</b><div style="font-size:11px;color:#9AA4B2">CHOP 1/2 · Mirror</div></div>
+<div style="background:#14181D;border-radius:8px;padding:8px"><b style="font-size:12px">L3 Particles α</b><div style="font-size:11px;color:#9AA4B2">LOOP · add · Glow</div></div>
+<div style="background:#14181D;border-radius:8px;padding:8px"><b style="font-size:12px">L4 —</b><div style="font-size:11px;color:#9AA4B2">empty (kit pads may use it)</div></div>
+</div>
+<span class="lbl">Live macros (knobs 5–8 while this scene is live)</span>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+<sc-for list="{{ macros }}" as="m" hint-placeholder-count="4"><div style="background:#1A1214;border:1px solid #4A2326;border-radius:8px;padding:8px"><div class="lbl" style="color:#FF9A93">{{ m.k }} · {{ m.n }}</div><div style="font-size:11px;color:#C9D1DB;margin-top:4px">{{ m.d }}</div><div style="height:6px;border-radius:3px;background:#2A1A1C;margin-top:6px;position:relative"><div style="{{ m.range }}"></div></div></div></sc-for>
+</div>
+<div style="display:flex;gap:10px;font-size:12px;color:#C9D1DB"><span>Transition in: <b>fade 1 bar, on the bar</b></span><span>Autopilot: <b>off</b></span><span>GO next: <b>5 Drop</b></span></div>
+</div>
+
+<div style="background:#12161C;border:1px solid #2A313A;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;justify-content:space-between;align-items:center"><span class="lbl">Kit · 16 pads (click a pad)</span><span class="hw">Fill kit</span></div>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+<sc-for list="{{ pads }}" as="p" hint-placeholder-count="16"><button onClick="{{ p.on }}" style="{{ p.st }}"><span style="position:absolute;left:4px;bottom:3px;font:800 10px Inter;text-shadow:0 1px 2px #000">{{ p.n }}</span><span style="{{ p.tagst }}">{{ p.tag }}</span></button></sc-for>
+</div>
+<div style="background:#14181D;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:7px">
+<b style="font-size:14px">Pad {{ selNum }} · {{ selName }}</b>
+<div style="display:flex;gap:4px;flex-wrap:wrap"><span class="lbl" style="width:56px">Target</span><sc-for list="{{ targets }}" as="t" hint-placeholder-count="7"><button onClick="{{ t.on }}" style="{{ t.st }}">{{ t.t }}</button></sc-for></div>
+<div style="display:flex;gap:6px;font-size:12px;color:#C9D1DB;flex-wrap:wrap"><span class="lbl" style="width:56px">Trigger</span><span>{{ selTrig }}</span></div>
+<div style="display:flex;gap:6px;font-size:12px;color:#C9D1DB;flex-wrap:wrap"><span class="lbl" style="width:56px">PRESS</span><span>{{ selPress }}</span></div>
+<span style="font-size:11px;color:#9AA4B2">On the MK2: hold the pad + a group button sets the target (A/E = L1 … D/H = L4, ALL, SOLO = HIT, SELECT = SEL).</span>
+</div>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+constructor(props) { super(props); this.state = { scene: 3, pad: 12, tg: {} }; }
+renderVals() {
+const st = this.state;
+const sc = [['1 Intro', 'calm · 2 layers'], ['2 Verse A', 'groove · 3 layers'], ['3 Verse B', 'groove · kit 12 pads'], ['4 Build', 'rising · strobe kit'], ['5 Drop', 'peak · hits'], ['6 Outro', 'calm']];
+const scenes = sc.map((x, i) => ({ n: x[0], sub: x[1], on: () => this.setState({ scene: i }), th: 'background:linear-gradient(135deg,hsl(' + (i * 50 + 200) + ',50%,20%),hsl(' + (i * 50 + 240) + ',70%,45%))', st: 'display:flex;align-items:center;gap:8px;padding:6px;border-radius:8px;color:#E8ECF1;text-align:left;background:' + (st.scene === i ? '#1B2027' : 'transparent') + ';border:' + (st.scene === i ? '1px solid #30D158' : '1px solid transparent') }));
+const kit = {
+ 13: ['Tunnel', 'L1', 'NORMAL', 'opacity'], 14: ['Grid', 'L1', 'NORMAL', 'opacity'], 15: ['City', 'L1', 'NORMAL', 'opacity'], 16: ['Lasers', 'L1', 'NORMAL', 'opacity'],
+ 9: ['Particles α', 'L3', 'TOGGLE', 'glow'], 10: ['Logo α', 'L3', 'PIANO, fade out 1 beat', 'opacity'], 11: ['Lines', 'L2', 'NORMAL', 'mirror pos'], 12: ['Same ×4', 'ALL', 'NORMAL', 'strobe rate'],
+ 5: ['Strobe', 'FX', 'momentary, SHIFT = latch', 'rate 1/4 → 1/16 + brightness (capped)'], 6: ['RGB split', 'FX', 'momentary', 'distance'], 7: ['Zoom pulse', 'FX', 'momentary', 'amount'], 8: ['Freeze', 'FX', 'momentary', '—'],
+ 1: ['Fire hit', 'HIT', 'PIANO, fade out 0.5 beat', 'opacity'], 2: ['Flash hit', 'HIT', 'PIANO', 'brightness (capped)'], 3: ['Black', 'ACT', 'momentary', 'amount'], 4: ['Next scene', 'ACT', 'tap', '—'] };
+const order = [13, 14, 15, 16, 9, 10, 11, 12, 5, 6, 7, 8, 1, 2, 3, 4];
+const tagCol = { L1: '#2EC5FF', L2: '#2EC5FF', L3: '#2EC5FF', L4: '#2EC5FF', ALL: '#B78CFF', FX: '#FF9F1C', HIT: '#FF3B30', ACT: '#9AA4B2', SEL: '#E8ECF1', FREE: '#7EE2A0' };
+const tagOf = n => st.tg[n] || kit[n][1];
+const pads = order.map(n => ({ n: kit[n][0], tag: tagOf(n), on: () => this.setState({ pad: n }),
+  tagst: 'position:absolute;right:3px;top:3px;font:800 9px Inter;padding:1px 4px;border-radius:3px;background:#0B0D10cc;color:' + tagCol[tagOf(n)],
+  st: 'position:relative;height:58px;border-radius:7px;overflow:hidden;color:#E8ECF1;text-align:left;border:' + (st.pad === n ? '2px solid #fff' : '1px solid #2A313A') + ';background:' + (kit[n][1] === 'FX' ? '#2a2420' : kit[n][1] === 'ACT' ? '#14181D' : 'linear-gradient(135deg,hsl(' + (n * 23) + ',50%,16%),hsl(' + (n * 23 + 40) + ',70%,40%))') }));
+const k = kit[st.pad], clipPad = ['FX', 'ACT'].indexOf(k[1]) < 0;
+const targets = (clipPad ? ['SEL', 'L1', 'L2', 'L3', 'L4', 'ALL', 'FREE', 'HIT'] : [k[1]]).map(t => ({ t: t, on: () => { if (clipPad) { const tg = Object.assign({}, st.tg); tg[st.pad] = t; this.setState({ tg: tg }); } }, st: 'height:24px;padding:0 7px;border-radius:5px;font-weight:800;font-size:11px;border:1px solid #2A313A;color:' + (tagOf(st.pad) === t ? '#0B0D10' : '#E8ECF1') + ';background:' + (tagOf(st.pad) === t ? tagCol[t] : '#1B2027') }));
+const macros = [['5', 'INTENSITY', 'brightness, FX amounts, speed', 20, 85], ['6', 'COLOUR', 'palette turn of the mood', 0, 100], ['7', 'SPACE', 'mirror ← flat → tunnel', 30, 80], ['8', 'MASTER FX', 'glow amount', 0, 60]].map(m => ({ k: m[0], n: m[1], d: m[2], range: 'position:absolute;top:0;bottom:0;left:' + m[3] + '%;width:' + (m[4] - m[3]) + '%;background:#FF3B30;border-radius:3px' }));
+return { scenes: scenes, sceneName: sc[st.scene][0], sceneThumb: 'background:linear-gradient(120deg,hsl(' + (st.scene * 50 + 200) + ',50%,15%),hsl(' + (st.scene * 50 + 260) + ',70%,45%))',
+pads: pads, targets: targets, macros: macros, selNum: String(st.pad), selName: k[0], selTrig: k[2], selPress: k[3] };
+}
+}
+</script>
+</body>
+</html>

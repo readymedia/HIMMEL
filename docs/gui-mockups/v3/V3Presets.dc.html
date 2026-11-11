@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Himmel v3 – Presets on every level</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0D10}
+.hw{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;color:#8C96A3}
+.lbl{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#9AA4B2;font-weight:800}
+.th{width:62px;height:36px;border-radius:4px;flex:none}
+</style>
+</helmet>
+<div style="min-height:900px;width:100%;box-sizing:border-box;background:#0B0D10;color:#E8ECF1;font-family:Inter,system-ui,sans-serif;display:flex;flex-direction:column;gap:12px;padding:18px 24px">
+<div style="display:flex;flex-direction:column;gap:4px"><h1 style="margin:0;font-size:28px;font-weight:900">Three verbs, every level</h1>
+<span style="font-size:14px;color:#9AA4B2">Like a synth: you never start from zero. Pick a level by selecting it, then <b style="color:#D2B8FF">DICE</b> (new random that fits), <b style="color:#D2B8FF">MUTATE</b> (small variation) or <b style="color:#FFD60A">ROTATE</b> (step through your saved presets). <b style="color:#FF9A93">REC</b> saves at the level you are on. No names needed.</span></div>
+
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px">
+<div style="background:#221A33;border:1px solid #6A4FA0;border-radius:10px;padding:10px"><b style="color:#E9DDFF">DICE</b><div style="font-size:12px;color:#C9D1DB">A new combination inside the mood, the locks and the GPU budget.</div><div class="hw" style="margin-top:4px">KNOB 2 right · TRANSPORT ▶</div></div>
+<div style="background:#221A33;border:1px solid #6A4FA0;border-radius:10px;padding:10px"><b style="color:#E9DDFF">MUTATE</b><div style="font-size:12px;color:#C9D1DB">Same idea, values nudged ±20 % (variation on the MIX page).</div><div class="hw" style="margin-top:4px">SHIFT + TRANSPORT ▶</div></div>
+<div style="background:#2A2410;border:1px solid #7A6A20;border-radius:10px;padding:10px"><b style="color:#FFE98A">ROTATE</b><div style="font-size:12px;color:#C9D1DB">Your saved presets for this level, one after another. Can run by itself every n bars.</div><div class="hw" style="margin-top:4px">SHIFT + KNOB 2 · SHIFT + ◀ ▶</div></div>
+<div style="background:#2A1414;border:1px solid #7A2420;border-radius:10px;padding:10px"><b style="color:#FFB4AE">SAVE</b><div style="font-size:12px;color:#C9D1DB">Stores the current state as a preset of the level you are on. Starred in the history.</div><div class="hw" style="margin-top:4px">REC</div></div>
+</div>
+
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px">
+<div style="display:grid;grid-template-columns:170px 220px minmax(0,1fr) 170px;gap:10px;font-size:11px;color:#9AA4B2;font-weight:700;letter-spacing:.1em"><span>LEVEL</span><span>HOW YOU SELECT IT (MK2)</span><span>SAVED PRESETS · ROTATE ORDER (current outlined)</span><span>AUTO-ROTATE</span></div>
+
+<div style="display:grid;grid-template-columns:170px 220px minmax(0,1fr) 170px;gap:10px;align-items:center;padding:6px;background:#1B2027;border-radius:8px">
+<div><b>EFFECT</b><div style="font-size:11px;color:#9AA4B2">one slot's settings</div></div>
+<div style="font-size:12px">FX page · knob 1 picks the effect, <span class="hw">SHIFT+KNOB 1</span> rotates its presets</div>
+<div style="display:flex;gap:6px;overflow:hidden"><span class="th" style="background:repeating-conic-gradient(from 0deg at 50% 50%,#2EC5FF 0 45deg,#0B3A55 45deg 90deg)"></span><span class="th" style="background:repeating-conic-gradient(from 0deg at 50% 50%,#2EC5FF 0 30deg,#0B3A55 30deg 60deg);outline:3px solid #FFD60A"></span><span class="th" style="background:repeating-conic-gradient(from 10deg at 50% 50%,#B78CFF 0 15deg,#0B3A55 15deg 30deg)"></span><span class="th" style="background:repeating-conic-gradient(from 0deg at 30% 50%,#2EC5FF 0 20deg,#0B3A55 20deg 40deg)"></span><span style="font-size:11px;color:#9AA4B2;align-self:center">KALEIDO · 4 presets</span></div>
+<div style="font-size:12px;color:#9AA4B2">off</div>
+</div>
+
+<div style="display:grid;grid-template-columns:170px 220px minmax(0,1fr) 170px;gap:10px;align-items:center;padding:6px;background:#1B2027;border-radius:8px">
+<div><b>LAYER</b><div style="font-size:11px;color:#9AA4B2">source rule + place + FX + blend</div></div>
+<div style="font-size:12px">press a group button (A–D preview, E–H live)</div>
+<div style="display:flex;gap:6px;overflow:hidden"><span class="th" style="background:linear-gradient(135deg,#0B3A55,#2EC5FF)"></span><span class="th" style="background:repeating-linear-gradient(90deg,#103040 0 4px,#2EC5FF 4px 6px);outline:3px solid #FFD60A"></span><span class="th" style="background:radial-gradient(circle,#BFE9FF,#123)"></span><span class="th" style="background:linear-gradient(0deg,#123,#2EC5FF)"></span><span class="th" style="background:conic-gradient(from 30deg,#0B3A55,#2EC5FF,#0B3A55)"></span><span style="font-size:11px;color:#9AA4B2;align-self:center">"cold water clip + kaleido" family</span></div>
+<div style="font-size:12px;color:#FFE98A">every 16 bars ▸</div>
+</div>
+
+<div style="display:grid;grid-template-columns:170px 220px minmax(0,1fr) 170px;gap:10px;align-items:center;padding:6px;background:#1B2027;border-radius:8px;outline:2px solid #B78CFF">
+<div><b>LOOK</b><div style="font-size:11px;color:#9AA4B2">all layers of PREVIEW</div></div>
+<div style="font-size:12px"><span class="hw">ALL</span> (whole look) · the LOOKS pads are the same presets</div>
+<div style="display:flex;gap:6px;overflow:hidden"><span class="th" style="background:#FF3B6B"></span><span class="th" style="background:#2EC5FF;outline:3px solid #FFD60A"></span><span class="th" style="background:#B78CFF"></span><span class="th" style="background:#FFB347"></span><span class="th" style="background:#1E8FB8"></span><span class="th" style="background:#7A4FC0"></span><span style="font-size:11px;color:#9AA4B2;align-self:center">bank 2 · 12 looks</span></div>
+<div style="font-size:12px;color:#FFE98A">every 8 bars, on the phrase ▸</div>
+</div>
+
+<div style="display:grid;grid-template-columns:170px 220px minmax(0,1fr) 170px;gap:10px;align-items:center;padding:6px;background:#1B2027;border-radius:8px">
+<div><b>MASTER</b><div style="font-size:11px;color:#9AA4B2">master FX on PROGRAM</div></div>
+<div style="font-size:12px">knob 8 tile · <span class="hw">SHIFT+KNOB 8</span> rotates</div>
+<div style="display:flex;gap:6px;overflow:hidden"><span class="th" style="background:linear-gradient(90deg,#5A2A00,#FFE1B0)"></span><span class="th" style="background:repeating-linear-gradient(0deg,#FF9F1C 0 2px,#3A1A00 2px 6px);outline:3px solid #FFD60A"></span><span class="th" style="background:radial-gradient(#FFE1B0,#5A2A00)"></span><span style="font-size:11px;color:#9AA4B2;align-self:center">glow · scanlines · bloom</span></div>
+<div style="font-size:12px;color:#9AA4B2">off</div>
+</div>
+
+<div style="display:grid;grid-template-columns:170px 220px minmax(0,1fr) 170px;gap:10px;align-items:center;padding:6px;background:#1B2027;border-radius:8px">
+<div><b>OUTPUT</b><div style="font-size:11px;color:#9AA4B2">per output: source + FX</div></div>
+<div style="font-size:12px"><span class="hw">NAVIGATE</span> + pad 1–6</div>
+<div style="display:flex;gap:6px;overflow:hidden"><span class="th" style="background:#1E1030;display:flex;align-items:center;justify-content:center;font:800 9px Inter">LOGO</span><span class="th" style="background:linear-gradient(90deg,#FF9F1C,#120700);outline:3px solid #FFD60A"></span><span style="font-size:11px;color:#9AA4B2;align-self:center">LED strip: logo · beat bar</span></div>
+<div style="font-size:12px;color:#9AA4B2">off</div>
+</div>
+</div>
+
+<div style="display:flex;gap:12px;flex-wrap:wrap">
+<div style="flex:1 1 420px;background:#14181D;border:1px solid #2A313A;border-radius:12px;padding:12px;font-size:13px;line-height:1.6">
+<span class="lbl">How it feels</span><br>
+1. Select layer A (group A). Turn knob 2: new looks roll in on PREVIEW.<br>
+2. Like it? <span class="hw">REC</span>, it is now a LAYER preset (and in history with a star).<br>
+3. Press <span class="hw">ALL</span>, turn knob 2 with <span class="hw">SHIFT</span>: rotate through your saved LOOKS.<br>
+4. Wheel or <span class="hw">PLAY</span> to take it live. Turn on auto-rotate for a song you don't want to babysit.
+</div>
+<div style="flex:1 1 420px;background:#14181D;border:1px solid #2A313A;border-radius:12px;padding:12px;font-size:13px;line-height:1.6">
+<span class="lbl">Rules</span><br>
+· Levels nest: a LOOK holds LAYER presets, a LAYER holds EFFECT presets, so saving the look keeps all of it.<br>
+· Rotate and dice respect the locks (Top 1–4) and never break the GPU budget.<br>
+· Auto-rotate lands on the beat / phrase, respects GRID and stops when you touch anything on that level.<br>
+· Every preset gets an automatic name (mood + palette + number) and a thumbnail.
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

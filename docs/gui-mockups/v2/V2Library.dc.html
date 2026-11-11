@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Himmel v2 – Library</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0D10}
+.mono{font-family:'JetBrains Mono',monospace}
+.chip{font-family:'JetBrains Mono',monospace;font-size:11px;color:#C9D1DB;border:1px solid #3A434F;border-radius:4px;padding:1px 5px;white-space:nowrap;background:#0F1318}
+.lbl{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#9AA4B2;font-weight:600}
+.tag{font-size:11px;padding:1px 7px;border-radius:10px;background:#1B2027;border:1px solid #3A434F;color:#C9D1DB}
+</style>
+</helmet>
+<div style="min-height:900px;width:100%;box-sizing:border-box;background:#0B0D10;color:#E8ECF1;font-family:Inter,system-ui,sans-serif;display:flex;flex-direction:column;gap:12px;padding:14px 20px">
+<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+<div style="font-weight:800;letter-spacing:.2em">HIMMEL</div>
+<nav style="display:flex;gap:4px;font-size:13px;font-weight:700;letter-spacing:.06em" aria-label="Views"><span style="padding:6px 12px;color:#9AA4B2">PERFORM</span><span style="padding:6px 12px;border-radius:6px;background:#E8ECF1;color:#0B0D10">LIBRARY</span><span style="padding:6px 12px;color:#9AA4B2">SHOW</span><span style="padding:6px 12px;color:#9AA4B2">OUTPUTS</span><span style="padding:6px 12px;color:#9AA4B2">TABLE</span></nav>
+<div style="flex:1"></div>
+<label style="display:flex;gap:8px;align-items:center;background:#14181D;border:1px solid #3A434F;border-radius:8px;padding:0 10px;height:38px;min-width:260px"><span style="color:#9AA4B2;font-size:13px">Search</span><input aria-label="Search clips" style="flex:1;background:transparent;border:none;color:#E8ECF1;font:14px Inter" value="water"></label>
+<span class="chip">BROWSE</span>
+</div>
+
+<div style="display:flex;gap:12px;flex-wrap:wrap;flex:1">
+<aside style="flex:0 1 250px;min-width:220px;display:flex;flex-direction:column;gap:12px">
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px"><span class="lbl">Mood</span>
+<div style="height:120px;border-radius:6px;background:linear-gradient(0deg,rgba(0,0,0,.0),rgba(0,0,0,.0)),linear-gradient(90deg,#2B3A20,#203A52 50%,#4A1030);position:relative"><span style="position:absolute;left:30%;top:58%;width:44px;height:30px;border:2px solid #B78CFF;border-radius:6px;box-sizing:border-box"></span><span style="position:absolute;left:4px;bottom:2px;font-size:10px;color:#C9D1DB">calm → intense</span></div>
+<div style="display:flex;gap:4px;flex-wrap:wrap"><span class="tag" style="background:#12301C;color:#7EE2A0;border-color:#1F5A33">chill ✓</span><span class="tag">groove</span><span class="tag">techno</span><span class="tag">crazy</span></div></div>
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px"><span class="lbl">Colour</span>
+<div style="height:16px;border-radius:8px;background:linear-gradient(90deg,#f33,#f93,#ff3,#3f6,#3cf,#36f,#c3f,#f33);position:relative"><span style="position:absolute;left:58%;top:-4px;width:24px;height:24px;border-radius:50%;border:3px solid #fff;box-sizing:border-box"></span></div>
+<div style="font-size:12px;color:#9AA4B2">Sorted by palette match to cyan · or pick from the mood palette</div></div>
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;font-size:13px"><span class="lbl">Filters</span>
+<span>Energy <b class="mono">1–2</b> <span style="color:#9AA4B2">(knob 2)</span></span>
+<span>Motion: <b>calm</b> · medium · fast</span>
+<div style="display:flex;gap:4px;flex-wrap:wrap"><span class="tag" style="border-color:#2EC5FF;color:#BFE9FF">water ✓</span><span class="tag">nature</span><span class="tag">city</span><span class="tag">people</span><span class="tag">abstract</span><span class="tag">particles</span><span class="tag">retro</span><span class="tag">text</span></div>
+<span>Bars at 128: <b>4 · 8</b> · loops seamless ✓</span>
+<span style="color:#9AA4B2">☐ NEW / analysing · ☐ favourites · ☑ hide ⚠ flicker (safe mode)</span>
+</div>
+</aside>
+
+<main style="flex:999 1 520px;min-width:0;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;gap:8px;align-items:center;font-size:13px;color:#9AA4B2"><b style="color:#E8ECF1">23 clips</b> match · drag to a layer, or <span class="chip">ENCODER PUSH</span> loads into the selected PREVIEW layer · <span class="chip">SHIFT+PAD</span> find similar</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">
+<div style="background:#14181D;border:2px solid #B78CFF;border-radius:10px;overflow:hidden"><div style="height:110px;background:radial-gradient(ellipse at 40% 60%,#BFE9FF,#2EC5FF 25%,#0B3A55 60%,#05121C)"></div><div style="padding:8px;display:flex;flex-direction:column;gap:5px"><b style="font-size:13px">ocean_slow_01</b><div style="display:flex;gap:2px"><span style="flex:3;height:8px;background:#0B3A55"></span><span style="flex:2;height:8px;background:#2EC5FF"></span><span style="flex:2;height:8px;background:#BFE9FF"></span><span style="flex:1;height:8px;background:#123"></span><span style="flex:1;height:8px;background:#4A6A80"></span></div><div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center"><span class="mono" style="font-size:11px;color:#9AA4B2">E●○○○○</span><span class="tag" style="background:#12301C;color:#7EE2A0;border-color:#1F5A33">chill</span><span class="tag">water</span><span class="mono" style="font-size:10px;color:#7EE2A0">HAP ✓ · 8 bars</span></div></div></div>
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:10px;overflow:hidden"><div style="height:110px;background:linear-gradient(180deg,#0E2A3A,#2EC5FF 70%,#fff)"></div><div style="padding:8px;display:flex;flex-direction:column;gap:5px"><b style="font-size:13px">waterfall_mist</b><div style="display:flex;gap:2px"><span style="flex:3;height:8px;background:#0E2A3A"></span><span style="flex:2;height:8px;background:#2EC5FF"></span><span style="flex:2;height:8px;background:#eee"></span><span style="flex:1;height:8px;background:#456"></span><span style="flex:1;height:8px;background:#9ab"></span></div><div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center"><span class="mono" style="font-size:11px;color:#9AA4B2">E●●○○○</span><span class="tag" style="background:#12301C;color:#7EE2A0;border-color:#1F5A33">chill</span><span class="tag">water</span><span class="tag">nature</span></div></div></div>
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:10px;overflow:hidden"><div style="height:110px;background:repeating-radial-gradient(circle at 50% 120%,#1E8FB8 0 6px,#0B3A55 6px 14px)"></div><div style="padding:8px;display:flex;flex-direction:column;gap:5px"><b style="font-size:13px">caustics_loop</b><div style="display:flex;gap:2px"><span style="flex:3;height:8px;background:#0B3A55"></span><span style="flex:3;height:8px;background:#1E8FB8"></span><span style="flex:1;height:8px;background:#9cf"></span></div><div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center"><span class="mono" style="font-size:11px;color:#9AA4B2">E●●○○○</span><span class="tag">abstract</span><span class="tag">water</span><span class="mono" style="font-size:10px;color:#D2B8FF">ALPHA</span></div></div></div>
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:10px;overflow:hidden;opacity:.75"><div style="height:110px;background:#1B2027;display:flex;align-items:center;justify-content:center;color:#9AA4B2;font-size:12px">ANALYSING… 62 %</div><div style="padding:8px;display:flex;flex-direction:column;gap:5px"><b style="font-size:13px">rain_window_02</b><span class="tag" style="align-self:flex-start;background:#33300F;color:#FFD60A;border-color:#5A5010">NEW · not playable yet</span></div></div>
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:10px;overflow:hidden"><div style="height:110px;background:linear-gradient(135deg,#123,#2EC5FF 50%,#B78CFF)"></div><div style="padding:8px;display:flex;flex-direction:column;gap:5px"><b style="font-size:13px">gen · Plasma (blue)</b><div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center"><span class="mono" style="font-size:11px;color:#9AA4B2">E●●○○○</span><span class="tag">generator</span><span class="tag">abstract</span></div></div></div>
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:10px;overflow:hidden"><div style="height:110px;background:radial-gradient(circle at 60% 40%,#fff,#9cf 15%,#123 60%)"></div><div style="padding:8px;display:flex;flex-direction:column;gap:5px"><b style="font-size:13px">swimmer_slowmo <span style="color:#7EE2A0;font-size:10px">TRACKED</span></b><div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center"><span class="mono" style="font-size:11px;color:#9AA4B2">E●●○○○</span><span class="tag">people</span><span class="tag">water</span></div></div></div>
+</div>
+</main>
+
+<aside style="flex:0 1 300px;min-width:260px;background:#14181D;border:1px solid #2A313A;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;font-size:13px">
+<span class="lbl">ocean_slow_01 · analysis</span>
+<div style="height:120px;border-radius:6px;background:radial-gradient(ellipse at 40% 60%,#BFE9FF,#2EC5FF 25%,#0B3A55 60%,#05121C)"></div>
+<div style="display:grid;grid-template-columns:auto 1fr;gap:4px 10px">
+<span style="color:#9AA4B2">Energy</span><b>1 / 5</b>
+<span style="color:#9AA4B2">Mood</span><span>chill 0.86 · groove 0.22 · techno 0.03</span>
+<span style="color:#9AA4B2">Warm/cool</span><span>−0.7 cool</span>
+<span style="color:#9AA4B2">Motion</span><span>0.12 · drift → right</span>
+<span style="color:#9AA4B2">Cuts</span><span>0 / min</span>
+<span style="color:#9AA4B2">Loop</span><span>0.97 seamless</span>
+<span style="color:#9AA4B2">Bars</span><span>8 at 128 BPM</span>
+<span style="color:#9AA4B2">Flicker</span><span style="color:#7EE2A0">ok</span>
+<span style="color:#9AA4B2">Type</span><span>water · nature · abstract</span>
+<span style="color:#9AA4B2">File</span><span class="mono" style="font-size:11px">HAP Q · 1920×1080 · 29.97</span>
+</div>
+<button style="height:40px;border-radius:8px;border:1px solid #5B3E8F;background:#221A33;color:#E9DDFF;font:700 13px Inter">Find similar</button>
+<button style="height:40px;border-radius:8px;border:1px solid #3A434F;background:#1B2027;color:#E8ECF1;font:600 13px Inter">★ Favourite · own tags</button>
+</aside>
+</div>
+
+<div style="background:#101317;border:1px solid #2A313A;border-radius:10px;padding:8px 12px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:13px">
+<span class="lbl">Import</span><span>12 in queue · 3 converting · 1 analysing</span><span style="padding:2px 8px;border-radius:4px;background:#33300F;color:#FFD60A">Show running: low priority, paused when GPU &gt; 80 % of budget</span><div style="flex:1"></div><span style="color:#9AA4B2">Originals untouched · rebuildable from sidecars</span>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
