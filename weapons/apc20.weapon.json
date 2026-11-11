@@ -1,0 +1,2222 @@
+{
+ "format": "himmel-weapon/1",
+ "id": "apc20",
+ "name": "APC20",
+ "badge": "◎ HIMMEL · CLIPS",
+ "hardware": {
+  "maker": "Akai Professional",
+  "model": "APC20 (2010), UPC 0 825213 00251 7",
+  "usb": "09e8:007b",
+  "power": "needs its 12 V DC 2 A adapter (rear DC input, per Akai's APC20 Quickstart Guide); USB carries MIDI only",
+  "note": "Class-compliant USB-MIDI. Works with the hardware; not affiliated with Akai Professional or Ableton."
+ },
+ "driver": "midi-apc",
+ "page": "apc20_live.html",
+ "role": "secondary",
+ "protocol": {
+  "transport": "USB-MIDI (WinMM on Windows; the port is exclusive, close Ableton Live first). Port name 'Akai APC20' (expected).",
+  "init": "identity request F0 7E 7F 06 01 F7 -> reply F0 7E <dev> 06 02 47 7B 00 19 ... F7 (byte 13 = device id); then mode F0 47 <dev> 7B 60 00 04 <mode> <maj> <min> <bug> F7, mode 40 generic / 41 Ableton (host owns the LEDs) / 42 alternate Ableton / 43 note mode",
+  "input": "buttons = note on (vel 127) / note off; clip grid notes 53..57 on channel = track; faders CC 7 per track channel, master CC 14; Cue Level CC 47 relative two's complement",
+  "leds": "note on to the same note/channel: clip grid 0 off, 1 green, 2 green blink, 3 red, 4 red blink, 5 amber, 6 amber blink; other LEDs 0 off, 1 on, 2 blink",
+  "sources": "Ableton's APC20 MIDI Remote Script (as decompiled on GitHub, facts only) and Akai's APC20 Quickstart Guide; see THIRD_PARTY_NOTICES.md",
+  "unverified": "LED colours of the single-colour rows, note-off velocity and the note-mode grid on the real unit: checked with the LED test and map learning when the owner has power"
+ },
+ "mode_sysex": {
+  "manufacturer": 71,
+  "model": 123,
+  "generic": 64,
+  "ableton": 65,
+  "ableton_alt": 66,
+  "note": 67
+ },
+ "map": null,
+ "status": "simulated from public protocol facts; hardware probe, LED test and map learning ready; not yet checked on the owner's unit (no power supply yet)",
+ "panel": {
+  "w": 638,
+  "h": 868
+ },
+ "screens": [],
+ "sections": [
+  {
+   "label": "CLIP LAUNCH",
+   "x": 64,
+   "y": 56,
+   "w": 450
+  },
+  {
+   "label": "SCENE",
+   "x": 538,
+   "y": 56,
+   "w": 52
+  },
+  {
+   "label": "CLIP STOP",
+   "x": 64,
+   "y": 294,
+   "w": 450
+  },
+  {
+   "label": "NAVIGATION / TRACK SELECTION",
+   "x": 64,
+   "y": 360,
+   "w": 450
+  },
+  {
+   "label": "TRACK FADERS",
+   "x": 64,
+   "y": 570,
+   "w": 450
+  }
+ ],
+ "rows": [
+  {
+   "label": "ACTIVATOR",
+   "y": 464
+  },
+  {
+   "label": "SOLO/CUE",
+   "y": 498
+  },
+  {
+   "label": "REC ARM",
+   "y": 532
+  }
+ ],
+ "deco": [
+  {
+   "kind": "body",
+   "x": 14,
+   "y": 14,
+   "w": 610,
+   "h": 840,
+   "r": 14
+  },
+  {
+   "kind": "port",
+   "x": 618,
+   "y": 40,
+   "w": 6,
+   "h": 26,
+   "label": "DC 12V"
+  },
+  {
+   "kind": "port",
+   "x": 618,
+   "y": 80,
+   "w": 6,
+   "h": 20,
+   "label": "USB"
+  },
+  {
+   "kind": "port",
+   "x": 618,
+   "y": 112,
+   "w": 6,
+   "h": 14,
+   "label": "POWER"
+  }
+ ],
+ "controls": [
+  {
+   "name": "Clip 1.1",
+   "kind": "button",
+   "x": 64,
+   "y": 78,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 0,
+    "num": 53
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 0,
+    "num": 53
+   },
+   "group": "clip",
+   "track": 1,
+   "scene": 1
+  },
+  {
+   "name": "Clip 2.1",
+   "kind": "button",
+   "x": 122,
+   "y": 78,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 1,
+    "num": 53
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 1,
+    "num": 53
+   },
+   "group": "clip",
+   "track": 2,
+   "scene": 1
+  },
+  {
+   "name": "Clip 3.1",
+   "kind": "button",
+   "x": 180,
+   "y": 78,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 2,
+    "num": 53
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 2,
+    "num": 53
+   },
+   "group": "clip",
+   "track": 3,
+   "scene": 1
+  },
+  {
+   "name": "Clip 4.1",
+   "kind": "button",
+   "x": 238,
+   "y": 78,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 3,
+    "num": 53
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 3,
+    "num": 53
+   },
+   "group": "clip",
+   "track": 4,
+   "scene": 1
+  },
+  {
+   "name": "Clip 5.1",
+   "kind": "button",
+   "x": 296,
+   "y": 78,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 4,
+    "num": 53
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 4,
+    "num": 53
+   },
+   "group": "clip",
+   "track": 5,
+   "scene": 1
+  },
+  {
+   "name": "Clip 6.1",
+   "kind": "button",
+   "x": 354,
+   "y": 78,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 5,
+    "num": 53
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 5,
+    "num": 53
+   },
+   "group": "clip",
+   "track": 6,
+   "scene": 1
+  },
+  {
+   "name": "Clip 7.1",
+   "kind": "button",
+   "x": 412,
+   "y": 78,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 6,
+    "num": 53
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 6,
+    "num": 53
+   },
+   "group": "clip",
+   "track": 7,
+   "scene": 1
+  },
+  {
+   "name": "Clip 8.1",
+   "kind": "button",
+   "x": 470,
+   "y": 78,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 7,
+    "num": 53
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 7,
+    "num": 53
+   },
+   "group": "clip",
+   "track": 8,
+   "scene": 1
+  },
+  {
+   "name": "Scene 1",
+   "kind": "button",
+   "x": 542,
+   "y": 78,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 0,
+    "num": 82
+   },
+   "led": {
+    "palette": "mono",
+    "color": "green",
+    "ch": 0,
+    "num": 82
+   },
+   "group": "scene",
+   "scene": 1
+  },
+  {
+   "name": "Clip 1.2",
+   "kind": "button",
+   "x": 64,
+   "y": 122,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 0,
+    "num": 54
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 0,
+    "num": 54
+   },
+   "group": "clip",
+   "track": 1,
+   "scene": 2
+  },
+  {
+   "name": "Clip 2.2",
+   "kind": "button",
+   "x": 122,
+   "y": 122,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 1,
+    "num": 54
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 1,
+    "num": 54
+   },
+   "group": "clip",
+   "track": 2,
+   "scene": 2
+  },
+  {
+   "name": "Clip 3.2",
+   "kind": "button",
+   "x": 180,
+   "y": 122,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 2,
+    "num": 54
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 2,
+    "num": 54
+   },
+   "group": "clip",
+   "track": 3,
+   "scene": 2
+  },
+  {
+   "name": "Clip 4.2",
+   "kind": "button",
+   "x": 238,
+   "y": 122,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 3,
+    "num": 54
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 3,
+    "num": 54
+   },
+   "group": "clip",
+   "track": 4,
+   "scene": 2
+  },
+  {
+   "name": "Clip 5.2",
+   "kind": "button",
+   "x": 296,
+   "y": 122,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 4,
+    "num": 54
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 4,
+    "num": 54
+   },
+   "group": "clip",
+   "track": 5,
+   "scene": 2
+  },
+  {
+   "name": "Clip 6.2",
+   "kind": "button",
+   "x": 354,
+   "y": 122,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 5,
+    "num": 54
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 5,
+    "num": 54
+   },
+   "group": "clip",
+   "track": 6,
+   "scene": 2
+  },
+  {
+   "name": "Clip 7.2",
+   "kind": "button",
+   "x": 412,
+   "y": 122,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 6,
+    "num": 54
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 6,
+    "num": 54
+   },
+   "group": "clip",
+   "track": 7,
+   "scene": 2
+  },
+  {
+   "name": "Clip 8.2",
+   "kind": "button",
+   "x": 470,
+   "y": 122,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 7,
+    "num": 54
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 7,
+    "num": 54
+   },
+   "group": "clip",
+   "track": 8,
+   "scene": 2
+  },
+  {
+   "name": "Scene 2",
+   "kind": "button",
+   "x": 542,
+   "y": 122,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 0,
+    "num": 83
+   },
+   "led": {
+    "palette": "mono",
+    "color": "green",
+    "ch": 0,
+    "num": 83
+   },
+   "group": "scene",
+   "scene": 2
+  },
+  {
+   "name": "Clip 1.3",
+   "kind": "button",
+   "x": 64,
+   "y": 166,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 0,
+    "num": 55
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 0,
+    "num": 55
+   },
+   "group": "clip",
+   "track": 1,
+   "scene": 3
+  },
+  {
+   "name": "Clip 2.3",
+   "kind": "button",
+   "x": 122,
+   "y": 166,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 1,
+    "num": 55
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 1,
+    "num": 55
+   },
+   "group": "clip",
+   "track": 2,
+   "scene": 3
+  },
+  {
+   "name": "Clip 3.3",
+   "kind": "button",
+   "x": 180,
+   "y": 166,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 2,
+    "num": 55
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 2,
+    "num": 55
+   },
+   "group": "clip",
+   "track": 3,
+   "scene": 3
+  },
+  {
+   "name": "Clip 4.3",
+   "kind": "button",
+   "x": 238,
+   "y": 166,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 3,
+    "num": 55
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 3,
+    "num": 55
+   },
+   "group": "clip",
+   "track": 4,
+   "scene": 3
+  },
+  {
+   "name": "Clip 5.3",
+   "kind": "button",
+   "x": 296,
+   "y": 166,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 4,
+    "num": 55
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 4,
+    "num": 55
+   },
+   "group": "clip",
+   "track": 5,
+   "scene": 3
+  },
+  {
+   "name": "Clip 6.3",
+   "kind": "button",
+   "x": 354,
+   "y": 166,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 5,
+    "num": 55
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 5,
+    "num": 55
+   },
+   "group": "clip",
+   "track": 6,
+   "scene": 3
+  },
+  {
+   "name": "Clip 7.3",
+   "kind": "button",
+   "x": 412,
+   "y": 166,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 6,
+    "num": 55
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 6,
+    "num": 55
+   },
+   "group": "clip",
+   "track": 7,
+   "scene": 3
+  },
+  {
+   "name": "Clip 8.3",
+   "kind": "button",
+   "x": 470,
+   "y": 166,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 7,
+    "num": 55
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 7,
+    "num": 55
+   },
+   "group": "clip",
+   "track": 8,
+   "scene": 3
+  },
+  {
+   "name": "Scene 3",
+   "kind": "button",
+   "x": 542,
+   "y": 166,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 0,
+    "num": 84
+   },
+   "led": {
+    "palette": "mono",
+    "color": "green",
+    "ch": 0,
+    "num": 84
+   },
+   "group": "scene",
+   "scene": 3
+  },
+  {
+   "name": "Clip 1.4",
+   "kind": "button",
+   "x": 64,
+   "y": 210,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 0,
+    "num": 56
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 0,
+    "num": 56
+   },
+   "group": "clip",
+   "track": 1,
+   "scene": 4
+  },
+  {
+   "name": "Clip 2.4",
+   "kind": "button",
+   "x": 122,
+   "y": 210,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 1,
+    "num": 56
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 1,
+    "num": 56
+   },
+   "group": "clip",
+   "track": 2,
+   "scene": 4
+  },
+  {
+   "name": "Clip 3.4",
+   "kind": "button",
+   "x": 180,
+   "y": 210,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 2,
+    "num": 56
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 2,
+    "num": 56
+   },
+   "group": "clip",
+   "track": 3,
+   "scene": 4
+  },
+  {
+   "name": "Clip 4.4",
+   "kind": "button",
+   "x": 238,
+   "y": 210,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 3,
+    "num": 56
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 3,
+    "num": 56
+   },
+   "group": "clip",
+   "track": 4,
+   "scene": 4
+  },
+  {
+   "name": "Clip 5.4",
+   "kind": "button",
+   "x": 296,
+   "y": 210,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 4,
+    "num": 56
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 4,
+    "num": 56
+   },
+   "group": "clip",
+   "track": 5,
+   "scene": 4
+  },
+  {
+   "name": "Clip 6.4",
+   "kind": "button",
+   "x": 354,
+   "y": 210,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 5,
+    "num": 56
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 5,
+    "num": 56
+   },
+   "group": "clip",
+   "track": 6,
+   "scene": 4
+  },
+  {
+   "name": "Clip 7.4",
+   "kind": "button",
+   "x": 412,
+   "y": 210,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 6,
+    "num": 56
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 6,
+    "num": 56
+   },
+   "group": "clip",
+   "track": 7,
+   "scene": 4
+  },
+  {
+   "name": "Clip 8.4",
+   "kind": "button",
+   "x": 470,
+   "y": 210,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 7,
+    "num": 56
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 7,
+    "num": 56
+   },
+   "group": "clip",
+   "track": 8,
+   "scene": 4
+  },
+  {
+   "name": "Scene 4",
+   "kind": "button",
+   "x": 542,
+   "y": 210,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 0,
+    "num": 85
+   },
+   "led": {
+    "palette": "mono",
+    "color": "green",
+    "ch": 0,
+    "num": 85
+   },
+   "group": "scene",
+   "scene": 4
+  },
+  {
+   "name": "Clip 1.5",
+   "kind": "button",
+   "x": 64,
+   "y": 254,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 0,
+    "num": 57
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 0,
+    "num": 57
+   },
+   "group": "clip",
+   "track": 1,
+   "scene": 5
+  },
+  {
+   "name": "Clip 2.5",
+   "kind": "button",
+   "x": 122,
+   "y": 254,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 1,
+    "num": 57
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 1,
+    "num": 57
+   },
+   "group": "clip",
+   "track": 2,
+   "scene": 5
+  },
+  {
+   "name": "Clip 3.5",
+   "kind": "button",
+   "x": 180,
+   "y": 254,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 2,
+    "num": 57
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 2,
+    "num": 57
+   },
+   "group": "clip",
+   "track": 3,
+   "scene": 5
+  },
+  {
+   "name": "Clip 4.5",
+   "kind": "button",
+   "x": 238,
+   "y": 254,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 3,
+    "num": 57
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 3,
+    "num": 57
+   },
+   "group": "clip",
+   "track": 4,
+   "scene": 5
+  },
+  {
+   "name": "Clip 5.5",
+   "kind": "button",
+   "x": 296,
+   "y": 254,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 4,
+    "num": 57
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 4,
+    "num": 57
+   },
+   "group": "clip",
+   "track": 5,
+   "scene": 5
+  },
+  {
+   "name": "Clip 6.5",
+   "kind": "button",
+   "x": 354,
+   "y": 254,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 5,
+    "num": 57
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 5,
+    "num": 57
+   },
+   "group": "clip",
+   "track": 6,
+   "scene": 5
+  },
+  {
+   "name": "Clip 7.5",
+   "kind": "button",
+   "x": 412,
+   "y": 254,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 6,
+    "num": 57
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 6,
+    "num": 57
+   },
+   "group": "clip",
+   "track": 7,
+   "scene": 5
+  },
+  {
+   "name": "Clip 8.5",
+   "kind": "button",
+   "x": 470,
+   "y": 254,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 7,
+    "num": 57
+   },
+   "led": {
+    "palette": "tri",
+    "ch": 7,
+    "num": 57
+   },
+   "group": "clip",
+   "track": 8,
+   "scene": 5
+  },
+  {
+   "name": "Scene 5",
+   "kind": "button",
+   "x": 542,
+   "y": 254,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 0,
+    "num": 86
+   },
+   "led": {
+    "palette": "mono",
+    "color": "green",
+    "ch": 0,
+    "num": 86
+   },
+   "group": "scene",
+   "scene": 5
+  },
+  {
+   "name": "Stop 1",
+   "kind": "button",
+   "x": 64,
+   "y": 312,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 0,
+    "num": 52
+   },
+   "led": {
+    "palette": "mono",
+    "color": "green",
+    "ch": 0,
+    "num": 52
+   },
+   "group": "stop",
+   "track": 1
+  },
+  {
+   "name": "Stop 2",
+   "kind": "button",
+   "x": 122,
+   "y": 312,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 1,
+    "num": 52
+   },
+   "led": {
+    "palette": "mono",
+    "color": "green",
+    "ch": 1,
+    "num": 52
+   },
+   "group": "stop",
+   "track": 2
+  },
+  {
+   "name": "Stop 3",
+   "kind": "button",
+   "x": 180,
+   "y": 312,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 2,
+    "num": 52
+   },
+   "led": {
+    "palette": "mono",
+    "color": "green",
+    "ch": 2,
+    "num": 52
+   },
+   "group": "stop",
+   "track": 3
+  },
+  {
+   "name": "Stop 4",
+   "kind": "button",
+   "x": 238,
+   "y": 312,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 3,
+    "num": 52
+   },
+   "led": {
+    "palette": "mono",
+    "color": "green",
+    "ch": 3,
+    "num": 52
+   },
+   "group": "stop",
+   "track": 4
+  },
+  {
+   "name": "Stop 5",
+   "kind": "button",
+   "x": 296,
+   "y": 312,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 4,
+    "num": 52
+   },
+   "led": {
+    "palette": "mono",
+    "color": "green",
+    "ch": 4,
+    "num": 52
+   },
+   "group": "stop",
+   "track": 5
+  },
+  {
+   "name": "Stop 6",
+   "kind": "button",
+   "x": 354,
+   "y": 312,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 5,
+    "num": 52
+   },
+   "led": {
+    "palette": "mono",
+    "color": "green",
+    "ch": 5,
+    "num": 52
+   },
+   "group": "stop",
+   "track": 6
+  },
+  {
+   "name": "Stop 7",
+   "kind": "button",
+   "x": 412,
+   "y": 312,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 6,
+    "num": 52
+   },
+   "led": {
+    "palette": "mono",
+    "color": "green",
+    "ch": 6,
+    "num": 52
+   },
+   "group": "stop",
+   "track": 7
+  },
+  {
+   "name": "Stop 8",
+   "kind": "button",
+   "x": 470,
+   "y": 312,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 7,
+    "num": 52
+   },
+   "led": {
+    "palette": "mono",
+    "color": "green",
+    "ch": 7,
+    "num": 52
+   },
+   "group": "stop",
+   "track": 8
+  },
+  {
+   "name": "Shift",
+   "kind": "button",
+   "x": 542,
+   "y": 312,
+   "w": 44,
+   "h": 32,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 0,
+    "num": 81
+   },
+   "group": "shift",
+   "label2": "SHIFT"
+  },
+  {
+   "name": "Select 1",
+   "kind": "button",
+   "x": 64,
+   "y": 382,
+   "w": 44,
+   "h": 32,
+   "label": "PLAY",
+   "midi": {
+    "type": "note",
+    "ch": 0,
+    "num": 51
+   },
+   "led": {
+    "palette": "mono",
+    "color": "amber",
+    "ch": 0,
+    "num": 51
+   },
+   "group": "select",
+   "track": 1,
+   "label2": "1"
+  },
+  {
+   "name": "Select 2",
+   "kind": "button",
+   "x": 122,
+   "y": 382,
+   "w": 44,
+   "h": 32,
+   "label": "STOP",
+   "midi": {
+    "type": "note",
+    "ch": 1,
+    "num": 51
+   },
+   "led": {
+    "palette": "mono",
+    "color": "amber",
+    "ch": 1,
+    "num": 51
+   },
+   "group": "select",
+   "track": 2,
+   "label2": "2"
+  },
+  {
+   "name": "Select 3",
+   "kind": "button",
+   "x": 180,
+   "y": 382,
+   "w": 44,
+   "h": 32,
+   "label": "REC",
+   "midi": {
+    "type": "note",
+    "ch": 2,
+    "num": 51
+   },
+   "led": {
+    "palette": "mono",
+    "color": "amber",
+    "ch": 2,
+    "num": 51
+   },
+   "group": "select",
+   "track": 3,
+   "label2": "3"
+  },
+  {
+   "name": "Select 4",
+   "kind": "button",
+   "x": 238,
+   "y": 382,
+   "w": 44,
+   "h": 32,
+   "label": "MIDI\nOVERDUB",
+   "midi": {
+    "type": "note",
+    "ch": 3,
+    "num": 51
+   },
+   "led": {
+    "palette": "mono",
+    "color": "amber",
+    "ch": 3,
+    "num": 51
+   },
+   "group": "select",
+   "track": 4,
+   "label2": "4"
+  },
+  {
+   "name": "Select 5",
+   "kind": "button",
+   "x": 296,
+   "y": 382,
+   "w": 44,
+   "h": 32,
+   "label": "LEFT",
+   "midi": {
+    "type": "note",
+    "ch": 4,
+    "num": 51
+   },
+   "led": {
+    "palette": "mono",
+    "color": "amber",
+    "ch": 4,
+    "num": 51
+   },
+   "group": "select",
+   "track": 5,
+   "label2": "5"
+  },
+  {
+   "name": "Select 6",
+   "kind": "button",
+   "x": 354,
+   "y": 382,
+   "w": 44,
+   "h": 32,
+   "label": "RIGHT",
+   "midi": {
+    "type": "note",
+    "ch": 5,
+    "num": 51
+   },
+   "led": {
+    "palette": "mono",
+    "color": "amber",
+    "ch": 5,
+    "num": 51
+   },
+   "group": "select",
+   "track": 6,
+   "label2": "6"
+  },
+  {
+   "name": "Select 7",
+   "kind": "button",
+   "x": 412,
+   "y": 382,
+   "w": 44,
+   "h": 32,
+   "label": "UP",
+   "midi": {
+    "type": "note",
+    "ch": 6,
+    "num": 51
+   },
+   "led": {
+    "palette": "mono",
+    "color": "amber",
+    "ch": 6,
+    "num": 51
+   },
+   "group": "select",
+   "track": 7,
+   "label2": "7"
+  },
+  {
+   "name": "Select 8",
+   "kind": "button",
+   "x": 470,
+   "y": 382,
+   "w": 44,
+   "h": 32,
+   "label": "DOWN",
+   "midi": {
+    "type": "note",
+    "ch": 7,
+    "num": 51
+   },
+   "led": {
+    "palette": "mono",
+    "color": "amber",
+    "ch": 7,
+    "num": 51
+   },
+   "group": "select",
+   "track": 8,
+   "label2": "8"
+  },
+  {
+   "name": "Note Mode",
+   "kind": "button",
+   "x": 542,
+   "y": 382,
+   "w": 44,
+   "h": 32,
+   "label": "NOTE\nMODE",
+   "midi": {
+    "type": "note",
+    "ch": 0,
+    "num": 80
+   },
+   "led": {
+    "palette": "mono",
+    "color": "amber",
+    "ch": 0,
+    "num": 80
+   },
+   "group": "select",
+   "label2": "MASTER"
+  },
+  {
+   "name": "Activator 1",
+   "kind": "button",
+   "x": 66,
+   "y": 454,
+   "w": 40,
+   "h": 20,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 0,
+    "num": 50
+   },
+   "led": {
+    "palette": "mono",
+    "color": "amber",
+    "ch": 0,
+    "num": 50
+   },
+   "group": "activator",
+   "track": 1
+  },
+  {
+   "name": "Activator 2",
+   "kind": "button",
+   "x": 124,
+   "y": 454,
+   "w": 40,
+   "h": 20,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 1,
+    "num": 50
+   },
+   "led": {
+    "palette": "mono",
+    "color": "amber",
+    "ch": 1,
+    "num": 50
+   },
+   "group": "activator",
+   "track": 2
+  },
+  {
+   "name": "Activator 3",
+   "kind": "button",
+   "x": 182,
+   "y": 454,
+   "w": 40,
+   "h": 20,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 2,
+    "num": 50
+   },
+   "led": {
+    "palette": "mono",
+    "color": "amber",
+    "ch": 2,
+    "num": 50
+   },
+   "group": "activator",
+   "track": 3
+  },
+  {
+   "name": "Activator 4",
+   "kind": "button",
+   "x": 240,
+   "y": 454,
+   "w": 40,
+   "h": 20,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 3,
+    "num": 50
+   },
+   "led": {
+    "palette": "mono",
+    "color": "amber",
+    "ch": 3,
+    "num": 50
+   },
+   "group": "activator",
+   "track": 4
+  },
+  {
+   "name": "Activator 5",
+   "kind": "button",
+   "x": 298,
+   "y": 454,
+   "w": 40,
+   "h": 20,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 4,
+    "num": 50
+   },
+   "led": {
+    "palette": "mono",
+    "color": "amber",
+    "ch": 4,
+    "num": 50
+   },
+   "group": "activator",
+   "track": 5
+  },
+  {
+   "name": "Activator 6",
+   "kind": "button",
+   "x": 356,
+   "y": 454,
+   "w": 40,
+   "h": 20,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 5,
+    "num": 50
+   },
+   "led": {
+    "palette": "mono",
+    "color": "amber",
+    "ch": 5,
+    "num": 50
+   },
+   "group": "activator",
+   "track": 6
+  },
+  {
+   "name": "Activator 7",
+   "kind": "button",
+   "x": 414,
+   "y": 454,
+   "w": 40,
+   "h": 20,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 6,
+    "num": 50
+   },
+   "led": {
+    "palette": "mono",
+    "color": "amber",
+    "ch": 6,
+    "num": 50
+   },
+   "group": "activator",
+   "track": 7
+  },
+  {
+   "name": "Activator 8",
+   "kind": "button",
+   "x": 472,
+   "y": 454,
+   "w": 40,
+   "h": 20,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 7,
+    "num": 50
+   },
+   "led": {
+    "palette": "mono",
+    "color": "amber",
+    "ch": 7,
+    "num": 50
+   },
+   "group": "activator",
+   "track": 8
+  },
+  {
+   "name": "Solo 1",
+   "kind": "button",
+   "x": 66,
+   "y": 488,
+   "w": 40,
+   "h": 20,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 0,
+    "num": 49
+   },
+   "led": {
+    "palette": "mono",
+    "color": "blue",
+    "ch": 0,
+    "num": 49
+   },
+   "group": "solo",
+   "track": 1
+  },
+  {
+   "name": "Solo 2",
+   "kind": "button",
+   "x": 124,
+   "y": 488,
+   "w": 40,
+   "h": 20,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 1,
+    "num": 49
+   },
+   "led": {
+    "palette": "mono",
+    "color": "blue",
+    "ch": 1,
+    "num": 49
+   },
+   "group": "solo",
+   "track": 2
+  },
+  {
+   "name": "Solo 3",
+   "kind": "button",
+   "x": 182,
+   "y": 488,
+   "w": 40,
+   "h": 20,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 2,
+    "num": 49
+   },
+   "led": {
+    "palette": "mono",
+    "color": "blue",
+    "ch": 2,
+    "num": 49
+   },
+   "group": "solo",
+   "track": 3
+  },
+  {
+   "name": "Solo 4",
+   "kind": "button",
+   "x": 240,
+   "y": 488,
+   "w": 40,
+   "h": 20,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 3,
+    "num": 49
+   },
+   "led": {
+    "palette": "mono",
+    "color": "blue",
+    "ch": 3,
+    "num": 49
+   },
+   "group": "solo",
+   "track": 4
+  },
+  {
+   "name": "Solo 5",
+   "kind": "button",
+   "x": 298,
+   "y": 488,
+   "w": 40,
+   "h": 20,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 4,
+    "num": 49
+   },
+   "led": {
+    "palette": "mono",
+    "color": "blue",
+    "ch": 4,
+    "num": 49
+   },
+   "group": "solo",
+   "track": 5
+  },
+  {
+   "name": "Solo 6",
+   "kind": "button",
+   "x": 356,
+   "y": 488,
+   "w": 40,
+   "h": 20,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 5,
+    "num": 49
+   },
+   "led": {
+    "palette": "mono",
+    "color": "blue",
+    "ch": 5,
+    "num": 49
+   },
+   "group": "solo",
+   "track": 6
+  },
+  {
+   "name": "Solo 7",
+   "kind": "button",
+   "x": 414,
+   "y": 488,
+   "w": 40,
+   "h": 20,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 6,
+    "num": 49
+   },
+   "led": {
+    "palette": "mono",
+    "color": "blue",
+    "ch": 6,
+    "num": 49
+   },
+   "group": "solo",
+   "track": 7
+  },
+  {
+   "name": "Solo 8",
+   "kind": "button",
+   "x": 472,
+   "y": 488,
+   "w": 40,
+   "h": 20,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 7,
+    "num": 49
+   },
+   "led": {
+    "palette": "mono",
+    "color": "blue",
+    "ch": 7,
+    "num": 49
+   },
+   "group": "solo",
+   "track": 8
+  },
+  {
+   "name": "Arm 1",
+   "kind": "button",
+   "x": 66,
+   "y": 522,
+   "w": 40,
+   "h": 20,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 0,
+    "num": 48
+   },
+   "led": {
+    "palette": "mono",
+    "color": "red",
+    "ch": 0,
+    "num": 48
+   },
+   "group": "arm",
+   "track": 1,
+   "label2": "VOL"
+  },
+  {
+   "name": "Arm 2",
+   "kind": "button",
+   "x": 124,
+   "y": 522,
+   "w": 40,
+   "h": 20,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 1,
+    "num": 48
+   },
+   "led": {
+    "palette": "mono",
+    "color": "red",
+    "ch": 1,
+    "num": 48
+   },
+   "group": "arm",
+   "track": 2,
+   "label2": "PAN"
+  },
+  {
+   "name": "Arm 3",
+   "kind": "button",
+   "x": 182,
+   "y": 522,
+   "w": 40,
+   "h": 20,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 2,
+    "num": 48
+   },
+   "led": {
+    "palette": "mono",
+    "color": "red",
+    "ch": 2,
+    "num": 48
+   },
+   "group": "arm",
+   "track": 3,
+   "label2": "SEND A"
+  },
+  {
+   "name": "Arm 4",
+   "kind": "button",
+   "x": 240,
+   "y": 522,
+   "w": 40,
+   "h": 20,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 3,
+    "num": 48
+   },
+   "led": {
+    "palette": "mono",
+    "color": "red",
+    "ch": 3,
+    "num": 48
+   },
+   "group": "arm",
+   "track": 4,
+   "label2": "SEND B"
+  },
+  {
+   "name": "Arm 5",
+   "kind": "button",
+   "x": 298,
+   "y": 522,
+   "w": 40,
+   "h": 20,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 4,
+    "num": 48
+   },
+   "led": {
+    "palette": "mono",
+    "color": "red",
+    "ch": 4,
+    "num": 48
+   },
+   "group": "arm",
+   "track": 5,
+   "label2": "SEND C"
+  },
+  {
+   "name": "Arm 6",
+   "kind": "button",
+   "x": 356,
+   "y": 522,
+   "w": 40,
+   "h": 20,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 5,
+    "num": 48
+   },
+   "led": {
+    "palette": "mono",
+    "color": "red",
+    "ch": 5,
+    "num": 48
+   },
+   "group": "arm",
+   "track": 6,
+   "label2": "USER1"
+  },
+  {
+   "name": "Arm 7",
+   "kind": "button",
+   "x": 414,
+   "y": 522,
+   "w": 40,
+   "h": 20,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 6,
+    "num": 48
+   },
+   "led": {
+    "palette": "mono",
+    "color": "red",
+    "ch": 6,
+    "num": 48
+   },
+   "group": "arm",
+   "track": 7,
+   "label2": "USER2"
+  },
+  {
+   "name": "Arm 8",
+   "kind": "button",
+   "x": 472,
+   "y": 522,
+   "w": 40,
+   "h": 20,
+   "label": "",
+   "midi": {
+    "type": "note",
+    "ch": 7,
+    "num": 48
+   },
+   "led": {
+    "palette": "mono",
+    "color": "red",
+    "ch": 7,
+    "num": 48
+   },
+   "group": "arm",
+   "track": 8,
+   "label2": "USER3"
+  },
+  {
+   "name": "Cue Level",
+   "kind": "encoder",
+   "x": 564,
+   "y": 490,
+   "r": 20,
+   "range": 128,
+   "label": "CUE LEVEL",
+   "midi": {
+    "type": "cc",
+    "ch": 0,
+    "num": 47,
+    "enc": "rel2c"
+   },
+   "group": "cue"
+  },
+  {
+   "name": "Fader 1",
+   "kind": "fader",
+   "orient": "v",
+   "x": 86,
+   "y": 600,
+   "len": 190,
+   "label": "1",
+   "range": 127,
+   "midi": {
+    "type": "cc",
+    "ch": 0,
+    "num": 7,
+    "enc": "abs"
+   },
+   "group": "fader",
+   "track": 1
+  },
+  {
+   "name": "Fader 2",
+   "kind": "fader",
+   "orient": "v",
+   "x": 144,
+   "y": 600,
+   "len": 190,
+   "label": "2",
+   "range": 127,
+   "midi": {
+    "type": "cc",
+    "ch": 1,
+    "num": 7,
+    "enc": "abs"
+   },
+   "group": "fader",
+   "track": 2
+  },
+  {
+   "name": "Fader 3",
+   "kind": "fader",
+   "orient": "v",
+   "x": 202,
+   "y": 600,
+   "len": 190,
+   "label": "3",
+   "range": 127,
+   "midi": {
+    "type": "cc",
+    "ch": 2,
+    "num": 7,
+    "enc": "abs"
+   },
+   "group": "fader",
+   "track": 3
+  },
+  {
+   "name": "Fader 4",
+   "kind": "fader",
+   "orient": "v",
+   "x": 260,
+   "y": 600,
+   "len": 190,
+   "label": "4",
+   "range": 127,
+   "midi": {
+    "type": "cc",
+    "ch": 3,
+    "num": 7,
+    "enc": "abs"
+   },
+   "group": "fader",
+   "track": 4
+  },
+  {
+   "name": "Fader 5",
+   "kind": "fader",
+   "orient": "v",
+   "x": 318,
+   "y": 600,
+   "len": 190,
+   "label": "5",
+   "range": 127,
+   "midi": {
+    "type": "cc",
+    "ch": 4,
+    "num": 7,
+    "enc": "abs"
+   },
+   "group": "fader",
+   "track": 5
+  },
+  {
+   "name": "Fader 6",
+   "kind": "fader",
+   "orient": "v",
+   "x": 376,
+   "y": 600,
+   "len": 190,
+   "label": "6",
+   "range": 127,
+   "midi": {
+    "type": "cc",
+    "ch": 5,
+    "num": 7,
+    "enc": "abs"
+   },
+   "group": "fader",
+   "track": 6
+  },
+  {
+   "name": "Fader 7",
+   "kind": "fader",
+   "orient": "v",
+   "x": 434,
+   "y": 600,
+   "len": 190,
+   "label": "7",
+   "range": 127,
+   "midi": {
+    "type": "cc",
+    "ch": 6,
+    "num": 7,
+    "enc": "abs"
+   },
+   "group": "fader",
+   "track": 7
+  },
+  {
+   "name": "Fader 8",
+   "kind": "fader",
+   "orient": "v",
+   "x": 492,
+   "y": 600,
+   "len": 190,
+   "label": "8",
+   "range": 127,
+   "midi": {
+    "type": "cc",
+    "ch": 7,
+    "num": 7,
+    "enc": "abs"
+   },
+   "group": "fader",
+   "track": 8
+  },
+  {
+   "name": "Master",
+   "kind": "fader",
+   "orient": "v",
+   "x": 564,
+   "y": 600,
+   "len": 190,
+   "label": "MASTER",
+   "range": 127,
+   "midi": {
+    "type": "cc",
+    "ch": 0,
+    "num": 14,
+    "enc": "abs"
+   },
+   "group": "fader"
+  }
+ ]
+}

@@ -69,6 +69,8 @@ checked everything on real hardware.
 | [ArKaos GrandVJ NuVJ page](https://vj.arkaos.com/node/98) | web page, read only | That GrandVJ drives the NuVJ's LEDs and LCD through MIDI feedback (no protocol details). |
 | Mixxx wiki: [Numark Total Control MIDI codes](https://github.com/mixxxdj/mixxx/wiki/Numark-Total-Control-Midi-Codes) | wiki page, no license stated (facts only, no code used) | Background: on Numark's Total Control (same era), LEDs are lit with note-on messages. The NuVJ turned out to use SysEx instead. |
 | MIDI 1.0 specification (MIDI Association): Universal System Exclusive, General Information, Identity Request / Reply | public specification | The identity request `F0 7E 7F 06 01 F7` (the NuVJ software sends it too). |
+| Ableton's **APC20 MIDI Remote Script** (Ableton Live 9, `MIDI Remote Scripts/APC20/` and `_APC/`), as decompiled and published on GitHub in [gluon/AbletonLive9_RemoteScripts](https://github.com/gluon/AbletonLive9_RemoteScripts) | © Ableton AG; the repository states no license. **Facts only, no code copied.** | The APC20 wire protocol for weapon no. 9: USB vendor/product id 2536/123 (`09e8:007b`), Akai's SysEx manufacturer id 0x47 and the APC20 model byte 0x7B, the mode SysEx `F0 47 <dev> 7B 60 00 04 <mode> <version> F7` with modes 0x41 Ableton and 0x43 note mode, the device id at byte 13 of the identity reply, the note per control (clip grid 53..57 per track channel, scene 82..86, clip stop 52, shift 81, track select 51, master 80, activator 50, solo 49, arm 48), faders CC 7 per channel and master CC 14, Cue Level CC 47 relative two's complement, the clip LED velocities (1 green, 2 green blink, 3 red, 4 red blink, 5 amber), note-mode notes 36..75 on channel 10, and that Shift is host logic (files `APC20.py`, `__init__.py`, `consts.py`, `ShiftableSelectorComponent.py`, `ShiftableZoomingComponent.py`, `SliderModesComponent.py`, `_APC/APC.py`, `_APC/ControlElementUtils.py`, `_APC/SkinDefault.py`). Our `tools/apc20_sim.py` and `weapons/apc20.weapon.json` were written from these facts. |
+| Akai Professional, [APC20 Quickstart Guide (Rev A)](https://cdn.inmusicbrands.com/akai/attachments/legacy1/apc20___quickstart_guide___reva_00.pdf), © Akai Professional / inMusic Brands | manufacturer documentation, read only, not included | That the APC20 needs its **12 V DC 2 A adapter** (USB carries MIDI only), the rear panel, the Shift functions (track selection 1–8 / Master, fader modes on the Record Arm row, Session Overview, stop all clips), the LED colour meanings in Ableton Live, and the note-mode layout (two 4 × 5 halves, C1..G2 and G#2..D#3, left to right, bottom to top). The drawing in `weapons/apc20.weapon.json` was made from the owner's photo. |
 
 ## 5. External tools (used, never linked)
 
@@ -110,7 +112,10 @@ is **not affiliated with or endorsed by** them, and its drawings say
 "HIMMEL · LIGHTPAD" without the maker's logo. Numark and NuVJ are trademarks of
 inMusic Brands, Inc.; ArKaos and GrandVJ belong to ArKaos S.A. Himmel is **not
 affiliated with or endorsed by** them, and its NuVJ drawing says "HIMMEL · VJ"
-without the maker's logo. Windows,
+without the maker's logo. Akai Professional and APC are trademarks of
+inMusic Brands, Inc.; Ableton and Live are trademarks of Ableton AG. Himmel is
+**not affiliated with or endorsed by** them, and its APC20 drawing says
+"HIMMEL · CLIPS" without the maker's logo. Windows,
 Direct3D and Media Foundation are trademarks of Microsoft. HAP is a format by
 VIDVOX. All other names belong to their owners.
 

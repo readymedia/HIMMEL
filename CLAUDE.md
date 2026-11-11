@@ -234,6 +234,26 @@ The full mapping is `docs/design/hardware-mapping.md` §3 and
     **Start-up shows** (`INTROS` in `tools/nuvj_games.py`, 2026-11-11): Boot sweep, Starburst and
     Made by play on the LEDs and LCD when Himmel takes the NuVJ (random by default, or picked
     in the live view); the ✦ buttons play them any time, and any button skips.
+  - **Weapon no. 9 = Akai APC20, a secondary weapon (2026-11-11; owner's
+    unit, UPC 0 825213 00251 7).** Simulated only: it needs its **12 V DC 2 A
+    adapter** (not USB powered) and the owner has none yet.
+    - Profile `weapons/apc20.weapon.json` (97 controls, wire bytes inline as
+      `midi` / `led`, `role: secondary`, own page `tools/apc20_live.html`,
+      badge "HIMMEL · CLIPS"). USB `09e8:007b`; mode SysEx
+      `F0 47 <dev> 7B 60 00 04 41 …` = Ableton mode (host owns the LEDs).
+    - `tools/apc20_sim.py`: sim (UDP engine link 8782), read-only WinMM
+      probe, LED tests incl. walk, click-then-press learning into
+      `apc20_map.json`, and a Himmel stand-in for the secondary-weapon jobs
+      (clip/scene launch at the beat, fader pages with pickup, deck focus for
+      the MK2). `--selftest`. Live view: launch config `apc20-live`, port 8787.
+    - Jobs, event mapping, two-weapon rules and the owner's hardware steps:
+      `weapons/README.md`.
+    - **Driver done 2026-11-11, checked with the simulator** (not hardware):
+      `weapon_apc20.exe [--sim]` (`himmel/weapon/apc20.h`), slot 9
+      (`Local\HimmelWeapon9`), sim link UDP 8782. Identity → Ableton mode → LEDs
+      from the engine's levels (grid 8..63 amber, 64+ green; exact APC codes =
+      120 + code). Grid = pads 1..40, faders = `Fader`, Cue Level =
+      `EncoderDelta`. Reads `apc20_map.json` when it exists. `himmel.exe` starts it.
 - **Visual mapping is the way to work with the controller. Keep it and build on
   it** (the owner wants graphical tools, not terminal tables):
   - `tools/mk2_live.py` + `tools/mk2_live.html`: a browser live view of the MK2
@@ -402,12 +422,13 @@ integrations. The list below is the history of what is done on `main`.
    - Drivers (WinMM, no new dependency): `weapon_blocks.exe lightpad|lumi`
      (handshake, renderer upload, HeapSync frames, pings on their own 400 ms timer,
      config 13 restored and confirmed on let go, endAPIMode), `weapon_nuvj.exe`
-     (init, LEDs/text/segments on change + every 2 s, never `7B`). Both: heartbeat,
-     reconnect, `--sim` (UDP Lightpad 8767, LUMI 8769, **NuVJ 8774**: the Python
+     (init, LEDs/text/segments on change + every 2 s, never `7B`), `weapon_apc20.exe`
+     (identity, Ableton mode, LED notes on change + every 5 s). All: heartbeat,
+     reconnect, `--sim` (UDP Lightpad 8767, LUMI 8769, **NuVJ 8774**, APC20 8782: the Python
      NuVJ sim got an engine link + active sensing every 300 ms), `--ports`, `--slot`.
    - `weapon_monitor.exe [--slot N] [--echo] [--stop N]`; `weapon_tests.exe`
-     (122 checks, bytes compared with the Python reference).
-   - `himmel.exe` starts the three drivers (`--weapons LIST`, `--no-weapons`);
+     (163 checks incl. the APC20, bytes compared with the Python reference).
+   - `himmel.exe` starts the four drivers (`--weapons LIST`, `--no-weapons`);
      `--sim` puts them in sim mode too. The renderer reads ring 0 of every slot and
      uses only the header roles (table in the README).
    - Lightpad velocity: wait for the next touch message (max 35 ms) unless the

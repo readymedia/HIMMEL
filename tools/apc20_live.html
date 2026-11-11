@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APC20 Live</title>
+<!-- Weapon no. 9 (APC20, a secondary weapon). Served by tools/mk2_live.py for ?weapon=apc20; talks to
+     tools/apc20_sim.py through /weapon?id=apc20, /wevents?id=apc20 and /wcmd?id=apc20.
+     The drawing comes from weapons/apc20.weapon.json. -->
+<style>
+  :root {
+    --bg: #101113; --edge: #2a2b2f; --text: #d8d9dc; --label: #9a9ca3; --red: #e5533d;
+    --seen: #3ddc84; --learn: #ff9d2e; --missing: #e5484d;
+    --rubber: #cfccc0; --green: #3dff6e; --redled: #ff3b2f; --amber: #ffb02e; --blue: #4aa8ff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.4 "Segoe UI", system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; }
+  .pill { padding: 3px 10px; border-radius: 99px; background: #26272b; font-size: 12px; }
+  .pill.ok { background: #143d27; color: #7ff0b0; } .pill.bad { background: #4a1719; color: #ffb3b5; }
+  .pill.sim { background: #2b2350; color: #c8b8ff; } .pill.warn { background: #4a3a12; color: #ffd98a; }
+  button, select { background: #2c2e33; color: var(--text); border: 1px solid #3a3c42; border-radius: 6px; padding: 5px 10px; font: inherit; }
+  button { cursor: pointer; } button:hover { background: #383a40; }
+  button.on { background: #3b5bdb; border-color: #4c6ef5; color: #fff; }
+  .progress { width: 140px; height: 8px; background: #26272b; border-radius: 4px; overflow: hidden; }
+  .progress > div { height: 100%; background: var(--seen); width: 0; transition: width .2s; }
+  main { display: flex; gap: 16px; padding: 0 16px 24px; align-items: flex-start; flex-wrap: wrap; }
+  #stageWrap { flex: 0 0 auto; max-width: 100%; }
+  #stage { position: relative; transform-origin: 0 0; }
+  #side { flex: 1 1 420px; min-width: 0; display: grid; gap: 12px; }
+  .body { position: absolute; border-radius: 14px; background: linear-gradient(170deg, #2a2b2f, #141518 55%, #0e0f11);
+          box-shadow: inset 0 0 0 2px #050506, inset 0 2px 0 #ffffff12, 0 18px 50px #000a; }
+  .sec { position: absolute; font-size: 9px; font-weight: 700; color: var(--label); letter-spacing: .6px; white-space: nowrap; }
+  .sec::after { content: ""; position: absolute; left: 0; right: 0; top: 14px; height: 1px; background: #3a3c42; }
+  .rowl { position: absolute; font-size: 8px; font-weight: 700; color: var(--label); white-space: pre; text-align: right; line-height: 1.05; transform: translateY(-50%); }
+  .badge { position: absolute; font-weight: 800; font-size: 17px; letter-spacing: 2px; color: #e9e9ec; }
+  .badge small { display: block; font-size: 8px; letter-spacing: 1.5px; color: var(--label); font-weight: 700; }
+  .port { position: absolute; background: #050506; border: 1px solid #3a3a40; border-radius: 2px; }
+  .port span { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 7px; color: var(--label); white-space: nowrap; }
+  .c { position: absolute; user-select: none; touch-action: none; }
+  body.sim .c { cursor: grab; } body.hw .c { cursor: pointer; }
+  .b { border-radius: 4px; background: linear-gradient(#dcd9cd, #b9b6aa); box-shadow: 0 0 0 1.5px #050506, inset 0 -3px 0 #0002, 0 2px 3px #000a;
+       font-size: 7px; font-weight: 800; color: #3b3a35; white-space: pre; display: flex; align-items: center; justify-content: center;
+       text-align: center; line-height: 1.05; transition: background .03s, box-shadow .03s; }
+  .b.held { transform: translateY(1px); box-shadow: 0 0 0 2px #fff, inset 0 -1px 0 #0002; }
+  .lab2 { position: absolute; font-size: 7.5px; font-weight: 800; color: var(--red); transform: translateX(-50%); white-space: nowrap; pointer-events: none; }
+  .lab { position: absolute; font-size: 7.5px; font-weight: 800; color: #e3e3e6; transform: translateX(-50%); white-space: pre; text-align: center; pointer-events: none; line-height: 1.05; }
+  .track { position: absolute; background: #050506; border-radius: 3px; box-shadow: inset 0 0 0 1px #34353b; }
+  .tick { position: absolute; height: 1px; background: #4a4b52; }
+  .cap { position: absolute; background: linear-gradient(#3a3b40, #121316); border-radius: 3px; box-shadow: 0 0 0 1px #000, 0 3px 6px #000c; }
+  .cap::after { content: ""; position: absolute; left: 3px; right: 3px; top: 50%; height: 2px; margin-top: -1px; background: #d9d6c9; }
+  .val { position: absolute; font-size: 8px; color: var(--label); transform: translateX(-50%); white-space: nowrap; pointer-events: none; }
+  .knob { border-radius: 50%; background: radial-gradient(circle at 40% 35%, #f1efe8, #a9a69b 70%); border: 2px solid #0a0a0b; box-shadow: 0 3px 6px #000c; }
+  .knob .ind { position: absolute; left: 50%; top: 8%; width: 2px; height: 40%; margin-left: -1px; background: #222; transform-origin: 50% 105%; }
+  .knob.flash { box-shadow: 0 0 0 2px #fff8, 0 0 14px #fff6; }
+  .c.seen::after { content: ""; position: absolute; right: -3px; top: -3px; width: 7px; height: 7px; border-radius: 50%; background: var(--seen); box-shadow: 0 0 0 2px #111; }
+  .c.learn { outline: 2px solid var(--learn); outline-offset: 3px; animation: pulse .6s infinite alternate; }
+  @keyframes pulse { from { outline-color: var(--learn); } to { outline-color: transparent; } }
+  body.hw .c.missing { outline: 1.5px dashed var(--missing); outline-offset: 2px; }
+  .card { background: #17181b; border: 1px solid #26272b; border-radius: 8px; padding: 10px 12px; min-width: 0; }
+  .card h2 { font-size: 12px; margin: 0 0 6px; color: var(--label); font-weight: 600; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 5px 0; }
+  .help { color: var(--label); font-size: 12px; }
+  .msg { color: #ffd98a; min-height: 1.4em; }
+  table { border-collapse: collapse; width: 100%; font: 11px/1.45 Consolas, monospace; }
+  td, th { padding: 1px 8px 1px 0; text-align: left; vertical-align: top; white-space: nowrap; }
+  th { color: var(--label); font-weight: 600; }
+  td.hex { color: #7f838c; }
+  tr.up td.dir { color: #7ff0b0; } tr.down td.dir { color: #c8b8ff; } tr.probe td.dir { color: #ffcf7a; }
+  .scroll { max-height: 260px; overflow: auto; }
+  .chips span { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 7px; border-radius: 99px; background: #26272b; font-size: 11px; cursor: pointer; }
+  .chips span:hover { background: #3a3c42; }
+  ol { margin: 4px 0 0 18px; padding: 0; } li { margin: 2px 0; }
+  .deck td.on { color: #7ff0b0; } .deck td.q { color: #ffd98a; } .deck td.off { color: #6c6f77; }
+  .walk { font: 700 14px/1.4 Consolas, monospace; color: #ffd98a; min-height: 1.4em; }
+  body.sim .hwonly { display: none; } body.hw .simonly { display: none; }
+</style>
+</head>
+<body class="sim">
+<header>
+  <select id="weaponPick" title="Weapon: the controller to show"></select>
+  <h1>APC20 Live <span class="help">weapon no. 9 · secondary weapon</span></h1>
+  <span id="src" class="pill sim">simulated</span>
+  <span id="mode" class="pill">mode ?</span>
+  <span id="eng" class="pill" style="display:none">engine link</span>
+  <button id="bSim" class="on">Simulate</button>
+  <button id="bHw">Use the real APC20</button>
+  <span class="hwonly row" style="margin:0"><span class="help">seen</span><div class="progress"><div id="prog"></div></div><span id="seenN" class="help"></span></span>
+</header>
+<main>
+  <div id="stageWrap"><div id="stage"></div></div>
+  <div id="side">
+    <div class="card">
+      <h2>HIMMEL WITH THE APC20 AS SECOND WEAPON</h2>
+      <div class="msg" id="msg"></div>
+      <div class="row help" id="hstate"></div>
+      <table class="deck" id="decks"></table>
+      <div class="help" style="margin-top:6px">
+        <b>Grid</b> = launch the clip (at the next beat) · <b>Scene</b> = launch the row · <b>Clip stop</b> = stop the deck (Shift: all) ·
+        <b>Faders</b> = the fader page per deck, <b>Master</b> = master level · <b>Activator</b> = deck on/off · <b>Solo</b> ·
+        <b>Rec arm</b> = deck focus (the MK2's knob page follows) · <b>Shift + Rec arm</b> = fader page (VOL → OPACITY, PAN → SPEED, …) ·
+        <b>Shift + 1–8</b> = deck focus · PLAY = beat clock, STOP = stop all now, REC = Smart Random, OVERDUB = tap tempo, ←/→ = focus, ↑/↓ = clip rows (Shift: 5) ·
+        <b>Note Mode</b> = grid of 40 one-shot flashes · <b>Cue Level</b> = scene transition (Shift: BPM). Keyboard Shift = Shift.
+      </div>
+    </div>
+    <div class="card">
+      <h2>EVENTS HIMMEL GOT</h2>
+      <div class="scroll" style="max-height:170px"><table id="events"></table></div>
+    </div>
+    <div class="card hwonly">
+      <h2>HARDWARE CHECK (THE DAY THE APC20 HAS POWER)</h2>
+      <ol class="help">
+        <li>12 V DC 2 A adapter in, power switch on, USB to the PC. Close Ableton Live.</li>
+        <li><b>Use the real APC20</b>. It is a read-only probe: Himmel sends nothing yet. Press a few buttons: the drawing follows.</li>
+        <li><b>Identity request</b>: the reply should say APC20 and a device id.</li>
+        <li><b>Ableton mode</b>: the LEDs now belong to the host. Run the <b>LED tests</b>; <b>Walk</b> lights one LED at a time and names it: click the colour you see.</li>
+        <li>Touch every control once; unmapped messages: click the control, then press it (learning). Saved in <code>apc20_map.json</code>.</li>
+        <li><b>Himmel host on</b>: play the clip grid, faders and the rest as above.</li>
+      </ol>
+      <div class="row"><button data-c='{"identity":true}'>Identity request</button>
+        <button data-c='{"mode":"ableton"}'>Ableton mode</button><button data-c='{"mode":"generic"}'>Generic mode</button>
+        <button data-c='{"mode":"note"}'>Note mode</button></div>
+      <div class="row help" id="ident"></div>
+      <div class="row"><span class="help">LED test</span>
+        <button data-t="green">green</button><button data-t="red">red</button><button data-t="amber">amber</button>
+        <button data-t="blink">blink</button><button data-t="mono">single-colour</button><button data-t="walk">walk</button>
+        <button data-t="chase">chase</button><button data-t="off">off</button></div>
+      <div class="walk" id="walk"></div>
+      <div class="row" id="walkBtns" style="display:none"><span class="help">I see</span>
+        <button data-col="green">green</button><button data-col="red">red</button><button data-col="amber">amber/orange</button>
+        <button data-col="blue">blue</button><button data-col="none">nothing</button></div>
+      <div class="row"><button id="bHost">Himmel host on</button><button data-c='{"reset_seen":true}'>Clear seen</button>
+        <select id="portPick"><option value="">port: auto</option></select></div>
+      <div class="help" id="mapInfo"></div>
+      <div class="chips" id="missing"></div>
+    </div>
+    <div class="card">
+      <h2>MIDI MONITOR <label class="help" style="float:right"><input type="checkbox" id="noisy"> show LED traffic</label></h2>
+      <div class="help" id="notes"></div>
+      <div class="scroll"><table id="log"></table></div>
+    </div>
+  </div>
+</main>
+<script>
+"use strict";
+const WID = "apc20";
+const $ = id => document.getElementById(id);
+const post = o => fetch("/wcmd?id=" + WID, { method: "POST", body: JSON.stringify(o) }).catch(() => {});
+let P = null, S = null, els = [], shiftIdx = -1, dirty = false;
+
+// ---- weapon picker (same as the other pages) ----
+const pick = $("weaponPick");
+pick.onchange = () => { location.search = "?weapon=" + encodeURIComponent(pick.value); };
+fetch("/weapons").then(r => r.json()).then(list => {
+  for (const w of list.weapons) {
+    const o = document.createElement("option");
+    o.value = w.id; o.textContent = w.name + (w.playable ? "" : " (drawing only)");
+    if (w.id === WID) o.selected = true;
+    pick.appendChild(o);
+  }
+});
+
+function el(tag, cls, parent, css) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (css) Object.assign(e.style, css);
+  (parent || $("stage")).appendChild(e);
+  return e;
+}
+const px = v => v + "px";
+
+const TRI = { 1: "--green", 2: "--green", 3: "--redled", 4: "--redled", 5: "--amber", 6: "--amber" };
+const MONO = { green: "--green", red: "--redled", amber: "--amber", blue: "--blue" };
+function ledColour(c, v) {
+  if (!v) return null;
+  const blink = c.led.palette === "tri" ? (v === 2 || v === 4 || v === 6) : v === 2;
+  if (blink && Math.floor(Date.now() / 250) % 2) return null;
+  const varName = c.led.palette === "tri" ? (TRI[v] || "--green") : MONO[c.led.color] || "--green";
+  return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+}
+
+function draw() {
+  const st = $("stage");
+  st.innerHTML = "";
+  st.style.width = px(P.panel.w); st.style.height = px(P.panel.h);
+  for (const d of P.deco || []) {
+    if (d.kind === "body") el("div", "body", st, { left: px(d.x), top: px(d.y), width: px(d.w), height: px(d.h) });
+    if (d.kind === "port") { const p = el("div", "port", st, { left: px(d.x), top: px(d.y), width: px(d.w), height: px(d.h) });
+      el("span", "", p).textContent = d.label; }
+  }
+  for (const s of P.sections || []) { const e = el("div", "sec", st, { left: px(s.x), top: px(s.y), width: px(s.w) }); e.textContent = s.label; }
+  const first = P.controls.find(c => c.group === "activator");
+  for (const r of P.rows || []) { const e = el("div", "rowl", st, { right: px(P.panel.w - first.x + 8), top: px(r.y) }); e.textContent = r.label; }
+  const fd = P.controls.find(c => c.kind === "fader");
+  const b = el("div", "badge", st, { left: px(36), top: px(fd.y + fd.len + 24) });
+  b.innerHTML = (P.badge || "HIMMEL") + "<small>CLIP LAUNCH · SECOND WEAPON</small>";
+  els = P.controls.map((c, i) => {
+    let e;
+    if (c.kind === "button") {
+      e = el("div", "c b", st, { left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h) });
+      if (c.label && c.group === "select") el("div", "lab", st, { left: px(c.x + c.w / 2), top: px(c.y - 11) }).textContent = c.label.replace("\n", " ");
+      if (c.label2) el("div", "lab2", st, { left: px(c.x + c.w / 2), top: px(c.y + c.h + 2) }).textContent = c.label2;
+      if (c.name === "Shift") el("div", "lab2", st, { left: px(c.x - 30), top: px(c.y + c.h + 2) }).textContent = "STOP ALL CLIPS";
+    } else if (c.kind === "fader") {
+      el("div", "track", st, { left: px(c.x - 3), top: px(c.y), width: px(6), height: px(c.len) });
+      for (let k = 0; k <= 10; k++) el("div", "tick", st, { left: px(c.x - 18), top: px(c.y + k * c.len / 10), width: px(36) });
+      el("div", "lab", st, { left: px(c.x), top: px(c.y - 16), fontSize: "9px" }).textContent = c.label;
+      e = el("div", "c cap", st, { left: px(c.x - 20), width: px(40), height: px(20) });
+      e.val = el("div", "val", st, { left: px(c.x), top: px(c.y + c.len + 16) });
+    } else if (c.kind === "encoder") {
+      e = el("div", "c knob", st, { left: px(c.x - c.r), top: px(c.y - c.r), width: px(2 * c.r), height: px(2 * c.r) });
+      e.ind = el("div", "ind", e);
+      el("div", "lab", st, { left: px(c.x), top: px(c.y + c.r + 6) }).textContent = c.label;
+    }
+    e.title = c.name + (c.midi ? `  (ch${c.midi.ch + 1} ${c.midi.type} ${c.midi.num})` : "");
+    bind(e, c, i);
+    if (c.name === "Shift") shiftIdx = i;
+    return e;
+  });
+  fit();
+}
+
+function fit() {
+  const avail = Math.min(window.innerWidth - 32, 760), scale = Math.min(1.15, avail / P.panel.w);
+  $("stage").style.transform = `scale(${scale})`;
+  $("stageWrap").style.width = px(P.panel.w * scale); $("stageWrap").style.height = px(P.panel.h * scale);
+}
+window.addEventListener("resize", () => P && fit());
+
+function bind(e, c, i) {
+  e.addEventListener("pointerdown", ev => {
+    ev.preventDefault();
+    if (S && S.source === "hw") { post({ learn: c.name }); return; }
+    e.setPointerCapture(ev.pointerId);
+    if (c.kind === "button") {
+      post({ press: i, down: true });
+      const up = () => { post({ press: i, down: false }); e.removeEventListener("pointerup", up); e.removeEventListener("pointercancel", up); };
+      e.addEventListener("pointerup", up); e.addEventListener("pointercancel", up);
+    } else {
+      let y0 = ev.clientY, v0 = S ? (S.faders[i] ?? 0) : 0, scale = P.panel.w / $("stageWrap").getBoundingClientRect().width;
+      const move = m => {
+        const dy = (m.clientY - y0) * scale;
+        if (c.kind === "fader") post({ fader: i, value: Math.max(0, Math.min(127, Math.round(v0 - dy * 127 / c.len))) });
+        else { const d = Math.round(-dy / 4); if (d) { post({ turn: i, delta: d }); y0 = m.clientY; } }
+      };
+      const done = () => { e.removeEventListener("pointermove", move); e.removeEventListener("pointerup", done); };
+      e.addEventListener("pointermove", move); e.addEventListener("pointerup", done);
+    }
+  });
+  if (c.kind !== "button") e.addEventListener("wheel", ev => {
+    ev.preventDefault();
+    if (S && S.source === "hw") return;
+    const s = ev.deltaY < 0 ? 1 : -1;
+    if (c.kind === "fader") post({ fader: i, value: Math.max(0, Math.min(127, (S.faders[i] ?? 0) + s * 4)) });
+    else post({ turn: i, delta: s });
+  }, { passive: false });
+}
+
+// keyboard Shift = the Shift button (sim only)
+let shiftDown = false;
+addEventListener("keydown", ev => {
+  if (ev.key === "Shift" && !shiftDown && S && S.source === "sim") { shiftDown = true; post({ press: shiftIdx, down: true }); }
+  if (ev.key === "Escape") post({ learn_cancel: true });
+});
+addEventListener("keyup", ev => { if (ev.key === "Shift" && shiftDown) { shiftDown = false; post({ press: shiftIdx, down: false }); } });
+addEventListener("blur", () => { if (shiftDown) { shiftDown = false; post({ press: shiftIdx, down: false }); } });
+
+function render() {
+  if (!S || !P) return;
+  const hw = S.source === "hw";
+  document.body.className = hw ? "hw" : "sim";
+  const seen = new Set(S.map.seen);
+  P.controls.forEach((c, i) => {
+    const e = els[i];
+    if (c.kind === "button") {
+      const col = c.led ? ledColour(c, S.leds[i] || 0) : null;
+      e.style.background = col ? `radial-gradient(circle at 50% 45%, #fff 0 8%, ${col} 45%, ${col}cc)` : "";
+      e.style.boxShadow = col ? `0 0 0 1.5px #050506, 0 0 14px ${col}aa` : "";
+      e.classList.toggle("held", S.held.includes(i));
+    } else if (c.kind === "fader") {
+      const v = S.faders[i] ?? 0, y = c.y + c.len - (v / 127) * c.len - 10;
+      e.style.top = px(y);
+      e.val.textContent = v;
+    } else if (c.kind === "encoder") {
+      e.ind.style.transform = `rotate(${(S.enc[i] || 0) * 360 / 32}deg)`;
+    }
+    e.classList.toggle("seen", hw && seen.has(c.name));
+    e.classList.toggle("missing", hw && !seen.has(c.name));
+    e.classList.toggle("learn", S.learn === c.name);
+  });
+  if (!dirty) return;   // the rest only when a new snapshot came
+  dirty = false;
+  // header
+  const src = $("src");
+  src.className = "pill " + (hw ? (S.connected ? "ok" : "bad") : "sim");
+  src.textContent = hw ? (S.connected ? "real APC20: " + (S.ports || [""])[0] : "real APC20: not found") : "simulated";
+  $("mode").textContent = "mode " + (S.mode || "unknown");
+  $("mode").className = "pill " + (S.mode === "ableton" ? "ok" : S.mode ? "warn" : "");
+  $("eng").style.display = S.engine ? "" : "none";
+  $("eng").textContent = "engine drives the LEDs (UDP 8782)";
+  $("bSim").classList.toggle("on", !hw); $("bHw").classList.toggle("on", hw);
+  $("bHost").classList.toggle("on", S.host_on); $("bHost").textContent = S.host_on ? "Himmel host: on" : "Himmel host: off";
+  $("prog").style.width = (100 * S.map.seen.length / S.map.total) + "%";
+  $("seenN").textContent = S.map.seen.length + " / " + S.map.total;
+  $("msg").textContent = S.message || S.himmel.message || "";
+  // Himmel state
+  const h = S.himmel;
+  $("hstate").innerHTML = `focus <b>deck ${h.focus}</b> · fader page <b>${h.page}</b> · clip rows <b>${h.offset + 1}–${h.offset + 5}</b> · ` +
+    `<b>${h.bpm.toFixed(1)}</b> BPM ${h.running ? "▶" : "⏸"} · transition <b>${h.transition}</b> · master <b>${Math.round(h.master * 100)}%</b>` +
+    (h.flash ? " · <b>flash grid</b>" : "") + (h.shift ? " · <b>SHIFT</b>" : "") + (S.engine ? " · <i>engine has the LEDs</i>" : "");
+  let t = "<tr><th>deck</th><th>playing</th><th>next</th><th>on</th><th>solo</th><th>" + h.page.toLowerCase() + "</th></tr>";
+  const pi = h.pages.indexOf(h.page);
+  h.decks.forEach((d, k) => {
+    t += `<tr${h.focus === k + 1 ? ' style="background:#2b2350"' : ""}><td>${k + 1}</td><td class="${d.playing ? "on" : "off"}">${d.playing || "–"}</td>` +
+      `<td class="q">${d.queued || ""}</td><td class="${d.active ? "on" : "off"}">${d.active ? "on" : "off"}</td>` +
+      `<td class="${d.solo ? "on" : "off"}">${d.solo ? "solo" : ""}</td><td>${Math.round(d.values[pi] * 100)}%${d.picked ? "" : " (pick up)"}</td></tr>`;
+  });
+  $("decks").innerHTML = t;
+  $("events").innerHTML = h.events.slice().reverse().map(e => `<tr><td class="hex">${e[0]}</td><td>${e[1]}</td></tr>`).join("");
+  // hardware card
+  $("ident").textContent = S.identity ? `identity: ${S.identity.is_apc20 ? "APC20" : "manufacturer " + S.identity.manufacturer + " model " + S.identity.model}, version ${S.identity.version}, device id ${S.identity.dev}` : "no identity reply yet";
+  $("walk").textContent = S.led_test === "walk" ? (S.walk || "…") : S.led_test ? "LED test: " + S.led_test : "";
+  $("walkBtns").style.display = S.led_test === "walk" && S.walk ? "" : "none";
+  const missing = P.controls.filter(c => !seen.has(c.name)).map(c => c.name);
+  $("mapInfo").textContent = `${S.map.file}: ${S.map.exists ? "saved" : "not created yet"} · learned ${S.map.learned.length} · LED colours noted ${Object.keys(S.map.led_colors).length}` +
+    (S.map.note_off ? " · release = " + S.map.note_off : "") + (missing.length ? " · not seen yet (click to learn):" : " · every control seen");
+  $("missing").innerHTML = missing.slice(0, 120).map(n => `<span>${n}</span>`).join("");
+  // monitor
+  $("notes").textContent = (S.notes || []).join(" ");
+  const showNoisy = $("noisy").checked;
+  $("log").innerHTML = S.log.filter(r => showNoisy || !r[4]).slice(-60).reverse().map(r =>
+    `<tr class="${r[1].startsWith("device") ? "up" : r[1] === "probe" ? "probe" : "down"}"><td class="hex">${r[0]}</td><td class="dir">${r[1]}</td><td class="hex">${r[2]}</td><td>${r[3]}</td></tr>`).join("");
+  if (hw && S.port_list) {
+    const pp = $("portPick"), want = ["", ...S.port_list];
+    if (pp.options.length !== want.length) pp.innerHTML = want.map(n => `<option value="${n}">${n ? "port: " + n : "port: auto"}</option>`).join("");
+  }
+}
+
+$("bSim").onclick = () => post({ use: "sim" });
+$("bHw").onclick = () => post({ use: "hw" });
+$("bHost").onclick = () => post({ host: !(S && S.host_on) });
+$("portPick").onchange = e => post({ use: "hw", port: e.target.value });
+document.querySelectorAll("[data-c]").forEach(b => b.onclick = () => post(JSON.parse(b.dataset.c)));
+document.querySelectorAll("[data-t]").forEach(b => b.onclick = () => post({ led_test: b.dataset.t }));
+document.querySelectorAll("[data-col]").forEach(b => b.onclick = () => {
+  if (S && S.walk) post({ led_color: S.walk.split(" = ")[0], color: b.dataset.col });
+});
+$("missing").onclick = e => { if (e.target.tagName === "SPAN") post({ learn: e.target.textContent }); };
+
+fetch("/weapon?id=" + WID).then(r => r.json()).then(p => {
+  P = p; draw();
+  const es = new EventSource("/wevents?id=" + WID);
+  es.onmessage = m => { S = JSON.parse(m.data); dirty = true; };
+  (function loop() { render(); requestAnimationFrame(loop); })();
+});
+</script>
+</body>
+</html>

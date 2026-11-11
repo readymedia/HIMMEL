@@ -40,7 +40,8 @@ add_library(himmel_weapon STATIC
     src/weapon/driver.cpp
     src/weapon/blocks_codec.cpp
     src/weapon/blocks_session.cpp
-    src/weapon/nuvj.cpp)
+    src/weapon/nuvj.cpp
+    src/weapon/apc20.cpp)
 target_include_directories(himmel_weapon PUBLIC include)
 target_link_libraries(himmel_weapon PUBLIC himmel_mk2 nlohmann_json::nlohmann_json PRIVATE winmm)
 
@@ -49,6 +50,9 @@ target_link_libraries(weapon_blocks PRIVATE himmel_weapon winmm)
 
 add_executable(weapon_nuvj app/weapon_nuvj_main.cpp)
 target_link_libraries(weapon_nuvj PRIVATE himmel_weapon winmm)
+
+add_executable(weapon_apc20 app/weapon_apc20_main.cpp)
+target_link_libraries(weapon_apc20 PRIVATE himmel_weapon winmm)
 
 add_executable(weapon_monitor app/weapon_monitor_main.cpp)
 target_link_libraries(weapon_monitor PRIVATE himmel_weapon)
@@ -59,7 +63,7 @@ target_compile_definitions(weapon_tests PRIVATE HIMMEL_SOURCE_DIR="${PROJECT_SOU
 add_test(NAME weapon_tests COMMAND weapon_tests)
 
 foreach(t mk2_controller mk2_monitor mk2_pages_check mk2_pages_demo mk2_tests
-          himmel_weapon weapon_blocks weapon_nuvj weapon_monitor weapon_tests)
+          himmel_weapon weapon_blocks weapon_nuvj weapon_apc20 weapon_monitor weapon_tests)
     if(MSVC)
         target_compile_options(${t} PRIVATE /W4 /permissive- /utf-8)
     endif()

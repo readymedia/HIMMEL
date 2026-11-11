@@ -5,12 +5,13 @@
 //   himmel [--no-controller] [--weapons LIST | --no-weapons] [--sim] [-- render arguments ...]
 //   e.g. himmel -- --outputs 3 --fullscreen
 //   --sim: no hardware; the MK2 controller and the weapon drivers talk to the
-//          simulators in tools/mk2_live.py (MK2 8766, Lightpad 8767, LUMI 8769, NuVJ 8774).
-//   --weapons lightpad,lumi,nuvj: the weapon drivers to run (default: all three);
+//          simulators in tools/mk2_live.py (MK2 8766, Lightpad 8767, LUMI 8769, NuVJ 8774,
+//          APC20 8782).
+//   --weapons lightpad,lumi,nuvj,apc20: the weapon drivers to run (default: all four);
 //          a driver whose device is not plugged in just waits for it.
 //
 // Starts mk2_controller.exe, the weapon drivers (weapon_blocks.exe lightpad / lumi,
-// weapon_nuvj.exe) and himmel_render.exe from its own folder and keeps them alive
+// weapon_nuvj.exe, weapon_apc20.exe) and himmel_render.exe from its own folder and keeps them alive
 // for a whole night:
 //   * a child that exits is restarted (0.25 s, doubling up to 10 s if it keeps
 //     dying quickly; back to 0.25 s after it has run for a minute);
@@ -157,7 +158,7 @@ int main(int argc, char** argv) {
 
     bool with_controller = true;
     std::wstring render_args, ctl_args;
-    std::string weapons = "lightpad,lumi,nuvj";
+    std::string weapons = "lightpad,lumi,nuvj,apc20";
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "--no-controller") with_controller = false;
@@ -201,7 +202,8 @@ int main(int argc, char** argv) {
     };
     const WeaponDef defs[] = {{"lightpad", L"weapon_blocks.exe", L"lightpad", 2},
                               {"lumi", L"weapon_blocks.exe", L"lumi", 3},
-                              {"nuvj", L"weapon_nuvj.exe", L"", 5}};
+                              {"nuvj", L"weapon_nuvj.exe", L"", 5},
+                              {"apc20", L"weapon_apc20.exe", L"", 9}};
     std::vector<std::unique_ptr<Child>> weapon_children;
     std::vector<std::unique_ptr<himmel::weapon::SharedMemory>> weapon_shm;
     for (const auto& d : defs) {

@@ -23,6 +23,7 @@ A weapon has up to four parts:
 | 3 | **LUMI Keys** (ROLI LUMI Keys) | USB-MIDI, BLOCKS family: 24 keys with strike velocity, pressure and glide, one RGB LED per key, Mode / Octave − / Octave + | [`lumi.weapon.json`](lumi.weapon.json) | [`tools/lumi_sim.py`](../tools/lumi_sim.py) | Simulated, and checked on the owner's LUMI (firmware 1.3.8, 2026-11-10): keys, velocity, buttons, **Himmel's own key LEDs**. C++ driver `weapon_blocks.exe lumi` (checked with the simulator) |
 | 2 | **Lightpad** (ROLI Lightpad Block / Block M) | USB-MIDI: multi-touch surface (x, y, pressure per finger), 15 × 15 RGB LEDs, one Mode button | [`lightpad.weapon.json`](lightpad.weapon.json) | [`tools/lightpad_sim.py`](../tools/lightpad_sim.py) | Simulated, and played on the owner's Lightpad M (2026-11-10): touch, multi-touch, Mode button, orientation, factory note map, **and Himmel's own LED program** (~55 frames/s). C++ driver `weapon_blocks.exe lightpad` (checked with the simulator) |
 | 5 | **NuVJ** (Numark NuVJ, 2008) | USB-MIDI: 2 × 9 pads, 2 jog wheels, 2 speed faders, crossfader, 12 knobs, 2 push BANK encoders, 31 LEDs, front switches, blue segment LCD (feedback by SysEx) | [`nuvj.weapon.json`](nuvj.weapon.json) | [`tools/nuvj_sim.py`](../tools/nuvj_sim.py) | **Checked on the owner's unit (2026-11-11)**: map of all 53 controls verified, 31 LEDs, LCD text and the whole segment map (camera mapper); protocol in [`docs/nuvj-protocol.md`](../docs/nuvj-protocol.md). C++ driver `weapon_nuvj.exe` (checked with the simulator) |
+| 9 | **APC20** (Akai APC20), a **secondary weapon** | USB-MIDI: 8 × 5 clip grid (green / red / amber, blinking), 5 scene, 8 clip stop, Shift, 9 transport / track select, 3 × 8 track buttons, Cue Level encoder, 8 faders + master | [`apc20.weapon.json`](apc20.weapon.json) | [`tools/apc20_sim.py`](../tools/apc20_sim.py) | Simulated from public protocol facts; probe, LED test and map learning ready. Not yet checked on the owner's unit (it needs its 12 V adapter) |
 
 ## The live view: one tool for every weapon
 
@@ -639,9 +640,187 @@ They are in `tools/nuvj_games.py` (`INTROS`).
 - **Skip.** Any button ends the show.
 - **Without hardware.** `python tools/nuvj_games.py` also checks the shows.
 
+## Weapon no. 9: the APC20 (a secondary weapon)
+
+The owner's Akai APC20 (UPC 0 825213 00251 7) is a clip-launch controller made
+for Ableton Live. In Himmel it is the **second weapon**: it plays next to the
+MK2 (or any primary weapon) and takes the clip grid and the mixer, while the
+primary keeps its screens, menus and parameter pages.
+
+- **Profile:** [`apc20.weapon.json`](apc20.weapon.json), drawn from the owner's
+  photo. 97 controls; badge "HIMMEL · CLIPS", no maker logo. Each control has
+  its wire address inline (`midi`: `type` note/cc, `ch` 0..15, `num`, `enc`
+  abs/rel2c) and LED controls have `led` (`palette` tri/mono, colour, ch, num).
+  A map learned on the owner's unit (`apc20_map.json`) overrides it. New kind
+  `fader` (`orient`, `len`, `range` 127), as on the NuVJ / V-4 / Ohm64
+  branches. `"role": "secondary"` and `"page": "apc20_live.html"` (its own page,
+  the same `page` hook as the NuVJ).
+- **Simulator, probe and Himmel stand-in:** [`tools/apc20_sim.py`](../tools/apc20_sim.py)
+  (`--selftest`: 35 checks, `--ports`) and the page
+  [`tools/apc20_live.html`](../tools/apc20_live.html).
+- **Run:** `python tools/mk2_live.py --port 8787 --weapon apc20` (launch config
+  `apc20-live`), then http://127.0.0.1:8787. Mouse: hold a button, drag a
+  fader, drag or scroll Cue Level; the keyboard Shift key holds Shift.
+
+### Power: it needs its adapter
+
+The APC20 is **not USB bus powered**. Akai's Quickstart Guide: the included
+**12 V DC, 2 A** adapter goes in the rear DC input; USB only carries MIDI. Get a
+12 V supply rated 2 A or more with a barrel plug that fits the rear socket,
+and check the polarity symbol printed next to the socket before plugging in.
+A 6 V Akai adapter (MPK / MPD series) is the wrong one.
+
+### The protocol
+
+Facts from Ableton's APC20 script and Akai's Quickstart Guide (credits in
+[THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)).
+
+| What | Bytes |
+|---|---|
+| USB id | `09e8:007b`, class-compliant USB-MIDI, port "Akai APC20" (expected) |
+| Identity | host `F0 7E 7F 06 01 F7` → `F0 7E <dev> 06 02 47 7B 00 19 <ver ×4> <dev> … F7` (byte 13 = device id) |
+| Mode | `F0 47 <dev> 7B 60 00 04 <mode> <maj> <min> <bug> F7`; mode `40` generic (power-on), `41` Ableton (the host owns the LEDs), `42` alternate Ableton, `43` note mode. Himmel sends `41` after every connect. |
+| Clip grid | note 53..57 (row 1..5) on channel = track 1..8 |
+| Scene 1..5 | note 82..86, ch 1 |
+| Clip stop 1..8 | note 52, ch = track |
+| Shift | note 81, ch 1 (printed "stop all clips / shift"; Shift is host logic, the device sends the same notes) |
+| Transport / track select 1..8 | note 51, ch = track (PLAY STOP REC OVERDUB LEFT RIGHT UP DOWN) |
+| Note Mode / Master | note 80, ch 1 |
+| Activator, Solo/Cue, Record Arm | note 50, 49, 48, ch = track |
+| Faders | CC 7, ch = track, 0..127; master CC 14, ch 1 |
+| Cue Level | CC 47, ch 1, relative two's complement (1..63 = +n clockwise, 65..127 = n − 128) |
+| Note mode grid | notes 36..75 on ch 10: left 4 × 5 half C1..G2, right half G#2..D#3, left to right, bottom to top |
+| LEDs | note on to the control's own note/channel, velocity = state. Grid: 0 off, 1 green, 2 green blink, 3 red, 4 red blink, 5 amber, 6 amber blink. Others: 0 off, 1 on, 2 blink. The device blinks by itself. |
+
+Not known yet (the probe finds out): the colour of each single-colour row
+(the profile guesses scene/stop green, select/activator amber, solo blue, arm
+red), whether a release is note off or note on with velocity 0, and what
+generic mode does with the LEDs (the sim lights a button while it is held).
+
+### Secondary-weapon setup: jobs
+
+| APC20 | Job in Himmel |
+|---|---|
+| Clip grid 8 × 5 | **Clip launcher**: column = deck 1..8, row = clip slot. Launches at the next beat (at once when the clock is paused). LED: amber = clip there, green = playing, green blink = queued. Shift + clip = focus that deck and cue the clip without launching. |
+| Scene 1..5 | Launch the row on every deck, with the scene transition time. |
+| Clip stop 1..8 | Stop that deck at the beat (blinks until then). Shift + clip stop = stop all at the beat. |
+| Faders 1..8 | The current **fader page** for each deck: OPACITY (VOL), SPEED (PAN), FX A/B/C (SEND A/B/C), USER 1..3. Shift + a Record Arm button picks the page; the faders then **pick up** (soft takeover) at the stored value. |
+| Master fader | Master level (fade the output to black). |
+| Activator | Deck on/off (mute). |
+| Solo/Cue | Deck solo (only soloed decks are seen; later: preview in the operator GUI). |
+| Record Arm | **Deck focus**: the deck the primary weapon's knob page edits. Shift + 1..8 does the same; Shift + Master = focus the master. |
+| PLAY / STOP / REC / OVERDUB | Beat clock run/pause / stop all now / Smart Random on the focused deck / tap tempo. |
+| LEFT / RIGHT, UP / DOWN | Focus the deck to the left/right; move the 5-row clip window (Shift = 5 rows). |
+| Note Mode | The grid = 40 one-shot **flash** effects while held (lit red). |
+| Cue Level | Scene transition time (cut … 8 beats); Shift + turn = BPM. |
+
+### The driver: `weapon_apc20.exe` (done 2026-11-11, checked with the simulator)
+
+The APC20 goes through the generic weapon driver
+(`src/controller/include/himmel/weapon/`), not an engine path of its own.
+Code: `himmel/weapon/apc20.h`, `src/weapon/apc20.cpp` (a port of
+`tools/apc20_sim.py`), `app/weapon_apc20_main.cpp`; tests in
+`tests/controller/weapon_tests.cpp` (the profile, the wire table, SysEx bytes,
+decoder, LED levels and header, checked against the Python reference).
+
+```
+build\bin\Release\weapon_apc20.exe [--sim] [--port NAME|N] [--map apc20_map.json] [--slot N]
+build\bin\Release\himmel.exe --sim --weapons apc20 -- --size 640x360
+```
+
+- **Shared block** `Local\HimmelWeapon9` (slot = weapon number).
+- **Session start** (every reconnect): identity request; the device id from
+  the reply (byte 13; 0 if nothing answers in 0.3 s); the Ableton mode SysEx;
+  a full LED refresh. Everything again every 5 s, so an APC that was switched
+  off and on catches up. Ctrl+C: LEDs off, back to generic mode.
+- **Only** the identity request, the APC mode SysEx and note on (LEDs) are
+  ever sent. With `--sim` the driver also sends a `FE` hello every 250 ms
+  (never to hardware), so the page knows the engine is there.
+- **Wire table:** from the control names (the protocol facts); a learned
+  `apc20_map.json` overrides single controls. Without the profile file the
+  driver uses its built-in control list (show-safe).
+- **Events** (`id` = control index in the profile):
+
+  | APC20 input | Event |
+  |---|---|
+  | Clip grid | `PadHit` (velocity 127) / `PadRelease`: `id` = pad 1..40, Pad 1 = bottom-left, Pad 40 = top-right; `reserved` = control index. Note-mode notes (ch 10) land on the same pads. |
+  | Every other button | `ButtonDown` / `ButtonUp` (a release may be note off or note on 0: both work) |
+  | 8 faders + master | `Fader`: `value` = 0..16383 (7-bit × 16383 / 127), `raw` = the 7-bit value |
+  | Cue Level | `EncoderDelta`: `value` = ±ticks, `raw` = the wire byte |
+  | Port appears / goes | `Connected` / `Disconnected` |
+
+- **LEDs:** the engine writes a level per control (`Outputs::led`, 0..127, as
+  for every weapon). The driver turns it into the APC velocity:
+  grid 0..7 off, 8..63 amber, 64..127 green; other LEDs 0..31 off (the
+  engine's "dim" 20), 32..127 on. For exact colours the engine writes
+  120 + the APC code: 121 green, 122 green blink, 123 red, 124 red blink,
+  125 amber, 126 amber blink (other LEDs: 122 / 124 / 126 blink, the rest on).
+  Until the engine writes LEDs, a button lights while held.
+- **Engine skeleton roles** (until Himmel has real mapping pages): faders
+  1..8 = the 8 knob slots, Cue Level = next/previous clip, PLAY = pause/play,
+  STOP = restart, LEFT/RIGHT = previous/next clip, UP/DOWN = knob page,
+  Note Mode = span/mirror, the grid = 40 pads (jump points on the clip page).
+  The jobs in the table above (clip launcher, fader pages, deck focus) come
+  with the engine's deck and cue system; the page's Himmel stand-in shows them
+  today.
+- **Checked with the simulator:** `himmel.exe --sim --weapons apc20` → the
+  render process sees slot 9, the grid flashes, PLAY and Note Mode light from
+  the engine, identity and Ableton mode reach the simulated APC20.
+
+### Two weapons, one show: how they share the engine without fighting
+
+1. **Each weapon is its own driver process with its own shared block** (MK2:
+   `Local\HimmelMk2`, APC20: `Local\HimmelWeapon9`). One dying never touches
+   the other; the engine keeps the last state and shows the weapon as lost.
+2. **The show file says who does what**, for example
+   `"weapons": [{"slot": 0, "id": "mk2", "role": "primary"}, {"slot": 9, "id": "apc20", "role": "secondary", "jobs": ["clips", "mixer", "focus"]}]`.
+   Each job (clips, mixer, focus, transport, pages, screens) has one owner. The
+   primary owns every job no secondary claims; screens and menus always stay
+   with the primary.
+3. **The engine owns the state; weapons only send intents.** A clip launch
+   from the APC20 and a pad on the MK2 both become "launch clip X on deck N";
+   the engine's quantizer decides when. Both weapons' LEDs are drawn from the
+   same engine state, so they never disagree.
+4. **Continuous values: the last touch wins, with pickup.** If an MK2 knob and
+   an APC20 fader both reach deck 3's opacity, the latest change wins; an
+   absolute fader that no longer matches the value waits until it crosses it
+   (soft takeover) instead of jumping. Relative controls (MK2 knobs, Cue
+   Level) never need pickup.
+5. **Focus is shared.** Record Arm or Shift + 1..8 on the APC20 sets the
+   focused deck; the MK2's knob page and screens follow it, and the MK2's own
+   deck buttons set the same focus (the APC20's arm LEDs follow).
+6. **Shift is per weapon.** APC20 Shift never changes what MK2 buttons do.
+
+### When the owner has power: the hardware check
+
+Everything below is on the page (Use the real APC20 → the card "Hardware check").
+
+1. Plug in the 12 V 2 A adapter, switch on, connect USB, close Ableton Live.
+   `python tools/apc20_sim.py --ports` should list "Akai APC20" (or similar).
+2. Start the page (`apc20-live`, port 8787) and press **Use the real APC20**.
+   This is a **read-only probe**: Himmel sends nothing. Press buttons, move
+   faders, turn Cue Level: the drawing follows and the monitor shows the bytes.
+3. **Identity request**: the reply should say APC20, with a version and a
+   device id (saved in the map).
+4. **Ableton mode**: the pill turns green. Then the **LED tests**: green, red,
+   amber (grid only), blink, single-colour, chase. **Walk** lights one LED at
+   a time and names it; click the colour you see. Saved in `apc20_map.json`.
+5. Touch **every** control once until the counter shows 97 / 97. If a control
+   does not light up on the drawing, click it, then press it (learning).
+   Commit `apc20_map.json` when everything is seen.
+6. **Note mode** (button): press grid buttons; the monitor should show notes
+   36..75 on channel 10. Then Ableton mode again.
+7. **Himmel host on**: play it as in the table above. Pull the USB cable and
+   put it back: the probe reconnects and the host sends its setup again.
+8. **The driver:** stop the page (it holds the port), then run
+   `build\bin\Release\weapon_apc20.exe` (or `himmel.exe --weapons apc20`). Its log
+   should say "APC20 identity: device id …" and the grid should light from the
+   engine. If an LED colour or a control differs from the table, fix it in the
+   map (step 5) and commit `apc20_map.json`: the driver reads it.
+
 ## How a generic weapon feeds Himmel (wired 2026-11-11)
 
-The Lightpad, the LUMI Keys and the NuVJ feed the C++ engine the same way the
+The Lightpad, the LUMI Keys, the NuVJ and the APC20 feed the C++ engine the same way the
 MK2 does: a driver process per weapon kind, a shared block per weapon, and the
 same 16-byte `Event`. The MK2 path is unchanged.
 
@@ -650,6 +829,7 @@ build\bin\Release\himmel.exe --sim -- --size 640x360          MK2 + Lightpad + L
 build\bin\Release\himmel.exe --weapons nuvj                   real hardware, only the NuVJ driver
 build\bin\Release\weapon_blocks.exe lightpad|lumi [--sim]     one driver on its own
 build\bin\Release\weapon_nuvj.exe [--sim]
+build\bin\Release\weapon_apc20.exe [--sim]
 build\bin\Release\weapon_monitor.exe [--slot N] [--echo]      prints the events by control name
 build\bin\Release\weapon_monitor.exe --stop N                 asks a driver to let go and exit
 build\bin\Release\weapon_tests.exe                            codecs + shared block, no hardware
@@ -664,21 +844,22 @@ build\bin\Release\weapon_tests.exe                            codecs + shared bl
 | Run loop | `himmel/weapon/driver.h` | Open, run a session, heartbeat every loop, reopen when the port goes (checked every second) or the simulator stops sending. Stops on Ctrl+C or on `status.stop_request` (the supervisor sets it, so it also works without a console), and first lets go of the device. |
 | BLOCKS | `himmel/weapon/blocks.h`, `blocks_session.h` | Port of `lightpad_sim.py`, `lightpad_littlefoot.py` and `lumi_sim.py`: the codec, the `sharedDataChange` diff, HeapSync (cumulative ACKs, resend after 250 ms, the counter wraps 1023 → 0), the LittleFoot renderers (117 bytes for the Lightpad, 121 for the LUMI) and the session. |
 | NuVJ | `himmel/weapon/nuvj.h` | Port of `nuvj_sim.py`: feedback SysEx (`60`, `01`, `02`, `03`; `7B` is refused), the map and decoder, the LED bits, the LCD model → segment memory from `nuvj_map.json`. |
-| Drivers | `src/controller/app/weapon_*_main.cpp` | `weapon_blocks.exe lightpad\|lumi`, `weapon_nuvj.exe`, `weapon_monitor.exe`. |
+| APC20 | `himmel/weapon/apc20.h` | Port of `apc20_sim.py`: identity + mode SysEx, the wire table and decoder, engine LED levels → APC velocities (see "Weapon no. 9"). |
+| Drivers | `src/controller/app/weapon_*_main.cpp` | `weapon_blocks.exe lightpad\|lumi`, `weapon_nuvj.exe`, `weapon_apc20.exe`, `weapon_monitor.exe`. |
 
 - **Slots.** By default the slot is the weapon's number (2 Lightpad, 3 LUMI,
-  5 NuVJ; up to 16). `--slot N` moves one.
-- **Supervisor.** It starts all three drivers unless told otherwise
+  5 NuVJ, 9 APC20; up to 16). `--slot N` moves one.
+- **Supervisor.** It starts all four drivers unless told otherwise
   (`--weapons LIST`, `--no-weapons`). A driver whose device is not plugged in
   just waits for it.
 - **Sim links** (UDP 127.0.0.1): MK2 8766, Lightpad 8767, LUMI 8769,
-  **NuVJ 8774**.
+  **NuVJ 8774**, **APC20 8782**.
   - The Python simulators send every device message as one datagram there and
     treat what comes back as MIDI from the host.
   - While the engine talks, the live view's own host stays quiet and the
     drawing shows what the engine sent.
-  - The simulated NuVJ also sends active sensing (`FE`) every 300 ms, so the
-    driver finds it before any control is touched.
+  - The simulated NuVJ and APC20 also send active sensing (`FE`) every 300 ms, so the
+    driver finds them before any control is touched.
 
 ### Events
 
