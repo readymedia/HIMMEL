@@ -369,8 +369,8 @@ The details are in the mockup (`docs/vj-mockup.html`).
      supervisor so a renderer restart shows black, not the desktop.
    - Dev PC note: the owner's dev laptop is a GTX 1070 with one screen, so
      outputs are tested as windows there; the show PC is the RTX 5090.
-5. **Generic weapon driver (2026-11-11; checked with the simulators, NOT yet on
-   the owner's Lightpad, LUMI and NuVJ).** The Lightpad, LUMI and NuVJ feed the
+5. **Generic weapon driver (2026-11-11; checked with the simulators, and on the
+   owner's Lightpad M and NuVJ under `himmel.exe`; the LUMI only simulated).** The Lightpad, LUMI and NuVJ feed the
    engine like the MK2. Details: `weapons/README.md`, "How a generic weapon feeds
    Himmel".
    - Shared block `Local\HimmelWeapon<N>` (`himmel/weapon/shared.h`), N = slot,
@@ -393,8 +393,11 @@ The details are in the mockup (`docs/vj-mockup.html`).
    - `himmel.exe` starts the four drivers (`--weapons LIST`, `--no-weapons`);
      `--sim` puts them in sim mode too. The renderer reads ring 0 of every slot and
      uses only the header roles (table in the README).
-   - Next: check on the owner's hardware (Lightpad velocity from the first z is
-     provisional), NuVJ start-up shows in C++, real mapping pages.
+   - Lightpad velocity: wait for the next touch message (max 35 ms) unless the
+     first z >= 48; velocity = sqrt(z/255)*127 (measured: z rises over ~100 ms).
+   - Gotcha: WinMM lets two programs open the NuVJ; close NuVJ Live (or set it to
+     simulated) before Himmel runs, or both drive the LEDs.
+   - Next: the LUMI on hardware, NuVJ start-up shows in C++, real mapping pages.
 6. Then: the ffmpeg/HAP import pipeline, audio analysis, the cue system, Smart
    Random and the GUI.
 7. **TODO (owner, 2026-11-10): the effect set, after the graphics engine is

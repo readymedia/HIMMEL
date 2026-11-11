@@ -451,11 +451,11 @@ static void test_apc20_leds_and_header() {
 // ---------------------------------------------------------------- shared block
 static void test_shared_block() {
     std::printf("shared block Local\\HimmelWeapon<N>\n");
-    CHECK(sizeof(Event) == 16);
+    static_assert(sizeof(Event) == 16);
     CHECK(shm_name(5) == L"Local\\HimmelWeapon5");
     // The MK2's event values never change (the MK2 path must stay as it is).
-    CHECK(static_cast<int>(EventType::Disconnected) == 8 && static_cast<int>(EventType::TouchStart) == 9 &&
-          static_cast<int>(EventType::Switch) == 13);
+    static_assert(static_cast<int>(EventType::Disconnected) == 8 && static_cast<int>(EventType::TouchStart) == 9 &&
+                  static_cast<int>(EventType::Switch) == 13);
     auto lp = load_profile(std::string(kSourceDir) + "/weapons/lightpad.weapon.json");
     auto lu = load_profile(std::string(kSourceDir) + "/weapons/lumi.weapon.json");
     CHECK(lp && lu);

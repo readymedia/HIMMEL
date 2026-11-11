@@ -113,6 +113,8 @@ bool BlocksSession::tick(MidiTransport& io, uint64_t t) {
         if (api_) shm_.set_message("no answer for 3 s in API mode: handshake again");
         return handshake(io, t);
     }
+    for (uint8_t f = 0; f < hit_due_.size(); ++f)  // a resting finger that sent no move in time
+        if (hit_due_[f] && t >= hit_due_[f]) fire_hit(f, t);
     if (t >= next_ping_) {  // pings first: never behind LED traffic
         next_ping_ = t + kPingIntervalUs;
         if (!send(io, host_command(kCmdPing))) return false;
@@ -237,16 +239,21 @@ void BlocksSession::on_device(const DeviceEvent& e, uint64_t t) {
                 const int col = std::min(3, e.x * 4 / 4096), row = std::min(3, (4095 - e.y) * 4 / 4096);
                 const int pad = 1 + col + 4 * row;
                 finger_pad_[f] = static_cast<int8_t>(pad);
-                // Provisional velocity from the first z (the API strike vz is not usable; tune on the block).
-                const int vel = std::clamp(e.z * 127 / 160, 1, 127);
-                publish(EventType::PadHit, static_cast<uint8_t>(pad), static_cast<int16_t>(vel), e.z, kNone, t);
+                hit_z_[f] = e.z;
+                hit_due_[f] = t + kVelocityWaitUs;
+                if (e.z >= kVelocityNowZ) fire_hit(f, t);  // a firm strike: no need to wait
                 fingers_[f] = {e.x, e.y, static_cast<uint16_t>(e.z + 1)};
             } else if (e.phase == 1) {
+                if (hit_due_[f]) {
+                    hit_z_[f] = std::max(hit_z_[f], e.z);
+                    fire_hit(f, t);
+                }
                 if (finger_pad_[f])
                     publish(EventType::PadPressure, static_cast<uint8_t>(finger_pad_[f]), static_cast<int16_t>(e.z * 16), e.z,
                             kNone, t);
                 fingers_[f] = {e.x, e.y, static_cast<uint16_t>(e.z + 1)};
             } else {
+                if (hit_due_[f]) fire_hit(f, t);  // a tap shorter than the wait still hits
                 if (finger_pad_[f]) publish(EventType::PadRelease, static_cast<uint8_t>(finger_pad_[f]), 0, 0, kNone, t);
                 finger_pad_[f] = 0;
                 fingers_[f] = {0, 0, 0};
@@ -255,6 +262,13 @@ void BlocksSession::on_device(const DeviceEvent& e, uint64_t t) {
         }
         default: break;
     }
+}
+
+void BlocksSession::fire_hit(uint8_t f, uint64_t t) {
+    hit_due_[f] = 0;
+    if (!finger_pad_[f]) return;
+    const int vel = std::clamp(static_cast<int>(std::lround(127.0 * std::sqrt(hit_z_[f] / 255.0))), 1, 127);
+    publish(EventType::PadHit, static_cast<uint8_t>(finger_pad_[f]), static_cast<int16_t>(vel), hit_z_[f], kNone, t);
 }
 
 void BlocksSession::button(uint32_t id, bool down, bool via_program, uint64_t t) {
