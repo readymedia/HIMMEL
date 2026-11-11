@@ -66,6 +66,8 @@ macros, songs → scenes (look + kit + macros), pads with layer targets, `ENTER`
 = next scene, live undo/reset; NuVJ: crossfader decides, wheels BEND /
 SCRATCH / FX. **All design decisions D42–D76 were confirmed by the owner on
 2026-11-11** (`docs/decisions.md`); D65: no flash cap by default.
+Projects (save / open / recent / one-file export, autosave) and output
+resolution presets 720p / 1080p / 1440p / 4K: `docs/design/projects.md` (D77–D78).
 - **Show:** outputs, mapping (keystone, mesh warp, edge blend), cameras, banks,
   audio and sync sources.
 - **Bank:** clips and loops, with analysis (colors, motion, mood such as

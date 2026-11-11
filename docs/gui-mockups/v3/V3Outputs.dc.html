@@ -39,6 +39,11 @@ button{cursor:pointer}
 <span style="height:44px;line-height:44px;padding:0 18px;border-radius:8px;border:1px dashed #3A434F;color:#6B7684;font:700 14px Inter">2×2 · custom (later)</span>
 <span style="font-size:13px;color:#9AA4B2">+ separate extras (LED strip, a TV at the bar) can be added below with their own source.</span>
 </div>
+<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+<span class="lbl">Resolution</span>
+<sc-for list="{{ resChips }}" as="r" hint-placeholder-count="4"><button onClick="{{ r.on }}" style="{{ r.st }}"><b>{{ r.t }}</b><span style="font-size:11px;color:#9AA4B2;margin-left:6px">{{ r.sub }}</span></button></sc-for>
+<span style="font-size:12px;color:#6B7684">Custom size under Advanced. Preselected from the display's native mode.</span>
+</div>
 
 <div style="background:#101418;border:1px solid #2A313A;border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:12px">
 <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span class="lbl">The canvas you play on</span><b class="mono" style="font-size:18px">{{ canvasLabel }}</b><span style="font-size:13px;color:#9AA4B2">{{ canvasNote }}</span></div>
@@ -69,9 +74,12 @@ button{cursor:pointer}
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
 class Component extends DCLogic {
-constructor(props) { super(props); this.state = { kind: 'proj', n: 3 }; }
+constructor(props) { super(props); this.state = { kind: 'proj', n: 3, res: 1 }; }
 renderVals() {
-const proj = this.state.kind === 'proj', n = this.state.n, W = 1920, OV = proj ? 269 : 0;
+const RES = [[1280, 720, '720p', 'small / test'], [1920, 1080, '1080p', 'recommended'], [2560, 1440, '1440p', 'big rigs'], [3840, 2160, '4K', 'big rigs · 4K clips']];
+const R = RES[this.state.res];
+const proj = this.state.kind === 'proj', n = this.state.n, W = R[0], H = R[1], OV = proj ? Math.round(W * 0.14) : 0;
+const resChips = RES.map((r, i) => ({ t: r[2], sub: r[3], on: () => this.setState({ res: i }), st: 'height:44px;padding:0 14px;border-radius:8px;background:#1B2027;color:#E8ECF1;font:700 14px Inter;border:' + (this.state.res === i ? '2px solid #E8ECF1' : '1px solid #3A434F') }));
 const cw = n * W - (n - 1) * OV;
 const zones = [], labels = [];
 for (let k = 0; k < n; k++) {
@@ -87,8 +95,8 @@ return {
 isProj: proj, isScreen: !proj,
 screenBorder: proj ? un : sel, projBorder: proj ? sel : un,
 c1: n === 1 ? bs : bu, c2: n === 2 ? bs : bu, c3: n === 3 ? bs : bu,
-aspect: cw + '/1080', zones: zones, labels: labels,
-canvasLabel: cw + ' × 1080',
+aspect: cw + '/' + H, resChips: resChips, zones: zones, labels: labels,
+canvasLabel: cw + ' × ' + H,
 canvasNote: n === 1 ? 'one 16:9 output' : (proj ? n + ' projectors, ' + (n - 1) + ' blend zone' + (n > 2 ? 's' : '') + ' (hatched)' : n + ' screens, edges meet'),
 pickScreen: () => this.setState({ kind: 'screen' }), pickProj: () => this.setState({ kind: 'proj' }),
 n1: () => this.setState({ n: 1 }), n2: () => this.setState({ n: 2 }), n3: () => this.setState({ n: 3 })

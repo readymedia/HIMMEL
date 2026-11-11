@@ -15,6 +15,7 @@ Nothing yet: this file was created with the v2 plan.
 2. The scene / bank / cue model + save/recall over the command protocol.
 3. The shuffle sampler v1 (seeded, locks, scopes, history), mood files (16).
 - Clip variants A–D; parameter scopes (LOOK values stored per look; GLOBAL values in the show); the MOTION lock holds the transport (`docs/design/clips-and-playback.md` §4).
+- M3 includes **projects** (`docs/design/projects.md`): folder format, new / open / recent / save / save as / `.himmelshow`, atomic save worker, autosave journal + restore, relink missing clips.
 
 ## GUESSES
 - None recorded yet.

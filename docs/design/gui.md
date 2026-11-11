@@ -82,7 +82,12 @@ apart for the common colour-blindness types.
 The first run is a four-step wizard. A bar at the top always shows
 **1 CLIPS · 2 WEAPON · 3 OUTPUTS · 4 PLAY**, and you can click any step.
 
-On later starts Himmel goes straight to step 4 after a one-line health check
+**Before the wizard: the start screen** (`projects.md`): *New project*,
+*Open…* (a project folder or a `.himmelshow` file), and the last 10
+projects as cards (thumbnail, name, date, outputs). "Restore autosave" shows
+here after a crash.
+
+On later starts Himmel opens the last project and goes straight to step 4 after a one-line health check
 ("All good: 312 clips, MK2 + Lightpad, 3 outputs"). If something changed (a
 display missing, a controller gone), it opens the step that needs you.
 
@@ -140,18 +145,23 @@ display missing, a controller gone), it opens the step that needs you.
      pen-tool masks. Mapping comes next (§13).
 2. **How many:** **1**, **2 side by side** or **3 side by side** (2 × 2 and
    custom grids later).
-3. **The canvas you play on** is drawn to scale, with its size:
+3. **Resolution per output**, four big chips: **720p · 1080p · 1440p · 4K**
+   (1080p is the default and marked "recommended"; 1440p and 4K are marked
+   "recommended for big rigs" with the GPU cost shown). The wizard
+   preselects the display's native mode and warns if outputs on one canvas
+   differ. A custom size hides under "Advanced" (`projects.md` §5).
+4. **The canvas you play on** is drawn to scale, with its size:
    - 1 output = 1920 × 1080;
    - 3 screens = 5760 × 1080 (edges meet);
    - 3 projectors with a 14 % blend = 5222 × 1080, with hatched blend zones.
 
    The blend overlap slider changes the canvas width live, and every monitor
    in Perform follows.
-4. **Extra outputs** (an LED strip, a TV at the bar), each with its own source
+5. **Extra outputs** (an LED strip, a TV at the bar), each with its own source
    (MAIN, A, B, OWN, TABLE).
-5. Checks: the same refresh rate on the canvas outputs, flip model, and
+6. Checks: the same refresh rate on the canvas outputs, flip model, and
    measure latency.
-6. **Show type:** VJ or Overlay (§ engine), as before.
+7. **Show type:** VJ or Overlay (§ engine), as before.
 
 The GUI screens are never show outputs; the wizard keeps them apart (§14).
 
@@ -659,3 +669,16 @@ Playback 0.1" on the design canvas, copies in `docs/gui-mockups/v4/`.
   and PRESS; "Fill kit" proposes the default layout (`perform.md` §4.2).
 - Every change can be tried at once on PREVIEW ("Rehearse": load the scene
   to PREVIEW with its kit active on the weapon).
+
+## 18. Projects and files
+
+Spec: [`projects.md`](projects.md).
+- **File menu** (top bar, left of the song strip): New, Open…, Open recent,
+  Save, Save as…, Save a copy as file…, Revert, Pack with media. Keys
+  `Ctrl+N / O / S / Shift+S`.
+- The top bar shows the **project name** with a dot for unsaved changes; the
+  autosave time is in its tooltip.
+- **On the MK2:** the system menu (`SHIFT` + wheel) has Save, Open recent and
+  New; the wheel picks, push confirms. Opening during a show loads into the
+  PREVIEW side and asks for a TAKE, so the outputs never drop.
+- **Find missing clips** opens by itself when a project has missing files.

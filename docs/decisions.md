@@ -16,6 +16,8 @@ Status values:
 
 | # | Decision | Status | Details |
 |---|---|---|---|
+| D77 | **Projects:** a project = a folder `<name>.himmel/` of JSON; New / Open / Open recent / Save / Save as / export as one `.himmelshow` file / pack with media; autosave journal + snapshots; relink missing clips | DECIDED (owner, 2026-11-11) | `design/projects.md` |
+| D78 | **Output resolution presets:** 720p, 1080p (default), 1440p and 4K (the two big ones recommended for big rigs); custom only under Advanced | DECIDED (owner, 2026-11-11) | `design/projects.md` §5 |
 | D68 | **Two flows, one surface:** PREP → TAKE and PLAY both always available; **focus = the side of the last group pressed**; pads, knobs 1–4 and pages act on the focus; **knobs 5–8 always PROGRAM**; "LIVE EDIT" renamed PLAY focus | DECIDED (owner, 2026-11-11) | `design/perform.md` §1 |
 | D69 | **Scene = look + kit + 4 macros + transition + variations**; a song holds up to 16 scenes; LOOKS pads show the song's scenes | DECIDED (owner, 2026-11-11) | `design/perform.md` §2 |
 | D70 | **Scenes land where the focus is**; `ENTER` = next scene live on the beat; `SHIFT` + `ENTER` = into PREVIEW | DECIDED (owner, 2026-11-11) | `design/perform.md` §2 |
