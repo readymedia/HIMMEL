@@ -20,8 +20,9 @@ the owner's unit (``apc20_map.json``, repo root) overrides it.
 - ``SimAPC20``: a pretend device. The drawn panel drives it. It answers the
   identity request, takes the mode SysEx, keeps the LEDs the host sends
   (blinking is done by the device, as on the real one) and sends note / CC.
-  Every message it sends also goes to UDP 127.0.0.1:8782 (the engine link for
-  the generic weapon driver); datagrams sent back count as host -> device.
+  Every message it sends also goes to UDP 127.0.0.1:8782, plus a 0xFE hello
+  every 0.3 s: that is where ``weapon_apc20.exe --sim`` listens. Datagrams sent
+  back count as host -> device (the driver's own 0xFE hello says "engine here").
 - ``HwAPC20``: the real device over WinMM (ctypes, no new dependency). It is
   a **read-only probe** until you press a button: it sends nothing by itself.
   Only the identity request, the APC mode SysEx and note on/off go out; any
@@ -89,7 +90,8 @@ def parse_mode(msg):
 def identity_reply(dev=0, version=(0, 1, 0, 5), serial=(0, 0, 0, 0)):
     """What an APC answers to F0 7E 7F 06 01 F7. Ableton reads bytes 5 (manufacturer), 6 (model),
     9..12 (version, 4 nibbles) and 13 (device id). The rest is filled with zeros in the sim."""
-    return bytes([0xF0, 0x7E, dev & 0x7F, 0x06, 0x02, MANUFACTURER, MODEL, 0x00, 0x19, 0x00] +
+    # F0 7E <dev> 06 02 | 47 7B 00 19 (manufacturer, family/model) | version x4 (bytes 9..12) | dev (13) | ...
+    return bytes([0xF0, 0x7E, dev & 0x7F, 0x06, 0x02, MANUFACTURER, MODEL, 0x00, 0x19] +
                  list(version) + [dev & 0x7F] + list(serial) + [0] * 16 + [0xF7])
 
 
@@ -351,7 +353,15 @@ class SimAPC20(DeviceBase):
                 pass
 
     def _rx_loop(self):
+        next_hello = 0.0
         while not self.closed:
+            now = time.time()
+            if now >= next_hello:      # keep-alive for weapon_apc20.exe --sim (not logged, never a control)
+                next_hello = now + 0.3
+                try:
+                    self.udp.sendto(bytes([0xFE]), ENGINE_ADDR)
+                except OSError:
+                    pass
             try:
                 r, _ = self.udp.recvfrom(4096)
             except socket.timeout:
@@ -1247,9 +1257,10 @@ def selftest():
     check(rt, "note mode round trip")
     check(mode_sysex("ableton").hex(" ") == "f0 47 00 7b 60 00 04 41 01 00 00 f7", "Ableton mode SysEx")
     check(parse_mode(mode_sysex("note", 3)) == (3, 0x43), "mode SysEx parses")
-    rep = identity_reply(5)
+    rep = identity_reply(3, version=(0, 1, 0, 9))
     idn = parse_identity(rep)
-    check(idn and idn["is_apc20"] and idn["dev"] == 5 and rep[13] == 5, "identity reply: APC20, device id at byte 13")
+    check(idn and idn["is_apc20"] and idn["dev"] == 3 and rep[13] == 3 and idn["version"] == "1.9",
+          "identity reply: APC20, version at bytes 9..12, device id at byte 13")
     check(rel2c(1) == 1 and rel2c(127) == -1 and rel2c(65) == -63 and to_rel2c(-2) == 126, "relative two's complement")
 
     # the simulated device

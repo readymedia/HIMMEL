@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "himmel/weapon/apc20.h"
 #include "himmel/weapon/blocks.h"
 #include "himmel/weapon/blocks_session.h"
 #include "himmel/weapon/driver.h"
@@ -342,6 +343,111 @@ static void test_nuvj_header() {
     CHECK(slots == 8);
 }
 
+// ---------------------------------------------------------------- APC20 (weapon no. 9)
+// Expected bytes from tools/apc20_sim.py (Ableton's APC20 script + Akai's Quickstart Guide).
+static std::optional<Profile> apc20_profile() {
+    return load_profile(std::string(kSourceDir) + "/weapons/apc20.weapon.json");
+}
+
+static void test_apc20_profile_and_map() {
+    std::printf("APC20 profile, built-in list and wire table\n");
+    auto p = apc20_profile();
+    CHECK(p.has_value());
+    if (!p) return;
+    const Profile b = apc20::builtin_profile();
+    CHECK(p->count() == apc20::kControls && b.count() == apc20::kControls);
+    CHECK(p->names == b.names && p->kinds == b.kinds);
+    const apc20::Map m = apc20::default_map(*p);
+    // every control has a wire address, and no two share one
+    bool all = true, unique = true;
+    std::vector<int> used(2 * 16 * 128, 0);
+    for (int i = 0; i < m.count; ++i) {
+        const auto& e = m.controls[static_cast<size_t>(i)];
+        all &= e.kind != apc20::Kind::None;
+        unique &= ++used[static_cast<size_t>((e.cc ? 2048 : 0) + e.ch * 128 + e.num)] == 1;
+    }
+    CHECK(all && unique);
+    auto at = [&](const char* n) { return m.controls[static_cast<size_t>(p->index(n))]; };
+    CHECK(!at("Clip 3.2").cc && at("Clip 3.2").ch == 2 && at("Clip 3.2").num == 54 && at("Clip 3.2").led == apc20::Palette::Tri);
+    CHECK(at("Scene 5").num == 86 && at("Shift").num == 81 && at("Shift").led == apc20::Palette::None);
+    CHECK(at("Select 1").ch == 0 && at("Select 1").num == 51 && at("Note Mode").num == 80);
+    CHECK(at("Activator 2").ch == 1 && at("Activator 2").num == 50 && at("Solo 2").num == 49 && at("Arm 2").num == 48);
+    CHECK(at("Fader 8").cc && at("Fader 8").ch == 7 && at("Fader 8").num == 7 && at("Master").num == 14);
+    CHECK(at("Cue Level").kind == apc20::Kind::Encoder && at("Cue Level").num == 47);
+    CHECK(at("Clip 1.5").pad == 1 && at("Clip 8.1").pad == 40 && at("Clip 1.1").pad == 33);
+    CHECK(apc20::note_mode_note(0, 4) == 36 && apc20::note_mode_note(3, 0) == 55 && apc20::note_mode_note(4, 4) == 56 &&
+          apc20::note_mode_note(7, 0) == 75);
+}
+
+static void test_apc20_messages() {
+    std::printf("APC20 identity and mode SysEx\n");
+    CHECK(hex(apc20::mode_sysex(apc20::kModeAbleton, 0)) == "f047007b60000441010000f7");
+    CHECK(hex(apc20::mode_sysex(apc20::kModeNote, 3)) == "f047037b60000443010000f7");
+    // identity reply as the simulator sends it (version 1.9 in bytes 9..12, device id 3 at byte 13)
+    const auto r = unhex("f07e030602477b001900010009030000000000000000000000000000000000000000f7");
+    uint8_t dev = 0;
+    bool is = false;
+    CHECK(apc20::parse_identity(r.data(), r.size(), dev, is) && is && dev == 3);
+    CHECK(!apc20::parse_identity(apc20::kIdentityRequest, sizeof(apc20::kIdentityRequest), dev, is));
+}
+
+static void test_apc20_decoder() {
+    std::printf("APC20 input -> Himmel events\n");
+    auto p = apc20_profile();
+    if (!p) return;
+    const apc20::Map m = apc20::default_map(*p);
+    apc20::Decoder dec(m);
+    Event e[1];
+    auto one = [&](std::initializer_list<uint8_t> b) {
+        const std::vector<uint8_t> v(b);
+        return dec.decode(v.data(), v.size(), 7, e, 1);
+    };
+    // Clip 1.5 (bottom-left) = ch1 note 57 -> pad 1; release as note off with velocity 127
+    CHECK(one({0x90, 57, 127}) == 1 && e[0].type == EventType::PadHit && e[0].id == 1 && e[0].value == 127 &&
+          e[0].reserved == p->index("Clip 1.5"));
+    CHECK(one({0x80, 57, 127}) == 1 && e[0].type == EventType::PadRelease && e[0].id == 1);
+    // Clip 8.1 (top-right) = ch8 note 53 -> pad 40; release as note on velocity 0
+    CHECK(one({0x97, 53, 127}) == 1 && e[0].type == EventType::PadHit && e[0].id == 40);
+    CHECK(one({0x97, 53, 0}) == 1 && e[0].type == EventType::PadRelease);
+    // Shift, Scene 1, Arm 4
+    CHECK(one({0x90, 81, 127}) == 1 && e[0].type == EventType::ButtonDown && e[0].id == p->index("Shift"));
+    CHECK(dec.held(p->index("Shift")));
+    CHECK(one({0x90, 81, 127}) == 0);  // a repeat
+    CHECK(one({0x80, 81, 127}) == 1 && e[0].type == EventType::ButtonUp);
+    CHECK(one({0x90, 82, 127}) == 1 && e[0].id == p->index("Scene 1"));
+    CHECK(one({0x93, 48, 127}) == 1 && e[0].id == p->index("Arm 4"));
+    // Fader 3 = ch3 CC 7; master = CC 14
+    CHECK(one({0xB2, 7, 127}) == 1 && e[0].type == EventType::Fader && e[0].id == p->index("Fader 3") &&
+          e[0].value == 16383 && e[0].raw == 127);
+    CHECK(one({0xB0, 14, 0}) == 1 && e[0].type == EventType::Fader && e[0].id == p->index("Master") && e[0].value == 0);
+    // Cue Level: CC 47 relative two's complement
+    CHECK(one({0xB0, 47, 1}) == 1 && e[0].type == EventType::EncoderDelta && e[0].value == 1);
+    CHECK(one({0xB0, 47, 125}) == 1 && e[0].value == -3);
+    // note mode: channel 10 note 36 = the bottom-left grid button
+    CHECK(one({0x99, 36, 127}) == 1 && e[0].type == EventType::PadHit && e[0].id == 1);
+    CHECK(one({0xFE}) == 0);
+    CHECK(one({0x90, 99, 127}) == 0);
+}
+
+static void test_apc20_leds_and_header() {
+    std::printf("APC20 LED levels, header\n");
+    using apc20::Palette;
+    CHECK(apc20::led_velocity(Palette::Tri, 0) == 0 && apc20::led_velocity(Palette::Tri, 5) == 0);
+    CHECK(apc20::led_velocity(Palette::Tri, 20) == apc20::kAmber && apc20::led_velocity(Palette::Tri, 127) == apc20::kGreen);
+    CHECK(apc20::led_velocity(Palette::Tri, apc20::kLedCode + apc20::kRedBlink) == apc20::kRedBlink);
+    CHECK(apc20::led_velocity(Palette::Mono, 20) == 0 && apc20::led_velocity(Palette::Mono, 127) == 1);
+    CHECK(apc20::led_velocity(Palette::Mono, apc20::kLedCode + 2) == 2);
+    CHECK(apc20::led_velocity(Palette::None, 127) == 0);
+    auto p = apc20_profile();
+    if (!p) return;
+    const Header h = apc20::make_header(*p, true);
+    CHECK(h.pads == 40 && h.controls == 97 && h.simulated == 1);
+    CHECK(h.role[p->index("Fader 1")] == kRoleKnob && h.knob_slot[p->index("Fader 1")] == 0 &&
+          h.knob_slot[p->index("Fader 8")] == 7);
+    CHECK(h.role[p->index("Cue Level")] == kRoleBrowse && h.role[p->index("Select 1")] == kRolePlay);
+    CHECK(h.pad_control[0] == p->index("Clip 1.5") && h.pad_control[39] == p->index("Clip 8.1"));
+}
+
 // ---------------------------------------------------------------- shared block
 static void test_shared_block() {
     std::printf("shared block Local\\HimmelWeapon<N>\n");
@@ -400,6 +506,10 @@ int main() {
     test_nuvj_segments();
     test_nuvj_decoder();
     test_nuvj_header();
+    test_apc20_profile_and_map();
+    test_apc20_messages();
+    test_apc20_decoder();
+    test_apc20_leds_and_header();
     test_shared_block();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;

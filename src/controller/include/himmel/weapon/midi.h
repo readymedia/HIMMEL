@@ -8,7 +8,7 @@
 // The simulated link is the one the Python simulators use (tools/lightpad_sim.py,
 // tools/lumi_sim.py, tools/nuvj_sim.py): every MIDI message the simulated device
 // sends is one UDP datagram to 127.0.0.1:<port>; whatever the driver sends back
-// to that sender is MIDI into the device. Ports: Lightpad 8767, LUMI 8769, NuVJ 8774.
+// to that sender is MIDI into the device. Ports: Lightpad 8767, LUMI 8769, NuVJ 8774, APC20 8782.
 #pragma once
 
 #include <cstddef>
@@ -22,6 +22,7 @@ namespace himmel::weapon {
 inline constexpr uint16_t kSimPortLightpad = 8767;
 inline constexpr uint16_t kSimPortLumi = 8769;
 inline constexpr uint16_t kSimPortNuvj = 8774;
+inline constexpr uint16_t kSimPortApc20 = 8782;
 
 struct MidiMsg {
     static constexpr size_t kCap = 1024;

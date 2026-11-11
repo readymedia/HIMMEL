@@ -714,26 +714,58 @@ generic mode does with the LEDs (the sim lights a button while it is held).
 | Note Mode | The grid = 40 one-shot **flash** effects while held (lit red). |
 | Cue Level | Scene transition time (cut … 8 beats); Shift + turn = BPM. |
 
-### Events in Himmel's event model (generic weapon driver)
+### The driver: `weapon_apc20.exe` (done 2026-11-11, checked with the simulator)
 
 The APC20 goes through the generic weapon driver
-(`src/controller/include/himmel/weapon/`, built in the session "Generic weapon
-driver"), not an engine path of its own:
+(`src/controller/include/himmel/weapon/`), not an engine path of its own.
+Code: `himmel/weapon/apc20.h`, `src/weapon/apc20.cpp` (a port of
+`tools/apc20_sim.py`), `app/weapon_apc20_main.cpp`; tests in
+`tests/controller/weapon_tests.cpp` (the profile, the wire table, SysEx bytes,
+decoder, LED levels and header, checked against the Python reference).
 
-- one shared block `Local\HimmelWeapon9` (slot = weapon number);
-- `ButtonDown` / `ButtonUp` for every button, `id` = the control index in the profile;
-- `Fader` for the 9 faders: `value` = 0..16383 (7-bit × 16383 / 127), `raw` = the 7-bit value;
-- `EncoderDelta` for Cue Level: `value` = ±ticks;
-- `Connected` / `Disconnected` when the port comes and goes.
-- **Session start** (every reconnect): identity request, read the device id,
-  then the Ableton mode SysEx, then a full LED refresh.
-- **Output:** the engine writes `led[control index]` = the APC velocity
-  (grid 0..6, others 0..2); the driver sends a note on only for LEDs that
-  changed, plus a full refresh after a reconnect. Only the identity request,
-  the mode SysEx and note on/off are ever sent to the device.
-- **Sim link:** the simulator sends every message to UDP 127.0.0.1:8782 and
-  treats datagrams sent back as host → device (LEDs, SysEx). While an engine
-  answers, the page's own Himmel stand-in stops driving the LEDs.
+```
+build\bin\Release\weapon_apc20.exe [--sim] [--port NAME|N] [--map apc20_map.json] [--slot N]
+build\bin\Release\himmel.exe --sim --weapons apc20 -- --size 640x360
+```
+
+- **Shared block** `Local\HimmelWeapon9` (slot = weapon number).
+- **Session start** (every reconnect): identity request; the device id from
+  the reply (byte 13; 0 if nothing answers in 0.3 s); the Ableton mode SysEx;
+  a full LED refresh. Everything again every 5 s, so an APC that was switched
+  off and on catches up. Ctrl+C: LEDs off, back to generic mode.
+- **Only** the identity request, the APC mode SysEx and note on (LEDs) are
+  ever sent. With `--sim` the driver also sends a `FE` hello every 250 ms
+  (never to hardware), so the page knows the engine is there.
+- **Wire table:** from the control names (the protocol facts); a learned
+  `apc20_map.json` overrides single controls. Without the profile file the
+  driver uses its built-in control list (show-safe).
+- **Events** (`id` = control index in the profile):
+
+  | APC20 input | Event |
+  |---|---|
+  | Clip grid | `PadHit` (velocity 127) / `PadRelease`: `id` = pad 1..40, Pad 1 = bottom-left, Pad 40 = top-right; `reserved` = control index. Note-mode notes (ch 10) land on the same pads. |
+  | Every other button | `ButtonDown` / `ButtonUp` (a release may be note off or note on 0: both work) |
+  | 8 faders + master | `Fader`: `value` = 0..16383 (7-bit × 16383 / 127), `raw` = the 7-bit value |
+  | Cue Level | `EncoderDelta`: `value` = ±ticks, `raw` = the wire byte |
+  | Port appears / goes | `Connected` / `Disconnected` |
+
+- **LEDs:** the engine writes a level per control (`Outputs::led`, 0..127, as
+  for every weapon). The driver turns it into the APC velocity:
+  grid 0..7 off, 8..63 amber, 64..127 green; other LEDs 0..31 off (the
+  engine's "dim" 20), 32..127 on. For exact colours the engine writes
+  120 + the APC code: 121 green, 122 green blink, 123 red, 124 red blink,
+  125 amber, 126 amber blink (other LEDs: 122 / 124 / 126 blink, the rest on).
+  Until the engine writes LEDs, a button lights while held.
+- **Engine skeleton roles** (until Himmel has real mapping pages): faders
+  1..8 = the 8 knob slots, Cue Level = next/previous clip, PLAY = pause/play,
+  STOP = restart, LEFT/RIGHT = previous/next clip, UP/DOWN = knob page,
+  Note Mode = span/mirror, the grid = 40 pads (jump points on the clip page).
+  The jobs in the table above (clip launcher, fader pages, deck focus) come
+  with the engine's deck and cue system; the page's Himmel stand-in shows them
+  today.
+- **Checked with the simulator:** `himmel.exe --sim --weapons apc20` → the
+  render process sees slot 9, the grid flashes, PLAY and Note Mode light from
+  the engine, identity and Ableton mode reach the simulated APC20.
 
 ### Two weapons, one show: how they share the engine without fighting
 
@@ -780,10 +812,15 @@ Everything below is on the page (Use the real APC20 → the card "Hardware check
    36..75 on channel 10. Then Ableton mode again.
 7. **Himmel host on**: play it as in the table above. Pull the USB cable and
    put it back: the probe reconnects and the host sends its setup again.
+8. **The driver:** stop the page (it holds the port), then run
+   `build\bin\Release\weapon_apc20.exe` (or `himmel.exe --weapons apc20`). Its log
+   should say "APC20 identity: device id …" and the grid should light from the
+   engine. If an LED colour or a control differs from the table, fix it in the
+   map (step 5) and commit `apc20_map.json`: the driver reads it.
 
 ## How a generic weapon feeds Himmel (wired 2026-11-11)
 
-The Lightpad, the LUMI Keys and the NuVJ feed the C++ engine the same way the
+The Lightpad, the LUMI Keys, the NuVJ and the APC20 feed the C++ engine the same way the
 MK2 does: a driver process per weapon kind, a shared block per weapon, and the
 same 16-byte `Event`. The MK2 path is unchanged.
 
@@ -792,6 +829,7 @@ build\bin\Release\himmel.exe --sim -- --size 640x360          MK2 + Lightpad + L
 build\bin\Release\himmel.exe --weapons nuvj                   real hardware, only the NuVJ driver
 build\bin\Release\weapon_blocks.exe lightpad|lumi [--sim]     one driver on its own
 build\bin\Release\weapon_nuvj.exe [--sim]
+build\bin\Release\weapon_apc20.exe [--sim]
 build\bin\Release\weapon_monitor.exe [--slot N] [--echo]      prints the events by control name
 build\bin\Release\weapon_monitor.exe --stop N                 asks a driver to let go and exit
 build\bin\Release\weapon_tests.exe                            codecs + shared block, no hardware
@@ -806,21 +844,22 @@ build\bin\Release\weapon_tests.exe                            codecs + shared bl
 | Run loop | `himmel/weapon/driver.h` | Open, run a session, heartbeat every loop, reopen when the port goes (checked every second) or the simulator stops sending. Stops on Ctrl+C or on `status.stop_request` (the supervisor sets it, so it also works without a console), and first lets go of the device. |
 | BLOCKS | `himmel/weapon/blocks.h`, `blocks_session.h` | Port of `lightpad_sim.py`, `lightpad_littlefoot.py` and `lumi_sim.py`: the codec, the `sharedDataChange` diff, HeapSync (cumulative ACKs, resend after 250 ms, the counter wraps 1023 → 0), the LittleFoot renderers (117 bytes for the Lightpad, 121 for the LUMI) and the session. |
 | NuVJ | `himmel/weapon/nuvj.h` | Port of `nuvj_sim.py`: feedback SysEx (`60`, `01`, `02`, `03`; `7B` is refused), the map and decoder, the LED bits, the LCD model → segment memory from `nuvj_map.json`. |
-| Drivers | `src/controller/app/weapon_*_main.cpp` | `weapon_blocks.exe lightpad\|lumi`, `weapon_nuvj.exe`, `weapon_monitor.exe`. |
+| APC20 | `himmel/weapon/apc20.h` | Port of `apc20_sim.py`: identity + mode SysEx, the wire table and decoder, engine LED levels → APC velocities (see "Weapon no. 9"). |
+| Drivers | `src/controller/app/weapon_*_main.cpp` | `weapon_blocks.exe lightpad\|lumi`, `weapon_nuvj.exe`, `weapon_apc20.exe`, `weapon_monitor.exe`. |
 
 - **Slots.** By default the slot is the weapon's number (2 Lightpad, 3 LUMI,
-  5 NuVJ; up to 16). `--slot N` moves one.
-- **Supervisor.** It starts all three drivers unless told otherwise
+  5 NuVJ, 9 APC20; up to 16). `--slot N` moves one.
+- **Supervisor.** It starts all four drivers unless told otherwise
   (`--weapons LIST`, `--no-weapons`). A driver whose device is not plugged in
   just waits for it.
 - **Sim links** (UDP 127.0.0.1): MK2 8766, Lightpad 8767, LUMI 8769,
-  **NuVJ 8774**.
+  **NuVJ 8774**, **APC20 8782**.
   - The Python simulators send every device message as one datagram there and
     treat what comes back as MIDI from the host.
   - While the engine talks, the live view's own host stays quiet and the
     drawing shows what the engine sent.
-  - The simulated NuVJ also sends active sensing (`FE`) every 300 ms, so the
-    driver finds it before any control is touched.
+  - The simulated NuVJ and APC20 also send active sensing (`FE`) every 300 ms, so the
+    driver finds them before any control is touched.
 
 ### Events
 

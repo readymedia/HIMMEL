@@ -17,7 +17,7 @@ flowchart LR
     CLIPS[("HAP clips<br/>media/")]
     SHM1[/"Local\HimmelMk2<br/>events, LEDs, screens"/]
     SHM2[/"Local\HimmelEngine<br/>heartbeat, stats"/]
-    WPN["weapon_blocks.exe / weapon_nuvj.exe<br/>one per weapon"]
+    WPN["weapon_blocks.exe / weapon_nuvj.exe /<br/>weapon_apc20.exe, one per weapon"]
     DEV(("Lightpad, LUMI, NuVJ<br/>USB-MIDI"))
     SHM3[/"Local\HimmelWeapon&lt;N&gt;<br/>events, LEDs, pixels, display"/]
 
@@ -42,7 +42,7 @@ flowchart LR
 |---|---|---|
 | `himmel.exe` | Starts the others in a job object, watches their heartbeats, restarts them (0.25 s, doubling to 10 s if they keep dying), kills one that has been silent for 2 s, logs everything. | The job object closes all children; start it again. (Run it from a service or a watchdog for unattended installs.) |
 | `mk2_controller.exe` | Owns the MK2: reads it at ~750 Hz, publishes events, sends LEDs and screens, reconnects when the cable is pulled. | The renderer keeps playing; it shows "MK2 OFF" and picks the controller up again when it is back (~0.3 s). |
-| `weapon_blocks.exe lightpad\|lumi`, `weapon_nuvj.exe` | One per weapon (`weapons/README.md`): owns the device over WinMM, publishes events, sends LEDs / pixels / LCD, reconnects. Lets go of the device (settings back, LEDs off) on Ctrl+C or the supervisor's stop request. | The renderer keeps playing and picks the weapon up again. |
+| `weapon_blocks.exe lightpad\|lumi`, `weapon_nuvj.exe`, `weapon_apc20.exe` | One per weapon (`weapons/README.md`): owns the device over WinMM, publishes events, sends LEDs / pixels / LCD, reconnects. Lets go of the device (settings back, LEDs off) on Ctrl+C or the supervisor's stop request. | The renderer keeps playing and picks the weapon up again. |
 | `himmel_render.exe` | Outputs, canvas, test card, clips, camera, MK2 and weapon control. | The supervisor restarts it within a second. |
 | Later: GUI, workers, bridges | Operator GUI (Dear ImGui), import/analysis workers, sync bridges (Ableton Link, Pro DJ Link). | Same rule: the output keeps going. |
 
@@ -162,7 +162,7 @@ src/controller/   himmel_mk2 library: map, input parsing + pad tracker, LED/scre
                   app/: mk2_controller, mk2_monitor, mk2_pages_demo, mk2_pages_check
                   himmel_weapon library (src/weapon/): weapon shared block, MIDI links,
                   driver run loop, BLOCKS codec + session, NuVJ codec + session
-                  app/: weapon_blocks, weapon_nuvj, weapon_monitor
+                  app/: weapon_blocks, weapon_nuvj, weapon_apc20, weapon_monitor
 src/media/        himmel_media: MOV reader, HAP decoder; tools/hap_probe
 src/engine/       engine_shared (status block), clip_player, camera_capture,
                   render/ (himmel_render + shaders), supervisor/ (himmel)
