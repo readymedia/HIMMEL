@@ -8,6 +8,8 @@ everything in the repo is English.
 **Read in this order:**
 1. `CLAUDE.md`: hardware facts, verified decisions, gotchas.
 2. `docs/roadmap.md`: the plan, the phases, and who owns what.
+   **`docs/build-v1.md`: what to build now (0.1 "Playback", milestones
+   M0–M12).**
 3. `docs/agents/README.md`: how we work (tracks, branches, handoffs, guesses).
 4. `docs/agents/handoff/<your track>.md`: where your track stands.
 5. `docs/design/` (what to build) and `docs/interfaces/` (the contracts).

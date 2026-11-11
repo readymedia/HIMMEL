@@ -1,6 +1,7 @@
 # Himmel – project handoff for Claude Code
 
 > **Start here:** `AGENTS.md` → this file → `docs/roadmap.md` (the plan) →
+> **`docs/build-v1.md` (what to build now: 0.1 "Playback")** →
 > `docs/agents/README.md` (how agents work: tracks, handoffs, `GUESS:` rule) →
 > `docs/design/` (v2 product design, 2026-11-11) → `docs/decisions.md`.
 > This file keeps hardware facts and verified decisions; the plan and the
@@ -59,6 +60,11 @@ moods on a 4×4 energy × style map; clips analysed and tagged on import.
 Every clip has a full transport (loop, ping-pong, random, chop, step, scratch,
 in/out, cue points, beat loops); pads play PREVIEW or PROGRAM, pressure drives
 the clip's effect, `PATTERN` twice = SLICE (`docs/design/clips-and-playback.md`).
+**How a show is played (v4, wins over older text): `docs/design/perform.md`**:
+focus = last group pressed (PREP green / PLAY red), knobs 5–8 always live
+macros, songs → scenes (look + kit + macros), pads with layer targets, `ENTER`
+= next scene, live undo/reset; NuVJ: crossfader decides, wheels BEND /
+SCRATCH / FX.
 - **Show:** outputs, mapping (keystone, mesh warp, edge blend), cameras, banks,
   audio and sync sources.
 - **Bank:** clips and loops, with analysis (colors, motion, mood such as

@@ -161,7 +161,7 @@ The **mood map** has two axes:
 - **Y = style:** organic / warm → synthetic / cold.
 
 There are 16 built-in moods, placed on a 4 × 4 grid (rows = energy, columns =
-style). These are the pads in `SHIFT + PATTERN`. The 12 themes from design
+style). These are the pads in `SHIFT + SCENE`. The 12 themes from design
 spec v1 are kept, and four are added:
 
 | Energy ↓ / Style → | Organic, warm | Soft | Graphic | Synthetic, cold |
@@ -203,6 +203,11 @@ so that the whole range looks good. Hold `SHIFT` and touch a macro knob to see
 and trim what it drives.
 
 ## 6. Scenes, banks and triggering back and forth
+
+> **v4:** firing follows the focus (scenes land where your focus is),
+> `ENTER` = the next scene live, and a scene also carries a kit, 4 macros
+> and variations. See [`perform.md`](perform.md) §2. The gestures below are
+> the PREP-focus case.
 
 - **Banks** have 16 scenes each. `Master < >` changes the bank. A song can
   bring its own bank.

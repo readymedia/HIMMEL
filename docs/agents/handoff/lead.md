@@ -9,6 +9,7 @@ The v2 plan and design are written: `docs/roadmap.md`, `docs/design/*`, `docs/de
 2. Phase 0: merge the branches in the order in `docs/roadmap.md`, then delete them.
 3. Write `docs/interfaces/command-protocol.md` and `preview-block.md` with ENGINE (phase 1).
 4. Spawn the track agents for phase 1 (ENGINE, CONTROL), phase 3 (MEDIA) and phase 5 (SHOW) using the template in `docs/agents/README.md` §5.
+- **0.1 "Playback" is scoped in `docs/build-v1.md` (M0–M12).** Every track takes its milestone from there; `docs/design/perform.md` (v4) decides behaviour where docs disagree.
 
 ## GUESSES
 - GUESS: the timeline weeks in `docs/roadmap.md` §3 are estimates (medium confidence); re-plan after phase 1.

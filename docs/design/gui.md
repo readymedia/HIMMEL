@@ -1,6 +1,9 @@
-# GUI specification (v3: the GUI mimics the main weapon)
+# GUI specification (v3 + v4 perform flow: the GUI mimics the main weapon)
 
 Status: proposal for the owner, 2026-11-11.
+- **v4** (the basis for 0.1): the instrument flow in [`perform.md`](perform.md)
+  (focus, kits and pad targets, songs and scenes, live undo, the NuVJ wheels)
+  and the v4 artboards (§17). Where v3 text differs, v4 wins.
 - **v3** replaces v2 for Perform, the weapon select and the adaptive layout,
   after the owner's feedback: *mimic the controller, do not mirror it; the
   pads are clip thumbnails; prepare vs program must be crystal clear; one
@@ -27,8 +30,10 @@ Status: proposal for the owner, 2026-11-11.
    audience cannot see it), red = live (on the outputs), as in a TV gallery.
    - On the MK2, the left screen + knobs 1–4 + group row A–D are PREVIEW;
      the right screen + knobs 5–8 + group row E–H are PROGRAM.
-   - Working directly on PROGRAM shows a red **LIVE EDIT** bar, so you always
-     know.
+   - **Focus** (v4): the last group pressed. PREP focus = green frame,
+     PLAY focus (playing PROGRAM directly) = red frame, so you always know
+     where the pads and knobs 1–4 land. Knobs 5–8 are always PROGRAM
+     (`perform.md` §1).
 3. **Dark only.** The background is near-black (`#0B0D10`), the panels are
    slightly lighter, and colour is reserved for state (live, preview, mood,
    layers) and for the content itself. A GUI brightness setting dims
@@ -231,7 +236,7 @@ interactive artboard "Perform · MAIN = MK2".
   - the bottom row = PROGRAM layers E–H (red labels);
   - each card shows the layer's thumbnail;
   - the selected card is outlined white. Selecting a bottom-row card starts
-    **LIVE EDIT** (the red bar).
+    **PLAY focus** (the red frame).
 - **Transport, 2 × 4, as on the MK2:**
 
   | | | | |
@@ -526,7 +531,7 @@ Reached from step 3, or OUTPUTS › Mapping. **Screens skip this entirely.**
 **v3** (page "v3 · Instrument" on the canvas; copies in
 `docs/gui-mockups/v3/`):
 1. Perform · MAIN = MK2 (+ Block, LUMI). It is **interactive**: click group
-   A or F to switch between preparing and LIVE EDIT, and click the pad-mode
+   A or F to switch between PREP and PLAY focus, and click the pad-mode
    tabs.
 2. Knob tiles: what turning will do.
 3. Choose your weapon: main + side arms (interactive).
@@ -556,7 +561,7 @@ Spec: [`clips-and-playback.md`](clips-and-playback.md). The editor is a
 **drawer under the monitors** that opens when a layer is selected and the
 CLIP knob page is shown (or on double-click on a clip pad). It edits the
 clip **on the selected layer**: on PREVIEW by default, on PROGRAM only in
-LIVE EDIT (the drawer then has the red bar). It never covers the monitors.
+PLAY focus (the drawer then has the red frame). It never covers the monitors.
 
 **Row 1: the timeline.**
 - A filmstrip of the clip (thumbnails every few seconds) with the waveform-like
@@ -599,3 +604,58 @@ playhead square lit white, the in / out range in the clip's colour, and a
 PREVIEW and open it here), **A / B** (hold: show the state before this edit),
 and **AUDITION** in the library (the hovered clip plays in PREVIEW with
 variant A, nothing is loaded).
+
+## 17. Perform v4: the instrument layout (basis for 0.1)
+
+Spec of behaviour: [`perform.md`](perform.md). Artboards: page "v4 ·
+Playback 0.1" on the design canvas, copies in `docs/gui-mockups/v4/`.
+
+**MK2 as main (V4PerformMK2):**
+- **Top bar:** HIMMEL · the **song strip** (song name, its scenes as small
+  numbered chips: the live one red, the one in PREVIEW green, the next GO
+  outlined) · BPM with a beat dot · GRID division · the clock.
+- **The two monitors** (PREVIEW left, PROGRAM right) with the **focus frame**:
+  the side with the focus has a thick green or red frame and a label
+  ("PREP · pads land here" / "PLAY · pads land here"). The monitors keep the
+  canvas shape (§4.2).
+- **Under PREVIEW:** knob tiles 1–4 of the current page for the focus side;
+  the four preview layer strips (A–D).
+- **Under PROGRAM:** the **four macro tiles** of the live scene (knobs 5–8),
+  always there; the four program layer strips (E–H), each with a small
+  **↺ reset** chip (hold `ERASE` + group).
+- **The TAKE column** between them: the wheel as a ring that fills with the
+  TAKE %, `PLAY` = auto TAKE, `RESTART` = CUT, and `ENTER` = GO with the next
+  scene's name.
+- **The pads (right, 4 × 4)**: in CLIPS mode each tile is a thumbnail with
+  its **target tag** (`SEL`, `L1`–`L4`, `ALL`, `HIT`) and its trigger style
+  icon; holding a pad lights the layer strips it will land on, in the focus
+  colour. In SLICE mode the tiles are the slices; in FX PADS the effect names
+  with a PRESS bar; in LOOKS the song's scenes with their thumbnails.
+- **Pressure is visible:** a held pad grows a ring; the PRESS bar on the tile
+  fills.
+- **Undo strip** (small, under the pads): the last 5 changes as chips
+  ("L2 speed ×1.5", "Kaleido on"); a click undoes back to that point.
+- **Side arms:** docked cards at the bottom right (Block mode, LUMI, Ohm64).
+
+**NuVJ as main (V4PerformNuVJ):**
+- Laid out like the NuVJ: **deck A | master | deck B**, the real crossfader
+  at the bottom centre.
+- The deck the crossfader favours has the red frame (PROGRAM), the other the
+  green frame (PREVIEW); the frames move as the fader moves past the middle.
+- Each deck: its monitor; a **wheel ring** showing the wheel mode (BEND /
+  SCRATCH / FX WHEEL) and a playhead needle that moves with the clip; the
+  clip's in / out arc on the ring; the 3 × 3 pad thumbnails; BANK, PMTR 1 / 2
+  tiles; LATCH / AUTO / SYNC; the SPEED fader.
+- Master column: PROGRAM monitor, the 8-character LCD mirror, master FX tiles,
+  `INSTA A / B / BLACK` with the AUTO FADE speed, FADER MODE, FADER START.
+
+**Build › Song and scene editor (V4SceneKit):**
+- Left: the setlist and the song's scenes (drag to reorder; dice + keep;
+  "Fill song from mood").
+- Centre: the selected scene: its 4 layers, its 4 macros (pick from a list,
+  set limits by dragging), its transition, its variations (3a, 3b, …).
+- Right: **the kit editor** = the 16 pads (or the NuVJ 3 × 3): drag a clip,
+  an effect, a scene or an action onto a pad; set its target, trigger style
+  and PRESS; "Fill kit" proposes the default layout (`perform.md` §4.2).
+- Every change can be tried at once on PREVIEW ("Rehearse": load the scene
+  to PREVIEW with its kit active on the weapon).

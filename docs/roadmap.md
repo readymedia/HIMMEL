@@ -18,6 +18,15 @@ Lightpad:
 All of this at the lowest latency we can measure, from a 4-step wizard start,
 and without one dropped frame in an 8-hour soak.
 
+## 0. The first release: 0.1 "Playback"
+
+**Build from [`build-v1.md`](build-v1.md).** It picks the parts of the phases
+below that make 0.1 (robust, fun live playback from the MK2 + Block, the NuVJ
+if its driver checks out) and puts them in milestone order M0–M12 with a
+"done when" for each. How a show is played is in
+[`design/perform.md`](design/perform.md). The phases below stay the long
+plan.
+
 ## 1. What we have to build on
 
 | Exists | Where | Becomes |
@@ -303,4 +312,4 @@ a file** (HAP / ProRes, a worker, never the render loop).
 
 D42 mapping changes · D43 GUI technology · D44 Lightpad modes · D45 the 16
 moods · D46 layers per deck · D47 merge now · D61–D67 clip transport and
-pads.
+pads · D68–D76 perform flow and the 0.1 scope.

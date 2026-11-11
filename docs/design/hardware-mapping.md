@@ -6,6 +6,11 @@ it is laid out like the controller in front of you, so you know where to
 press and what will happen.** It is not a mirror of the device. Control names
 are the names in `weapons/*.weapon.json`.
 
+> **v4 note (2026-11-11):** how a show is *played* (focus, kits and pad
+> targets, songs and scenes, live undo, the NuVJ wheels) is decided in
+> [`perform.md`](perform.md). This file gives the button-level mapping and
+> follows it.
+
 ## 1. Main weapon and side arms
 
 | Role | What it does | Weapons |
@@ -28,7 +33,7 @@ Rules for side arms:
 The MK2 has two screens with four knobs under each. Himmel uses that shape:
 
 - **Left screen = PREVIEW** (green): you prepare here, the audience cannot
-  see it. Knobs 1–4 under it change the preview.
+  see it. Knobs 1–4 under it act on the focus (normally the preview).
 - **Right screen = PROGRAM** (red): this is what is live. Knobs 5–8 under it
   change what is live.
 - **Group buttons, top row A–D = the PREVIEW layers 1–4; bottom row E–H = the
@@ -36,9 +41,12 @@ The MK2 has two screens with four knobs under each. Himmel uses that shape:
   two stacks swap, and the rows keep meaning prepare / live. (The engine
   still has decks A / B; the MK2 shows them as roles. The NuVJ shows them as
   fixed decks, as on its panel.)
-- **Choosing a group in the bottom row means you play PROGRAM directly.** The
-  GUI then shows a red "LIVE EDIT" bar, and the MK2 screen inverts its top
-  line. Choose a top-row group to go back to preparing.
+- **Focus (v4, `perform.md` §1):** the last group pressed sets the focus.
+  A–D = PREP focus; E–H = **PLAY focus** (you play PROGRAM directly; the GUI
+  frame turns red and the right screen's title inverts). Pads, knobs 1–4 and
+  the CLIP / LAYER / FX pages act on the focus; **knobs 5–8 always act on
+  PROGRAM** (the scene's macros). Double-tap a group = the same layer on the
+  other side.
 
 ## 3. MK2 as the main weapon (PERFORM)
 
@@ -113,7 +121,9 @@ thumbnails** on the right.
 |---|---|---|---|
 | **CLIPS** (`PATTERN`, **default**) | 16 clips of the selected layer's bank; `Master ◀ ▶` = bank | Load into the selected layer (A–D = PREVIEW at once; E–H = PROGRAM, on the beat); velocity = punch-in; the clip's trigger style applies (normal / toggle / piano / legato) | **PRESS:** the clip's pressure target (e.g. strobe rate + brightness, blur size) |
 | **SLICE** (`PATTERN` again; LED blinks) | 16 cue points / slices of the selected layer's clip | Jump (on GRID on PROGRAM); hold = loop the slice; hold A + tap B = in / out; two held = ping-pong | **Harder = shorter beat loop** (1 → 1/16 beat) |
-| **LOOKS** (`SCENE`) | 16 saved looks | Into PREVIEW; `SHIFT` + tap = straight to PROGRAM; hold = morph | Morph speed |
+| **LOOKS** (`SCENE`) | The current song's scenes (or a scene bank of 16 without a setlist) | **Lands where the focus is:** PREP = into PREVIEW (with its kit), PLAY = live on the beat; `SHIFT` + tap = the other way; hold = morph | Morph speed |
+| **KIT / BANK** (`SHIFT` + `PATTERN`) | Switches what CLIPS shows: the scene's kit (mixed targets) or the bank | — | — |
+| **MOODS** (`SHIFT` + `SCENE`) | The 16 moods on the 4 × 4 map | Set the mood (steers the dice) | — |
 | **FX PADS** (`PAD MODE`) | 16 momentary effects on PROGRAM | On while held; velocity = punch + variation (soft = subtle, hard = extreme); `SHIFT` + pad = latch | The effect's PRESS target |
 | **OUTPUTS** (`NAVIGATE`) | Pads 1–6 = outputs; Top buttons = MAIN / A / B / OWN / TABLE | Choose the output | — |
 
@@ -122,8 +132,12 @@ without firing, `SOLO` = peek (hold: PREVIEW shows only the selected layer,
 and the output thumbnails show "next"), `MUTE` = mute the layer;
 `SHIFT + MUTE` = **PANIC** (safe scene).
 
-**Pads on PREVIEW and PROGRAM** (full spec: `clips-and-playback.md` §8):
-- The pads follow the selected group: A–D = PREVIEW, E–H = PROGRAM (LIVE EDIT).
+**Pads on PREVIEW and PROGRAM** (full spec: `clips-and-playback.md` §8,
+`perform.md` §4):
+- The pads follow the focus: A–D = PREVIEW, E–H = PROGRAM (PLAY focus).
+- **Pad targets:** hold a clip pad + a group button = that pad always plays on
+  that layer (A / E = layer 1 … D / H = layer 4); + `ALL` = all 4 layers;
+  + `SOLO` = HIT; + `SELECT` = back to the selected layer.
 - `SHIFT` + clip pad (PREVIEW selected) = load and TAKE that layer at once.
 - **`SOLO` held + clip pad = HIT:** the clip plays on top of PROGRAM (the hit
   layer) while held; velocity = start opacity, pressure = PRESS, release =
@@ -159,10 +173,10 @@ and the output thumbnails show "next"), `MUTE` = mute the layer;
 | `SHIFT` + `SELECT` + knob | Cycle that parameter's scope: slot / LOOK / GLOBAL / MOVE |
 | `Transport ◀ / ▶` | Dice back / forward (the same as knob 2); `SHIFT + ▶` = mutate; **`SHIFT + ◀ / ▶` held with knob 2 = rotate** (see below) |
 | `GRID` | On the beat (quantise) |
-| `REC` | Save the preview look to the next free LOOKS pad (`REC` + pad = that pad) |
-| `ERASE` | Undo (`SHIFT` = redo) |
+| `REC` | PREP focus: save the preview scene to the next free scene pad (`REC` + pad = that pad). **PLAY focus: save the live state as a new variation** of the scene (never overwrites) |
+| `ERASE` | Undo, 64 deep (`SHIFT` = redo); **hold `ERASE` + group = reset that layer to the scene as saved**; hold `ERASE` + `ALL` = reset the scene (glides 1 beat) |
 | `NOTE REPEAT` | Hold = beat stutter on PROGRAM; the wheel sets the rate while held |
-| `ENTER` | Next cue (GO) |
+| `ENTER` | **GO: the next scene of the song, live, on the beat**; `SHIFT` + `ENTER` = the next scene into PREVIEW |
 | Groups | Select a layer (`SHIFT` = mute); the LED = the layer's content colour, brighter in the selected row |
 
 ### 3.6 MK2 screens in PERFORM
@@ -175,7 +189,7 @@ and the output thumbnails show "next"), `MUTE` = mute the layer;
   - top line = the labels of Top 5–8;
   - the middle = what is live, BPM, the TAKE % while the wheel turns;
   - bottom line = knob 5–8.
-- In LIVE EDIT the top line of the right screen is inverted.
+- The title line of the focus side is inverted (left = PREP, right = PLAY).
 - The labels sit over the physical knobs (`kKnobX`).
 
 ### 3.7 Presets: dice, mutate, rotate
@@ -229,10 +243,16 @@ panel, and the tallies follow the real crossfader.
 | `LATCH` | Lock the deck's look (no dice) |
 | `AUTO` | Dice (long press = mutate) |
 | `SYNC` | On the beat |
-| Jog / `SCRATCH` | Scrub the clip; hold `SCRATCH` = grab (the playhead SCRATCH mode, `clips-and-playback.md` §2.5); `SHIFT` + jog = in / out |
+| `SCRATCH` | Cycles the wheel mode: off = **BEND**, lit = **SCRATCH**, blinking = **FX WHEEL** (the LCD names it) |
+| Wheel (jog) | BEND: nudge speed (scrub when paused); SCRATCH: drag the playhead like vinyl, let go = catch-up; FX WHEEL: sweep the deck's main effect, springs back. No touch sensor: "let go" = no movement for ~120 ms (`GUESS:`) |
+| Hold a pad + wheel | Trim that clip's in point (the loop length stays) |
+| Hold `SYNC` + wheel | The deck's beat-loop length; release `SYNC` = loop off with catch-up |
+| Hold `LATCH` + pad | Load scene 1–9 of the song into that deck |
+| SPEED fader | Clip speed (centre = ×1 or the synced speed) |
 | A / B channel faders | Deck levels |
 | Crossfader, `FADER MODE`, `AUTO FADE`, `FADER START` | The crossfader, its curve, TAKE time, start on fader move |
-| `INSTA A` / `INSTA B` / `INSTA BLACK` | Flash deck A / B / black |
+| `INSTA A` / `INSTA B` / `INSTA BLACK` | Fade to deck A / B / black at the `AUTO FADE` speed (INSTANT … SLOW) |
+| Tallies | **The crossfader decides:** the deck it favours is PROGRAM (red), the other PREVIEW (green); no focus on the NuVJ |
 | `FX LEVEL`, `MASTER FX` (encoder + button), `PMTR 1 / 2` (master) | Master FX: amount, choose, on / off, params |
 | `CONTRAST`, `BRIGHT` | Master contrast / brightness |
 | `BPM TAP` | Tap tempo |

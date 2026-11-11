@@ -16,6 +16,15 @@ Status values:
 
 | # | Decision | Status | Details |
 |---|---|---|---|
+| D68 | **Two flows, one surface:** PREP → TAKE and PLAY both always available; **focus = the side of the last group pressed**; pads, knobs 1–4 and pages act on the focus; **knobs 5–8 always PROGRAM**; "LIVE EDIT" renamed PLAY focus | DECIDED (owner: both flows, super flow); the mapping is PROPOSED | `design/perform.md` §1 |
+| D69 | **Scene = look + kit + 4 macros + transition + variations**; a song holds up to 16 scenes; LOOKS pads show the song's scenes | PROPOSED | `design/perform.md` §2 |
+| D70 | **Scenes land where the focus is**; `ENTER` = next scene live on the beat; `SHIFT` + `ENTER` = into PREVIEW | PROPOSED | `design/perform.md` §2 |
+| D71 | **Pad targets** SELECTED / LAYER 1–4 / ALL / FREE / HIT (hold pad + group); BANK kit vs SCENE kit (`SHIFT` + `PATTERN`); moods move to `SHIFT` + `SCENE` | DECIDED (owner: pads choose their layer, one or all); the mapping is PROPOSED | `design/perform.md` §4 |
+| D72 | **Live undo / reset:** `ERASE` = undo (64), hold `ERASE` + group = reset the layer to the scene; `REC` in PLAY focus = a new variation, never an overwrite | PROPOSED | `design/perform.md` §3 |
+| D73 | **NuVJ:** the crossfader decides PROGRAM (no focus); wheel modes BEND / SCRATCH / FX WHEEL on `SCRATCH`; hold pad + wheel = trim; hold `SYNC` + wheel = beat loop; `INSTA` = auto fade | PROPOSED | `design/perform.md` §5.2 |
+| D74 | Hits and slices in PLAY focus are instant; clip and scene launches wait for `GRID` | PROPOSED | `design/perform.md` §4.3 |
+| D75 | The start focus is a show setting (PREP default) | PROPOSED | `design/perform.md` §1 |
+| D76 | **0.1 "Playback" scope and milestones M0–M12** | PROPOSED | `build-v1.md` |
 | D61 | **Every clip is an instrument:** full clip transport (direction; LOOP, PING-PONG, ONCE hold / eject / next, RANDOM, CHOP, STEP, SCRATCH; in / out + inner loop; 16 cue points; beat loop with catch-up; FREE / BPM / TIMECODE time base) | DECIDED (owner asked for it); the details are PROPOSED | `design/clips-and-playback.md` §2 |
 | D62 | **Trigger styles** NORMAL / TOGGLE / PIANO / LEGATO, restart / continue, fade in / out per clip, beat snap only on PROGRAM, clip target own / free, HIT layer, autopilot per layer | PROPOSED | `design/clips-and-playback.md` §3 |
 | D63 | **Effect levels** clip / layer / deck / master / output, and **parameter scopes** SLOT / LOOK / GLOBAL / MOVE; clip variants A–D; all edits tried on PREVIEW first | DECIDED (owner: per clip, global or per scene); the model is PROPOSED | `design/clips-and-playback.md` §4 |

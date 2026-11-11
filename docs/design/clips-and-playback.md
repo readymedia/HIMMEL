@@ -246,7 +246,7 @@ The MOTION lock (Top 4) also holds the transport (play mode, speed, in / out).
 ### 4.5 Test on PREVIEW (the rule)
 
 - Every edit, dice, rotate and clip load happens on **PREVIEW** unless a
-  PROGRAM layer is selected (LIVE EDIT, red bar).
+  PROGRAM layer is selected (PLAY focus, red frame).
 - **Try a program look:** `DUPLICATE` + a PROGRAM group copies that layer
   (or `DUPLICATE` + `ALL` the whole look) into PREVIEW. Tweak, then TAKE.
 - **Audition a clip:** in LIBRARY, the wheel scrolls and the PREVIEW monitor
@@ -300,7 +300,7 @@ this on 16 keys. So the pads do more than trigger:
 ### 8.1 Where pads act: PREVIEW and PROGRAM
 
 - **The pads follow the selected group.** A–D selected → pads act on PREVIEW.
-  E–H selected (LIVE EDIT) → pads act on PROGRAM (on the beat when GRID is
+  E–H selected (PLAY focus) → pads act on PROGRAM (on the beat when GRID is
   on).
 - **`SHIFT` + pad** (CLIPS mode, a PREVIEW group selected) = load into PREVIEW
   *and* TAKE that layer at once: "fire it live" without leaving prep.

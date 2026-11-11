@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Himmel v4 – Perform with the MK2 (0.1 Playback)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0D10}
+.mono{font-family:'JetBrains Mono',monospace}
+.lbl{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#9AA4B2;font-weight:800}
+.hw{font-family:'JetBrains Mono',monospace;font-size:10px;color:#9AA4B2;border:1px solid #2A313A;border-radius:4px;padding:1px 5px}
+button{cursor:pointer;font-family:Inter}
+</style>
+</helmet>
+<div style="min-height:900px;width:100%;box-sizing:border-box;background:#0B0D10;color:#E8ECF1;font-family:Inter,system-ui,sans-serif;display:flex;flex-direction:column;gap:10px;padding:14px 20px">
+
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+<b style="letter-spacing:.2em">HIMMEL</b>
+<span style="font-size:12px;color:#9AA4B2">SONG 3/9</span><b style="font-size:15px">Nightdrive</b>
+<div style="display:flex;gap:5px"><sc-for list="{{ scenes }}" as="c" hint-placeholder-count="6"><span style="{{ c.st }}">{{ c.t }}</span></sc-for></div>
+<span style="font-size:12px;color:#9AA4B2">next GO: <b style="color:#E8ECF1">4 Build</b> <span class="hw">ENTER</span></span>
+<span style="flex:1"></span>
+<span style="display:flex;align-items:center;gap:6px;font-weight:800"><span style="width:10px;height:10px;border-radius:50%;background:#B78CFF;box-shadow:0 0 8px #B78CFF"></span>126.0 BPM</span>
+<span class="hw">GRID 1 BAR</span>
+<span style="font-size:12px;font-weight:900;padding:4px 10px;border-radius:12px;background:{{ focusCol }};color:#0B0D10">{{ focusName }}</span>
+</div>
+
+<div style="display:grid;grid-template-columns:minmax(0,1fr) 128px minmax(0,1fr) 372px;gap:12px;flex:1">
+
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;justify-content:space-between;align-items:center"><span class="lbl" style="color:#30D158">PREVIEW · scene 3 Verse B</span><span style="font-size:11px;font-weight:800;color:#30D158">{{ prepTag }}</span></div>
+<div style="{{ monPrev }}"><div style="position:absolute;inset:0;background:radial-gradient(circle at 30% 60%,#30D15855,transparent 50%),linear-gradient(120deg,#0b2a3a,#145a6e 50%,#2b8a8a)"></div><span style="position:absolute;left:10px;bottom:8px;font:800 11px Inter;background:rgba(0,0,0,.55);padding:2px 7px;border-radius:4px">3 VERSE B · off air</span></div>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+<sc-for list="{{ knobsL }}" as="k" hint-placeholder-count="4"><div style="background:#14181D;border:1px solid #2A313A;border-radius:8px;padding:7px"><div class="lbl">{{ k.n }}</div><div style="font-weight:800;font-size:14px;margin-top:3px">{{ k.v }}</div><div style="height:4px;border-radius:2px;background:#1B2027;margin-top:5px;overflow:hidden"><div style="{{ k.bar }}"></div></div></div></sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:5px">
+<sc-for list="{{ prevLayers }}" as="l" hint-placeholder-count="4"><button onClick="{{ l.on }}" style="{{ l.st }}"><span class="hw">{{ l.g }}</span><span style="width:46px;height:26px;border-radius:4px;{{ l.thumb }}"></span><b style="font-size:13px">{{ l.n }}</b><span style="font-size:11px;color:#9AA4B2">{{ l.fx }}</span><span style="flex:1"></span><span style="font-size:11px;font-weight:800;color:{{ l.hcol }}">{{ l.hint }}</span></button></sc-for>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;align-items:center;gap:10px;padding-top:24px">
+<span class="lbl">TAKE</span>
+<div style="width:104px;height:104px;border-radius:50%;background:conic-gradient(#FF3B30 0 38%,#1B2027 38% 100%);display:flex;align-items:center;justify-content:center"><div style="width:80px;height:80px;border-radius:50%;background:#0B0D10;display:flex;flex-direction:column;align-items:center;justify-content:center"><b style="font-size:20px">38%</b><span style="font-size:10px;color:#9AA4B2">wheel</span></div></div>
+<span class="hw">PUSH / PLAY = auto</span>
+<span class="hw">RESTART = CUT</span>
+<div style="margin-top:8px;text-align:center;background:#14181D;border:1px solid #2A313A;border-radius:8px;padding:8px;width:100%;box-sizing:border-box"><div class="lbl">GO</div><b style="font-size:13px">4 Build</b><div style="font-size:10px;color:#9AA4B2;margin-top:2px">live on the bar</div><span class="hw">ENTER</span></div>
+<div style="text-align:center;font-size:10px;color:#9AA4B2;line-height:1.4">Double-tap a group = same layer, other side</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;justify-content:space-between;align-items:center"><span class="lbl" style="color:#FF6B61">PROGRAM · scene 2 Verse A</span><span style="font-size:11px;font-weight:800;color:#FF6B61">{{ playTag }}</span></div>
+<div style="{{ monProg }}"><div style="position:absolute;inset:0;background:radial-gradient(circle at 65% 40%,#FF2E8877,transparent 55%),linear-gradient(120deg,#1d0f3a,#5a1e7a 55%,#ff2e88)"></div><span style="position:absolute;left:10px;bottom:8px;font:800 11px Inter;background:#FF3B30;padding:2px 7px;border-radius:4px">LIVE</span>
+<sc-if value="{{ hitOn }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;inset:18% 30%;border:2px dashed #fff;border-radius:6px;display:flex;align-items:center;justify-content:center;font:900 13px Inter;background:rgba(255,255,255,.12)">HIT</span></sc-if>
+</div>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+<sc-for list="{{ macros }}" as="k" hint-placeholder-count="4"><div style="background:#1A1214;border:1px solid #4A2326;border-radius:8px;padding:7px"><div class="lbl" style="color:#FF9A93">{{ k.n }}</div><div style="font-weight:800;font-size:14px;margin-top:3px">{{ k.v }}</div><div style="height:4px;border-radius:2px;background:#2A1A1C;margin-top:5px;overflow:hidden"><div style="{{ k.bar }}"></div></div></div></sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:5px">
+<div style="{{ hitStrip }}"><span class="hw">SOLO+PAD</span><b style="font-size:12px">HIT layer</b><span style="font-size:11px;color:#9AA4B2">momentary, add blend, never saved</span></div>
+<sc-for list="{{ progLayers }}" as="l" hint-placeholder-count="4"><button onClick="{{ l.on }}" style="{{ l.st }}"><span class="hw">{{ l.g }}</span><span style="width:46px;height:26px;border-radius:4px;{{ l.thumb }}"></span><b style="font-size:13px">{{ l.n }}</b><span style="font-size:11px;color:#9AA4B2">{{ l.fx }}</span><span style="flex:1"></span><span style="font-size:11px;font-weight:800;color:{{ l.hcol }}">{{ l.hint }}</span><span title="hold ERASE + group" style="font-size:11px;color:#9AA4B2;border:1px solid #2A313A;border-radius:4px;padding:1px 5px">↺ reset</span></button></sc-for>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:8px;background:#12161C;border:1px solid #2A313A;border-radius:12px;padding:10px">
+<div style="display:flex;gap:5px;flex-wrap:wrap"><sc-for list="{{ tabs }}" as="t" hint-placeholder-count="5"><button onClick="{{ t.on }}" style="{{ t.st }}">{{ t.t }}</button></sc-for></div>
+<div style="font-size:11px;color:#C9D1DB;min-height:30px">{{ modeNote }}</div>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+<sc-for list="{{ pads }}" as="p" hint-placeholder-count="16"><button onClick="{{ p.on }}" style="{{ p.st }}"><span style="{{ p.thumb }}"></span><span style="position:absolute;left:4px;bottom:3px;font:800 10px Inter;text-shadow:0 1px 2px #000">{{ p.n }}</span><span style="{{ p.tagst }}">{{ p.tag }}</span><span style="position:absolute;left:4px;top:3px;font:700 9px 'JetBrains Mono';color:#fff;opacity:.75">{{ p.num }}</span></button></sc-for>
+</div>
+<div style="font-size:11px;color:#9AA4B2">{{ holdNote }}</div>
+<div style="border-top:1px solid #2A313A;padding-top:8px;display:flex;flex-direction:column;gap:5px">
+<span class="lbl">Undo · ERASE (64 deep)</span>
+<div style="display:flex;gap:4px;flex-wrap:wrap"><span class="hw">L2 speed ×1.5</span><span class="hw">Kaleido on</span><span class="hw">macro COLOUR 0.7</span><span class="hw">clip → L1</span></div>
+<span style="font-size:11px;color:#9AA4B2">REC in PLAY focus = keep it as variation 2b (never overwrites)</span>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+constructor(props) { super(props); this.state = { focus: 'prep', sel: 1, mode: 'CLIPS', held: -1 }; }
+renderVals() {
+const st = this.state, prep = st.focus === 'prep';
+const G = '#30D158', R = '#FF3B30', fc = prep ? G : R;
+const sceneNames = ['1 Intro', '2 Verse A', '3 Verse B', '4 Build', '5 Drop', '6 Outro'];
+const scenes = sceneNames.map((n, i) => ({ t: n, st: 'font-size:11px;font-weight:800;padding:3px 8px;border-radius:10px;' + (i === 1 ? 'background:#FF3B30;color:#0B0D10' : i === 2 ? 'background:#30D158;color:#0B0D10' : i === 3 ? 'border:1px dashed #E8ECF1;color:#E8ECF1' : 'background:#1B2027;color:#9AA4B2') }));
+const mon = on => 'position:relative;aspect-ratio:16/9;border-radius:8px;overflow:hidden;box-sizing:border-box;border:' + (on ? '4px solid ' + fc : '1px solid #2A313A');
+// pads: kit layout, hardware rows top to bottom = pads 13-16, 9-12, 5-8, 1-4
+const kit = {
+ 13: ['Ocean', 'L1', 'linear-gradient(135deg,#0b2a3a,#2b8a8a)'], 14: ['Ink', 'L1', 'linear-gradient(135deg,#111,#444)'], 15: ['Neon tunnel', 'L1', 'linear-gradient(135deg,#1d0f3a,#ff2e88)'], 16: ['Sunrise', 'L1', 'linear-gradient(135deg,#3a1a0a,#ff9f1c)'],
+ 9: ['Particles α', 'L3', 'radial-gradient(circle,#fff4,#0000 60%),#101820'], 10: ['Logo α', 'L3', 'linear-gradient(135deg,#222,#B78CFF)'], 11: ['Lines', 'L3', 'repeating-linear-gradient(90deg,#2EC5FF 0 3px,#0B0D10 3px 12px)'], 12: ['Same ×4', 'ALL', 'linear-gradient(135deg,#0d3b66,#1aa3a3)'],
+ 5: ['Strobe', 'FX', '#2a2a2a'], 6: ['RGB split', 'FX', '#2a1a2a'], 7: ['Zoom pulse', 'FX', '#1a2a2a'], 8: ['Freeze', 'FX', '#1a1a2a'],
+ 1: ['Fire hit', 'HIT', 'linear-gradient(135deg,#3a0a0a,#ff5a1c)'], 2: ['Flash hit', 'HIT', 'linear-gradient(135deg,#444,#fff)'], 3: ['Black', 'ACT', '#000'], 4: ['Next scene', 'ACT', '#14181D'] };
+const order = [13, 14, 15, 16, 9, 10, 11, 12, 5, 6, 7, 8, 1, 2, 3, 4];
+const tagCol = { L1: '#2EC5FF', L3: '#2EC5FF', ALL: '#B78CFF', FX: '#FF9F1C', HIT: '#FF3B30', ACT: '#9AA4B2', SEL: '#E8ECF1' };
+const pads = order.map(n => {
+  let name, tag, bg;
+  if (st.mode === 'CLIPS') { [name, tag, bg] = kit[n]; }
+  else if (st.mode === 'SLICE') { name = 'slice ' + n; tag = n === 6 ? 'PLAY' : ''; bg = 'linear-gradient(135deg,hsl(' + (260 + n * 6) + ',60%,' + (18 + n) + '%),hsl(' + (300 + n * 4) + ',70%,40%))'; }
+  else if (st.mode === 'LOOKS') { name = n <= 6 ? sceneNames[n - 1] : (n <= 9 ? 'var ' + n : ''); tag = n === 2 ? 'LIVE' : n === 3 ? 'PREV' : ''; bg = n <= 9 ? 'linear-gradient(135deg,hsl(' + (n * 47) + ',50%,20%),hsl(' + (n * 47 + 40) + ',70%,45%))' : '#14181D'; }
+  else if (st.mode === 'FX') { const fx = ['Strobe', 'Flash', 'Stutter', 'Freeze', 'Invert', 'RGB split', 'Zoom pulse', 'Kaleido', 'Mirror', 'Shake', 'Tunnel', 'Blur', 'Glitch', 'Echo', 'Black', 'White']; name = fx[n - 1]; tag = 'PRESS'; bg = '#1B2027'; }
+  else { name = n <= 3 ? 'OUT ' + n : ''; tag = ''; bg = '#14181D'; }
+  const held = st.held === n;
+  const tc = st.mode === 'CLIPS' ? tagCol[tag] : (tag === 'LIVE' ? R : tag === 'PREV' ? G : '#E8ECF1');
+  return { n: name, num: String(n), tag: tag,
+    on: () => this.setState({ held: st.held === n ? -1 : n }),
+    st: 'position:relative;height:66px;border-radius:7px;overflow:hidden;padding:0;border:' + (held ? '2px solid #fff' : '1px solid #2A313A') + ';box-shadow:' + (held ? '0 0 0 4px ' + fc + '88' : 'none') + ';background:#0B0D10;color:#E8ECF1;text-align:left',
+    thumb: 'position:absolute;inset:0;background:' + bg + ';opacity:' + (held ? '1' : '.85'),
+    tagst: 'position:absolute;right:3px;top:3px;font:800 9px Inter;padding:1px 4px;border-radius:3px;background:#0B0D10cc;color:' + tc };
+});
+// where the held pad lands
+let land = [], hitOn = false, holdNote = 'Click a pad to hold it: the layers it lands on light up in the focus colour.';
+if (st.held > 0 && st.mode === 'CLIPS') {
+  const [name, tag] = kit[st.held];
+  if (tag === 'L1') land = [0]; else if (tag === 'L3') land = [2]; else if (tag === 'ALL') land = [0, 1, 2, 3];
+  else if (tag === 'HIT') hitOn = true;
+  const where = tag === 'HIT' ? 'the HIT layer over PROGRAM (from either focus)' : tag === 'FX' ? 'the ' + (prep ? 'PREVIEW' : 'PROGRAM') + ' deck as an effect hit; pressure = its PRESS target' : tag === 'ACT' ? 'an action' : (tag === 'ALL' ? 'all 4 layers' : 'layer ' + tag.slice(1)) + ' of ' + (prep ? 'PREVIEW (at once)' : 'PROGRAM (on the bar)');
+  holdNote = 'Holding pad ' + st.held + ' "' + name + '" → ' + where + '. Hold pad + group button = change its target.';
+}
+const lay = (side) => {
+  const names = side === 'p' ? [['Ocean', 'Kaleido 6'], ['Ink drops', 'Tint'], ['Logo α', '—'], ['—', '']] : [['Neon tunnel', 'Strobe · RGB'], ['Lines', 'Mirror'], ['Particles α', 'Glow'], ['—', '']];
+  const thumbs = side === 'p' ? ['#145a6e', '#333', '#B78CFF', '#14181D'] : ['#ff2e88', '#2EC5FF', '#888', '#14181D'];
+  const mine = (side === 'p') === prep;
+  return names.map((x, i) => {
+    const isSel = mine && st.sel === i, lit = mine && land.indexOf(i) >= 0;
+    const col = side === 'p' ? G : R;
+    return { g: (side === 'p' ? 'ABCD' : 'EFGH')[i], n: x[0], fx: x[1], thumb: 'background:' + thumbs[i],
+      hint: lit ? '← lands here' : isSel ? 'selected' : '', hcol: col,
+      on: () => this.setState({ focus: side === 'p' ? 'prep' : 'play', sel: i, held: -1 }),
+      st: 'display:flex;align-items:center;gap:8px;height:38px;padding:0 8px;border-radius:7px;color:#E8ECF1;text-align:left;background:' + (lit ? col + '33' : '#14181D') + ';border:' + (isSel ? '2px solid ' + col : '1px solid #2A313A') };
+  });
+};
+const page = st.mode === 'SLICE' ? [['IN', 'slice 3', 20], ['OUT', 'slice 10', 62], ['MODE', 'CHOP', 50], ['BEATS', '8', 40]] : [['SCROLL', 'Ocean', 30], ['DICE', 'roll 12', 50], ['FX AMT', '0.62', 62], ['SPEED', '×1', 50]];
+const knobsL = page.map(k => ({ n: k[0] + (prep ? '' : ' · LIVE'), v: k[1], bar: 'height:100%;width:' + k[2] + '%;background:' + fc }));
+const macros = [['INTENSITY', '0.71', 71], ['COLOUR', 'magenta', 55], ['SPACE', 'tunnel 0.3', 65], ['MASTER FX', 'glow 0.4', 40]].map(k => ({ n: k[0], v: k[1], bar: 'height:100%;width:' + k[2] + '%;background:#FF3B30' }));
+const tabDefs = [['CLIPS', 'CLIPS · kit', 'PATTERN'], ['SLICE', 'SLICE', 'PATTERN ×2'], ['LOOKS', 'SCENES', 'SCENE'], ['FX', 'FX PADS', 'PAD MODE'], ['OUT', 'OUTPUTS', 'NAVIGATE']];
+const tabs = tabDefs.map(t => ({ t: t[1], on: () => this.setState({ mode: t[0], held: -1 }), st: 'height:26px;padding:0 8px;border-radius:6px;font-weight:800;font-size:11px;border:1px solid #2A313A;color:' + (st.mode === t[0] ? '#0B0D10' : '#E8ECF1') + ';background:' + (st.mode === t[0] ? fc : '#1B2027') }));
+const notes = {
+ CLIPS: 'Scene kit of "3 Verse B" (SHIFT+PATTERN = bank instead). Tags = where each pad plays: L1/L3 layer, ALL = all 4 layers, FX = effect hit, HIT = over PROGRAM, ACT = action.',
+ SLICE: 'The selected clip in 16 slices. Tap = jump, hold = loop it, press harder = shorter beat loop, hold A + tap B = in / out.',
+ LOOKS: 'The song\'s scenes. They land where your focus is: PREP = into PREVIEW with its kit, PLAY = live on the bar. SHIFT = the other way.',
+ FX: 'Momentary effects on PROGRAM. Velocity = punch + variation, pressure = PRESS, SHIFT + pad = latch.',
+ OUT: 'Pads 1–3 = outputs; Top buttons = MAIN / A / B / OWN / TABLE.' };
+return {
+scenes: scenes, focusCol: fc, focusName: prep ? 'PREP FOCUS · pads → PREVIEW' : 'PLAY FOCUS · pads → PROGRAM',
+prepTag: prep ? 'FOCUS · pads + knobs 1–4 land here' : 'click a group A–D to prepare', playTag: prep ? 'knobs 5–8 always live · click E–H to play' : 'FOCUS · pads + knobs 1–4 land here',
+monPrev: mon(prep), monProg: mon(!prep), hitOn: hitOn,
+hitStrip: 'display:flex;align-items:center;gap:8px;height:28px;padding:0 8px;border-radius:7px;border:1px dashed ' + (hitOn ? '#fff' : '#4A2326') + ';background:' + (hitOn ? '#FF3B3044' : 'transparent'),
+knobsL: knobsL, macros: macros, prevLayers: lay('p'), progLayers: lay('g'),
+tabs: tabs, modeNote: notes[st.mode], pads: pads, holdNote: st.mode === 'CLIPS' ? holdNote : 'Pads follow the focus: ' + (prep ? 'PREVIEW, at once.' : 'PROGRAM; slices and hits instant, clips and scenes on the bar.')
+};
+}
+}
+</script>
+</body>
+</html>
