@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Himmel VJ table – mockup</title>
+<!--
+  Mockup for docs/vj-table-design.md. Content and layout only, not production
+  code (the real table view will be the live view / Dear ImGui). Pictures are
+  fake (2D canvas) and GPU times are estimates.
+-->
+<style>
+:root{--bg:#0e0e10;--line:#2a2a2e;--text:#dcdce0;--dim:#8a8a90;
+  --video:#4aa3ff;--control:#3ddc84;--trigger:#ff9f43;--clock:#b07cff;--remote:#f2f2f2}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:13px system-ui,-apple-system,"Segoe UI",sans-serif}
+header{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line);background:#121215}
+h1{font-size:16px;font-weight:600;margin:0;letter-spacing:.02em}
+.sub{color:var(--dim);font-size:12px}
+.tb{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-left:auto}
+.pill{font:12px ui-monospace,Consolas,monospace;color:#c4c4ca;background:#1c1c20;border:1px solid var(--line);border-radius:6px;padding:4px 8px;white-space:nowrap}
+.pill b{color:#fff;font-weight:600}
+.gpu{display:inline-block;width:60px;height:6px;background:#2a2a2e;border-radius:3px;vertical-align:middle;margin-left:6px;overflow:hidden}
+.gpu i{display:block;height:100%;background:var(--control);width:10%}
+.beat{display:inline-flex;gap:3px;margin-left:6px;vertical-align:middle}
+.beat i{width:7px;height:7px;border-radius:50%;background:#333}.beat i.on{background:var(--clock)}
+.tbtn{font:600 12px system-ui,"Segoe UI",sans-serif;color:#ddd;background:#232328;border:1px solid #3a3a40;border-radius:6px;padding:5px 10px;cursor:pointer}
+.tbtn:hover{border-color:#6a6a72}
+.tbtn.panic{background:#5a1416;border-color:#a33;color:#fff}.tbtn.panic.on{background:#e5484d}
+
+/* the room */
+#room{position:relative;padding:14px 16px 0;background:radial-gradient(ellipse at 50% 120%,#1b1d24 0,#0b0b0e 70%);border-bottom:1px solid #000}
+#wall{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;max-width:720px;margin:0 auto}
+.scr{position:relative;background:#16171b;border:3px solid #2c2d33;box-shadow:0 0 0 1px #000,0 10px 30px #0008}
+.scr canvas{display:block;width:100%;aspect-ratio:16/9}
+.scr .tag{position:absolute;left:6px;top:4px;font:10px ui-monospace,Consolas,monospace;color:#fffb;text-shadow:0 0 3px #000}
+.scr .tag b{background:#e5484d;color:#fff;border-radius:3px;padding:0 4px;margin-right:4px}
+.legs{display:flex;justify-content:space-around;max-width:720px;margin:0 auto;height:14px}
+.legs i{width:3px;background:#2c2d33}
+#roomcap{text-align:center;font:11px ui-monospace,Consolas,monospace;color:#777;padding:2px 0 6px}
+
+/* the table */
+#bar{display:flex;gap:10px;align-items:center;padding:6px 16px;background:#121215;border-bottom:1px solid var(--line);flex-wrap:wrap}
+#insp{flex:1;min-width:240px;font-size:12px;color:#c8c8ce}
+#insp .k{color:var(--dim)}
+.legend{display:flex;gap:10px;font-size:11px;color:var(--dim);flex-wrap:wrap}
+.legend i{display:inline-block;width:14px;height:4px;border-radius:2px;vertical-align:middle;margin-right:4px}
+#view{position:relative;height:640px;overflow:hidden;cursor:grab;touch-action:none;
+  background:#3b2a1e repeating-linear-gradient(90deg,#3e2c20 0 3px,#3a291d 3px 9px,#36261b 9px 14px);}
+#view.pan{cursor:grabbing}
+#table{position:absolute;left:0;top:0;width:1500px;height:900px;transform-origin:0 0;user-select:none;-webkit-user-select:none}
+#cones,#cables{position:absolute;left:0;top:0;width:1500px;height:900px;overflow:visible;pointer-events:none}
+#cones{z-index:0}#cables{z-index:50}
+#cables path.c{fill:none;stroke-linecap:round;pointer-events:stroke;cursor:pointer;filter:drop-shadow(0 3px 2px rgba(0,0,0,.55))}
+#cables path.c:hover{stroke-width:8}
+#cables path.c.fire{stroke:#fff !important}
+#cables circle.plug{stroke:#000;stroke-width:1.5}
+#drawer{position:absolute;right:10px;top:10px;z-index:60;background:#151518ee;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:11px;width:170px;cursor:default}
+#drawer h2{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:2px 0 4px}
+#drawer div{display:flex;justify-content:space-between;color:#c8c8ce;padding:1px 0}
+#drawer span{color:var(--dim);font:10px ui-monospace,Consolas,monospace}
+@media (max-width:1000px){#drawer{display:none}}@media (max-width:700px){#view{height:520px}}
+
+/* items */
+.item{position:absolute;z-index:5;border-radius:8px;box-shadow:0 8px 14px rgba(0,0,0,.55),0 1px 0 rgba(255,255,255,.08) inset;cursor:move}
+.item.lift{box-shadow:0 16px 28px rgba(0,0,0,.6);z-index:40}
+.badge{font:800 10px system-ui,"Segoe UI",sans-serif;letter-spacing:.06em;white-space:nowrap}
+.edge{position:absolute;left:8px;right:8px;top:-1px;height:30px;display:flex;gap:6px;align-items:flex-start;justify-content:flex-start;padding-top:2px}
+.strip{position:absolute;background:#18233d;border:1px solid #2e4170;border-radius:4px;display:flex;gap:3px;padding:2px 3px}
+.strip.v{flex-direction:column}
+.strip::before{content:"HIMMEL";font:700 6px ui-monospace,Consolas,monospace;color:#7c93cf;letter-spacing:.1em;align-self:center}
+.jack{display:flex;flex-direction:column;align-items:center;cursor:crosshair;min-width:26px}
+.jack i{width:14px;height:14px;border-radius:50%;background:#0b0b0c;border:3px solid var(--jc);box-shadow:inset 0 0 0 2px #444}
+.jack.real i{width:17px;height:17px;border-color:#b9bcc2;box-shadow:inset 0 0 0 3px #222,0 0 0 2px var(--jc)}
+.jack small{font:7.5px ui-monospace,Consolas,monospace;color:inherit;white-space:nowrap;margin-top:1px;opacity:.9}
+.jack.dim{opacity:.2}.jack.ok i{box-shadow:0 0 0 4px #fff9}
+.cost{position:absolute;right:6px;bottom:3px;font:9px ui-monospace,Consolas,monospace;color:#fffa;text-shadow:0 0 2px #000;pointer-events:none}
+.cost.pruned{color:#fff5}
+.led{width:7px;height:7px;border-radius:50%;background:#333;display:inline-block}
+.led.ok{background:#3ddc84}.led.bad{background:#e5484d}.led.warn{background:#f5b041}
+.btn{font:700 8.5px ui-monospace,Consolas,monospace;color:#2a3150;background:#f4f5f7;border:1px solid #8d929c;border-radius:3px;padding:2px 4px;min-width:20px;text-align:center;cursor:pointer;box-shadow:0 1px 0 #0003}
+.btn.on{background:var(--bc,#ffd34d);color:#111;box-shadow:0 0 6px var(--bc,#ffd34d)}
+.dark .btn{background:#2c2c31;color:#cfcfd4;border-color:#4a4a52}
+.dark .btn.on{background:var(--bc,#e8e8ee);color:#111}
+.knob{display:inline-flex;flex-direction:column;align-items:center;cursor:ns-resize;touch-action:none}
+.knob svg{display:block}
+.knob span{font:7.5px ui-monospace,Consolas,monospace;text-transform:uppercase;white-space:nowrap}
+canvas.th{display:block;background:#000;border:2px solid #111;border-radius:2px}
+.lab{font:700 7.5px ui-monospace,Consolas,monospace;letter-spacing:.06em;text-transform:uppercase}
+.row{display:flex;gap:4px;align-items:center}
+.col{display:flex;flex-direction:column;gap:4px}
+.abs{position:absolute}
+/* V-4 look */
+.v4{background:linear-gradient(160deg,#e4e6e9,#c9ccd1);color:#2a3150}
+.v4 .edge{background:#2a2e38;left:0;right:0;top:0;border-radius:8px 8px 0 0;height:36px;padding:3px 10px;color:#cfd3dc}
+.plate{width:110px;height:110px;border-radius:50%;background:radial-gradient(circle,#d7d9dd 0,#b9bcc2 70%,#9da1a8 100%);box-shadow:inset 0 2px 6px #0005;position:relative;cursor:ns-resize;touch-action:none}
+.plate::before{content:"";position:absolute;left:52px;top:12px;bottom:12px;width:6px;border-radius:3px;background:#2a2e38}
+.plate i{position:absolute;left:22px;width:66px;height:14px;border-radius:4px;background:linear-gradient(#5a5f6a,#2b2f38);box-shadow:0 3px 4px #0007}
+.plate em{position:absolute;left:46px;width:18px;height:2px;background:var(--control)}
+/* dark devices */
+.dark{background:linear-gradient(#2a2a2e,#1e1e21);color:#c9c9cf}
+.dark .edge{color:#c9c9cf}
+.mk2scr{background:#1a2b5c;border:2px solid #0b0f1e;border-radius:2px;image-rendering:pixelated}
+.pads{display:grid;grid-template-columns:repeat(4,30px);gap:4px}
+.pad{width:30px;height:30px;border-radius:4px;background:#3a3a40;border:1px solid #555;cursor:pointer;font:700 8px ui-monospace,Consolas,monospace;color:#999;display:flex;align-items:flex-end;justify-content:flex-end;padding:2px}
+.pedal{border-radius:12px}
+.foot{width:34px;height:34px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#eee,#999 60%,#555);border:2px solid #333;cursor:pointer;box-shadow:0 2px 3px #0008}
+.lens{width:34px;height:34px;border-radius:50%;background:radial-gradient(circle at 40% 40%,#6c7da8,#10131c 60%);border:4px solid #444}
+.disp{font:11px ui-monospace,Consolas,monospace;background:#0b1410;color:#7dffb0;border:1px solid #000;border-radius:3px;padding:2px 6px;white-space:nowrap}
+.disp.big{font-size:18px}
+.live{font:800 9px ui-monospace,Consolas,monospace;border-radius:3px;padding:2px 5px;cursor:pointer;background:#444;color:#bbb}
+.live.on{background:#e5484d;color:#fff}
+.dim{opacity:.6}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>HIMMEL · VJ TABLE <span class="sub">mockup – the boxes as they are, patched on a table</span></h1>
+    <div class="sub">Play the boxes with the mouse. Drag a box to move it; drag the empty table to pan, wheel to zoom. Drag socket → socket for a cable; click a cable to pull it out.</div>
+  </div>
+  <div class="tb">
+    <span class="pill" id="pRev">table rev 1</span>
+    <span class="pill">GPU <b id="pGpu">0.0</b> / 4.0 ms<span class="gpu"><i id="pGpuBar"></i></span></span>
+    <span class="pill">CLOCK <b id="pBpm">128.0</b><span class="beat" id="pBeat"><i></i><i></i><i></i><i></i></span></span>
+    <button class="tbtn" id="bFit">Fit table</button>
+    <button class="tbtn panic" id="bPanic" title="Cut every live projector to the safe source">PANIC</button>
+  </div>
+</header>
+<section id="room">
+  <div id="wall">
+    <div class="scr"><canvas id="w1" width="320" height="180"></canvas><span class="tag" id="wt1"></span></div>
+    <div class="scr"><canvas id="w2" width="320" height="180"></canvas><span class="tag" id="wt2"></span></div>
+    <div class="scr"><canvas id="w3" width="320" height="180"></canvas><span class="tag" id="wt3"></span></div>
+  </div>
+  <div class="legs"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <div id="roomcap">THE ROOM · 3 screens side by side · live projectors = Himmel's real outputs</div>
+</section>
+<div id="bar">
+  <div id="insp">Hover a box, a socket or a cable.</div>
+  <div class="legend"><span><i style="background:var(--video)"></i>video</span><span><i style="background:var(--control)"></i>control (CV)</span><span><i style="background:var(--trigger)"></i>trigger (gate)</span><span><i style="background:var(--clock)"></i>clock</span><span><i style="background:var(--remote)"></i>remote (USB / MIDI)</span><span>big silver ring = real socket · blue strip = Himmel extras</span></div>
+</div>
+<div id="view">
+  <div id="table"><svg id="cones"></svg><div id="items"></div><svg id="cables"></svg></div>
+  <div id="drawer">
+    <h2>Add to the table</h2>
+    <div>Video player<span>upload</span></div><div>Camera<span>—</span></div><div>Generator<span>0–1 pass</span></div>
+    <div>Effect pedal<span>0–1 pass</span></div><div>Frame delay<span>1 copy</span></div><div>Crossfader<span>0–1 pass</span></div>
+    <div>Clock · LFO<span>CPU</span></div><div>Span box<span>0</span></div><div>Monitor<span>tiny</span></div><div>Projector<span>output</span></div>
+    <div>V-4 · MK2 · Lightpad · LUMI<span>boxes</span></div>
+    <h2 style="margin-top:6px">Ready-made tables</h2>
+    <div>V-4 classic<span>open</span></div><div>One deck<span></span></div><div>Camera show<span></span></div>
+  </div>
+</div>
+<script>
+"use strict";
+const V='video',C='control',T='trigger',K='clock',R='remote';
+/* ---------- item types: ports = [id,label,type,dir,real] ---------- */
+const TYPES={
+  player:{ports:[['out','VIDEO OUT',V,'out',1],['restart','RESTART',T,'in'],['next','NEXT',T,'in'],['speed','SPEED',C,'in']],desc:'Video player: plays HAP clips (today\'s ClipPlayer). A worker decodes ahead; the frame loop only uploads ready frames.'},
+  camera:{ports:[['out','VIDEO OUT',V,'out',1]],desc:'Camera on a tripod (today\'s CameraCapture). NV12 is converted in the first pass that reads it, so no extra cost.'},
+  gen:{ports:[['out','VIDEO OUT',V,'out',1],['hue','HUE',C,'in']],desc:'Generator: test card, gradient, noise, flat colour. One cheap pass (a flat colour costs nothing).'},
+  pedal:{ports:[['out','OUT',V,'out',1],['in','IN',V,'in',1],['amt','AMOUNT',C,'in'],['sw','ON/OFF',T,'in']],desc:'Effect pedal: one effect from the V-4 catalogue. Switched off it costs nothing (its output is its input). Pedals in a row are fused into one pass.'},
+  v4:{ports:[['in1','INPUT 1',V,'in',1],['in2','INPUT 2',V,'in',1],['in3','INPUT 3',V,'in',1],['in4','INPUT 4',V,'in',1],['prev','PREVIEW',V,'out',1],['pgm','PROGRAM',V,'out',1],['midi_in','MIDI IN',R,'in',1],['midi_out','MIDI OUT',R,'out',1],
+     ['tbar_cv','T-BAR',C,'in'],['ctla_cv','CTRL A',C,'in'],['take','TAKE',T,'in'],['tap','TAP',T,'in'],['clk','CLOCK',K,'in'],['sendb','SEND B',V,'out'],['retb','RET B',V,'in'],['tbar_out','T-BAR',C,'out']],
+     desc:'The V-4 as it is (weapon no. 7, simulated: the owner has none). Its real sockets: INPUT 1-4, PREVIEW and PROGRAM OUT, MIDI IN/OUT. The blue Himmel strip adds what the real one lacks: CV for the T-bar and CONTROL A, TAKE and TAP triggers, a clock, and a send/return to put pedals into channel B. The mixing is Himmel\'s own GPU rebuild: 0 passes when the T-bar rests on a side with no effects, 3 at most.'},
+  mk2:{ports:[['usb','USB',R,'out',1],['k1','K1',C,'out'],['k2','K2',C,'out'],['p1','P1',T,'out'],['p2','P2',T,'out']],desc:'The MK2. A remote cable (white, USB) to a box makes the MK2 play it with the box\'s default page: pads 1-4 input A, 5-8 input B, 9-16 effects, knob 1 T-bar, knobs 2-3 CONTROL A/B. The blue strip gives knobs and pads as CV and gate outputs to patch anywhere.'},
+  clock:{ports:[['clk','CLOCK',K,'out'],['beat','BEAT',T,'out'],['bar','BAR',T,'out'],['tap','TAP',T,'in']],desc:'Clock: tap, Ableton Link or Pro DJ Link bridge, audio, timecode. Unpatched clock inputs follow this one.'},
+  lfo:{ports:[['out','OUT',C,'out'],['clk','CLOCK',K,'in']],desc:'LFO: moves a knob by itself. CPU only. Patched to the V-4 CONTROL A it sweeps the colorize colour; the knob stays where you left it, a green ring shows the moving value.'},
+  span:{ports:[['in','IN',V,'in',1],['o1','OUT 1',V,'out',1],['o2','OUT 2',V,'out',1],['o3','OUT 3',V,'out',1]],desc:'Span box: one picture across 3 outputs (span) or the same on all (mirror). Costs nothing: each output is a part of the picture.'},
+  proj:{ports:[['in','IN',V,'in',1]],desc:'Projector. LIVE = this is Himmel\'s real output N; the room above shows what goes out. If its cable is pulled or its source fails, it shows the safe source, never the desktop.'},
+  mon:{ports:[['in','IN',V,'in',1]],desc:'Monitor: look at any signal. Preview only, never a show output. Costs a tiny copy at ~10 Hz, only while on screen.'},
+};
+const ITEMS=[
+  {id:'pj1',type:'proj',x:470,y:40,w:120,h:76,n:1,live:true},
+  {id:'pj2',type:'proj',x:690,y:40,w:120,h:76,n:2,live:true},
+  {id:'pj3',type:'proj',x:910,y:40,w:120,h:76,n:3,live:true},
+  {id:'span',type:'span',x:640,y:170,w:220,h:70},
+  {id:'mon1',type:'mon',x:1110,y:40,w:200,h:150,name:'MONITOR 1'},
+  {id:'mon2',type:'mon',x:1330,y:40,w:150,h:120,name:'MONITOR 2'},
+  {id:'v4',type:'v4',x:520,y:300,w:480,h:360},
+  {id:'pl1',type:'player',x:40,y:230,w:230,h:150,name:'PLAYER 1',clip:'neon_tunnel.mov',variant:0},
+  {id:'pl2',type:'player',x:40,y:420,w:230,h:150,name:'PLAYER 2',clip:'rain_lines.mov',variant:1},
+  {id:'ped1',type:'pedal',x:320,y:430,w:120,h:160,name:'MIRROR',fx:'MIRROR',col:'#2d7dd2'},
+  {id:'cam',type:'camera',x:320,y:250,w:120,h:120},
+  {id:'gen',type:'gen',x:40,y:620,w:230,h:90},
+  {id:'ped2',type:'pedal',x:330,y:700,w:120,h:160,name:'NEGATIVE',fx:'NEGATIVE',col:'#c0392b'},
+  {id:'clock',type:'clock',x:1060,y:250,w:210,h:96},
+  {id:'lfo',type:'lfo',x:1290,y:250,w:180,h:96},
+  {id:'mk2',type:'mk2',x:1060,y:400,w:410,h:300},
+];
+const IT={};ITEMS.forEach(i=>IT[i.id]=i);
+const PORT={};
+ITEMS.forEach(it=>TYPES[it.type].ports.forEach(([id,label,type,dir,real])=>{PORT[it.id+'.'+id]={key:it.id+'.'+id,id,label,type,dir,real:!!real,it}}));
+let CABLES=[
+  ['pl1.out','v4.in1'],['pl2.out','ped1.in'],['ped1.out','v4.in2'],['cam.out','v4.in3'],['gen.out','v4.in4'],
+  ['v4.pgm','span.in'],['span.o1','pj1.in'],['span.o2','pj2.in'],['span.o3','pj3.in'],['v4.prev','mon1.in'],
+  ['mk2.usb','v4.midi_in'],['lfo.out','v4.ctla_cv'],['clock.clk','v4.clk'],['clock.bar','pl2.restart'],['mk2.p2','pl1.next'],
+];
+const srcOf=k=>{const c=CABLES.find(c=>c[1]===k);return c?c[0]:null};
+let rev=1;
+
+/* ---------- parameters ---------- */
+const P={
+  'v4.src_a':1,'v4.src_b':3,'v4.tbar':.3,'v4.ctl_a':.3,'v4.ctl_b':.5,'v4.fade':.5,'v4.trans':'MIX','v4.sync':false,'v4.mem':2,
+  'v4.fx_a':[false,false,true,false],'v4.fx_b':[false,false,false,false],
+  'pl1.play':true,'pl2.play':true,'pl1.speed':.62,'pl2.speed':.6,
+  'ped1.on':true,'ped1.amt':1,'ped2.on':true,'ped2.amt':1,
+  'gen.kind':'BARS','gen.hue':0,'span.mode':'SPAN',
+  'lfo.rate':.4,'lfo.depth':.6,'lfo.sync':true,'mk2.k':[.3,.3,.5,.5,.62,.6,1,0],
+};
+const MODIN={'v4.tbar_cv':'v4.tbar','v4.ctla_cv':'v4.ctl_a','ped1.amt':'ped1.amt','ped2.amt':'ped2.amt','pl1.speed':'pl1.speed','pl2.speed':'pl2.speed','gen.hue':'gen.hue'};
+const PMOD={};for(const k in MODIN)PMOD[MODIN[k]]=k;
+let bpm=128,beatOrigin=performance.now(),lastBeat=-1,taps=[],lfoVal=.5,lfoPhase=0,tbarAnim=null,panic=false;
+const fired={};
+const remoteOn=()=>srcOf('v4.midi_in')==='mk2.usb';
+function ctlOut(k){if(k==='lfo.out')return lfoVal;if(k==='v4.tbar_out')return eff('v4.tbar');
+  if(k==='mk2.k1')return mk2Knob(0);if(k==='mk2.k2')return mk2Knob(1);return .5}
+// MK2 knob 1..3 drive the V-4 through the remote cable; otherwise they are free knobs
+const MK2MAP=['v4.tbar','v4.ctl_a','v4.ctl_b','v4.fade'];
+function mk2Knob(i){return remoteOn()&&MK2MAP[i]?P[MK2MAP[i]]:P['mk2.k'][i]}
+function eff(key){let v=P[key];const m=PMOD[key];if(m){const s=srcOf(m);if(s){const amt=key==='v4.ctl_a'?P['lfo.depth']*1.4:1;v=v+(ctlOut(s)-.5)*amt}}return Math.min(1,Math.max(0,v))}
+function fire(out){fired[out]=performance.now();CABLES.filter(c=>c[0]===out).forEach(c=>trig(c[1]))}
+function trig(k){fired[k]=performance.now();const [d,p]=k.split('.');
+  if(p==='restart')clipT[d]=0;else if(p==='next')nextClip(d);else if(p==='sw')P[d+'.on']=!P[d+'.on'];
+  else if(k==='v4.take')take();else if(p==='tap')tap()}
+function take(){const f=P['v4.tbar'],to=f<.5?1:0;tbarAnim={f,to,t:performance.now(),dur:60000/bpm*1.5}}
+function tap(){const n=performance.now();taps=taps.filter(x=>n-x<2500);taps.push(n);if(taps.length>=3){bpm=Math.max(60,Math.min(200,60000/((taps[taps.length-1]-taps[0])/(taps.length-1))));beatOrigin=n}}
+const CLIPS={pl1:['neon_tunnel.mov','orbit_dust.mov','laser_fan.mov'],pl2:['rain_lines.mov','city_scan.mov','bloom_grid.mov']};
+const clipIdx={pl1:0,pl2:0},clipT={pl1:0,pl2:0};
+function nextClip(d){clipIdx[d]=(clipIdx[d]+1)%3;const e=document.getElementById('cn_'+d);if(e)e.textContent=CLIPS[d][clipIdx[d]]}
+
+/* ---------- widgets ---------- */
+function J(it,pid){const p=PORT[it.id+'.'+pid];return `<div class="jack ${p.dir}${p.real?' real':''}" data-port="${p.key}" style="--jc:var(--${p.type})"><i></i><small>${p.label}</small></div>`}
+const arc=v=>{const a0=-225*Math.PI/180,a1=a0+v*270*Math.PI/180,r=14.5;return `M${(17+r*Math.cos(a0)).toFixed(2)} ${(17+r*Math.sin(a0)).toFixed(2)} A${r} ${r} 0 ${v>2/3?1:0} 1 ${(17+r*Math.cos(a1)).toFixed(2)} ${(17+r*Math.sin(a1)).toFixed(2)}`};
+function KN(key,label,size,col){size=size||30;return `<div class="knob ctl" data-knob="${key}"><svg width="${size}" height="${size}" viewBox="0 0 34 34"><path d="${arc(.9999)}" fill="none" stroke="#0006" stroke-width="3"/><path class="val" fill="none" stroke="${col||'#fff'}" stroke-width="3"/><path class="mod" fill="none" stroke="var(--control)" stroke-width="1.6"/><circle cx="17" cy="17" r="10.5" fill="#2e2e33" stroke="#555"/><line class="ind" x1="17" y1="17" x2="17" y2="8" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg><span>${label}</span></div>`}
+const B=(act,label,style='')=>`<span class="btn ctl" data-act="${act}" style="${style}">${label}</span>`;
+const TH=(id,w,h)=>`<canvas class="th" id="th_${id}" width="${w}" height="${h}"></canvas>`;
+const COST=it=>`<div class="cost" id="cost_${it.id}"></div>`;
+
+function itemHTML(it){
+  switch(it.type){
+  case 'proj': return `<div class="dark" style="position:absolute;inset:0;border-radius:8px;padding:6px 8px"><div class="edge" style="top:auto;bottom:4px;left:auto;right:6px;width:auto">${J(it,'in')}</div>
+     <div class="row"><div class="lens"></div><div class="col"><span class="badge">PROJECTOR ${it.n}</span><span class="live ctl" data-act="live:${it.id}">LIVE → OUT ${it.n}</span></div></div>${COST(it)}</div>`;
+  case 'mon': return `<div class="dark" style="position:absolute;inset:0;border-radius:8px;padding:6px"><div class="row" style="justify-content:space-between"><span class="badge">${it.name}</span>${J(it,'in')}</div>${TH(it.id,it.w-16,Math.round((it.w-16)*9/16))}<div class="lab" style="margin-top:3px;color:#888">preview only</div></div>`;
+  case 'span': return `<div class="dark" style="position:absolute;inset:0;border-radius:8px;padding:5px 8px"><div class="row">${J(it,'in')}<div class="col" style="align-items:center;flex:1"><span class="badge">SPAN BOX</span><div class="row">${B('span:SPAN','SPAN')}${B('span:MIRROR','MIRROR')}</div></div>${J(it,'o1')}${J(it,'o2')}${J(it,'o3')}</div>${COST(it)}</div>`;
+  case 'player': return `<div class="dark" style="position:absolute;inset:0;border-radius:8px;padding:6px 8px">
+     <div class="row" style="justify-content:space-between"><span class="badge">${it.name}</span>${J(it,'out')}</div>
+     <div class="row" style="align-items:flex-start">${TH(it.id,112,63)}<div class="col"><span class="disp" id="cn_${it.id}" style="font-size:9px">${it.clip}</span><span class="lab" style="color:#888">HAP · 1080p · 25</span><div class="row">${B('play:'+it.id,'▶','--bc:#3ddc84')}${B('restart:'+it.id,'⟲')}${B('next:'+it.id,'▸▸')}</div></div></div>
+     <div class="strip" style="left:8px;bottom:6px">${J(it,'restart')}${J(it,'next')}${J(it,'speed')}</div>${COST(it)}</div>`;
+  case 'camera': return `<div style="position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle,#2a2a2e 0,#1a1a1d 60%,transparent 61%)"></div>
+     <div class="abs" style="left:38px;top:22px"><div class="lens" style="width:44px;height:44px"></div></div>
+     <div class="abs badge" style="left:30px;top:72px;color:#ccc">CAMERA</div><div class="abs" style="left:43px;top:86px">${J(it,'out')}</div>${COST(it)}`;
+  case 'gen': return `<div class="dark" style="position:absolute;inset:0;border-radius:8px;padding:6px 8px"><div class="row" style="align-items:flex-start">${TH('gen',72,40)}<div class="col"><span class="badge">GENERATOR</span><div class="row">${['BARS','GRAD','NOISE','COLOR'].map(k=>B('gen:'+k,k)).join('')}</div></div>${J(it,'out')}</div><div class="strip" style="left:8px;bottom:5px">${J(it,'hue')}</div>${COST(it)}</div>`;
+  case 'pedal': return `<div class="pedal" style="position:absolute;inset:0;background:linear-gradient(160deg,${it.col},#111 140%);padding:6px 8px;color:#fff">
+     <div class="row" style="justify-content:space-between">${J(it,'out')}${J(it,'in')}</div>
+     <div class="row" style="justify-content:center;margin-top:2px">${KN(it.id+'.amt','amount',30)}<span class="led" id="led_${it.id}"></span></div>
+     <div class="badge" style="text-align:center;margin-top:2px">${it.name}</div>
+     <div class="row" style="justify-content:center;margin-top:4px"><div class="foot ctl" data-act="foot:${it.id}" title="Footswitch"></div></div>
+     <div class="strip" style="left:6px;bottom:4px">${J(it,'amt')}${J(it,'sw')}</div>${COST(it)}</div>`;
+  case 'clock': return `<div class="dark" style="position:absolute;inset:0;border-radius:8px;padding:6px 8px"><div class="row" style="justify-content:space-between"><span class="badge">CLOCK</span><span class="beat" id="cBeat"><i></i><i></i><i></i><i></i></span></div>
+     <div class="row"><span class="disp big" id="cBpm">128.0</span>${B('tap','TAP','padding:5px 9px')}</div><div class="strip" style="left:6px;bottom:4px;right:6px">${J(it,'clk')}${J(it,'beat')}${J(it,'bar')}${J(it,'tap')}</div></div>`;
+  case 'lfo': return `<div class="dark" style="position:absolute;inset:0;border-radius:8px;padding:6px 8px"><div class="row" style="justify-content:space-between"><span class="badge">LFO</span>${B('lfosync','SYNC','--bc:#b07cff')}</div>
+     <div class="row"><canvas class="th" id="th_lfo" width="70" height="30"></canvas>${KN('lfo.rate','rate',26)}${KN('lfo.depth','depth',26)}</div><div class="strip" style="left:6px;bottom:4px">${J(it,'out')}${J(it,'clk')}</div></div>`;
+  case 'v4': {
+    const ch=(c,names,col)=>`<div class="col" style="width:140px"><span class="lab">INPUT ${c}</span><div class="row">${[1,2,3,4].map(i=>B(`src_${c.toLowerCase()}:${i}`,i,`--bc:${col}`)).join('')}</div>
+      <span class="lab">EFFECTS ${c}</span><div class="row" style="flex-wrap:wrap">${names.map((n,i)=>B(`fx_${c.toLowerCase()}:${i}`,n)).join('')}</div>
+      <div class="row">${KN('v4.ctl_'+c.toLowerCase(),'control '+c,32,'#2a3150')}</div></div>`;
+    return `<div class="v4" style="position:absolute;inset:0;border-radius:8px">
+      <div class="edge">${J(it,'in1')}${J(it,'in2')}${J(it,'in3')}${J(it,'in4')}<span style="width:8px"></span>${J(it,'prev')}${J(it,'pgm')}<span style="width:8px"></span>${J(it,'midi_in')}${J(it,'midi_out')}</div>
+      <div class="abs" style="left:14px;top:48px;right:70px;display:flex;justify-content:space-between">
+        ${ch('A',['STROBE','NEGA','COLOR','MULTI'],'#4aa3ff')}
+        <div class="col" style="align-items:center"><div class="row">${B('trans:MIX','MIX')}${B('trans:WIPE','WIPE')}${B('trans:EFX','EFX')}</div>
+          <div class="plate ctl" data-tbar="1"><em></em><i></i></div><div class="row">${B('take','TAKE','--bc:#3ddc84')}${B('sync','BPM SYNC','--bc:#b07cff')}</div></div>
+        ${ch('B',['MIRROR','CHROMA','LUMA','PinP'],'#ff6b9a')}
+      </div>
+      <div class="abs row" style="left:14px;bottom:30px"><span class="lab">MEMORY</span>${[1,2,3,4,5,6,7,8].map(i=>B('mem:'+i,i)).join('')}<span style="width:10px"></span>${KN('v4.fade','fade',28,'#2a3150')}</div>
+      <div class="abs badge" style="left:14px;bottom:10px;font-size:13px">◎ HIMMEL · V4</div>
+      <div class="abs lab" style="left:150px;bottom:12px" id="v4remote"></div>
+      <div class="strip v" style="right:6px;top:44px">${J(it,'tbar_cv')}${J(it,'ctla_cv')}${J(it,'take')}${J(it,'tap')}${J(it,'clk')}${J(it,'sendb')}${J(it,'retb')}${J(it,'tbar_out')}</div>
+      ${COST(it)}</div>`;}
+  case 'mk2': return `<div class="dark" style="position:absolute;inset:0;border-radius:10px;padding:8px 10px">
+      <div class="row" style="justify-content:space-between"><span class="badge">◎ HIMMEL · MK2</span>${J(it,'usb')}</div>
+      <div class="row" style="margin-top:2px"><canvas class="mk2scr" id="mkL" width="128" height="32" style="width:150px;height:38px"></canvas><canvas class="mk2scr" id="mkR" width="128" height="32" style="width:150px;height:38px"></canvas></div>
+      <div class="row" style="margin-top:4px;gap:6px">${[0,1,2,3,4,5,6,7].map(i=>`<div class="knob ctl" data-mk="${i}"><svg width="28" height="28" viewBox="0 0 34 34"><path d="${arc(.9999)}" fill="none" stroke="#0006" stroke-width="3"/><path class="val" fill="none" stroke="#f5b041" stroke-width="3"/><path class="mod"/><circle cx="17" cy="17" r="10.5" fill="#2e2e33" stroke="#555"/><line class="ind" x1="17" y1="17" x2="17" y2="8" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg><span>K${i+1}</span></div>`).join('')}</div>
+      <div class="row" style="margin-top:6px;align-items:flex-start;gap:14px"><div class="col"><span class="lab">GROUPS</span><div class="row">${'ABCD'.split('').map(g=>B('grp:'+g,g)).join('')}</div><div class="row">${'EFGH'.split('').map(g=>B('grp:'+g,g)).join('')}</div>
+        <span class="lab" style="margin-top:6px">${'remote'}</span><span class="lab" id="mkrem" style="color:#f5b041"></span></div>
+        <div class="pads">${[13,14,15,16,9,10,11,12,5,6,7,8,1,2,3,4].map(n=>`<div class="pad ctl" data-act="pad:${n}" id="pad${n}">${n}</div>`).join('')}</div></div>
+      <div class="strip" style="right:8px;bottom:8px">${J(it,'k1')}${J(it,'k2')}${J(it,'p1')}${J(it,'p2')}</div></div>`;
+  }
+}
+const itemsEl=document.getElementById('items');
+itemsEl.innerHTML=ITEMS.map(it=>`<div class="item" id="it_${it.id}" data-it="${it.id}" style="left:${it.x}px;top:${it.y}px;width:${it.w}px;height:${it.h}px">${itemHTML(it)}</div>`).join('');
+
+/* ---------- fake video ---------- */
+const W=160,H=90;const mk=()=>{const c=document.createElement('canvas');c.width=W;c.height=H;return c};
+const VID={};Object.values(PORT).forEach(p=>{if(p.type===V&&p.dir==='out')VID[p.key]=mk()});
+const tmp=mk(),chA=mk(),chB=mk();
+const vin=k=>{const s=srcOf(k);return s?VID[s]:null};
+function blank(c,col='#000'){const x=c.getContext('2d');x.globalAlpha=1;x.filter='none';x.fillStyle=col;x.fillRect(0,0,W,H)}
+function copyF(dst,src,filter){const x=dst.getContext('2d');x.filter=filter||'none';x.globalAlpha=1;x.drawImage(src,0,0,W,H);x.filter='none'}
+const RENDER={
+  player(it,now,dt){const d=it.id;if(P[d+'.play'])clipT[d]+=dt*(eff(d+'.speed')-.5)*4;const c=VID[d+'.out'],x=c.getContext('2d'),t=clipT[d];
+    if(it.variant===0){blank(c);const h0=clipIdx[d]*110;for(let i=0;i<14;i++){const r=(i*14+t*60)%196;x.strokeStyle=`hsl(${(h0+i*25+t*40)%360},90%,60%)`;x.lineWidth=4;x.beginPath();x.ellipse(80,45,r,r*.6,t*.3,0,7);x.stroke()}}
+    else{blank(c,'#04060c');const h2=200+clipIdx[d]*60;for(let i=0;i<40;i++){const px=(i*37)%W,py=((i*53)+t*120*(1+(i%3)))%(H+40)-40;x.strokeStyle=`hsla(${h2+(i%5)*12},90%,${55+(i%3)*12}%,.9)`;x.lineWidth=1+(i%3);x.beginPath();x.moveTo(px,py);x.lineTo(px-6,py+30);x.stroke()}}
+    const fl=Math.max(0,1-(now-(fired[d+'.restart']||0))/250);if(fl){x.fillStyle=`rgba(255,255,255,${fl*.6})`;x.fillRect(0,0,W,H)}},
+  camera(it,now){const c=VID['cam.out'],x=c.getContext('2d');const g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,'#5a6068');g.addColorStop(1,'#2a2c30');x.fillStyle=g;x.fillRect(0,0,W,H);
+    const s=Math.sin(now/900)*6;x.fillStyle='#c9a58a';x.beginPath();x.ellipse(80+s,40,15,19,0,0,7);x.fill();x.fillStyle='#1f2a44';x.beginPath();x.ellipse(80+s,98,42,30,0,0,7);x.fill();x.fillStyle='#2b1d14';x.beginPath();x.ellipse(80+s,27,16,9,0,0,7);x.fill();
+    for(let i=0;i<50;i++){x.fillStyle=`rgba(255,255,255,${Math.random()*.08})`;x.fillRect(Math.random()*W,Math.random()*H,2,2)}},
+  gen(it,now){const c=VID['gen.out'],x=c.getContext('2d'),k=P['gen.kind'];
+    if(k==='BARS'){['#c0c0c0','#c0c000','#00c0c0','#00c000','#c000c0','#c00000','#0000c0'].forEach((cc,i)=>{x.fillStyle=cc;x.fillRect(i*W/7,0,W/7+1,H*.75)});const g=x.createLinearGradient(0,0,W,0);g.addColorStop(0,'#000');g.addColorStop(1,'#fff');x.fillStyle=g;x.fillRect(0,H*.75,W,H*.25)}
+    else if(k==='GRAD'){const s=now/1000,g=x.createLinearGradient(0,0,W,H);g.addColorStop(0,`hsl(${s*40%360},80%,50%)`);g.addColorStop(1,`hsl(${(s*40+120)%360},80%,30%)`);x.fillStyle=g;x.fillRect(0,0,W,H)}
+    else if(k==='NOISE'){for(let yy=0;yy<H;yy+=6)for(let xx=0;xx<W;xx+=6){const v=Math.random()*255|0;x.fillStyle=`rgb(${v},${v},${v})`;x.fillRect(xx,yy,6,6)}}
+    else{x.fillStyle='#d23';x.fillRect(0,0,W,H)}
+    const h=eff('gen.hue')*360;if(h>1){copyF(tmp,c);copyF(c,tmp,`hue-rotate(${h}deg)`)}},
+  pedal(it){const o=VID[it.id+'.out'],src=vin(it.id+'.in');if(!src){blank(o);return}
+    const x=o.getContext('2d');copyF(o,src);if(!P[it.id+'.on'])return;const a=eff(it.id+'.amt');
+    if(it.fx==='MIRROR'){x.globalAlpha=a;x.save();x.translate(W,0);x.scale(-1,1);x.drawImage(src,0,0,W/2,H,0,0,W/2,H);x.restore();x.globalAlpha=1}
+    else{copyF(tmp,src);x.globalAlpha=a;x.filter='invert(1)';x.drawImage(tmp,0,0);x.filter='none';x.globalAlpha=1}},
+  v4(it,now){
+    const ch=(c,out)=>{const lc=c.toLowerCase();const s=vin('v4.in'+P['v4.src_'+lc]);const ox=out.getContext('2d');
+      if(c==='B'){const send=VID['v4.sendb'];if(s)copyF(send,s);else blank(send);const r=vin('v4.retb');if(r){copyF(out,r);return}}
+      if(!s){blank(out);return}
+      const fx=P['v4.fx_'+lc],ctl=eff('v4.ctl_'+lc);let f='';
+      if(c==='A'){if(fx[1])f+='invert(1) ';if(fx[2])f+=`sepia(1) saturate(4) hue-rotate(${Math.round(ctl*360)}deg) `}else{if(fx[1])f+='saturate(2.5) ';if(fx[2])f+='contrast(1.8) ';}
+      if(c==='A'&&fx[0]&&Math.floor(now/16.7)%(2+Math.round(ctl*8))!==0)return;
+      ox.filter=f||'none';if(c==='A'&&fx[3]){for(let i=0;i<2;i++)for(let j=0;j<2;j++)ox.drawImage(s,i*W/2,j*H/2,W/2,H/2)}else ox.drawImage(s,0,0,W,H);ox.filter='none';
+      if(c==='B'&&fx[0]){ox.save();ox.translate(W,0);ox.scale(-1,1);ox.drawImage(out,0,0,W/2,H,0,0,W/2,H);ox.restore()}
+      if(c==='B'&&fx[3]){const a=vin('v4.in'+P['v4.src_a']);if(a){ox.fillStyle='#fff';ox.fillRect(W-62,6,56,32);ox.drawImage(a,W-60,8,52,28)}}};
+    ch('A',chA);ch('B',chB);
+    const t=eff('v4.tbar'),pg=VID['v4.pgm'],x=pg.getContext('2d');copyF(pg,chA);
+    if(t>0){const m=P['v4.trans'];if(m==='MIX'){x.globalAlpha=t;x.drawImage(chB,0,0);x.globalAlpha=1}
+      else if(m==='WIPE'){const e=t*(W+20)-10;x.save();x.beginPath();x.rect(0,0,Math.max(0,e),H);x.clip();x.drawImage(chB,0,0);x.restore();x.fillStyle='rgba(255,255,255,.35)';x.fillRect(e-1,0,2,H)}
+      else{x.save();x.beginPath();x.arc(W/2,H/2,t*95,0,7);x.clip();x.drawImage(chB,0,0);x.restore()}}
+    const f=(eff('v4.fade')-.5)*2;if(Math.abs(f)>.01){x.fillStyle=f<0?`rgba(0,0,0,${-f})`:`rgba(255,255,255,${f})`;x.fillRect(0,0,W,H)}
+    // preview: 4 inputs + program
+    const pv=VID['v4.prev'],px=pv.getContext('2d');blank(pv,'#111');
+    [1,2,3,4].forEach((i,n)=>{const s=vin('v4.in'+i);const xx=(n%2)*W/4,yy=Math.floor(n/2)*H/2;if(s)px.drawImage(s,xx,yy,W/4-1,H/2-1);px.fillStyle='#fff';px.font='7px monospace';px.fillText(i,xx+2,yy+8);
+      if(P['v4.src_a']===i){px.strokeStyle='#4aa3ff';px.strokeRect(xx+.5,yy+.5,W/4-2,H/2-2)}if(P['v4.src_b']===i){px.strokeStyle='#ff6b9a';px.strokeRect(xx+1.5,yy+1.5,W/4-4,H/2-4)}});
+    px.drawImage(pg,W/2,H/4,W/2,H/2);px.fillStyle='#e5484d';px.fillText('PGM',W/2+2,H/4+8);},
+  span(it){const s=vin('span.in');['o1','o2','o3'].forEach((o,i)=>{const c=VID['span.'+o];if(!s){blank(c);return}const x=c.getContext('2d');
+    if(P['span.mode']==='SPAN')x.drawImage(s,i*W/3,0,W/3,H,0,0,W,H);else x.drawImage(s,0,0)})},
+};
+/* evaluation order: sources before what reads them (a loop = last frame, like a frame delay) */
+function order(){const out=[],seen=new Set();const visit=it=>{if(seen.has(it.id))return;seen.add(it.id);
+  TYPES[it.type].ports.forEach(([id,,type,dir])=>{if(type===V&&dir==='in'){const s=srcOf(it.id+'.'+id);if(s)visit(PORT[s].it)}});out.push(it)};
+  ITEMS.forEach(visit);return out}
+/* what is seen: upstream of live projectors and monitors */
+function seenSet(){const s=new Set();const up=it=>{if(s.has(it.id))return;s.add(it.id);TYPES[it.type].ports.forEach(([id,,type,dir])=>{if(type===V&&dir==='in'){const q=srcOf(it.id+'.'+id);if(q)up(PORT[q].it)}})};
+  ITEMS.filter(i=>(i.type==='proj'&&i.live)||i.type==='mon').forEach(up);return s}
+const PASS=.15;
+function costs(seen){const Cs={};const t=eff('v4.tbar');
+  ITEMS.forEach(it=>{if(!seen.has(it.id)||it.type==='proj'||it.type==='mon'){Cs[it.id]=it.type==='proj'?(it.live?[.03,'output']:[0,'rehearsal']):null;return}
+    switch(it.type){
+      case 'player':case 'camera':Cs[it.id]=[.04,'upload'];break;
+      case 'gen':Cs[it.id]=P['gen.kind']==='COLOR'?[0,'flat']:[PASS*.5,'1 pass'];break;
+      case 'pedal':Cs[it.id]=P[it.id+'.on']?[PASS,'1 pass']:[0,'off · alias'];break;
+      case 'span':Cs[it.id]=[0,'sub-rects'];break;
+      case 'v4':{let n=0;const a=P['v4.fx_a'].some(Boolean),b=P['v4.fx_b'].some(Boolean)&&!srcOf('v4.retb');if(t<1&&a)n++;if(t>0&&b)n++;if((t>0&&t<1)||Math.abs(P['v4.fade']-.5)>.01)n++;
+        Cs[it.id]=[n*PASS,`${n} pass${n==1?'':'es'}${t===0?' · B not drawn':t===1?' · A not drawn':''}`];break}
+      default:Cs[it.id]=[0,'CPU'];}});
+  return Cs}
+
+/* ---------- table view: pan, zoom, move ---------- */
+const view=document.getElementById('view'),table=document.getElementById('table');
+let Z=1,PX=0,PY=0;
+function apply(){table.style.transform=`translate(${PX}px,${PY}px) scale(${Z})`}
+function fitTable(){const w=view.clientWidth,h=view.clientHeight;Z=Math.min(w/1500,h/880);PX=(w-1500*Z)/2;PY=6;apply()}
+document.getElementById('bFit').onclick=fitTable;addEventListener('resize',fitTable);fitTable();
+view.addEventListener('wheel',e=>{e.preventDefault();const r=view.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;const nz=Math.min(2.2,Math.max(.3,Z*(e.deltaY<0?1.1:1/1.1)));PX=mx-(mx-PX)*nz/Z;PY=my-(my-PY)*nz/Z;Z=nz;apply()},{passive:false});
+const toTable=e=>{const r=table.getBoundingClientRect();return [(e.clientX-r.left)/Z,(e.clientY-r.top)/Z]};
+let drag=null;
+function jackAt(e){for(const el of document.elementsFromPoint(e.clientX,e.clientY)){const j=el.closest&&el.closest('.jack');if(j)return j}return null}
+view.addEventListener('pointerdown',e=>{
+  if(e.target.closest('#drawer'))return;
+  const j=jackAt(e);if(j){e.preventDefault();startCable(j.dataset.port,e);return}
+  if(e.target.closest('path.c'))return;
+  const tb=e.target.closest('[data-tbar]'),kn=e.target.closest('[data-knob],[data-mk]');
+  if(tb||kn){e.preventDefault();const el=tb||kn;const y0=e.clientY;let key=kn&&kn.dataset.knob;const mi=kn&&kn.dataset.mk!=null?+kn.dataset.mk:null;
+    if(mi!=null&&remoteOn()&&MK2MAP[mi])key=MK2MAP[mi];
+    const v0=key?P[key]:mi!=null?P['mk2.k'][mi]:0;
+    drag={kind:'ctl',mv:ev=>{let v;if(tb){const r=el.getBoundingClientRect();v=Math.min(1,Math.max(0,(ev.clientY-r.top-14*Z)/(r.height-28*Z)));P['v4.tbar']=v;tbarAnim=null;return}
+      v=Math.min(1,Math.max(0,v0+(y0-ev.clientY)/(ev.shiftKey?600:150)));if(key)P[key]=v;else P['mk2.k'][mi]=v;if(mi!=null&&mi<2)fire('mk2.k'+(mi+1))}};
+    if(tb)drag.mv(e);return}
+  if(e.target.closest('.ctl'))return;
+  const itEl=e.target.closest('.item');
+  if(itEl){const it=IT[itEl.dataset.it];const [x0,y0]=toTable(e);const ox=it.x,oy=it.y;itEl.classList.add('lift');
+    drag={kind:'move',mv:ev=>{const [x,y]=toTable(ev);it.x=Math.round(ox+x-x0);it.y=Math.round(oy+y-y0);itEl.style.left=it.x+'px';itEl.style.top=it.y+'px'},up:()=>itEl.classList.remove('lift')};return}
+  const sx=e.clientX,sy=e.clientY,px=PX,py=PY;view.classList.add('pan');
+  drag={kind:'pan',mv:ev=>{PX=px+ev.clientX-sx;PY=py+ev.clientY-sy;apply()},up:()=>view.classList.remove('pan')};
+});
+addEventListener('pointermove',e=>{if(drag)drag.mv(e)});
+addEventListener('pointerup',e=>{if(!drag)return;if(drag.kind==='cable')endCable(e);if(drag.up)drag.up();drag=null});
+
+/* ---------- cables ---------- */
+const svg=document.getElementById('cables'),cones=document.getElementById('cones');
+const COL={video:'#4aa3ff',control:'#3ddc84',trigger:'#ff9f43',clock:'#b07cff',remote:'#f2f2f2'};
+function jackXY(key){const el=document.querySelector(`.jack[data-port="${key}"] i`),r=el.getBoundingClientRect(),t=table.getBoundingClientRect();return [(r.left+r.width/2-t.left)/Z,(r.top+r.height/2-t.top)/Z]}
+function cpath(a,b){const dx=b[0]-a[0],dy=b[1]-a[1],d=Math.hypot(dx,dy),s=18+d*.12;return `M${a[0]} ${a[1]} C${a[0]+dx*.25} ${a[1]+dy*.1+s} ${b[0]-dx*.25} ${b[1]-dy*.1+s} ${b[0]} ${b[1]}`}
+function drawCables(now){let s='';
+  CABLES.forEach(([o,i],n)=>{const a=jackXY(o),b=jackXY(i),col=COL[PORT[o].type],hot=now-(fired[o]||0)<120,w=PORT[o].type===V?6:PORT[o].type===R?5:4;
+    s+=`<path class="c${hot?' fire':''}" data-cable="${n}" d="${cpath(a,b)}" stroke="${col}" stroke-width="${w}" opacity=".92"/><circle class="plug" cx="${a[0]}" cy="${a[1]}" r="4.5" fill="${col}"/><circle class="plug" cx="${b[0]}" cy="${b[1]}" r="4.5" fill="${col}"/>`});
+  if(drag&&drag.kind==='cable'){const a=jackXY(drag.from);s+=`<path d="${cpath(a,drag.pt)}" stroke="${COL[PORT[drag.from].type]}" stroke-width="5" fill="none" stroke-dasharray="7 5"/>`}
+  svg.innerHTML=s;
+  // projector light cones toward the room (top edge of the table)
+  let c='<defs><linearGradient id="lg" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>';
+  ITEMS.filter(i=>i.type==='proj').forEach(p=>{if(!srcOf(p.id+'.in')&&!panic)return;const cx=p.x+28,cy=p.y+20;c+=`<polygon points="${cx-14},${cy} ${cx+14},${cy} ${cx+90},-60 ${cx-90},-60" fill="url(#lg)"/>`});
+  cones.innerHTML=c}
+function bump(msg){rev++;document.getElementById('pRev').textContent=`table rev ${rev} · ${msg} · compiled in the worker, swapped at a frame start`}
+function startCable(key,e){const p=PORT[key];let from=key;
+  if(p.dir==='in'){const ix=CABLES.findIndex(c=>c[1]===key);if(ix<0)return;from=CABLES[ix][0];CABLES.splice(ix,1);bump('cable pulled out')}
+  drag={kind:'cable',from,pt:toTable(e),mv:ev=>{drag.pt=toTable(ev)}};
+  document.querySelectorAll('.jack').forEach(j=>{const q=PORT[j.dataset.port];const ok=q.type===PORT[from].type&&q.dir==='in'&&q.it!==PORT[from].it;j.classList.toggle('dim',!ok&&j.dataset.port!==from);j.classList.toggle('ok',ok)})}
+function endCable(e){const j=jackAt(e);
+  if(j){const q=PORT[j.dataset.port],f=PORT[drag.from];
+    if(q.dir==='in'&&q.type===f.type&&q.it!==f.it){const ix=CABLES.findIndex(c=>c[1]===q.key);if(ix>=0)CABLES.splice(ix,1);CABLES.push([f.key,q.key]);bump(`${f.key} → ${q.key}`)}
+    else if(q.dir==='in')say(`<b>Refused:</b> a ${f.type} cable does not fit a ${q.type} socket. Types never convert by themselves.`)}
+  document.querySelectorAll('.jack').forEach(j=>j.classList.remove('dim','ok'))}
+let noClick=false;
+svg.addEventListener('click',e=>{const p=e.target.closest('path.c');if(!p)return;const [o,i]=CABLES[+p.dataset.cable];CABLES.splice(+p.dataset.cable,1);bump(`${o} ✕ ${i}`)});
+
+/* ---------- buttons ---------- */
+function act(a){const [k,v]=a.split(':');
+  if(k==='live'){IT[v].live=!IT[v].live;bump(IT[v].live?`projector ${IT[v].n} live`:`projector ${IT[v].n} rehearsal only`)}
+  else if(k==='span')P['span.mode']=v;else if(k==='play')P[v+'.play']=!P[v+'.play'];else if(k==='restart')trig(v+'.restart');else if(k==='next')trig(v+'.next');
+  else if(k==='gen')P['gen.kind']=v;else if(k==='foot')P[v+'.on']=!P[v+'.on'];else if(k==='tap')trig('clock.tap');else if(k==='lfosync')P['lfo.sync']=!P['lfo.sync'];
+  else if(k==='src_a')P['v4.src_a']=+v;else if(k==='src_b')P['v4.src_b']=+v;else if(k==='fx_a')P['v4.fx_a'][+v]=!P['v4.fx_a'][+v];else if(k==='fx_b')P['v4.fx_b'][+v]=!P['v4.fx_b'][+v];
+  else if(k==='trans')P['v4.trans']=v;else if(k==='take')take();else if(k==='sync')P['v4.sync']=!P['v4.sync'];
+  else if(k==='mem'){P['v4.mem']=+v;const M={1:[1,2,'MIX',[0,0,0,0],[0,0,0,0]],2:[1,3,'MIX',[0,0,1,0],[0,0,0,0]],3:[2,4,'WIPE',[0,1,0,0],[1,0,0,0]],4:[1,2,'EFX',[0,0,0,1],[0,0,0,1]]}[+v]||[+v%4+1,(+v+1)%4+1,['MIX','WIPE','EFX'][+v%3],[+v%2,0,0,0],[0,0,+v%2,0]];
+    P['v4.src_a']=M[0];P['v4.src_b']=M[1];P['v4.trans']=M[2];P['v4.fx_a']=M[3].map(Boolean);P['v4.fx_b']=M[4].map(Boolean);say(`<b>V-4 memory ${v}</b> recalled: an item preset. Only values change, so it is instant.`)}
+  else if(k==='pad'){const n=+v;if(n<=2)fire('mk2.p'+n);if(!remoteOn()){say('The MK2 has no remote cable to a box: its pads only send their gate outputs. Plug MK2 USB → V-4 MIDI IN.');return}
+    if(n<=4)P['v4.src_a']=n;else if(n<=8)P['v4.src_b']=n-4;else if(n<=12)P['v4.fx_a'][n-9]=!P['v4.fx_a'][n-9];else P['v4.fx_b'][n-13]=!P['v4.fx_b'][n-13]}
+}
+itemsEl.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(b)act(b.dataset.act)});
+document.getElementById('bPanic').onclick=e=>{panic=!panic;e.target.classList.toggle('on',panic)};
+
+/* ---------- inspector ---------- */
+const say=h=>document.getElementById('insp').innerHTML=h;
+view.addEventListener('mouseover',e=>{
+  const p=e.target.closest('path.c');if(p){const [o,i]=CABLES[+p.dataset.cable]||[];if(!o)return;const t=PORT[o].type;
+    say(`<b>Cable</b> <span class="k">${t}</span> ${o} → ${i} · ${t===C?'value '+ctlOut(o).toFixed(3):t===V?'a texture, no copy':t===T?'last edge '+(fired[o]?((performance.now()-fired[o])/1000).toFixed(1)+' s ago':'never'):t===K?bpm.toFixed(1)+' BPM':'this controller plays that box (default page)'} · click to pull it out`);return}
+  const j=e.target.closest('.jack');if(j){const q=PORT[j.dataset.port],s=q.dir==='in'?srcOf(q.key):null,outs=CABLES.filter(c=>c[0]===q.key).map(c=>c[1]);
+    say(`<b>${q.it.name||q.it.type.toUpperCase()} · ${q.label}</b> <span class="k">${q.dir} · ${q.type} · ${q.real?'real socket':'Himmel strip'}</span> · ${q.dir==='in'?(s?'from '+s:'unpatched → '+({video:'black',control:'the knob itself',trigger:'nothing',clock:'master clock',remote:'not played'})[q.type]):(outs.length?'to '+outs.join(', '):'not patched')}`);return}
+  const it=e.target.closest('.item');if(it){const I=IT[it.dataset.it];say(TYPES[I.type].desc)}});
+
+/* ---------- drawing helpers ---------- */
+function drawKnob(el,v,mv){el.querySelector('path.val').setAttribute('d',arc(Math.max(.001,v)));el.querySelector('line.ind').setAttribute('transform',`rotate(${-135+v*270} 17 17)`);const m=el.querySelector('path.mod');if(m)m.setAttribute('d',mv==null?'':arc(Math.max(.001,mv)))}
+function thumb(id,src,nosig){const c=document.getElementById('th_'+id);if(!c)return;const x=c.getContext('2d');if(src)x.drawImage(src,0,0,c.width,c.height);else{x.fillStyle='#05070a';x.fillRect(0,0,c.width,c.height);x.fillStyle='#4a5';x.font='10px monospace';x.fillText(nosig||'NO SIGNAL',6,c.height/2+3)}}
+function mk2Screen(id,lines){const c=document.getElementById(id),x=c.getContext('2d');x.fillStyle='#1a2b5c';x.fillRect(0,0,128,32);x.fillStyle='#e8f0ff';x.font='7px monospace';lines.forEach((l,i)=>x.fillText(l,3,9+i*9))}
+const on=(a,v)=>document.querySelectorAll(`[data-act="${a}"]`).forEach(e=>e.classList.toggle('on',!!v));
+
+/* ---------- frame loop ---------- */
+let last=performance.now();
+function frame(now){
+  const dt=Math.min(.1,(now-last)/1000);last=now;
+  const b=(now-beatOrigin)/60000*bpm,bi=Math.floor(b);
+  if(bi!==lastBeat){lastBeat=bi;fire('clock.beat');if(bi%4===0){fire('clock.bar');if(P['v4.sync']&&!tbarAnim)take()}}
+  const ph=P['lfo.sync']?(b/4)%1:(lfoPhase=(lfoPhase+dt*(0.05+P['lfo.rate']*4))%1);
+  lfoVal=.5+.5*Math.sin(ph*2*Math.PI)*P['lfo.depth'];
+  if(tbarAnim){const u=Math.min(1,(now-tbarAnim.t)/tbarAnim.dur);P['v4.tbar']=tbarAnim.f+(tbarAnim.to-tbarAnim.f)*(u*u*(3-2*u));if(u>=1)tbarAnim=null}
+  // video, in patch order
+  order().forEach(it=>{const r=RENDER[it.type];if(r)r(it,now,dt)});
+  thumb('pl1',VID['pl1.out']);thumb('pl2',VID['pl2.out']);thumb('gen',VID['gen.out']);
+  ['mon1','mon2'].forEach(m=>thumb(m,vin(m+'.in')));
+  // the room: each wall screen shows the projector aimed at it
+  ITEMS.filter(i=>i.type==='proj').forEach(p=>{const c=document.getElementById('w'+p.n),x=c.getContext('2d'),s=vin(p.id+'.in');
+    x.fillStyle='#16171b';x.fillRect(0,0,320,180);
+    const tag=document.getElementById('wt'+p.n);
+    if(panic){x.fillStyle='#000';x.fillRect(0,0,320,180);tag.innerHTML=`<b>PANIC</b>safe source`}
+    else if(s){x.drawImage(s,0,0,320,180);tag.innerHTML=p.live?`<b>LIVE ${p.n}</b>output ${p.n}`:`rehearsal projector · not an output`}
+    else{x.fillStyle=p.live?'#000':'#16171b';x.fillRect(0,0,320,180);tag.innerHTML=p.live?`<b>LIVE ${p.n}</b>no cable → safe source (black)`:'no projector'}
+    if(!p.live&&s){x.fillStyle='rgba(22,23,27,.55)';x.fillRect(0,0,320,180)}});
+  // controls
+  document.querySelectorAll('[data-knob]').forEach(k=>{const key=k.dataset.knob,m=PMOD[key],mod=m&&srcOf(m);drawKnob(k,P[key],mod?eff(key):null)});
+  document.querySelectorAll('[data-mk]').forEach(k=>drawKnob(k,mk2Knob(+k.dataset.mk),null));
+  const pl=document.querySelector('[data-tbar]');pl.querySelector('i').style.top=(14+P['v4.tbar']*68)+'px';pl.querySelector('em').style.top=(20+eff('v4.tbar')*68)+'px';
+  [1,2,3,4].forEach(i=>{on('src_a:'+i,P['v4.src_a']===i);on('src_b:'+i,P['v4.src_b']===i)});[0,1,2,3].forEach(i=>{on('fx_a:'+i,P['v4.fx_a'][i]);on('fx_b:'+i,P['v4.fx_b'][i])});
+  ['MIX','WIPE','EFX'].forEach(m=>on('trans:'+m,P['v4.trans']===m));on('take',!!tbarAnim);on('sync',P['v4.sync']);for(let i=1;i<=8;i++)on('mem:'+i,P['v4.mem']===i);
+  on('play:pl1',P['pl1.play']);on('play:pl2',P['pl2.play']);['BARS','GRAD','NOISE','COLOR'].forEach(k=>on('gen:'+k,P['gen.kind']===k));on('span:SPAN',P['span.mode']==='SPAN');on('span:MIRROR',P['span.mode']==='MIRROR');on('lfosync',P['lfo.sync']);
+  ITEMS.filter(i=>i.type==='proj').forEach(p=>on('live:'+p.id,p.live));
+  ['ped1','ped2'].forEach(p=>document.getElementById('led_'+p).className='led '+(P[p+'.on']?'bad':''));
+  const rem=remoteOn();document.getElementById('v4remote').textContent=rem?'◂ played by MK2 (remote cable)':'';document.getElementById('mkrem').textContent=rem?'→ V-4 · PERFORM':'none';
+  for(let n=1;n<=16;n++){const el=document.getElementById('pad'+n);const lit=rem&&(n<=4?P['v4.src_a']===n:n<=8?P['v4.src_b']===n-4:n<=12?P['v4.fx_a'][n-9]:P['v4.fx_b'][n-13]);
+    el.style.background=!rem?'#3a3a40':lit?(n<=4?'#4aa3ff':n<=8?'#ff6b9a':'#f5b041'):(n<=4?'#1d3550':n<=8?'#4a2131':'#4a3a1a');el.style.color=lit?'#111':'#999'}
+  if(rem){mk2Screen('mkL',['V-4  PERFORM   1/2','T-BAR  CTRL A  CTRL B  FADE',`${P['v4.tbar'].toFixed(2)}   ${eff('v4.ctl_a').toFixed(2)}    ${P['v4.ctl_b'].toFixed(2)}    ${((P['v4.fade']-.5)*2).toFixed(2)}`]);mk2Screen('mkR',[`A:${P['v4.src_a']}  B:${P['v4.src_b']}  ${P['v4.trans']}`,`${bpm.toFixed(1)} BPM  MEM ${P['v4.mem']}`,'PADS: IN A / IN B / FX'])}
+  else{mk2Screen('mkL',['NO REMOTE CABLE','patch USB to a box']);mk2Screen('mkR',['K1 K2 → CV outs','P1 P2 → gate outs'])}
+  // clock + lfo
+  const bs=bpm.toFixed(1);document.getElementById('pBpm').textContent=bs;document.getElementById('cBpm').textContent=bs;
+  ['pBeat','cBeat'].forEach(id=>[...document.getElementById(id).children].forEach((e,i)=>e.classList.toggle('on',i===((bi%4)+4)%4)));
+  const lc=document.getElementById('th_lfo').getContext('2d');lc.fillStyle='#0b1410';lc.fillRect(0,0,70,30);lc.strokeStyle='#3ddc84';lc.beginPath();for(let x=0;x<70;x++)lc.lineTo(x,15-Math.sin(x/70*2*Math.PI)*11);lc.stroke();lc.fillStyle='#fff';lc.beginPath();lc.arc(ph*70,15-Math.sin(ph*2*Math.PI)*11,2.5,0,7);lc.fill();
+  // GPU
+  const Cs=costs(seenSet());let tot=0;ITEMS.forEach(it=>{const el=document.getElementById('cost_'+it.id);const c=Cs[it.id];if(c)tot+=c[0];if(!el)return;
+    el.textContent=c?`${c[0].toFixed(2)} ms · ${c[1]}`:'not seen · 0 ms';el.classList.toggle('pruned',!c)});
+  document.getElementById('pGpu').textContent=tot.toFixed(2);const bar=document.getElementById('pGpuBar');bar.style.width=Math.min(100,tot/4*100)+'%';
+  drawCables(now);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+say('The <b>V-4 classic</b> table: two video players (one through a MIRROR pedal), a camera and a generator into the <b>V-4</b>; PROGRAM → span box → 3 live projectors → the room above. The MK2 plays the V-4 over a remote cable. The NEGATIVE pedal and monitor 2 lie unplugged: patch them in.');
+</script>
+</body>
+</html>
