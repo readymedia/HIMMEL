@@ -238,7 +238,8 @@ The details are in the mockup (`docs/vj-mockup.html`).
      4 frames ahead (also backwards) into lock-free slots; the renderer uploads
      ready frames as BC textures (UpdateSubresource). 1080p: 0.2-0.9 ms per frame.
      Playlist = `--clip` (repeatable) or every .mov under `media/` (gitignored;
-     test clips in `media/test/`, made with ffmpeg testsrc). MK2: Page </> =
+     test clips in `media/test/`, made by `python tools/make_test_clips.py`
+     from ffmpeg testsrc, not in git). MK2: Page </> =
      knob page 1 test card / 2 clip (opacity, speed -2..2x, zoom, pos x/y),
      encoder = next/previous clip, pads = 16 jump points, Play = pause,
      Restart = start. ffmpeg's HAP encoder needs width/height divisible by 4.

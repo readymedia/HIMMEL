@@ -170,7 +170,13 @@ The MK2 screens always show the current page, with each value right above its kn
 Himmel plays **HAP** (`.mov`): Hap, Hap Alpha and Hap Q, plain or chunked.
 Not yet: Hap Q Alpha, Hap R.
 
-Make a test clip:
+The test clips (`media/test/`, not in git) are made by one script, in about
+10 seconds; it checks each clip with `hap_probe.exe` if that is built:
+```
+python tools/make_test_clips.py
+```
+It makes Hap (4 chunks), Hap Q, Hap Alpha (alpha ramp) and an uncompressed
+1276x716 25 fps clip from ffmpeg's test pattern. Make a single clip by hand:
 ```
 ffmpeg -f lavfi -i testsrc=size=1920x1080:rate=30:duration=10 -vf format=rgba -c:v hap -chunks 4 media/test/testcard.mov
 ```

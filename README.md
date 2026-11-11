@@ -39,6 +39,7 @@ git clone https://github.com/readymedia/HIMMEL.git
 cd HIMMEL
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release
+python tools/make_test_clips.py
 build\bin\Release\mk2_tests.exe && build\bin\Release\media_tests.exe
 build\bin\Release\himmel.exe -- --outputs 3 --size 640x360
 ```
