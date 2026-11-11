@@ -64,6 +64,24 @@ MAIN / A / B / OWN / TABLE ──► OUTPUT n (output FX ▸ warp/blend ▸ swap
   per 1080p frame, measured). 4–8 HAP layers at 1080p are limited by disk
   speed before the GPU.
 
+### 2.0 Canvas geometry
+
+- The outputs are windows onto one canvas.
+  - **Screens** butt: the canvas width = N × W (plus optional bezel
+    compensation).
+  - **Projectors** overlap by the blend width O: the canvas width =
+    N × W − (N − 1) × O.
+- The output stage cuts each window out of the canvas, then applies the
+  output effects → keystone / mesh warp → masks → edge-blend ramps (gamma,
+  black-level lift) in one pass per output.
+- Layers have a **place** (FILL ALL, OUT n, FIT, REPEAT, FREE) that becomes
+  their transform. It is computed when the layer or the canvas changes,
+  never per frame.
+- Masks are output-stage polygons (feathered, triangulated at edit time), so
+  every look respects them.
+- During mapping the output stage also draws the crosshair, the outlines and
+  the test grid on that output only.
+
 ### 2.1 The render graph (built off the frame loop)
 
 - The **patch / graph worker** turns the model (decks, layers, slots,

@@ -93,6 +93,9 @@ and without one dropped frame in an 8-hour soak.
    + blend + opacity + 4 FX slots + reactions + clip FX.
 2. **The crossfader** A ↔ B into MAIN, with curves, TAKE (timed,
    quantisable) and CUT, and the decks swapping roles after a TAKE.
+2b. **The canvas model:** canvas size from the outputs (screens butt,
+   projectors overlap); layer places (FILL ALL, OUT n, FIT, REPEAT, FREE)
+   (`design/engine.md` §2.0).
 3. **Effect slots at every level** (clip, layer, deck, master, output).
    Touch FX moves into a slot.
 4. **The render graph** is built in a worker and swapped at frame boundaries;
@@ -115,6 +118,7 @@ and without one dropped frame in an 8-hour soak.
    picture when one is unplugged); effects work on them exactly as on clips.
 2. Spout in / out; NDI later.
 3. **The source per output:** MAIN / A / B / OWN / TABLE; per-output FX;
+   the outputs wizard (screens vs projectors, 1 / 2 / 3, blend overlap → canvas);
    black-out per output.
 4. **Curtain windows** in the supervisor; the safe scene is always loaded.
 5. The latency test is run and logged (Q); the driver latency is reported per
@@ -151,7 +155,8 @@ and without one dropped frame in an 8-hour soak.
 
 1. The effect metadata format (`interfaces/effect-metadata.md`).
 2. Tier 1 effects (~30) and tier 1 generators (~12) from
-   `design/effects-and-generators.md`, each with a PNG + timing check.
+   `design/effects-and-generators.md`, each with a PNG + timing check,
+   including the **text generator** (§5 there: sources, styles, SDF glyphs).
 3. FX pads set; default reactions.
 4. The ISF loader (glslang + SPIRV-Cross) on the **add-on shelf**, behind the
    safety gate: compile, cost, flicker check, preview loop.
@@ -169,6 +174,8 @@ and without one dropped frame in an 8-hour soak.
    - constraint rules (library fit, effect compatibility, GPU budget,
      brightness).
 4. 16 mood files on the 4 × 4 map; 8 macros per mood.
+4b. **ROTATE** saved presets on every level, `REC` saves at the level,
+   auto-rotate every n bars (`design/presets-and-shuffle.md` §2).
 5. "Fill bank from mood".
 6. **Done when:** a beginner can make a good 16-scene bank in under
    2 minutes with `>` and `REC`.
@@ -191,8 +198,9 @@ and without one dropped frame in an 8-hour soak.
    - the weapon band.
 4. Library view, Show view, Outputs view.
 5. The audience view (the weapon drawing on a second screen, with Explain).
-6. The weapon-adaptive layouts (MK2 + Lightpad, MK2, Lightpad, NuVJ,
-   keyboard).
+6. The weapon-adaptive layouts: main weapon (MK2, NuVJ, keyboard) +
+   side-arm cards; the monitors follow the canvas shape; optional second
+   GUI screen (`design/gui.md` §8, §14).
 
 ### Phase 7: music (A, weeks 48–52)
 
@@ -232,8 +240,10 @@ and without one dropped frame in an 8-hour soak.
 
 ### Phase 11: projection mapping
 
-Keystone, mesh warp, edge blend and masks per output; room view; up to
-6 outputs (splitter / 2nd GPU).
+Keystone, mesh warp, edge blend and **pen-tool masks with a crosshair on
+the real output** (the Block as a trackpad), per output; room view; up to
+6 outputs (splitter / 2nd GPU). Simple edge blend for the 3-projector
+canvas can come earlier if a gig needs it.
 
 ### Phase 12: Overlay mode and pro I/O
 

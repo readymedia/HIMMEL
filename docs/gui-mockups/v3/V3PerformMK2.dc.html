@@ -22,6 +22,12 @@ button{cursor:pointer}
 <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#12161B;border:1px solid #232A33;border-radius:8px;padding:5px 12px;font-size:12px">
 <b style="letter-spacing:.2em;font-size:14px">HIMMEL</b>
 <span style="padding:2px 8px;border-radius:12px;background:#E8ECF1;color:#0B0D10;font-weight:800">MAIN · MK2</span>
+<span style="margin-left:6px;font-size:11px;color:#9AA4B2">CANVAS</span>
+<button onClick="{{ o1 }}" style="height:24px;padding:0 8px;border-radius:5px;border:{{ b1 }};background:#1B2027;color:#E8ECF1;font:700 11px Inter">1</button>
+<button onClick="{{ o2 }}" style="height:24px;padding:0 8px;border-radius:5px;border:{{ b2 }};background:#1B2027;color:#E8ECF1;font:700 11px Inter">2</button>
+<button onClick="{{ o3 }}" style="height:24px;padding:0 8px;border-radius:5px;border:{{ b3 }};background:#1B2027;color:#E8ECF1;font:700 11px Inter">3 screens</button>
+<button onClick="{{ o3b }}" style="height:24px;padding:0 8px;border-radius:5px;border:{{ b3b }};background:#1B2027;color:#E8ECF1;font:700 11px Inter">3 projectors blend</button>
+<span class="mono" style="font-size:11px;color:#9AA4B2">{{ canvasLabel }}</span>
 <span style="padding:2px 8px;border-radius:12px;border:1px solid #1F5A33;color:#7EE2A0">+ BLOCK</span>
 <span style="padding:2px 8px;border-radius:12px;border:1px solid #1F5A33;color:#7EE2A0">+ LUMI</span>
 <span class="mono" style="font-size:16px;margin-left:8px">128.0</span><span style="display:flex;gap:2px"><span style="width:9px;height:9px;background:#E8ECF1"></span><span style="width:9px;height:9px;background:#3A434F"></span><span style="width:9px;height:9px;background:#3A434F"></span><span style="width:9px;height:9px;background:#3A434F"></span></span><span class="hw">LINK</span>
@@ -48,6 +54,22 @@ button{cursor:pointer}
 <div style="grid-column:span 2;margin-top:6px;font-size:10px;color:#6B7684;line-height:1.4">Page 1/5 · PLAY<br>Pages: PLAY · LAYER · FX · MIX · REACT</div>
 </div>
 
+<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+<sc-if value="{{ multi }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:900;color:#30D158;letter-spacing:.12em">PREVIEW</span><span style="font-size:11px;color:#9AA4B2">the whole canvas · thin lines = output edges · hatched = blend overlap · white box = selected layer A</span></div>
+<div style="aspect-ratio:{{ aspect }};max-height:150px;width:100%;border-radius:6px;border:3px solid #30D158;box-sizing:border-box;background:radial-gradient(ellipse at 40% 55%,#BFE9FF 0,#2EC5FF 12%,#0B3A55 40%,#05121C 80%);position:relative;overflow:hidden">
+<sc-for list="{{ zones }}" as="z" hint-placeholder-count="2"><div style="{{ z.st }}"></div></sc-for>
+<sc-for list="{{ labels }}" as="l" hint-placeholder-count="3"><span style="{{ l.st }}">{{ l.t }}</span></sc-for>
+<div style="position:absolute;left:2px;top:2px;right:2px;bottom:2px;border:2px dashed rgba(255,255,255,.85);border-radius:3px"></div>
+<div style="position:absolute;left:46%;top:30%;width:8%;height:40%;border:2px solid #B78CFF;border-radius:3px;background:rgba(183,140,255,.25);display:flex;align-items:center;justify-content:center;font:800 10px Inter">B · logo PNG</div>
+</div>
+<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;font-size:11px"><span style="color:#9AA4B2">Layer A snaps to:</span><span style="padding:3px 8px;border-radius:4px;background:#E8ECF1;color:#0B0D10;font-weight:800">FILL ALL · crop</span><span style="padding:3px 8px;border-radius:4px;border:1px solid #3A434F">OUT 1</span><span style="padding:3px 8px;border-radius:4px;border:1px solid #3A434F">OUT 2</span><span style="padding:3px 8px;border-radius:4px;border:1px solid #3A434F">OUT 3</span><span style="padding:3px 8px;border-radius:4px;border:1px solid #3A434F">FIT</span><span style="padding:3px 8px;border-radius:4px;border:1px solid #3A434F">FREE</span><span class="hw">LAYER page · knob 1 PLACE</span></div>
+<div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:900;color:#FF3B30;letter-spacing:.12em">● PROGRAM</span><span style="font-size:11px;color:#9AA4B2">exactly what the outputs show, side by side as in the room</span></div>
+<div style="aspect-ratio:{{ aspect }};max-height:150px;width:100%;border-radius:6px;border:3px solid #FF3B30;box-sizing:border-box;background:radial-gradient(ellipse at 50% 60%,#FFB347 0,#FF9F1C 12%,#5A2A00 40%,#120700 80%);position:relative;overflow:hidden">
+<sc-for list="{{ zones }}" as="z" hint-placeholder-count="2"><div style="{{ z.st }}"></div></sc-for>
+<sc-for list="{{ labels }}" as="l" hint-placeholder-count="3"><span style="{{ l.st }}">{{ l.t }}</span></sc-for>
+</div>
+</sc-if>
 <div style="flex:1;min-width:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px">
 <div style="display:flex;flex-direction:column;gap:6px;border-radius:10px;padding:6px;background:linear-gradient(180deg,rgba(48,209,88,.10),rgba(48,209,88,.02));border:1px solid #1F5A33">
 <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px">
@@ -57,7 +79,7 @@ button{cursor:pointer}
 <button style="height:30px;border-radius:5px;border:1px solid #6A4FA0;background:#221A33;color:#E9DDFF;font:800 10px Inter;letter-spacing:.06em">MOTION · free<div class="hw" style="font-size:9px">TOP 4</div></button>
 </div>
 <div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:900;color:#30D158;letter-spacing:.12em">PREVIEW</span><span style="font-size:11px;color:#9AA4B2">prepare here · the audience can't see this · left screen</span></div>
-<div style="aspect-ratio:16/9;max-height:230px;border-radius:6px;border:3px solid #30D158;background:radial-gradient(circle at 35% 40%,#2EC5FF 0,#0B3A55 35%,#05121C 72%);position:relative"><div style="position:absolute;inset:0;background:repeating-conic-gradient(from 0deg at 50% 50%,rgba(255,255,255,.07) 0 15deg,transparent 15deg 30deg)"></div><span class="mono" style="position:absolute;left:8px;bottom:6px;font-size:11px;color:#BFE9FF">look #23 · Techno Ice · layers A B C</span></div>
+<sc-if value="{{ single }}" hint-placeholder-val="{{ true }}"><div style="aspect-ratio:16/9;max-height:230px;border-radius:6px;border:3px solid #30D158;background:radial-gradient(circle at 35% 40%,#2EC5FF 0,#0B3A55 35%,#05121C 72%);position:relative"><div style="position:absolute;inset:0;background:repeating-conic-gradient(from 0deg at 50% 50%,rgba(255,255,255,.07) 0 15deg,transparent 15deg 30deg)"></div><span class="mono" style="position:absolute;left:8px;bottom:6px;font-size:11px;color:#BFE9FF">look #23 · Techno Ice · layers A B C</span></div></sc-if>
 <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px">
 <div style="background:#14181D;border:1px solid #234A30;border-radius:8px;padding:5px;display:flex;flex-direction:column;gap:4px"><div style="height:46px;display:flex;gap:2px;align-items:center"><span style="flex:1;height:30px;border-radius:2px;background:linear-gradient(135deg,#102030,#2EC5FF);opacity:.45"></span><span style="flex:1.6;height:44px;border-radius:3px;background:linear-gradient(135deg,#0B3A55,#2EC5FF);outline:2px solid #30D158"></span><span style="flex:1;height:30px;border-radius:2px;background:linear-gradient(135deg,#123,#BFE9FF);opacity:.45"></span></div><b style="font-size:11px">SCROLL CLIPS</b><span class="hw">KNOB 1 · turn = next clip</span></div>
 <div style="background:#14181D;border:1px solid #234A30;border-radius:8px;padding:5px;display:flex;flex-direction:column;gap:4px"><div style="height:46px;position:relative"><span style="position:absolute;left:18%;top:8px;width:46%;height:32px;border-radius:3px;background:#301040;transform:rotate(-10deg);opacity:.6"></span><span style="position:absolute;left:30%;top:4px;width:46%;height:34px;border-radius:3px;background:linear-gradient(135deg,#0B3A55,#2EC5FF);outline:2px solid #B78CFF"></span><span class="mono" style="position:absolute;right:2px;bottom:0;font-size:10px;color:#D2B8FF">#23</span></div><b style="font-size:11px">DICE THE LOOK</b><span class="hw">KNOB 2 · right new · left back</span></div>
@@ -74,7 +96,7 @@ button{cursor:pointer}
 <button style="height:30px;border-radius:5px;border:2px solid #FFD60A;background:#2A2410;color:#FFE98A;font:800 10px Inter">ASSIST on<div class="hw" style="font-size:9px">TOP 8</div></button>
 </div>
 <div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:900;color:#FF3B30;letter-spacing:.12em">● PROGRAM</span><span style="font-size:11px;color:#9AA4B2">on air → OUT 1·2·3 · right screen</span></div>
-<div style="aspect-ratio:16/9;max-height:230px;border-radius:6px;border:3px solid #FF3B30;background:radial-gradient(ellipse at 50% 60%,#FFB347 0,#FF9F1C 18%,#5A2A00 45%,#120700 75%);position:relative"><div style="position:absolute;inset:0;background:repeating-radial-gradient(circle at 50% 60%,rgba(255,255,255,.07) 0 6px,transparent 6px 22px)"></div><span class="mono" style="position:absolute;right:8px;top:6px;font-size:11px;color:#FFD9A8">Deep House Glow · layers E F</span></div>
+<sc-if value="{{ single }}" hint-placeholder-val="{{ true }}"><div style="aspect-ratio:16/9;max-height:230px;border-radius:6px;border:3px solid #FF3B30;background:radial-gradient(ellipse at 50% 60%,#FFB347 0,#FF9F1C 18%,#5A2A00 45%,#120700 75%);position:relative"><div style="position:absolute;inset:0;background:repeating-radial-gradient(circle at 50% 60%,rgba(255,255,255,.07) 0 6px,transparent 6px 22px)"></div><span class="mono" style="position:absolute;right:8px;top:6px;font-size:11px;color:#FFD9A8">Deep House Glow · layers E F</span></div></sc-if>
 <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px">
 <div style="background:#14181D;border:1px solid #4A2220;border-radius:8px;padding:5px;display:flex;flex-direction:column;gap:4px"><div style="height:46px;display:flex;gap:3px;align-items:flex-end"><span style="flex:1;height:30%;background:#FF9F1C"></span><span style="flex:1;height:50%;background:#FF9F1C"></span><span style="flex:1;height:70%;background:#FF9F1C"></span><span style="flex:1;height:85%;background:#FF6B30"></span><span style="flex:1;height:20%;background:#3A434F"></span></div><b style="font-size:11px">INTENSITY</b><span class="hw">KNOB 5 · energy macro</span></div>
 <div style="background:#14181D;border:1px solid #4A2220;border-radius:8px;padding:5px;display:flex;flex-direction:column;gap:4px"><div style="height:46px;display:flex;align-items:center;justify-content:center"><span style="width:44px;height:44px;border-radius:50%;background:conic-gradient(#f33,#f93,#ff3,#3f6,#3cf,#36f,#c3f,#f33);display:flex;align-items:center;justify-content:center"><span style="width:26px;height:26px;border-radius:50%;background:radial-gradient(#FFB347,#5A2A00)"></span></span></div><b style="font-size:11px">COLOUR · amber</b><span class="hw">KNOB 6 · turn the hue</span></div>
@@ -84,6 +106,7 @@ button{cursor:pointer}
 </div>
 </div>
 
+</div>
 <div style="width:150px;flex:none;display:flex;flex-direction:column;gap:6px;padding-top:22px">
 <span class="lbl">Outputs</span>
 <div style="border:2px solid #FF3B30;border-radius:6px;height:58px;background:radial-gradient(ellipse at 70% 60%,#FF9F1C,#120700 70%);position:relative"><span style="position:absolute;left:4px;top:2px;font-size:10px;font-weight:800">1 ● MAIN</span></div>
@@ -212,12 +235,35 @@ button{cursor:pointer}
 class Component extends DCLogic {
 constructor(props) {
 super(props);
-this.state = { target: 'prev', mode: 'clips' };
+this.state = { target: 'prev', mode: 'clips', outs: '1' };
 }
 renderVals() {
 const prog = this.state.target === 'prog';
+const o = this.state.outs;
+const W = 1920, OV = 269;
+let n = o === '1' ? 1 : (o === '2' ? 2 : 3);
+const blend = o === '3b';
+const cw = blend ? n * W - (n - 1) * OV : n * W;
+const zones = [], labels = [];
+for (let k = 0; k < n; k++) {
+  const x0 = blend ? k * (W - OV) : k * W;
+  labels.push({ t: 'OUT ' + (k + 1), st: 'position:absolute;top:4px;left:' + (100 * x0 / cw + 0.6).toFixed(2) + '%;font:800 10px Inter;color:#fff;background:rgba(0,0,0,.55);padding:1px 5px;border-radius:3px' });
+  if (k > 0) {
+    if (blend) zones.push({ st: 'position:absolute;top:0;bottom:0;left:' + (100 * x0 / cw).toFixed(2) + '%;width:' + (100 * OV / cw).toFixed(2) + '%;background:repeating-linear-gradient(45deg,rgba(255,255,255,.28) 0 4px,transparent 4px 9px);border-left:1px solid rgba(255,255,255,.7);border-right:1px solid rgba(255,255,255,.7)' });
+    else zones.push({ st: 'position:absolute;top:0;bottom:0;width:2px;background:rgba(255,255,255,.8);left:' + (100 * x0 / cw).toFixed(2) + '%' });
+  }
+}
+const sel = '2px solid #E8ECF1', un = '1px solid #3A434F';
 return {
 isProg: prog,
+single: n === 1,
+multi: n > 1,
+aspect: cw + '/1080',
+zones: zones,
+labels: labels,
+canvasLabel: cw + ' × 1080' + (blend ? ' · 14 % blend' : (n > 1 ? ' · butted' : '')),
+b1: o === '1' ? sel : un, b2: o === '2' ? sel : un, b3: o === '3' ? sel : un, b3b: o === '3b' ? sel : un,
+o1: () => this.setState({ outs: '1' }), o2: () => this.setState({ outs: '2' }), o3: () => this.setState({ outs: '3' }), o3b: () => this.setState({ outs: '3b' }),
 prevSel: prog ? '#234A30' : '#E8ECF1',
 progSel: prog ? '#FFFFFF' : '#4A2220',
 targetName: prog ? 'PROGRAM layer F (live)' : 'PREVIEW layer A',

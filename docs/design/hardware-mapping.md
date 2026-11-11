@@ -98,7 +98,7 @@ program. The full table is in `gui.md` §5.
 
 | Page | Knobs 1–4 (PREVIEW) | Knobs 5–8 (PROGRAM) |
 |---|---|---|
-| LAYER | Opacity, blend, zoom, position | The opacities of program layers E–H |
+| LAYER | **PLACE** (snap: FILL ALL / OUT 1–3 / FIT / REPEAT / FREE), ZOOM / crop, PAN (`SHIFT` = up / down), OPACITY | The opacities of program layers E–H |
 | FX | Choose, param 1, param 2, audio link | Master FX: choose, param 1, param 2, mix |
 | MIX | Fade time, curve, preview dim, transition | Master dim, outputs 1–3, output 4, safe limit |
 | REACT | Signal, amount, attack, release | REACT macro, bass, mid, high |
@@ -138,7 +138,7 @@ and the output thumbnails show "next"), `MUTE` = mute the layer;
 | `PAGE ◀ ▶` | Knob pages (`SHIFT` = jump to PLAY) |
 | `ALL` | The dice scope = the whole look (default: the selected layer) |
 | `AUTO WRITE` + knob | Link that knob to an audio signal |
-| `Transport ◀ / ▶` | Dice back / forward (the same as knob 2) |
+| `Transport ◀ / ▶` | Dice back / forward (the same as knob 2); `SHIFT + ▶` = mutate; **`SHIFT + ◀ / ▶` held with knob 2 = rotate** (see below) |
 | `GRID` | On the beat (quantise) |
 | `REC` | Save the preview look to the next free LOOKS pad (`REC` + pad = that pad) |
 | `ERASE` | Undo (`SHIFT` = redo) |
@@ -158,6 +158,42 @@ and the output thumbnails show "next"), `MUTE` = mute the layer;
   - bottom line = knob 5–8.
 - In LIVE EDIT the top line of the right screen is inverted.
 - The labels sit over the physical knobs (`kKnobX`).
+
+### 3.7 Presets: dice, mutate, rotate
+
+| Gesture | What it does |
+|---|---|
+| Knob 2 right / `▶` | **DICE** (a new random look) |
+| Knob 2 left / `◀` | Back through the dice history |
+| `SHIFT` + `▶` | **MUTATE** |
+| `SHIFT` + knob 2 | **ROTATE** through saved presets of the current level |
+| FX page, `SHIFT` + knob 1 | Rotate the effect's own presets |
+| `SHIFT` + knob 8 | Rotate the master FX presets |
+| `REC` | Save at the current level |
+| `SHIFT` + `REC` | Toggle **auto-rotate** for the current level (every 8 bars by default; the MIX page sets the interval) |
+
+The level follows what is selected:
+- effect = an FX page;
+- layer = a group button;
+- look = `ALL`;
+- master = knob 8;
+- output = `NAVIGATE` + pad.
+
+### 3.8 Mapping mode (OUTPUTS › Mapping, projectors only)
+
+| Control | Function |
+|---|---|
+| Knobs 1 / 2 | Move the selected point X / Y (`SHIFT` = finer) |
+| Knob 3 | Feather |
+| Knob 4 | Blend width (BLEND tool) |
+| Pads | Pick a point / corner |
+| `REC` | Add a point at the crosshair |
+| `ERASE` | Delete the point |
+| `ENTER` | Close the mask |
+| Wheel | Zoom the view |
+| Top 1–6 | The tools (CORNERS, WARP, BLEND, PEN, MAGIC, TEST GRID) |
+
+The **Block** is the trackpad for the crosshair.
 
 ## 4. NuVJ as the main weapon (classic)
 

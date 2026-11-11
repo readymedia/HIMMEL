@@ -74,6 +74,24 @@ Ice 07". Names are optional and can be edited later.
 | REACT | Audio links |
 | MOOD | Off = the roll stays at the mood point; on = it may drift to nearby moods |
 
+**ROTATE** (the third verb, owner 2026-11-11):
+- It steps through the **saved presets of the current level, in order**, so
+  you can cycle effects and effect settings you already like.
+- It works at every level: effect, layer, look (= the LOOKS pads), master and
+  output.
+- On the MK2: `SHIFT` + knob 2 (or `SHIFT` + knob 1 on the FX page, `SHIFT` +
+  knob 8 for the master).
+
+**Auto-rotate:**
+- A level can rotate by itself every n bars (8 by default), landing on the
+  beat or the phrase and respecting GRID.
+- It stops as soon as you touch that level. `SHIFT + REC` toggles it.
+- Good for installations and songs you don't want to babysit.
+
+**Saving follows the level:** `REC` saves an effect preset on an FX page, a
+layer preset when a group is selected, and a look with `ALL`. Levels nest: a
+look holds its layer presets, and a layer holds its effect presets.
+
 **History:** 64 rolls per deck, kept with the show. Each entry is a seed plus
 the locks plus the scope, so it can be rebuilt exactly (§4). Saved entries are
 starred. Undo (`ERASE`) is a separate stack and covers every edit, not only

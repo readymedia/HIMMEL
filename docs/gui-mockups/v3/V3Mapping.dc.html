@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Himmel v3 – Mapping: pen-tool masks with a crosshair on the projection</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0D10}
+.hw{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;color:#8C96A3}
+.lbl{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#9AA4B2;font-weight:800}
+.pt{position:absolute;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:#FFD60A;border:2px solid #000;box-sizing:border-box}
+</style>
+</helmet>
+<div style="min-height:900px;width:100%;box-sizing:border-box;background:#0B0D10;color:#E8ECF1;font-family:Inter,system-ui,sans-serif;display:flex;flex-direction:column;gap:12px;padding:16px 22px">
+<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap"><b style="letter-spacing:.2em">HIMMEL</b><span style="font-size:13px;color:#9AA4B2">OUTPUTS › Mapping › <b style="color:#E8ECF1">Projector 2</b></span><span style="font-size:12px;padding:3px 9px;border-radius:12px;background:#33300F;color:#FFD60A">Only projectors are mapped. Screens skip this.</span><div style="flex:1"></div><span style="font-size:13px">Projector</span><span style="padding:4px 10px;border-radius:6px;border:1px solid #3A434F">1</span><span style="padding:4px 10px;border-radius:6px;background:#E8ECF1;color:#0B0D10;font-weight:800">2</span><span style="padding:4px 10px;border-radius:6px;border:1px solid #3A434F">3</span></div>
+
+<div style="display:flex;gap:12px;flex:1;flex-wrap:wrap">
+<div style="width:128px;flex:none;display:flex;flex-direction:column;gap:6px">
+<span class="lbl">Tools</span>
+<div style="background:#1B2027;border-radius:8px;padding:8px;font-size:12px;font-weight:700">CORNERS<div style="font-weight:400;color:#9AA4B2;font-size:11px">4-point keystone</div></div>
+<div style="background:#1B2027;border-radius:8px;padding:8px;font-size:12px;font-weight:700">WARP<div style="font-weight:400;color:#9AA4B2;font-size:11px">3×3 … 9×9 grid</div></div>
+<div style="background:#1B2027;border-radius:8px;padding:8px;font-size:12px;font-weight:700">BLEND<div style="font-weight:400;color:#9AA4B2;font-size:11px">width · curve · black level</div></div>
+<div style="background:#E8ECF1;color:#0B0D10;border-radius:8px;padding:8px;font-size:12px;font-weight:800">PEN · MASK<div style="font-weight:500;font-size:11px">click corners, close on the first point</div></div>
+<div style="background:#1B2027;border-radius:8px;padding:8px;font-size:12px;font-weight:700;color:#9AA4B2">MAGIC<div style="font-weight:400;font-size:11px">camera: tap an object, mask suggested (later)</div></div>
+<div style="background:#1B2027;border-radius:8px;padding:8px;font-size:12px;font-weight:700">TEST GRID<div style="font-weight:400;color:#9AA4B2;font-size:11px">on / off on the real output</div></div>
+</div>
+
+<div style="flex:1 1 600px;min-width:0;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;gap:8px;align-items:center"><span class="lbl">Projector 2 · draw here</span><span style="font-size:12px;color:#9AA4B2">The photo is optional (a webcam pointed at the stage). The crosshair follows your pointer on the real projection.</span></div>
+<div style="aspect-ratio:16/9;width:100%;border-radius:8px;border:2px solid #3A434F;box-sizing:border-box;position:relative;overflow:hidden;background:linear-gradient(180deg,#15171C,#0B0C0F 60%,#1C1712)">
+<div style="position:absolute;left:30%;top:10%;width:40%;height:46%;background:#1E2229;border:3px solid #3A3F48"></div>
+<div style="position:absolute;left:6%;top:38%;width:14%;height:52%;background:#18191D;border:2px solid #2A2D33"></div>
+<div style="position:absolute;right:6%;top:38%;width:14%;height:52%;background:#18191D;border:2px solid #2A2D33"></div>
+<div style="position:absolute;left:36%;top:64%;width:28%;height:24%;background:#241E18;border:2px solid #3A2F24"></div>
+<div style="position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(255,255,255,.04) 0 1px,transparent 1px 10%),repeating-linear-gradient(90deg,rgba(255,255,255,.04) 0 1px,transparent 1px 10%)"></div>
+<div style="position:absolute;left:30%;top:10%;width:40%;height:46%;background:rgba(48,209,88,.18);outline:2px solid #30D158"></div>
+<span style="position:absolute;left:30.5%;top:10.5%;font:800 11px Inter;color:#7EE2A0">MASK 1 · LED frame · SHOW ONLY</span>
+<div style="position:absolute;left:36%;top:64%;width:28%;height:24%;background:rgba(255,59,48,.22);clip-path:polygon(0 8%,100% 0,96% 100%,4% 100%)"></div>
+<div class="pt" style="left:36%;top:65.9%"></div><div class="pt" style="left:64%;top:64%"></div><div class="pt" style="left:62.9%;top:88%"></div>
+<div class="pt" style="left:37.1%;top:88%;background:#fff;width:16px;height:16px;margin:-8px 0 0 -8px"></div>
+<span style="position:absolute;left:36.5%;top:58%;font:800 11px Inter;color:#FF9A93">MASK 2 · DJ booth · HIDE · 4 points</span>
+<div style="position:absolute;left:37.1%;top:0;bottom:0;width:1px;background:rgba(255,214,10,.6)"></div><div style="position:absolute;top:88%;left:0;right:0;height:1px;background:rgba(255,214,10,.6)"></div>
+</div>
+<div style="display:flex;gap:6px;flex-wrap:wrap;font-size:12px"><span style="padding:4px 9px;border-radius:5px;background:#1B2027">Click = add a point</span><span style="padding:4px 9px;border-radius:5px;background:#1B2027">Click the first point = close</span><span style="padding:4px 9px;border-radius:5px;background:#1B2027">Drag = move · Alt-drag = curve</span><span style="padding:4px 9px;border-radius:5px;background:#1B2027">Feather 12 px</span><span style="padding:4px 9px;border-radius:5px;background:#1B2027">HIDE / SHOW ONLY</span><span style="padding:4px 9px;border-radius:5px;background:#1B2027">Invert</span></div>
+</div>
+
+<div style="flex:0 1 360px;min-width:300px;display:flex;flex-direction:column;gap:10px">
+<span class="lbl">What projector 2 shows right now</span>
+<div style="aspect-ratio:16/9;border-radius:8px;background:#000;position:relative;overflow:hidden;border:2px solid #FFD60A;box-sizing:border-box">
+<div style="position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(255,255,255,.18) 0 1px,transparent 1px 10%),repeating-linear-gradient(90deg,rgba(255,255,255,.18) 0 1px,transparent 1px 10%)"></div>
+<div style="position:absolute;left:30%;top:10%;width:40%;height:46%;outline:2px solid #30D158"></div>
+<div style="position:absolute;left:36%;top:64%;width:28%;height:24%;border:2px solid #FF3B30;box-sizing:border-box;clip-path:polygon(0 8%,100% 0,96% 100%,4% 100%)"></div>
+<div style="position:absolute;left:37.1%;top:0;bottom:0;width:2px;background:#FFD60A"></div><div style="position:absolute;top:88%;left:0;right:0;height:2px;background:#FFD60A"></div>
+<div style="position:absolute;left:37.1%;top:88%;width:22px;height:22px;margin:-11px 0 0 -11px;border:2px solid #FFD60A;border-radius:50%"></div>
+</div>
+<div style="font-size:13px;color:#C9D1DB;line-height:1.5">A big <b style="color:#FFD60A">crosshair</b> and the mask outlines are projected onto the real stage while you draw. Put the crosshair on the real corner, click, next corner. What you see on the stage is what you get.</div>
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:10px;padding:10px;font-size:12px;line-height:1.6">
+<span class="lbl">With the hardware</span><br>
+<b>Block</b>: a trackpad for the crosshair (absolute X/Y on the output). Tap = add a point, MODE = close the mask.<br>
+<b>MK2</b>: knobs 1 / 2 = move the selected point X / Y (fine, SHIFT = finer), pads = pick a point, <span class="hw">REC</span> = add, <span class="hw">ERASE</span> = delete point, wheel = zoom the view.
+</div>
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:10px;padding:10px;font-size:12px;display:flex;flex-direction:column;gap:4px">
+<span class="lbl">Masks on projector 2</span>
+<span><span style="color:#30D158">■</span> Mask 1 · LED frame · show only · feather 4</span>
+<span><span style="color:#FF3B30">■</span> Mask 2 · DJ booth · hide · feather 12</span>
+<span style="color:#9AA4B2">Masks belong to the output, so every look respects them. Saved with the show and the venue.</span>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

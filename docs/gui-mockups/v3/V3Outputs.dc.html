@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Himmel v3 – Set outputs: screens or projectors</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0D10}
+.mono{font-family:'JetBrains Mono',monospace}
+.lbl{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#9AA4B2;font-weight:800}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="min-height:900px;width:100%;box-sizing:border-box;background:#0B0D10;color:#E8ECF1;font-family:Inter,system-ui,sans-serif;display:flex;flex-direction:column;gap:16px;padding:22px 32px">
+<div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap"><b style="letter-spacing:.2em">HIMMEL</b><span style="font-size:13px;color:#7EE2A0">✓ 1 CLIPS</span><span style="font-size:13px;color:#7EE2A0">✓ 2 WEAPON</span><span style="font-size:13px;font-weight:800;padding:6px 12px;border-radius:16px;background:#E8ECF1;color:#0B0D10">3 OUTPUTS</span><span style="font-size:13px;color:#9AA4B2">4 PLAY</span></div>
+<h1 style="margin:0;font-size:34px;font-weight:900">Where does the picture go?</h1>
+
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px">
+<button onClick="{{ pickScreen }}" style="text-align:left;border-radius:14px;padding:16px;background:#12161C;border:{{ screenBorder }};color:#E8ECF1;font-family:Inter;display:flex;gap:14px;align-items:center">
+<div style="width:120px;height:70px;border-radius:4px;background:#1B2027;border:4px solid #333;flex:none;box-sizing:border-box"></div>
+<div><b style="font-size:20px">Screens</b><div style="font-size:13px;color:#C9D1DB;margin-top:4px">TVs, monitors, LED walls. The edges just meet. <b>No mapping needed.</b> Optional bezel compensation so a line crosses the frames straight.</div></div>
+</button>
+<button onClick="{{ pickProj }}" style="text-align:left;border-radius:14px;padding:16px;background:#12161C;border:{{ projBorder }};color:#E8ECF1;font-family:Inter;display:flex;gap:14px;align-items:center">
+<div style="width:120px;height:70px;flex:none;position:relative"><span style="position:absolute;left:0;bottom:6px;width:34px;height:20px;background:#3A434F;border-radius:3px"></span><span style="position:absolute;left:30px;top:6px;width:86px;height:56px;background:linear-gradient(90deg,rgba(255,255,255,.05),rgba(255,214,10,.35));clip-path:polygon(0 70%,100% 0,100% 100%,0 90%)"></span></div>
+<div><b style="font-size:20px">Projectors</b><div style="font-size:13px;color:#C9D1DB;margin-top:4px">Keystone, warp, <b>edge blend</b> where they overlap, and masks drawn with the pen tool. Mapping comes next.</div></div>
+</button>
+</div>
+
+<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+<span class="lbl">How many</span>
+<button onClick="{{ n1 }}" style="height:44px;padding:0 18px;border-radius:8px;border:{{ c1 }};background:#1B2027;color:#E8ECF1;font:800 15px Inter">1</button>
+<button onClick="{{ n2 }}" style="height:44px;padding:0 18px;border-radius:8px;border:{{ c2 }};background:#1B2027;color:#E8ECF1;font:800 15px Inter">2 side by side</button>
+<button onClick="{{ n3 }}" style="height:44px;padding:0 18px;border-radius:8px;border:{{ c3 }};background:#1B2027;color:#E8ECF1;font:800 15px Inter">3 side by side</button>
+<span style="height:44px;line-height:44px;padding:0 18px;border-radius:8px;border:1px dashed #3A434F;color:#6B7684;font:700 14px Inter">2×2 · custom (later)</span>
+<span style="font-size:13px;color:#9AA4B2">+ separate extras (LED strip, a TV at the bar) can be added below with their own source.</span>
+</div>
+
+<div style="background:#101418;border:1px solid #2A313A;border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span class="lbl">The canvas you play on</span><b class="mono" style="font-size:18px">{{ canvasLabel }}</b><span style="font-size:13px;color:#9AA4B2">{{ canvasNote }}</span></div>
+<div style="aspect-ratio:{{ aspect }};width:100%;max-height:200px;border-radius:6px;background:linear-gradient(90deg,#0B3A55,#2EC5FF 30%,#B78CFF 60%,#FF9F1C);position:relative;overflow:hidden;border:2px solid #E8ECF1;box-sizing:border-box">
+<sc-for list="{{ zones }}" as="z" hint-placeholder-count="2"><div style="{{ z.st }}"></div></sc-for>
+<sc-for list="{{ labels }}" as="l" hint-placeholder-count="3"><span style="{{ l.st }}">{{ l.t }}</span></sc-for>
+</div>
+<sc-if value="{{ isProj }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+<span style="font-size:14px"><b>Blend overlap</b> per seam</span>
+<div style="width:280px;height:8px;border-radius:4px;background:#2A313A;position:relative"><span style="position:absolute;left:0;top:0;bottom:0;width:47%;background:#FFD60A;border-radius:4px"></span><span style="position:absolute;left:45%;top:-6px;width:20px;height:20px;border-radius:50%;background:#fff"></span></div>
+<b class="mono">14 % · 269 px</b>
+<span style="font-size:13px;color:#9AA4B2">More overlap = a narrower canvas, softer seams. The canvas above changes as you drag, and so does every monitor in Perform.</span>
+</div>
+<div style="font-size:13px;color:#9AA4B2">Next: <b style="color:#E8ECF1">Mapping</b> (keystone, warp, blend curves, pen-tool masks with a crosshair on the real projection). You can do it now or skip and come back.</div>
+</sc-if>
+<sc-if value="{{ isScreen }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px"><label style="display:flex;gap:8px;align-items:center"><input type="checkbox"> Bezel compensation</label><span class="mono">0 mm</span><span style="color:#9AA4B2;font-size:13px">Screens need no mapping. The edges meet exactly.</span></div>
+</sc-if>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px">
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:6px"><span class="lbl">Main canvas → outputs</span><span style="font-size:14px">Follows the crossfader (MAIN). Each output shows its part of the canvas.</span><span style="font-size:13px;color:#9AA4B2">Layers snap to FILL ALL, OUT 1–3, FIT or FREE.</span></div>
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:6px"><span class="lbl">Extra output</span><span style="font-size:14px">+ Add: LED strip 2560×240 · source OWN (logo + beat pulse)</span><span style="font-size:13px;color:#9AA4B2">Sources: MAIN, A, B, OWN, TABLE.</span></div>
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:6px"><span class="lbl">Checks</span><span style="font-size:13px;color:#7EE2A0">✓ same refresh rate on the canvas outputs</span><span style="font-size:13px;color:#7EE2A0">✓ flip model, 1 frame queued</span><span style="font-size:13px;color:#9AA4B2">Measure latency (camera at an output)</span></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+constructor(props) { super(props); this.state = { kind: 'proj', n: 3 }; }
+renderVals() {
+const proj = this.state.kind === 'proj', n = this.state.n, W = 1920, OV = proj ? 269 : 0;
+const cw = n * W - (n - 1) * OV;
+const zones = [], labels = [];
+for (let k = 0; k < n; k++) {
+  const x0 = k * (W - OV);
+  labels.push({ t: (proj ? 'PROJECTOR ' : 'SCREEN ') + (k + 1), st: 'position:absolute;top:6px;left:' + (100 * x0 / cw + 0.8).toFixed(2) + '%;font:800 12px Inter;color:#fff;background:rgba(0,0,0,.55);padding:2px 7px;border-radius:4px' });
+  if (k > 0) {
+    if (proj) zones.push({ st: 'position:absolute;top:0;bottom:0;left:' + (100 * x0 / cw).toFixed(2) + '%;width:' + (100 * OV / cw).toFixed(2) + '%;background:repeating-linear-gradient(45deg,rgba(255,255,255,.35) 0 5px,transparent 5px 11px);border-left:1px solid #fff;border-right:1px solid #fff' });
+    else zones.push({ st: 'position:absolute;top:0;bottom:0;width:4px;background:#0B0D10;left:' + (100 * x0 / cw).toFixed(2) + '%' });
+  }
+}
+const sel = '3px solid #30D158', un = '1px solid #2A313A', bs = '2px solid #E8ECF1', bu = '1px solid #3A434F';
+return {
+isProj: proj, isScreen: !proj,
+screenBorder: proj ? un : sel, projBorder: proj ? sel : un,
+c1: n === 1 ? bs : bu, c2: n === 2 ? bs : bu, c3: n === 3 ? bs : bu,
+aspect: cw + '/1080', zones: zones, labels: labels,
+canvasLabel: cw + ' × 1080',
+canvasNote: n === 1 ? 'one 16:9 output' : (proj ? n + ' projectors, ' + (n - 1) + ' blend zone' + (n > 2 ? 's' : '') + ' (hatched)' : n + ' screens, edges meet'),
+pickScreen: () => this.setState({ kind: 'screen' }), pickProj: () => this.setState({ kind: 'proj' }),
+n1: () => this.setState({ n: 1 }), n2: () => this.setState({ n: 2 }), n3: () => this.setState({ n: 3 })
+};
+}
+}
+</script>
+</body>
+</html>

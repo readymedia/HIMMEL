@@ -16,6 +16,13 @@ Status values:
 
 | # | Decision | Status | Details |
 |---|---|---|---|
+| D54 | **One canvas over the outputs** (Modul8 style). Screens butt; projectors overlap by the blend, and the canvas width follows. **The GUI monitors take the canvas shape** (1 output: 16:9 side by side; 2–3: full-width PREVIEW and PROGRAM strips with output lines and hatched blend zones) | DECIDED (owner); the details are PROPOSED | `design/gui.md` §4.2, §12 |
+| D55 | **Outputs step: Screens or Projectors first**; screens need no mapping; then 1 / 2 / 3 side by side, then the blend overlap with a live canvas size | DECIDED (owner) | `design/gui.md` §3 |
+| D56 | **Layer places that snap:** FILL ALL (zoom + crop), OUT 1–3, FIT, REPEAT, FREE; LAYER page knob 1 = PLACE | PROPOSED | `design/gui.md` §12 |
+| D57 | **Pen-tool masks** (click the corners, one or many per output) with **a crosshair projected on the real output**; the Block = a trackpad; later camera-assisted masks | DECIDED (owner); the details are PROPOSED | `design/gui.md` §13 |
+| D58 | **Text generator** with many sources and styles | DECIDED (owner) | `design/effects-and-generators.md` §5 |
+| D59 | **ROTATE** saved presets on every level (`SHIFT` + knob 2, etc.); `REC` saves at the current level; auto-rotate every n bars | DECIDED (owner); the mapping is PROPOSED | `design/presets-and-shuffle.md` §2 |
+| D60 | **Two GUI screens optional:** screen 1 = the main layout (unchanged), screen 2 = the room + side arms; one screen must always work | DECIDED (owner) | `design/gui.md` §14 |
 | D48 | **The MK2 master encoder = the TAKE wheel** (an endless T-bar: one turn = PREVIEW fully into PROGRAM, then the roles swap; push = auto TAKE). It replaces "encoder = browse" (D11) in PERFORM; browsing moves to knob 1 and `BROWSE`. `SHIFT` + wheel = system menu, as before | PROPOSED | `design/hardware-mapping.md` §3.1 |
 | D49 | **Main weapon + side arms**: the main (MK2 or NuVJ) decides the GUI layout; side arms (Block, LUMI, Ohm64, KPE1, MIDI learn) only add control, with soft takeover. The Ohm64 is a side arm for now | DECIDED (owner); the details are PROPOSED | `design/hardware-mapping.md` §1 |
 | D50 | **The GUI mimics the main weapon** (no drawn knobs or pads; knob tiles show what turning will do; the pads are clip thumbnails) | DECIDED (owner); the layout is PROPOSED | `design/gui.md` §1, §4 |

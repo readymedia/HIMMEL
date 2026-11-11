@@ -125,30 +125,30 @@ display missing, a controller gone), it opens the step that needs you.
   "MK2 + Block + LUMI". It is saved with the show.
 - No hardware at all: **Keyboard + mouse** plays the MK2 layout on screen.
 
-### Step 3: Set outputs
+### Step 3: Set outputs (screens or projectors)
 
-- The detected displays and projectors are drawn as boxes, in the arrangement
-  Windows reports. Drag them to fix the order. **Identify** flashes a big
-  number on each real screen.
-- Grouping per output: **SPAN** (one big canvas over several outputs),
-  **MIRROR** or **SEPARATE**.
-- **Source** per output:
+1. **Where does the picture go?** Two big cards:
+   - **Screens** (TVs, monitors, LED walls): the edges just meet, **no mapping
+     is needed**, with optional bezel compensation (mm) so lines cross the
+     frames straight.
+   - **Projectors**: keystone, warp, **edge blend** where they overlap, and
+     pen-tool masks. Mapping comes next (§13).
+2. **How many:** **1**, **2 side by side** or **3 side by side** (2 × 2 and
+   custom grids later).
+3. **The canvas you play on** is drawn to scale, with its size:
+   - 1 output = 1920 × 1080;
+   - 3 screens = 5760 × 1080 (edges meet);
+   - 3 projectors with a 14 % blend = 5222 × 1080, with hatched blend zones.
 
-  | Source | What the output shows |
-  |---|---|
-  | **MAIN** | Follows the crossfader (the default) |
-  | **A** | Always Deck A |
-  | **B** | Always Deck B |
-  | **OWN** | Its own small layer stack, for example a logo on an LED strip |
-  | **TABLE** | The output of the VJ table |
+   The blend overlap slider changes the canvas width live, and every monitor
+   in Perform follows.
+4. **Extra outputs** (an LED strip, a TV at the bar), each with its own source
+   (MAIN, A, B, OWN, TABLE).
+5. Checks: the same refresh rate on the canvas outputs, flip model, and
+   measure latency.
+6. **Show type:** VJ or Overlay (§ engine), as before.
 
-- **Test card** (on or off per output) and **Measure latency** (needs a
-  camera pointed at the output).
-- **Projector?** opens keystone, mesh warp and edge blend (phase 11). Until
-  then it shows "coming".
-- **Show type:** **VJ** (Himmel owns the picture) or **Overlay** (effects
-  keyed over a live mixer, see `engine.md` §8). Overlay is greyed out until an
-  SDI card is found.
+The GUI screens are never show outputs; the wizard keeps them apart (§14).
 
 ### Step 4: Play
 
@@ -196,6 +196,14 @@ interactive artboard "Perform · MAIN = MK2".
     to change);
   - over PROGRAM: four **live holds** (FREEZE, STROBE, BLACK, and ASSIST
     on / off).
+- **The monitors take the shape of the canvas** (§12):
+  - with **1 output** they are 16:9, side by side (PREVIEW left, PROGRAM
+    right);
+  - with **2–3 outputs** (32:9, 48:9, or the blended width) they become two
+    **full-width strips**, PREVIEW above and PROGRAM below, so the superwide
+    picture stays readable;
+  - the output edges are thin lines, and the blend overlaps are hatched;
+  - the knob tiles stay split left (preview) / right (program) under them.
 - **The PREVIEW monitor** (left, green frame, "prepare here, the audience
   can't see this") and **the PROGRAM monitor** (right, red frame, "on
   air → OUT 1 · 2 · 3").
@@ -279,6 +287,15 @@ bar.
 | **FX** | Choose (scroll) | Param 1 | Param 2 | Audio link | Master FX choose | Param 1 | Param 2 | Mix |
 | **MIX** | Fade time | Curve | Preview dim | Transition (scroll) | Master dim | Out 1–3 | Out 4 | Safe limit |
 | **REACT** | Reacts to (scroll) | Amount | Attack | Release | REACT macro | Bass | Mid | High |
+
+**Presets on every level** (see `presets-and-shuffle.md` §2 and the
+"Presets" artboard):
+- The same three verbs work at the effect, layer, look, master and output
+  levels: **DICE** (knob 2 / `▶`), **MUTATE** (`SHIFT+▶`) and **ROTATE**
+  through saved presets (`SHIFT` + knob 2, `SHIFT+◀ ▶`; on the FX page
+  `SHIFT` + knob 1 rotates the effect's own presets).
+- `REC` saves at the level you are on.
+- **Auto-rotate** can step through a level's presets every n bars.
 
 **The effect browser** (`BROWSE` on the FX page):
 - Top 1–8 are the categories (COLOUR, SPACE, DISTORT, LIGHT, STYLE, TIME,
@@ -405,7 +422,106 @@ the merge of the rack-design branch. What matters for the GUI:
 - Interfaces: `../interfaces/command-protocol.md` (to be written in phase 1)
   and `../interfaces/engine-status.md`.
 
-## 11. Mockups
+## 12. The canvas: outputs, layers and snapping
+
+**Model:** the outputs are windows onto **one canvas**, as in Modul8.
+- Its size comes from the outputs (step 3):
+  - screens add up edge to edge (N × 1920);
+  - projectors overlap by the blend width (N × 1920 − (N − 1) × overlap).
+- Changing the overlap changes the canvas, and every monitor follows.
+
+**Layers snap.** Each layer has a **place**:
+
+| Place | What it does |
+|---|---|
+| **FILL ALL** | Cover the whole canvas, zoomed and cropped. The default for a clip on a multi-output canvas. |
+| **OUT 1 / OUT 2 / OUT 3** | Fill one output only |
+| **FIT** | The whole clip, letterboxed |
+| **REPEAT** | The same picture in each output |
+| **FREE** | Drag and scale anywhere. Edges snap to the output lines; `SHIFT` = no snap. |
+
+A typical stack:
+- a 16:9 clip zoomed to FILL ALL (cropped top and bottom);
+- a PNG logo with alpha on OUT 2;
+- luma-keyed particles across;
+- a text ticker across the bottom.
+
+Keys and alpha come from the layer's blend: normal, add, screen, luma key,
+chroma key, or alpha from HAP Alpha / PNG.
+
+**On the MK2,** the LAYER page:
+
+| Knob | Function |
+|---|---|
+| 1 | **PLACE** (scrolls the targets above) |
+| 2 | **ZOOM / crop** |
+| 3 | **PAN** (`SHIFT` = up / down) |
+| 4 | **OPACITY** |
+| 5–8 | The opacities of the PROGRAM layers |
+
+With the mouse, drag in the PREVIEW strip; the snap targets are buttons under
+it.
+
+**Text generator** (a source like a clip; details in
+`effects-and-generators.md` §5):
+- **Styles:** ticker, one word per beat, typewriter, kinetic stack, outline,
+  a clip inside the letters, glitch letters, countdown / clock.
+- **Text from:** a typed list, a .txt / .csv file, the DJ's track title
+  (Pro DJ Link), BPM / clock, messages from a phone (a local web page) and
+  OSC.
+- On a text layer, the CLIPS pads = 16 lines of text.
+
+## 13. Mapping and masks (projectors only)
+
+Reached from step 3, or OUTPUTS › Mapping. **Screens skip this entirely.**
+
+- **The tools:**
+  - **CORNERS** (4-point keystone);
+  - **WARP** (a 3 × 3 … 9 × 9 grid);
+  - **BLEND** (width, curve, gamma, black level per seam);
+  - **PEN · MASK**;
+  - **TEST GRID**;
+  - later **MAGIC** (camera-assisted: tap an object in a webcam picture of
+    the stage, get a mask suggestion).
+- **The pen tool:** click the corners, click the first point to close.
+  - Drag = move, Alt-drag = a curved edge; feather; HIDE or SHOW ONLY;
+    invert.
+  - One or many masks per output.
+  - Masks belong to the **output**, so every look respects them. They are
+    saved with the show and the venue.
+- **A crosshair on the real projection:** while you draw, the projector shows
+  a big yellow crosshair at your pointer, plus the mask outlines and an
+  optional test grid. You put the crosshair on the real corner of the
+  physical object and click: what you see on stage is what you get.
+- **With the hardware:**
+  - **Block** = a trackpad for the crosshair (absolute X / Y on the output).
+    Tap = add a point; MODE = close.
+  - **MK2:** knobs 1 / 2 move the selected point (`SHIFT` = finer), pads pick
+    a point, `REC` adds, `ERASE` deletes, and the wheel zooms the view.
+- A photo backdrop (a webcam pointed at the stage) is optional; the GUI view
+  works on a plain test grid too.
+
+## 14. One or two GUI screens
+
+- **Settings › GUI screens: 1 or 2.** One screen is the default and must
+  always work.
+- **With two:**
+  - **Screen 1 = the main weapon's layout**, unchanged; the side-arm column
+    becomes a small "→ screen 2" note, and the monitors may grow.
+  - **Screen 2 = the room and the side arms:**
+    - PROGRAM and PREVIEW in their true superwide shape;
+    - the side arms large (the Block's LED mirror, the full LUMI keyboard,
+      the Ohm64 faders);
+    - cues or the library.
+- **Screen 2 presets:** Room + side arms (default) · Library + cues ·
+  Audience view (the cheat sheet) · Table.
+- **Rules:**
+  - Screen 1 never changes because screen 2 exists.
+  - Unplugging screen 2 folds its panels back into screen 1 as cards.
+  - Both are windows of the one GUI process.
+  - GUI screens are never show outputs.
+
+## 15. Mockups
 
 **v3** (page "v3 · Instrument" on the canvas; copies in
 `docs/gui-mockups/v3/`):
@@ -417,6 +533,15 @@ the merge of the rack-design branch. What matters for the GUI:
 4. Perform · MAIN = NuVJ.
 5. Side arms: Block, LUMI, Ohm64, KPE1.
 6. MK2 cheat sheet (audience view), drawn from the profile.
+7. Set outputs: screens or projectors, 1 / 2 / 3, blend, with a live canvas
+   size (interactive).
+8. Canvas, layers and snapping, plus the text generator.
+9. Mapping: pen-tool masks with a crosshair on the projection.
+10. Presets: dice, mutate and rotate on every level.
+11. Two GUI screens: the main layout on 1, side arms on 2.
 
-**v2** (still valid for these): wizard 1 Add clips, wizard 3 Outputs,
+Perform · MAIN = MK2 also has a **CANVAS 1 / 2 / 3 screens / 3 projectors
+blend** switch in its status strip, which shows how the monitors adapt.
+
+**v2** (still valid for these): wizard 1 Add clips,
 Library, Shuffle close-up, the MK2 screen pages, the VJ table.

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Himmel v3 – Canvas, layers, snapping and text</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;600&amp;family=Archivo+Black&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0D10}
+.hw{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;color:#8C96A3}
+.lbl{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#9AA4B2;font-weight:800}
+.chip{font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid #3A434F;white-space:nowrap}
+</style>
+</helmet>
+<div style="min-height:900px;width:100%;box-sizing:border-box;background:#0B0D10;color:#E8ECF1;font-family:Inter,system-ui,sans-serif;display:flex;flex-direction:column;gap:12px;padding:18px 24px">
+<div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap"><h1 style="margin:0;font-size:28px;font-weight:900">One canvas, layers that snap</h1><span style="font-size:14px;color:#9AA4B2">Like Modul8: the outputs are windows onto one canvas. Drop a clip and it snaps to an output or covers them all.</span></div>
+
+<div style="background:#101418;border:1px solid #2A313A;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="lbl">PREVIEW canvas · 5222 × 1080 · 3 projectors, 14 % blend</span><div style="flex:1"></div><span class="chip">snap guides on</span><span class="chip">SHIFT = free move</span></div>
+<div style="aspect-ratio:5222/1080;width:100%;border-radius:6px;border:3px solid #30D158;box-sizing:border-box;position:relative;overflow:hidden;background:#000">
+<div style="position:absolute;left:0;right:0;top:-22%;bottom:-22%;background:radial-gradient(ellipse at 30% 50%,#BFE9FF 0,#2EC5FF 10%,#0B3A55 35%,#05121C 70%)"></div>
+<div style="position:absolute;left:0;right:0;top:0;bottom:0;background:radial-gradient(circle at 70% 40%,rgba(255,255,255,.9) 0 2px,transparent 3px),radial-gradient(circle at 20% 70%,rgba(255,255,255,.8) 0 2px,transparent 3px),radial-gradient(circle at 85% 75%,rgba(255,255,255,.8) 0 2px,transparent 3px),radial-gradient(circle at 45% 25%,rgba(255,255,255,.8) 0 2px,transparent 3px)"></div>
+<div style="position:absolute;left:31.62%;width:5.15%;top:0;bottom:0;background:repeating-linear-gradient(45deg,rgba(255,255,255,.3) 0 4px,transparent 4px 9px);border-left:1px solid #fff;border-right:1px solid #fff"></div>
+<div style="position:absolute;left:63.24%;width:5.15%;top:0;bottom:0;background:repeating-linear-gradient(45deg,rgba(255,255,255,.3) 0 4px,transparent 4px 9px);border-left:1px solid #fff;border-right:1px solid #fff"></div>
+<span style="position:absolute;left:.6%;top:5px;font:800 11px Inter;background:rgba(0,0,0,.6);padding:1px 6px;border-radius:3px">OUT 1</span><span style="position:absolute;left:32.2%;top:5px;font:800 11px Inter;background:rgba(0,0,0,.6);padding:1px 6px;border-radius:3px">OUT 2</span><span style="position:absolute;left:63.8%;top:5px;font:800 11px Inter;background:rgba(0,0,0,.6);padding:1px 6px;border-radius:3px">OUT 3</span>
+<div style="position:absolute;left:43%;top:22%;width:14%;height:56%;border:2px solid #B78CFF;border-radius:4px;display:flex;align-items:center;justify-content:center;font:900 24px 'Archivo Black',Inter;letter-spacing:.12em;color:#fff;text-shadow:0 0 18px #B78CFF">HIMMEL</div>
+<div style="position:absolute;left:0;right:0;bottom:6%;height:18%;display:flex;align-items:center;overflow:hidden"><span style="white-space:nowrap;font:900 30px 'Archivo Black',Inter;letter-spacing:.06em;color:rgba(255,255,255,.92);padding-left:8%">THANK YOU OSLO ✦ NEXT UP: NIGHT DRIVE ✦ 128 BPM ✦ THANK YOU OSLO</span></div>
+<div style="position:absolute;left:2px;right:2px;top:2px;bottom:2px;border:2px dashed rgba(255,214,10,.9);border-radius:3px"></div>
+</div>
+</div>
+
+<div style="display:flex;gap:12px;flex-wrap:wrap">
+<div style="flex:1 1 520px;min-width:0;background:#14181D;border:1px solid #2A313A;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:6px">
+<span class="lbl">Layers on this look (top = front)</span>
+<div style="display:grid;grid-template-columns:28px 46px minmax(0,1.2fr) minmax(0,1.4fr) minmax(0,1fr);gap:8px;align-items:center;font-size:13px;padding:6px;background:#1B2027;border-radius:8px"><b>D</b><span style="height:26px;border-radius:3px;background:#222;display:flex;align-items:center;justify-content:center;font:900 10px Inter">Aa</span><span>TEXT · ticker</span><span><span class="chip" style="border-color:#E8ECF1">FILL ALL</span> bottom band</span><span style="color:#9AA4B2">normal · beat → speed</span></div>
+<div style="display:grid;grid-template-columns:28px 46px minmax(0,1.2fr) minmax(0,1.4fr) minmax(0,1fr);gap:8px;align-items:center;font-size:13px;padding:6px;background:#1B2027;border-radius:8px"><b>C</b><span style="height:26px;border-radius:3px;background:radial-gradient(circle,#fff 0 2px,#000 3px)"></span><span>particles.mov</span><span><span class="chip" style="border-color:#E8ECF1">FILL ALL</span></span><span style="color:#9AA4B2">LUMA KEY · black out</span></div>
+<div style="display:grid;grid-template-columns:28px 46px minmax(0,1.2fr) minmax(0,1.4fr) minmax(0,1fr);gap:8px;align-items:center;font-size:13px;padding:6px;background:#1B2027;border-radius:8px;outline:2px solid #B78CFF"><b>B</b><span style="height:26px;border-radius:3px;background:repeating-conic-gradient(#333 0 25%,#555 0 50%) 0 0/8px 8px"></span><span>logo.png</span><span><span class="chip" style="border-color:#B78CFF;color:#D2B8FF">OUT 2 · centre</span></span><span style="color:#9AA4B2">ALPHA · glow</span></div>
+<div style="display:grid;grid-template-columns:28px 46px minmax(0,1.2fr) minmax(0,1.4fr) minmax(0,1fr);gap:8px;align-items:center;font-size:13px;padding:6px;background:#1B2027;border-radius:8px;outline:2px dashed #FFD60A"><b>A</b><span style="height:26px;border-radius:3px;background:linear-gradient(135deg,#0B3A55,#2EC5FF)"></span><span>ocean_slow_01 (16:9)</span><span><span class="chip" style="border-color:#FFD60A;color:#FFE98A">FILL ALL · zoom 2.7× · crop 22 % top/bottom</span></span><span style="color:#9AA4B2">normal</span></div>
+<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;font-size:12px;align-items:center"><span style="color:#9AA4B2">Snap a layer:</span><span class="chip" style="border-color:#E8ECF1">FILL ALL (crop)</span><span class="chip">OUT 1</span><span class="chip">OUT 2</span><span class="chip">OUT 3</span><span class="chip">FIT (letterbox)</span><span class="chip">REPEAT in each</span><span class="chip">FREE</span></div>
+<div style="font-size:12px;color:#9AA4B2;line-height:1.5">On the MK2: LAYER page. <span class="hw">KNOB 1</span> PLACE scrolls these targets, <span class="hw">KNOB 2</span> ZOOM / crop, <span class="hw">KNOB 3</span> PAN (SHIFT = up/down), <span class="hw">KNOB 4</span> OPACITY. With the mouse: drag in the preview, the edges snap to the output lines.</div>
+</div>
+
+<div style="flex:1 1 420px;min-width:0;background:#14181D;border:1px solid #2A313A;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;gap:8px;align-items:center"><span class="lbl">Text generator</span><span style="font-size:12px;color:#9AA4B2">a source like a clip · dice and presets work on it</span></div>
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;font-size:11px;text-align:center">
+<div style="background:#000;border-radius:6px;padding:10px 4px;outline:2px solid #E8ECF1"><div style="font:900 15px 'Archivo Black',Inter;white-space:nowrap;overflow:hidden">TICKER →</div>ticker</div>
+<div style="background:#000;border-radius:6px;padding:10px 4px"><div style="font:900 22px 'Archivo Black',Inter">BIG</div>one word / beat</div>
+<div style="background:#000;border-radius:6px;padding:10px 4px"><div style="font:600 14px 'JetBrains Mono'">type_</div>typewriter</div>
+<div style="background:#000;border-radius:6px;padding:10px 4px"><div style="font:900 14px 'Archivo Black',Inter;line-height:.9">STA<br>CK</div>kinetic stack</div>
+<div style="background:#000;border-radius:6px;padding:10px 4px"><div style="font:900 18px 'Archivo Black',Inter;color:transparent;-webkit-text-stroke:1px #fff">OUT</div>outline</div>
+<div style="background:#000;border-radius:6px;padding:10px 4px"><div style="font:900 18px 'Archivo Black',Inter;background:linear-gradient(90deg,#2EC5FF,#FF9F1C);-webkit-background-clip:text;background-clip:text;color:transparent">CLIP</div>clip inside text</div>
+<div style="background:#000;border-radius:6px;padding:10px 4px"><div style="font:900 18px 'Archivo Black',Inter;text-shadow:2px 0 #f0f,-2px 0 #0ff">GL!TCH</div>glitch letters</div>
+<div style="background:#000;border-radius:6px;padding:10px 4px"><div style="font:600 18px 'JetBrains Mono'">00:42</div>countdown / clock</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:4px;font-size:12px">
+<span><b>Text comes from:</b> a list you type · a .txt / .csv file · song title and artist from the DJ (Pro DJ Link) · BPM and clock · messages sent from a phone (local web page) · OSC</span>
+<span><b>Pads in CLIPS mode on a text layer</b> = 16 lines of text. Tap = show that line.</span>
+<span><b>Looks:</b> font, size, fill (colour, gradient, a clip inside the letters), outline, shadow, layout (one output or across all), and reactions (word per beat, flash on kick, wobble on bass).</span>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

@@ -147,3 +147,18 @@ replaced per mood:
 > Strobe · Flash · Stutter · Freeze · Invert · RGB split · Zoom pulse ·
 > Kaleido · Mirror · Shake · Tunnel · Blur · Glitch blocks · Echo ·
 > Black-out · White-out
+
+## 5. Text generator
+
+The text generator is a source like a clip. Dice, presets and reactions work
+on it.
+
+| Part | Options |
+|---|---|
+| **Text sources** | A typed list; a .txt / .csv file; the DJ's track title and artist (Pro DJ Link); BPM, clock, countdown; messages from a phone (a local web page served by Himmel, with moderation: approve before showing); OSC |
+| **Styles** | Ticker (scroll), one word per beat, typewriter, kinetic stack, big centred, outline, a clip inside the letters (text as a mask), glitch letters, karaoke line, countdown / clock |
+| **Look** | Font (bundled open fonts, credited), size, tracking, fill (colour / gradient / clip), outline, shadow / glow, case |
+| **Place** | Like any layer: FILL ALL (across all outputs), OUT n, FIT, FREE; a ticker can run across the whole superwide canvas |
+| **Reactions** | Word on the beat, flash on the kick, wobble on bass, speed on BPM |
+| **Pads** | On a text layer, the CLIPS pads = 16 lines of text; tap = show that line |
+| **Cost** | Glyphs from a signed-distance-field atlas built at Prepare time: one cheap pass, sharp at any size |

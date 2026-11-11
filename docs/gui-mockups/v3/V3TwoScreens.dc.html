@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Himmel v3 – Two GUI screens</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0D10}
+.lbl{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#9AA4B2;font-weight:800}
+.mon{background:#0B0D10;border:10px solid #22262C;border-radius:10px;box-sizing:border-box;aspect-ratio:16/9;padding:6px;display:flex;flex-direction:column;gap:5px}
+.b{border-radius:4px}
+</style>
+</helmet>
+<div style="min-height:900px;width:100%;box-sizing:border-box;background:#0B0D10;color:#E8ECF1;font-family:Inter,system-ui,sans-serif;display:flex;flex-direction:column;gap:14px;padding:20px 26px">
+<div><h1 style="margin:0;font-size:28px;font-weight:900">One GUI screen works. Two are better.</h1>
+<div style="font-size:14px;color:#9AA4B2;margin-top:4px">Settings › GUI screens: 1 or 2. With two, the main weapon's layout stays on screen 1 exactly as before, and screen 2 gets the room-sized view and the side arms. Nothing moves on screen 1, so your hands keep their habits.</div></div>
+
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:6px">
+<span class="lbl">Screen 1 · main weapon (MK2 layout)</span>
+<div class="mon">
+<div class="b" style="height:8px;background:#1B2027"></div>
+<div style="display:flex;gap:5px;flex:1">
+<div class="b" style="width:9%;background:#1B2027"></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:5px">
+<div style="display:flex;gap:5px;flex:1.3"><div class="b" style="flex:1;border:2px solid #30D158;background:radial-gradient(circle,#2EC5FF,#05121C 70%)"></div><div class="b" style="flex:1;border:2px solid #FF3B30;background:radial-gradient(circle,#FF9F1C,#120700 70%)"></div></div>
+<div style="display:grid;grid-template-columns:repeat(8,1fr);gap:3px;flex:.45"><span class="b" style="background:#173A24"></span><span class="b" style="background:#173A24"></span><span class="b" style="background:#173A24"></span><span class="b" style="background:#173A24"></span><span class="b" style="background:#3A1A18"></span><span class="b" style="background:#3A1A18"></span><span class="b" style="background:#3A1A18"></span><span class="b" style="background:#3A1A18"></span></div>
+</div>
+<div class="b" style="width:11%;background:#1B2027"></div>
+</div>
+<div style="display:flex;gap:5px;flex:1">
+<div class="b" style="width:28%;background:#1B2027"></div><div class="b" style="width:8%;background:#1B2027"></div>
+<div style="flex:1;display:grid;grid-template-columns:repeat(4,1fr);gap:3px"><span class="b" style="background:#0B3A55"></span><span class="b" style="background:#2EC5FF"></span><span class="b" style="background:#1E8FB8"></span><span class="b" style="background:#123"></span><span class="b" style="background:#4A6A80"></span><span class="b" style="background:#BFE9FF"></span><span class="b" style="background:#301040"></span><span class="b" style="background:#0E2A3A"></span><span class="b" style="background:#FF9F1C"></span><span class="b" style="background:#123"></span><span class="b" style="background:#2EC5FF"></span><span class="b" style="background:#1B2027"></span><span class="b" style="background:#9cf"></span><span class="b" style="background:#0B3A55"></span><span class="b" style="background:#1E8FB8"></span><span class="b" style="background:#1B2027"></span></div>
+<div class="b" style="width:16%;background:#14181D;border:1px dashed #3A434F;display:flex;align-items:center;justify-content:center;font-size:9px;color:#6B7684;text-align:center">side arms<br>moved to<br>screen 2</div>
+</div>
+</div>
+<span style="font-size:12px;color:#9AA4B2">Same as the one-screen layout; the side-arm column becomes a small "→ screen 2" note, and the monitors can grow.</span>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:6px">
+<span class="lbl">Screen 2 · the room + side arms</span>
+<div class="mon">
+<div class="b" style="flex:.8;border:2px solid #FF3B30;background:linear-gradient(90deg,#5A2A00,#FF9F1C 30%,#FFB347 50%,#FF9F1C 70%,#5A2A00);position:relative"><span style="position:absolute;left:33%;top:0;bottom:0;width:4%;background:repeating-linear-gradient(45deg,rgba(255,255,255,.35) 0 2px,transparent 2px 5px)"></span><span style="position:absolute;left:64%;top:0;bottom:0;width:4%;background:repeating-linear-gradient(45deg,rgba(255,255,255,.35) 0 2px,transparent 2px 5px)"></span><span style="position:absolute;left:4px;top:2px;font:800 9px Inter">PROGRAM · the whole canvas, true shape</span></div>
+<div class="b" style="flex:.55;border:2px solid #30D158;background:linear-gradient(90deg,#05121C,#2EC5FF 50%,#05121C);position:relative"><span style="position:absolute;left:4px;top:2px;font:800 9px Inter">PREVIEW · what TAKE will bring</span></div>
+<div style="display:flex;gap:5px;flex:1.2">
+<div class="b" style="flex:1;background:#14181D;border:1px solid #2A313A;padding:4px;display:flex;flex-direction:column;gap:3px"><span style="font:800 9px Inter">BLOCK · TOUCH → PROGRAM</span><div style="flex:1;border-radius:3px;background-image:radial-gradient(circle at 62% 41%,#FFE 0 3px,#B78CFF 4px 8px,transparent 9px),repeating-linear-gradient(0deg,#1a1a24 0 3px,#22222e 3px 4px);border:2px solid #FF3B30"></div></div>
+<div class="b" style="flex:1.4;background:#14181D;border:1px solid #2A313A;padding:4px;display:flex;flex-direction:column;gap:3px"><span style="font:800 9px Inter">LUMI · FX KEYS</span><div style="flex:1;display:flex;gap:1px"><span style="flex:1;background:#FF3B6B"></span><span style="flex:1;background:#FF9F1C"></span><span style="flex:1;background:#FFD60A"></span><span style="flex:1;background:#30D158"></span><span style="flex:1;background:#2EC5FF"></span><span style="flex:1;background:#5A6AFF"></span><span style="flex:1;background:#B78CFF"></span><span style="flex:1;background:#3A0D0A"></span><span style="flex:1;background:#1A2A3A"></span><span style="flex:1;background:#2A1A3A"></span><span style="flex:1;background:#1A3A2A"></span><span style="flex:1;background:#000"></span></div></div>
+<div class="b" style="flex:1;background:#14181D;border:1px solid #2A313A;padding:4px;display:flex;flex-direction:column;gap:2px;font-size:8px"><span style="font:800 9px Inter">CUES · Opening</span><span>2 Groove ● LIVE</span><span style="color:#30D158">3 Build · next 8 bars</span><span>4 Drop</span></div>
+</div>
+</div>
+<span style="font-size:12px;color:#9AA4B2">Big PROGRAM / PREVIEW in their true superwide shape, side arms large (the Block's LED mirror, the full LUMI keyboard), plus cues or the library.</span>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:12px;padding:12px;font-size:13px;line-height:1.5"><span class="lbl">Screen 2 presets</span><br><b>Room + side arms</b> (default) · <b>Library + cues</b> (prep) · <b>Audience view</b> (the MK2 cheat sheet full screen) · <b>Table</b> (the VJ table next to Perform)</div>
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:12px;padding:12px;font-size:13px;line-height:1.5"><span class="lbl">Rules</span><br>Screen 1 never changes because screen 2 exists. Unplug screen 2 mid-show: its panels fold back into screen 1 as cards. The GUI is one process with two windows; a crash affects neither output.</div>
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:12px;padding:12px;font-size:13px;line-height:1.5"><span class="lbl">Not the show outputs</span><br>GUI screens are never show outputs. The wizard keeps them apart, so a projector can't end up showing the GUI.</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
