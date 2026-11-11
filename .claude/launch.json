@@ -7,6 +7,20 @@
       "runtimeArgs": ["tools/mk2_live.py"],
       "port": 8765,
       "url": "http://127.0.0.1:8765"
+    },
+    {
+      "name": "weapon-live",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["tools/mk2_live.py", "--port", "8775", "--weapon", "lightpad"],
+      "port": 8775,
+      "url": "http://127.0.0.1:8775"
+    },
+    {
+      "name": "mk2-live-sim-test",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["tools/mk2_live.py", "--port", "8776", "--sim"],
+      "port": 8776,
+      "url": "http://127.0.0.1:8776"
     }
   ]
 }
