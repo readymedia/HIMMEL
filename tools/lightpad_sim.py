@@ -965,7 +965,9 @@ class LocalHost:
             try:
                 self.step()
             except Exception as ex:  # a drawing bug must never stop the host loop
+                import traceback
                 self.state = "error: %s" % ex
+                self.last_error = traceback.format_exc(limit=3)[-600:]
 
     def set_config(self, item, value):
         self.want[item] = int(value)
@@ -1181,6 +1183,8 @@ class LightpadLive:
             "host": {"state": h.state, "mode": h.mode, "enabled": h.enabled, "serial": h.serial,
                      "battery": h.battery, "acks": h.acks, "stage": h.stage, "led": h.sync.stats(),
                      "program_bytes": len(h.program),
+                     "last_error": getattr(h, "last_error", None),
+                     "inflight": list(h.sync.inflight),
                      "config": {str(k): v for k, v in h.config.items()},
                      "original": {str(k): v for k, v in h.original.items()},
                      "z": {"now": h.z_now, "max": h.z_max, "hist": h.z_hist}},

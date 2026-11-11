@@ -136,8 +136,10 @@ class HwLightpad:
     def _open(self):
         mm = winmm()
         ins, outs = list_ports()
-        i = next((k for k, n in ins if self.port_name.lower() in n.lower()), None)
-        o = next((k for k, n in outs if self.port_name.lower() in n.lower()), None)
+        names = (self.port_name,) if isinstance(self.port_name, str) else tuple(self.port_name)
+        hit = lambda n: any(p.lower() in n.lower() for p in names)
+        i = next((k for k, n in ins if hit(n)), None)
+        o = next((k for k, n in outs if hit(n)), None)
         if i is None or o is None:
             self.notes = ["No %s MIDI ports found. Plug it in with USB (not Bluetooth). " % self.device_name +
                           "Ports seen: in %s, out %s" % ([n for _, n in ins], [n for _, n in outs])]

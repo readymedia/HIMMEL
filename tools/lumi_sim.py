@@ -48,7 +48,7 @@ class SimLumi(L.SimLightpad):
     def __init__(self):
         super().__init__()
         self.notes = ["Simulated LUMI Keys - no hardware. Play the keys with the mouse."]
-        self.config[CFG_OCTAVE] = [0, -4, 6]
+        self.config[CFG_OCTAVE] = [0, -4, 5]     # range as read on the owner's LUMI (firmware 1.3.8)
         self.keys = {}                  # key index -> dict(vel, z, x, ch, note)
         self.buttons = set()
 
@@ -181,6 +181,7 @@ class LumiHost(L.LocalHost):
         self.chan_key = {}                     # MIDI channel -> key index (MPE)
         self.glow = [[0.0, 0.0, 0.0] for _ in range(KEYS)]
         self.events = []                       # recent key events for the monitor
+        self.firmware_buttons = False          # seen button messages from the firmware itself
         super().__init__(sim)
         self.glow = [[0.0, 0.0, 0.0] for _ in range(KEYS)]
 
@@ -193,8 +194,17 @@ class LumiHost(L.LocalHost):
             return
         for e in L.decode_device(msg):
             if e["type"] == "button":
+                # The real LUMI (firmware 1.3.8) sends every button twice: its own button message
+                # and our renderer's program event. Once a firmware button message has been seen,
+                # the program copies are ignored (the Lightpad only sends the program ones).
+                if e.get("via") == "program":
+                    if self.firmware_buttons:
+                        continue
+                else:
+                    self.firmware_buttons = True
                 if e["down"] and e["id"] in (1, 2):
-                    v = max(-4, min(6, self.octave() + (1 if e["id"] == 2 else -1)))
+                    lo, hi = self.config.get(CFG_OCTAVE, [0, -4, 5])[1:]
+                    v = max(lo, min(hi, self.octave() + (1 if e["id"] == 2 else -1)))
                     self.set_config(CFG_OCTAVE, v)         # Himmel turns the octave (restored on let go)
                 elif e["id"] == 0 and not e["down"]:
                     self.palette = (self.palette + 1) % 6
@@ -281,7 +291,9 @@ class LumiLive(L.LightpadLive):
 
     def make_hw(self):
         import lightpad_hw
-        return lightpad_hw.HwLightpad(port_name="LUMI", device_name="LUMI Keys")
+        # With Windows' new MIDI driver (USBMidi2-ACX, Windows MIDI Services) the port is not called
+        # "LUMI" but "USBMidi2-ACX" (seen 2026-11-10 on the owner's PC).
+        return lightpad_hw.HwLightpad(port_name=("LUMI", "USBMidi2-ACX"), device_name="LUMI Keys")
 
     def make_host(self, sim):
         return LumiHost(sim)

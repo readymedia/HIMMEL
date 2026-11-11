@@ -20,6 +20,7 @@ A weapon has up to four parts:
 | No. | Weapon | Kind | Profile | Simulator | Status |
 |---|---|---|---|---|---|
 | 1 | **MK2** (Maschine MK2) | USB HID: 16 pads, 8 knobs, encoder, 48 buttons, two 1-bit screens | [`mk2.weapon.json`](mk2.weapon.json) | [`tools/mk2_sim.py`](../tools/mk2_sim.py) | Map verified on hardware, C++ driver done |
+| 3 | **LUMI Keys** (ROLI LUMI Keys) | USB-MIDI, BLOCKS family: 24 keys with strike velocity, pressure and glide, one RGB LED per key, Mode / Octave − / Octave + | [`lumi.weapon.json`](lumi.weapon.json) | [`tools/lumi_sim.py`](../tools/lumi_sim.py) | Simulated, and checked on the owner's LUMI (firmware 1.3.8, 2026-11-10): keys, velocity, buttons, **Himmel's own key LEDs** |
 | 2 | **Lightpad** (ROLI Lightpad Block / Block M) | USB-MIDI: multi-touch surface (x, y, pressure per finger), 15 × 15 RGB LEDs, one Mode button | [`lightpad.weapon.json`](lightpad.weapon.json) | [`tools/lightpad_sim.py`](../tools/lightpad_sim.py) | Simulated, and played on the owner's Lightpad M (2026-11-10): touch, multi-touch, Mode button, orientation, factory note map, **and Himmel's own LED program** (~55 frames/s) |
 | 5 | **NuVJ** (Numark NuVJ, 2008) | USB-MIDI: 2 × 9 pads, 2 jog wheels, 2 speed faders, crossfader, 12 knobs, 2 push BANK encoders, 31 LEDs, front switches, blue segment LCD (feedback by SysEx) | [`nuvj.weapon.json`](nuvj.weapon.json) | [`tools/nuvj_sim.py`](../tools/nuvj_sim.py) | **Checked on the owner's unit (2026-11-11)**: map of all 53 controls verified, 31 LEDs, LCD text and the whole segment map (camera mapper); protocol in [`docs/nuvj-protocol.md`](../docs/nuvj-protocol.md) |
 
@@ -314,6 +315,86 @@ It writes frame strips to `tools/_screens/`.
   - That arrives as a program event (message 0x28: three 32-bit ints).
   - The decoder turns it back into a button event.
   - The renderer is now 117 bytes.
+
+## Weapon no. 3: the LUMI Keys
+
+The owner chose it on 2026-11-10. It is a BLOCKS device like the Lightpad,
+so `tools/lumi_sim.py` reuses the codec, `HeapSync` and the host lifecycle and
+only adds what differs.
+
+```
+python tools/mk2_live.py --port 8775 --weapon lightpad   then pick "LUMI Keys" (or ?weapon=lumi)
+python tools/lumi_sim.py                                 self-test
+```
+
+### Windows: the MIDI driver may need to be chosen by hand
+
+On the owner's PC (Windows 11, Windows MIDI Services) the LUMI's MIDI
+interface first failed to start. Device Manager showed "USB-lydenhet" (USB
+Audio Device) with a yellow ⚠, error code 10, `STATUS_DEVICE_DATA_ERROR`,
+driver `usbaudio` (`wdma_usb.inf`). With no MIDI port, Himmel cannot reach
+the device at all. The Maschine MK2's MIDI part ("Maschine Controller MK2
+MIDI IAD") showed the same error. The MK2 is not affected, because Himmel
+uses its HID interface.
+
+The fix, done by the owner:
+1. Open Device Manager → *Sound, video and game controllers*.
+2. Right-click the ⚠ device → *Update driver*.
+3. Choose *Browse my computer* → *Let me pick from a list*.
+4. Untick *Show compatible hardware*, then pick **Microsoft → USBMidi2-ACX**
+   (the USB MIDI 2.0 class driver of Windows MIDI Services).
+5. Replug the LUMI.
+
+After that the port is called **"USBMidi2-ACX"**, not "LUMI", so the LUMI's
+`make_hw()` looks for both names. Do this while the LUMI is on: without a host
+talking to it, it switches itself off after a few seconds. Once Himmel pings
+it, it stays awake. To undo: *Uninstall device* and replug.
+
+### What we saw on the owner's LUMI (firmware 1.3.8)
+
+**Identity and settings**
+- Serial `LKB…`. Topology and version work as on the Lightpad. Battery 31/31,
+  charging.
+- The block index byte is `0x46`.
+- Config values: octave (item 4) = 1, range −4..5. Velocity sensitivity 110,
+  pressure sensitivity 127, lift sensitivity 127, brightness 100.
+- Himmel changes only the octave, and puts it back when it lets go.
+
+**LEDs**
+- Himmel's key renderer runs on the device. It is the same LittleFoot program
+  as the Lightpad's, sized for 24 keys, so 121 bytes.
+  - It calls `setUseDefaultKeyHandler(true, false)` (keep the musical key
+    handling, take the lighting) and `fillPixel(colour, key, 0)`.
+- The owner confirmed the test pattern and that played keys light up.
+- Once, the LEDs did not update after the test pattern (only 3 frames were
+  confirmed). After a restart they updated at frame rate (>550 frames while
+  playing). Cause unknown; watch for it.
+
+**Keys**
+- The block's own handler keeps sending MPE while our renderer runs: note
+  on/off with velocity, which the owner saw follow soft and hard strikes,
+  plus pressure and pitch bend.
+- Key 0 = note 48 + 12 × octave.
+- **It also sends BLOCKS touch messages per key** (0x13 / 0x11 / 0x15, finger
+  index, x/y/z). They are not used yet, and could later give key position
+  and pressure without MIDI.
+
+**Buttons**
+- 0 = Mode, 1 = Octave −, 2 = Octave +.
+- **Every press arrives twice**: once as the firmware's own button message
+  and once as our renderer's program event.
+- `LumiHost` ignores the program copies once it has seen a firmware button
+  message. Without that, one Octave + press moved two octaves.
+
+### The simulator
+- **Keys:** click = strike (lower on the key = harder), hold = pressure (it
+  grows; the scroll wheel changes it), drag sideways = glide.
+- **Buttons:** Mode, Octave −, Octave +.
+- **LEDs:** the simulated block runs the uploaded bytecode in MiniVM.
+- **Picture modes:** key colours (played keys glow by pressure; Mode
+  changes the colour family), rainbow, test pattern (key 1 red, 12 green,
+  13 blue, 24 white), off.
+- **Engine link:** UDP 127.0.0.1:8769 (8768 is the Entrancer engine).
 
 ## Weapon no. 5: the NuVJ
 
