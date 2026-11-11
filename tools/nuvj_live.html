@@ -114,6 +114,17 @@
   .chips span:hover { background: #3a3c42; }
   .full { grid-column: 1 / -1; }
   @media (max-width: 860px) { #below { grid-template-columns: 1fr; } }
+  #hunt { position: fixed; right: 14px; top: 60px; width: 420px; max-width: calc(100vw - 28px); z-index: 50; display: none;
+          background: #17181bf2; border: 2px solid #ff9d2e; border-radius: 12px; padding: 10px 12px; box-shadow: 0 16px 50px #000c; }
+  body.hunting #hunt { display: block; }
+  #hunt .hh { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  #hunt canvas { width: 100%; border-radius: 8px; cursor: crosshair; background: #000; box-shadow: 0 0 0 4px #050506; }
+  #hunt .hsteps { margin: 8px 0 4px 18px; padding: 0; font-size: 12px; color: var(--label); }
+  #hunt .hsteps b { color: var(--btn-text); }
+  #hunt button.big { background: #ff9d2e; border-color: #ffb86b; color: #111; font-weight: 700; padding: 6px 16px; }
+  #hunt .small { font-size: 11px; color: var(--label); }
+  #hOpen { position: fixed; right: 14px; bottom: 14px; z-index: 49; background: #ff9d2e; color: #111; border-color: #ffb86b; font-weight: 700; }
+  body.hunting #hOpen { display: none; }
 </style>
 </head>
 <body class="sim">
@@ -126,6 +137,22 @@
   <div class="progress" title="controls seen on the real NuVJ"><div id="bar"></div></div>
 </header>
 <div id="wrap"><div id="stage"><div id="panel"></div></div></div>
+<div id="hunt">
+  <div class="hh"><b>LCD hunt</b> <span id="hState" class="mono"></span><span style="flex:1"></span><button id="hClose" title="Stop the hunt">✕</button></div>
+  <canvas id="hLcd" width="800" height="456" title="Click the part that lights on the NuVJ"></canvas>
+  <ol class="hsteps">
+    <li>Look at the <b>NuVJ's own screen</b>. Its top text row shows where we are, e.g. <code>SEG05.*</code>.</li>
+    <li>Does anything <b>else</b> light there? <b>Click the same place on this picture</b>. It is saved.</li>
+    <li>Then press <b>Next ▶</b>. Nothing lit? Just press <b>Next ▶</b>.</li>
+  </ol>
+  <div class="row"><button id="hPrev">◀ Back</button><button id="hNext" class="big">Next ▶</button>
+    <label title="Light a whole byte (7 segments) at a time: quick first pass"><input type="checkbox" id="hWhole"> 7 at a time</label>
+    <label><input type="checkbox" id="hAuto"> Auto (1.2 s)</label></div>
+  <div class="row"><input type="text" id="hName" placeholder="Not in the picture? Say what and where" style="flex:1">
+    <button id="hSave">Save</button></div>
+  <div id="hFound" class="mono small"></div>
+</div>
+<button id="hOpen" title="Learn the NuVJ's LCD: light one part at a time and click it">LCD hunt</button>
 <div id="below">
   <div class="card">
     <h2>Play it</h2>
@@ -244,18 +271,7 @@ function build(w) {
     const [uw, uh] = s.units || [200, 108];
     const d = add(`<canvas width="${uw * 4}" height="${uh * 4}"></canvas>`, "lcd", { left: px(s.x), top: px(s.y), width: px(s.w), height: px(s.h) });
     s.ctx = d.firstChild.getContext("2d"); W.lcd = s; s.el = d;
-    d.addEventListener("click", e => {
-      if (!S || !S.seg_hunt || !s.hits) return;
-      const r = d.firstChild.getBoundingClientRect();
-      const ux = (e.clientX - r.left) / r.width * uw, uy = (e.clientY - r.top) / r.height * uh;
-      let best = null, bd = 1e9;
-      for (const h of s.hits) {   // the smallest part under the click, else the nearest within 8 units
-        const inside = ux >= h.x - 1 && ux <= h.x + h.w + 1 && uy >= h.y - 1 && uy <= h.y + h.h + 1;
-        const dist = inside ? h.w * h.h * 1e-3 : Math.hypot(ux - (h.x + h.w / 2), uy - (h.y + h.h / 2)) + 100;
-        if (dist < bd) { bd = dist; best = h; }
-      }
-      if (best && bd < 108) post({ seg_assign: best.key });
-    });
+    d.addEventListener("click", e => lcdClick(e, d.firstChild));
   }
   for (const c of w.controls) {
     let d;
@@ -517,6 +533,24 @@ function seg7(g, x, y, w, h, segs, on, hits, prefix, only) {
   }
 }
 
+// A click on the drawn LCD (the panel's or the big copy in the hunt panel) during the segment hunt:
+// the smallest part under the click, else the nearest within 8 LCD units, is what lit.
+function lcdClick(e, canvas) {
+  const s = W && W.lcd;
+  if (!S || !S.seg_hunt || !s || !s.hits) return;
+  const [uw, uh] = s.units || [200, 114], r = canvas.getBoundingClientRect();
+  const ux = (e.clientX - r.left) / r.width * uw, uy = (e.clientY - r.top) / r.height * uh;
+  let best = null, bd = 1e9;
+  for (const h of s.hits) {
+    const inside = ux >= h.x - 1 && ux <= h.x + h.w + 1 && uy >= h.y - 1 && uy <= h.y + h.h + 1;
+    const dist = inside ? h.w * h.h * 1e-3 : Math.hypot(ux - (h.x + h.w / 2), uy - (h.y + h.h / 2)) + 100;
+    if (dist < bd) { bd = dist; best = h; }
+  }
+  if (best && bd < 108) { post({ seg_assign: best.key }); huntFlash(best); }
+}
+let huntMark = null;
+function huntFlash(h) { huntMark = { h, t: performance.now() }; }
+
 // ---------- render a snapshot ----------
 const ledCss = (c, v) => { const n = parseInt((c.led_color || "#4aa8ff").slice(1), 16), a = 0.35 + 0.65 * v / 127;
   return [`rgba(${n >> 16},${n >> 8 & 255},${n & 255},${a})`, `0 0 ${6 + 14 * v / 127}px rgba(${n >> 16},${n >> 8 & 255},${n & 255},${a})`]; };
@@ -608,6 +642,22 @@ function render(s) {
   $("driveBtn").textContent = s.drive ? "■ Stop: listen only" : "Let Himmel drive the LEDs and LCD";
   $("driveBtn").classList.toggle("hwon", !!s.drive); $("driveBtn").disabled = !s.hardware;
   const sh = s.seg_hunt;
+  document.body.classList.toggle("hunting", !!sh);
+  if (sh) {
+    $("hState").textContent = sh.all ? "every segment on" : `byte ${sh.byte}${sh.whole ? " (all 7)" : " · bit " + sh.bit}`;
+    if (document.activeElement !== $("hWhole")) $("hWhole").checked = !!sh.whole;
+    if (document.activeElement !== $("hAuto")) $("hAuto").checked = !!sh.auto;
+    const hc = $("hLcd"), hg = hc.getContext("2d"), src = W.lcd.ctx.canvas;
+    hg.drawImage(src, 0, 0, hc.width, hc.height);
+    if (huntMark && performance.now() - huntMark.t < 1500) {   // where the last click landed
+      const [uw, uh] = W.lcd.units || [200, 114], kx = hc.width / uw, ky = hc.height / uh, h = huntMark.h;
+      hg.strokeStyle = "#ff9d2e"; hg.lineWidth = 4; hg.strokeRect(h.x * kx - 4, h.y * ky - 4, h.w * kx + 8, h.h * ky + 8);
+    }
+    const segs = s.lcd_segments || {}, keys = Object.keys(segs);
+    $("hFound").textContent = (s.learn_msg ? s.learn_msg + "\n" : "") +
+      `learned: ${keys.length} part(s)` + (keys.length ? " - last: " + keys.slice(-6).join(", ") : "") +
+      (s.lcd_bytes_lit && s.lcd_bytes_lit.length ? `\nbytes that light something: ${s.lcd_bytes_lit.join(", ")}` : "");
+  }
   if (W && W.lcd && W.lcd.el) W.lcd.el.classList.toggle("hunting", !!sh);
   $("shInfo").textContent = sh ? `lighting byte ${sh.byte} ${sh.whole ? "(all 7 bits)" : "bit " + sh.bit}${sh.auto ? " (auto)" : ""} - click what lit on the LCD drawing` +
     (s.lcd_bytes_lit && s.lcd_bytes_lit.length ? `; bytes that lit something: ${s.lcd_bytes_lit.join(", ")}` : "") : "";
@@ -665,6 +715,20 @@ $("shAuto").onchange = e => { if (S && S.seg_hunt) post({ seg_hunt: { auto: e.ta
 document.querySelectorAll("[data-sstep]").forEach(b => b.onclick = () => post({ seg_hunt: { step: +b.dataset.sstep, auto: false } }));
 $("lcdC").oninput = () => { $("lcdCV").textContent = $("lcdC").value; post({ contrast: +$("lcdC").value }); };
 $("idBtn").onclick = () => post({ identity: true });
+$("hOpen").onclick = () => post({ seg_hunt: { byte: 0, bit: 0, auto: false, whole: $("hWhole").checked } });
+$("hClose").onclick = () => post({ seg_hunt: null });
+$("hNext").onclick = () => post({ seg_hunt: { step: S && S.seg_hunt && S.seg_hunt.whole ? 7 : 1, auto: false } });
+$("hPrev").onclick = () => post({ seg_hunt: { step: S && S.seg_hunt && S.seg_hunt.whole ? -7 : -1, auto: false } });
+$("hWhole").onchange = e => post({ seg_hunt: { whole: e.target.checked } });
+$("hAuto").onchange = e => post({ seg_hunt: { auto: e.target.checked } });
+$("hSave").onclick = () => { const t = $("hName").value.trim(); if (t) { post({ seg_assign: "custom:" + t }); $("hName").value = ""; } };
+$("hName").onkeydown = e => { if (e.key === "Enter") $("hSave").click(); };
+$("hLcd").addEventListener("click", e => lcdClick(e, $("hLcd")));
+document.addEventListener("keydown", e => {   // arrow keys step the hunt
+  if (!S || !S.seg_hunt || document.activeElement === $("hName")) return;
+  if (e.key === "ArrowRight") { e.preventDefault(); $("hNext").click(); }
+  if (e.key === "ArrowLeft") { e.preventDefault(); $("hPrev").click(); }
+});
 $("driveBtn").onclick = () => post({ drive: !(S && S.drive) });
 $("help").innerHTML = "<b>Simulator:</b> the drawing is the NuVJ. <b>Buttons and pads:</b> hold the mouse. " +
   "<b>Knobs:</b> drag up/down or scroll. <b>BANK and MASTER FX:</b> endless, drag or scroll one step at a time; " +

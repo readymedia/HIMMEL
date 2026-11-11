@@ -431,5 +431,8 @@
  "leds": {
   "checked": "2026-11-11"
  },
- "lcd_segments": {}
+ "lcd_segments": {},
+ "lcd_bytes_lit": [
+  1
+ ]
 }
