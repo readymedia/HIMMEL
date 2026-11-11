@@ -1289,6 +1289,15 @@ class NuvjLive:
                     h["auto"] = False
                     self.learn_msg = "LCD segment %s = byte %d bit %d" % (key, h["byte"], h["bit"])
                     save_map(self.m)
+            elif d.get("seg_forget"):  # the hunt: forget what the current bit is saved as
+                h = self.host.seg_hunt
+                if h and self.dev.kind == "hw":
+                    segs = self.m.setdefault("lcd_segments", {})
+                    gone = [k for k, v in segs.items() if v == [h["byte"], 1 << h["bit"]]]
+                    for k in gone:
+                        del segs[k]
+                    self.learn_msg = "forgot %s" % (", ".join(gone) or "nothing")
+                    save_map(self.m)
             elif "contrast" in d:      # LCD contrast 0..99, not stored in the controller
                 self.host.contrast = max(0, min(99, int(d["contrast"])))
             elif d.get("identity"):

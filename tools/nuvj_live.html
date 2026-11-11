@@ -114,7 +114,7 @@
   .chips span:hover { background: #3a3c42; }
   .full { grid-column: 1 / -1; }
   @media (max-width: 860px) { #below { grid-template-columns: 1fr; } }
-  #hunt { position: fixed; right: 14px; top: 60px; width: 420px; max-width: calc(100vw - 28px); z-index: 50; display: none;
+  #hunt { position: fixed; right: 14px; top: 56px; width: min(900px, calc(100vw - 28px)); max-height: calc(100vh - 70px); overflow: auto; z-index: 50; display: none;
           background: #17181bf2; border: 2px solid #ff9d2e; border-radius: 12px; padding: 10px 12px; box-shadow: 0 16px 50px #000c; }
   body.hunting #hunt { display: block; }
   #hunt .hh { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
@@ -123,6 +123,8 @@
   #hunt .hsteps b { color: var(--btn-text); }
   #hunt button.big { background: #ff9d2e; border-color: #ffb86b; color: #111; font-weight: 700; padding: 6px 16px; }
   #hunt .small { font-size: 11px; color: var(--label); }
+  #hunt .hsaved { margin: 8px 0 2px; padding: 6px 10px; border-radius: 6px; font-weight: 600; background: #26272b; }
+  #hunt .hsaved.ok { background: #143d27; color: #7ff0b0; }
   #hOpen { position: fixed; right: 14px; bottom: 14px; z-index: 49; background: #ff9d2e; color: #111; border-color: #ffb86b; font-weight: 700; }
   body.hunting #hOpen { display: none; }
 </style>
@@ -139,15 +141,17 @@
 <div id="wrap"><div id="stage"><div id="panel"></div></div></div>
 <div id="hunt">
   <div class="hh"><b>LCD hunt</b> <span id="hState" class="mono"></span><span style="flex:1"></span><button id="hClose" title="Stop the hunt">✕</button></div>
-  <canvas id="hLcd" width="800" height="456" title="Click the part that lights on the NuVJ"></canvas>
+  <canvas id="hLcd" width="1600" height="896" title="Click the part that lights on the NuVJ"></canvas>
   <ol class="hsteps">
     <li>Look at the <b>NuVJ's own screen</b>. Its top text row shows where we are, e.g. <code>SEG05.*</code>.</li>
     <li>Does anything <b>else</b> light there? <b>Click the same place on this picture</b>. It is saved.</li>
     <li>Then press <b>Next ▶</b>. Nothing lit? Just press <b>Next ▶</b>.</li>
   </ol>
+  <div id="hSaved" class="hsaved"></div>
   <div class="row"><button id="hPrev">◀ Back</button><button id="hNext" class="big">Next ▶</button>
     <label title="Light a whole byte (7 segments) at a time: quick first pass"><input type="checkbox" id="hWhole"> 7 at a time</label>
-    <label><input type="checkbox" id="hAuto"> Auto (1.2 s)</label></div>
+    <label><input type="checkbox" id="hAuto"> Auto (1.2 s)</label>
+    <button id="hForget" title="Forget what this bit is saved as">Forget this one</button></div>
   <div class="row"><input type="text" id="hName" placeholder="Not in the picture? Say what and where" style="flex:1">
     <button id="hSave">Save</button></div>
   <div id="hFound" class="mono small"></div>
@@ -437,10 +441,11 @@ function seg16(g, x, y, w, h, segs, on, hits, prefix) {
   g.lineWidth = t; g.lineCap = "round";
   for (const k of SEG16_ALL) {
     const [x0, y0, x1, y1] = L[k];
-    g.strokeStyle = on(segs.includes(k)); g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+    g.strokeStyle = on(segs.includes(k) || LCD_FORCE.has(prefix + k)); g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
     if (hits) hits.push({ key: prefix + k, x: Math.min(x0, x1) - t / 2, y: Math.min(y0, y1) - t / 2, w: Math.abs(x1 - x0) + t, h: Math.abs(y1 - y0) + t });
   }
 }
+let LCD_FORCE = new Set();
 const LCD_BG = "#1f3fd0", LCD_ON = "#eef3ff", LCD_GHOST = "rgba(6, 10, 70, 0.20)";
 // The NuVJ's own glass (from the owner's photo with every segment on): words, an 8-character dot row, a
 // 2-digit PRESET number, a 3-digit number over "BPM", an 11-character 16-segment row, A/B/C/D boxes,
@@ -454,7 +459,9 @@ function drawLcd(m, note) {
   g.fillStyle = grad; g.fillRect(0, 0, g.canvas.width, g.canvas.height);
   g.save(); g.scale(k, k);
   const on = b => b ? LCD_ON : LCD_GHOST;
-  const lit = new Set(m.lit || []);
+  const force = new Set(m.keys || []);   // parts forced on: in the hunt, what this bit is saved as
+  const lit = new Set([...(m.lit || []), ...force]);
+  LCD_FORCE = force;
   const hits = s.hits = [];            // clickable parts (LCD units) for the segment hunt
   g.textBaseline = "middle"; g.textAlign = "center";
   for (const e of s.elements || []) {
@@ -486,7 +493,7 @@ function drawLcd(m, note) {
       const n = m[e.id] ?? -1;
       for (let i = 0; i < e.n; i++) {
         const sw = e.w / e.n, sh = e.h * (0.25 + 0.75 * (i + 1) / e.n);
-        g.fillStyle = on(i < n); g.fillRect(e.x + i * sw, e.y + e.h - sh, sw * 0.62, sh);
+        g.fillStyle = on(i < n || force.has(`${e.id}.${i}`)); g.fillRect(e.x + i * sw, e.y + e.h - sh, sw * 0.62, sh);
         hits.push({ key: `${e.id}.${i}`, x: e.x + i * sw, y: e.y + e.h - sh, w: sw * 0.62, h: sh });
       }
     } else if (e.kind === "wedge") {   // a wedge of n horizontal stripes, longest on top; the square edge on one side
@@ -494,7 +501,7 @@ function drawLcd(m, note) {
       for (let i = 0; i < e.n; i++) {        // i = 0 is the bottom (shortest) stripe
         const len = e.w * (i + 1) / e.n, y0 = e.y + e.h - (i + 1) * sh;
         const x0 = e.edge === "right" ? e.x + e.w - len : e.x;
-        g.fillStyle = on(i < n); g.fillRect(x0, y0, len, sh * 0.6);
+        g.fillStyle = on(i < n || force.has(`${e.id}.${i}`)); g.fillRect(x0, y0, len, sh * 0.6);
         hits.push({ key: `${e.id}.${i}`, x: x0, y: y0, w: len, h: sh * 0.6 });
       }
     } else if (e.kind === "box") {     // a box with dark text (lit = the box is on)
@@ -533,7 +540,7 @@ function seg7(g, x, y, w, h, segs, on, hits, prefix, only) {
   };
   for (const [k, pts] of Object.entries(S)) {
     if (only && !only.includes(k)) continue;
-    g.fillStyle = on(segs.includes(k)); g.beginPath(); pts.forEach(([px_, py], i) => i ? g.lineTo(px_, py) : g.moveTo(px_, py)); g.closePath(); g.fill();
+    g.fillStyle = on(segs.includes(k) || LCD_FORCE.has(prefix + k)); g.beginPath(); pts.forEach(([px_, py], i) => i ? g.lineTo(px_, py) : g.moveTo(px_, py)); g.closePath(); g.fill();
     if (hits) {
       const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
       hits.push({ key: prefix + k, x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) });
@@ -556,7 +563,7 @@ function lcdClick(e, canvas) {
   }
   if (best && bd < 108) { post({ seg_assign: best.key }); huntFlash(best); }
 }
-let huntMark = null;
+let huntMark = null, huntSaved = [];
 function huntFlash(h) { huntMark = { h, t: performance.now() }; }
 
 // ---------- render a snapshot ----------
@@ -617,7 +624,12 @@ function render(s) {
     for (const id of ["alpha", "bpm", "preset", "last", "data"]) if (!has(id)) wired[id] = id === "last" || id === "data" ? null : "";
     wired.lit = (wired.lit || []).filter(has);
   }
-  if (s.seg_hunt) wired = { text: wired.text };   // the hunt: only its text row
+  if (s.seg_hunt) {   // the hunt: its text row, and whatever this bit (or byte) is already saved as
+    const h = s.seg_hunt, saved = Object.entries(s.lcd_segments || {})
+      .filter(([k, v]) => v[0] === h.byte && (h.whole || v[1] === (1 << h.bit))).map(([k]) => k);
+    wired = { text: wired.text, keys: saved };
+    huntSaved = saved;
+  }
   drawLcd(wired, s.hardware ? "drawing: what Himmel would write (device LCD protocol unknown)" : "simulated: what Himmel would write");
   // host card
   const h = s.host;
@@ -654,6 +666,11 @@ function render(s) {
   if (sh) {
     $("hState").textContent = sh.all ? "every segment on" : `byte ${sh.byte}${sh.whole ? " (all 7)" : " · bit " + sh.bit}`;
     if (document.activeElement !== $("hWhole")) $("hWhole").checked = !!sh.whole;
+    const hs = $("hSaved");
+    hs.textContent = sh.whole ? "7 at a time: a click notes that this byte lights something (nothing is saved per part)"
+      : huntSaved.length ? "✓ Saved: this one lights " + huntSaved.join(", ") + " (lit on the picture)"
+      : "Not saved yet: click what lights on the NuVJ";
+    hs.classList.toggle("ok", !sh.whole && huntSaved.length > 0);
     if (document.activeElement !== $("hAuto")) $("hAuto").checked = !!sh.auto;
     const hc = $("hLcd"), hg = hc.getContext("2d"), src = W.lcd.ctx.canvas;
     hg.drawImage(src, 0, 0, hc.width, hc.height);
@@ -732,6 +749,7 @@ $("hAuto").onchange = e => post({ seg_hunt: { auto: e.target.checked } });
 $("hSave").onclick = () => { const t = $("hName").value.trim(); if (t) { post({ seg_assign: "custom:" + t }); $("hName").value = ""; } };
 $("hName").onkeydown = e => { if (e.key === "Enter") $("hSave").click(); };
 $("hLcd").addEventListener("click", e => lcdClick(e, $("hLcd")));
+$("hForget").onclick = () => post({ seg_forget: true });
 document.addEventListener("keydown", e => {   // arrow keys step the hunt
   if (!S || !S.seg_hunt || document.activeElement === $("hName")) return;
   if (e.key === "ArrowRight") { e.preventDefault(); $("hNext").click(); }
