@@ -505,12 +505,14 @@ function drawLcd(m, note) {
         hits.push({ key: `${e.id}.${i}`, x: x0, y: y0, w: len, h: sh * 0.6 });
       }
     } else if (e.kind === "box") {     // a box with dark text (lit = the box is on)
-      const b = lit.has(e.id);
+      const b = lit.has(e.id), bt = lit.has(e.id + ".text");
       g.fillStyle = on(b); g.fillRect(e.x, e.y, e.w, e.h);
-      g.fillStyle = b ? "#1638c4" : "rgba(6, 10, 70, 0.25)"; g.font = `bold ${e.h > 12 ? 5.5 : 6.5}px Segoe UI, sans-serif`;
+      g.fillStyle = bt ? (b ? "#1638c4" : LCD_ON) : b ? "#1638c4" : "rgba(6, 10, 70, 0.25)";
+      g.font = `bold ${e.h > 12 ? 5.5 : 6.5}px Segoe UI, sans-serif`;
       const lines = e.text.split("\n");
       lines.forEach((ln, i) => g.fillText(ln, e.x + e.w / 2, e.y + e.h * (i + 1) / (lines.length + 1)));
-      hits.push({ key: e.id, x: e.x, y: e.y, w: e.w, h: e.h });
+      hits.push({ key: e.id, x: e.x, y: e.y, w: e.w, h: e.h });                        // the box (frame / fill)
+      hits.push({ key: e.id + ".text", x: e.x + e.w * 0.25, y: e.y + e.h * 0.2, w: e.w * 0.5, h: e.h * 0.6 });   // its letter / text
     } else if (e.kind === "rule") {
       g.fillStyle = on(lit.has(e.id)); g.fillRect(e.x, e.y, e.w, 1.2);
       hits.push({ key: e.id, x: e.x, y: e.y - 1, w: e.w, h: 3 });
@@ -518,10 +520,14 @@ function drawLcd(m, note) {
       const b = lit.has(e.id);
       g.font = `600 ${e.size || 6}px Segoe UI, sans-serif`;
       const tw = g.measureText(e.text).width;
-      if (e.inv) { g.fillStyle = on(b); g.fillRect(e.x - tw / 2 - 2, e.y - 3.5, tw + 4, 7); g.fillStyle = b ? "#1638c4" : "rgba(6, 10, 70, 0.3)"; }
+      if (e.inv) { g.fillStyle = on(b); g.fillRect(e.x - tw / 2 - 2, e.y - 3.5, tw + 4, 7);
+        g.fillStyle = lit.has(e.id + ".text") ? (b ? "#1638c4" : LCD_ON) : b ? "#1638c4" : "rgba(6, 10, 70, 0.3)"; }
       else g.fillStyle = on(b);
       g.fillText(e.text, e.x, e.y);
-      hits.push({ key: e.id, x: e.x - tw / 2 - 1, y: e.y - 4, w: tw + 2, h: 8 });
+      if (e.inv) {   // a tab: its background and its text are separate parts
+        hits.push({ key: e.id, x: e.x - tw / 2 - 2, y: e.y - 3.5, w: tw + 4, h: 7 });
+        hits.push({ key: e.id + ".text", x: e.x - tw / 3, y: e.y - 2, w: tw * 2 / 3, h: 4 });
+      } else hits.push({ key: e.id, x: e.x - tw / 2 - 1, y: e.y - 4, w: tw + 2, h: 8 });
     }
   }
   g.restore();
@@ -626,7 +632,7 @@ function render(s) {
   }
   if (s.seg_hunt) {   // the hunt: its text row, and whatever this bit (or byte) is already saved as
     const h = s.seg_hunt, saved = Object.entries(s.lcd_segments || {})
-      .filter(([k, v]) => v[0] === h.byte && (h.whole || v[1] === (1 << h.bit))).map(([k]) => k);
+      .filter(([k, v]) => v.some(b => b[0] === h.byte && (h.whole || b[1] === (1 << h.bit)))).map(([k]) => k);
     wired = { text: wired.text, keys: saved };
     huntSaved = saved;
   }

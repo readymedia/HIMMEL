@@ -101,6 +101,13 @@ def entry_from_source(t):
     return e
 
 
+def seg_bits(v):
+    """The bits of one LCD part: [[byte, mask], ...] (also reads the older single [byte, mask])."""
+    if not v:
+        return []
+    return [list(v)] if isinstance(v[0], int) else [list(x) for x in v]
+
+
 def load_profile():
     with open(PROFILE, encoding="utf-8") as f:
         return json.load(f)
@@ -884,9 +891,10 @@ class NuvjHost:
                 seg[b] = 1
             number_into(seg, model.get("preset") or "")
         lit = self.lit_keys(model)
-        for key, (b, mask) in learned.items():
-            if key in lit:
-                seg[b] |= mask
+        for key, v in learned.items():
+            if key in lit or key.split(".")[0] + ".text" == key and key[:-5] in lit:
+                for b, mask in seg_bits(v):
+                    seg[b] |= mask
         return bytes(seg)
 
     def tick(self, dev, m, held, force=False):
@@ -1166,7 +1174,7 @@ class NuvjLive:
                              "contrast": dev.contrast, "inited": dev.inited},
                 "seg_hunt": self.host.seg_hunt,
                 "drive": self.drive,
-                "lcd_segments": dict(self.m.get("lcd_segments") or {}),
+                "lcd_segments": {k: seg_bits(v) for k, v in (self.m.get("lcd_segments") or {}).items()},
                 "lcd_bytes_lit": list(self.m.get("lcd_bytes_lit") or []),
                 "host": {"mode": self.host.mode, "modes": list(NuvjHost.MODES), "bpm": st["bpm"],
                          "A": dict(st["A"]), "B": dict(st["B"]), "toggles": dict(st["toggles"]),
@@ -1283,19 +1291,31 @@ class NuvjLive:
                     self.learn_msg = "segment hunt on the simulator: nothing is saved (only the real NuVJ teaches segments)"
                 else:
                     segs = self.m.setdefault("lcd_segments", {})
-                    for k2 in [k for k, v in segs.items() if v == [h["byte"], 1 << h["bit"]]]:
-                        del segs[k2]
-                    segs[key] = [h["byte"], 1 << h["bit"]]
+                    pair = [h["byte"], 1 << h["bit"]]
+                    for k2 in list(segs):                  # this bit belongs to one part only
+                        bits = [b for b in seg_bits(segs[k2]) if b != pair]
+                        if bits:
+                            segs[k2] = bits
+                        else:
+                            del segs[k2]
+                    segs[key] = seg_bits(segs.get(key)) + [pair]   # a part may light from several bits
                     h["auto"] = False
-                    self.learn_msg = "LCD segment %s = byte %d bit %d" % (key, h["byte"], h["bit"])
+                    self.learn_msg = "LCD part %s += byte %d bit %d (%d bit(s) now)" % (key, h["byte"], h["bit"], len(segs[key]))
                     save_map(self.m)
             elif d.get("seg_forget"):  # the hunt: forget what the current bit is saved as
                 h = self.host.seg_hunt
                 if h and self.dev.kind == "hw":
                     segs = self.m.setdefault("lcd_segments", {})
-                    gone = [k for k, v in segs.items() if v == [h["byte"], 1 << h["bit"]]]
-                    for k in gone:
-                        del segs[k]
+                    pair, gone = [h["byte"], 1 << h["bit"]], []
+                    for k in list(segs):
+                        bits = seg_bits(segs[k])
+                        if pair in bits:
+                            gone.append(k)
+                            bits.remove(pair)
+                            if bits:
+                                segs[k] = bits
+                            else:
+                                del segs[k]
                     self.learn_msg = "forgot %s" % (", ".join(gone) or "nothing")
                     save_map(self.m)
             elif "contrast" in d:      # LCD contrast 0..99, not stored in the controller
