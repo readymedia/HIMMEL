@@ -883,6 +883,8 @@ class NuvjHost:
             h = self.seg_hunt
             if h.get("all"):                     # every segment on: a photo shows the whole glass
                 return bytes([0x7F] * 64)
+            if h.get("blank"):                   # every segment off: the camera mapper's baseline
+                return bytes(64)
             seg[h["byte"]] = 0x7F if h.get("whole") else 1 << h["bit"]
             return bytes(seg)
         learned = m.get("lcd_segments") or {}
@@ -918,7 +920,7 @@ class NuvjHost:
         model = self.lcd()
         if self.seg_hunt is not None:
             h = self.seg_hunt
-            model = dict(model, text="ALL SEGS" if h.get("all") else
+            model = dict(model, text=" " * 8 if h.get("quiet") else "ALL SEGS" if h.get("all") else
                          "SEG%02d.%s" % (h["byte"], "*" if h.get("whole") else h["bit"]))
         out = {"leds": led_bytes(self.wanted(held)), "text": text_bytes(model["text"]), "segs": self.segments(model, m)}
         cmds = {"leds": CMD_LEDS, "text": CMD_TEXT, "segs": CMD_SEGMENTS}
@@ -1274,6 +1276,9 @@ class NuvjLive:
                         pos = (old["byte"] + (1 if int(h["step"]) > 0 else -1)) % 64 * 7
                     self.host.seg_hunt = {"byte": pos // 7, "bit": 0 if whole else pos % 7, "whole": whole,
                                           "all": bool(h.get("all", False)),
+                                          "blank": bool(h.get("blank", False)),
+                                          "quiet": bool(h.get("quiet", old.get("quiet", False))),
+                                          "seq": int(h.get("seq", 0)),
                                           "auto": bool(h.get("auto", old["auto"])), "t": time.time()}
             elif "seg_assign" in d:    # the owner clicked the element that lit: learn its bit
                 key, h = str(d["seg_assign"])[:40], self.host.seg_hunt
@@ -1302,6 +1307,20 @@ class NuvjLive:
                     h["auto"] = False
                     self.learn_msg = "LCD part %s += byte %d bit %d (%d bit(s) now)" % (key, h["byte"], h["bit"], len(segs[key]))
                     save_map(self.m)
+            elif "seg_set" in d:       # the camera mapper: bit (byte, bit) lights exactly these parts
+                c = d["seg_set"]
+                if self.dev.kind == "hw":
+                    segs = self.m.setdefault("lcd_segments", {})
+                    pair = [int(c["byte"]), 1 << int(c["bit"])]
+                    for k in list(segs):
+                        bits = [b for b in seg_bits(segs[k]) if b != pair]
+                        if bits:
+                            segs[k] = bits
+                        else:
+                            del segs[k]
+                    for key in [str(k)[:40] for k in c.get("keys", [])][:12]:
+                        segs[key] = seg_bits(segs.get(key)) + [pair]
+                    self._save_soon()
             elif d.get("seg_forget"):  # the hunt: forget what the current bit is saved as
                 h = self.host.seg_hunt
                 if h and self.dev.kind == "hw":

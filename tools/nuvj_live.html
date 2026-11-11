@@ -123,6 +123,12 @@
   #hunt .hsteps b { color: var(--btn-text); }
   #hunt button.big { background: #ff9d2e; border-color: #ffb86b; color: #111; font-weight: 700; padding: 6px 16px; }
   #hunt .small { font-size: 11px; color: var(--label); }
+  #hunt .camwrap { position: relative; display: none; margin-top: 6px; }
+  body.camon #hunt .camwrap { display: block; }
+  #hunt .camwrap video { width: 100%; display: block; border-radius: 6px; background: #000; }
+  #hunt .camwrap canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; cursor: crosshair; }
+  #hunt details summary { cursor: pointer; margin-top: 10px; }
+  body.camrun #camRun { opacity: .5; }
   #hunt .hsaved { margin: 8px 0 2px; padding: 6px 10px; border-radius: 6px; font-weight: 600; background: #26272b; }
   #hunt .hsaved.ok { background: #143d27; color: #7ff0b0; }
   #hOpen { position: fixed; right: 14px; bottom: 14px; z-index: 49; background: #ff9d2e; color: #111; border-color: #ffb86b; font-weight: 700; }
@@ -155,6 +161,24 @@
   <div class="row"><input type="text" id="hName" placeholder="Not in the picture? Say what and where" style="flex:1">
     <button id="hSave">Save</button></div>
   <div id="hFound" class="mono small"></div>
+  <details id="camBox" open>
+    <summary><b>Camera mapper</b> - let a webcam watch the NuVJ screen and map every segment by itself</summary>
+    <ol class="hsteps">
+      <li>Point a webcam straight at the NuVJ's screen (close, sharp, no glare), pick it and press <b>Camera on</b>.</li>
+      <li>Click the <b>4 corners of the blue glass</b> in the camera picture: top-left, top-right, bottom-right,
+        bottom-left. Green outlines should then sit on the real segments.</li>
+      <li>Press <b>Auto-map</b> and leave it (about 4-5 minutes). The NuVJ's text row stays blank meanwhile.</li>
+    </ol>
+    <div class="row"><select id="camSel" style="max-width:220px"></select><button id="camStart">Camera on</button>
+      <button id="camCal">Set corners again</button><button id="camRun" class="big">Auto-map</button><button id="camStop">Stop</button></div>
+    <div class="row small"><label>bytes <input id="camFrom" type="number" value="0" min="0" max="63" style="width:50px"></label>
+      <label>to <input id="camTo" type="number" value="63" min="0" max="63" style="width:50px"></label>
+      <label title="ms to wait after a change before the camera looks">settle <input id="camSettle" type="number" value="350" style="width:60px"></label>
+      <label title="how much brighter a pixel must get">threshold <input id="camThr" type="number" value="22" style="width:50px"></label>
+      <label title="share of a part that must light">cover <input id="camCover" type="number" value="0.18" step="0.02" style="width:60px"></label></div>
+    <div id="camInfo" class="mono small"></div>
+    <div class="camwrap"><video id="camVid" autoplay playsinline muted></video><canvas id="camOv"></canvas></div>
+  </details>
 </div>
 <button id="hOpen" title="Learn the NuVJ's LCD: light one part at a time and click it">LCD hunt</button>
 <div id="below">
@@ -756,6 +780,173 @@ $("hSave").onclick = () => { const t = $("hName").value.trim(); if (t) { post({ 
 $("hName").onkeydown = e => { if (e.key === "Enter") $("hSave").click(); };
 $("hLcd").addEventListener("click", e => lcdClick(e, $("hLcd")));
 $("hForget").onclick = () => post({ seg_forget: true });
+// ---------- camera mapper: a webcam watches the NuVJ's LCD and maps every segment bit by itself ----------
+// 1. Camera on (any webcam pointed at the NuVJ screen). 2. Click the 4 corners of the blue glass in the
+// picture: top-left, top-right, bottom-right, bottom-left. 3. Auto-map: for every byte, all segments off
+// (baseline); then each bit alone. What got brighter is mapped onto the drawn LCD and saved (seg_set).
+const CAM = { stream: null, corners: [], Hc2l: null, Hl2c: null, running: false, grid: null, last: null, parts: null };
+const GW = 400, GH = 225;     // the camera picture is analysed at this size
+function solve8(A, b) {        // Gaussian elimination for the 8x8 homography system
+  const n = 8, M = A.map((r, i) => [...r, b[i]]);
+  for (let c = 0; c < n; c++) {
+    let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    [M[c], M[p]] = [M[p], M[c]];
+    for (let r = 0; r < n; r++) if (r !== c) { const f = M[r][c] / M[c][c]; for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k]; }
+  }
+  return M.map((r, i) => r[n] / r[i]);
+}
+function homography(src, dst) {
+  const A = [], b = [];
+  for (let i = 0; i < 4; i++) {
+    const [x, y] = src[i], [u, v] = dst[i];
+    A.push([x, y, 1, 0, 0, 0, -u * x, -u * y]); b.push(u);
+    A.push([0, 0, 0, x, y, 1, -v * x, -v * y]); b.push(v);
+  }
+  return [...solve8(A, b), 1];
+}
+function hApply(H, x, y) { const w = H[6] * x + H[7] * y + 1; return [(H[0] * x + H[1] * y + H[2]) / w, (H[3] * x + H[4] * y + H[5]) / w]; }
+async function camList() {
+  try {
+    const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput");
+    const sel = $("camSel"), cur = sel.value;
+    sel.innerHTML = devs.map((d, i) => `<option value="${d.deviceId}">${esc(d.label || "camera " + (i + 1))}</option>`).join("");
+    if (cur) sel.value = cur;
+  } catch (e) { $("camInfo").textContent = "no camera list: " + e; }
+}
+async function camStart() {
+  try {
+    if (CAM.stream) CAM.stream.getTracks().forEach(t => t.stop());
+    const id = $("camSel").value;
+    CAM.stream = await navigator.mediaDevices.getUserMedia({ video: id ? { deviceId: { exact: id }, width: 1280, height: 720 } : { width: 1280, height: 720 } });
+    $("camVid").srcObject = CAM.stream;
+    document.body.classList.add("camon");
+    await camList();
+    $("camInfo").textContent = "Camera on. Now click the 4 corners of the blue glass: top-left, top-right, bottom-right, bottom-left.";
+    CAM.corners = []; CAM.Hc2l = null;
+  } catch (e) { $("camInfo").textContent = "camera failed: " + e + " (allow the camera for this page, or open it in Chrome)"; }
+}
+function vidPoint(e) {          // a click on the overlay -> a point in the video's own pixels
+  const v = $("camVid"), r = $("camOv").getBoundingClientRect();
+  return [(e.clientX - r.left) / r.width * v.videoWidth, (e.clientY - r.top) / r.height * v.videoHeight];
+}
+function camCalibrated() {
+  const [uw, uh] = W.lcd.units || [200, 112];
+  const L = [[0, 0], [uw, 0], [uw, uh], [0, uh]];
+  CAM.Hc2l = homography(CAM.corners, L); CAM.Hl2c = homography(L, CAM.corners);
+  // every analysed pixel inside the glass, with its place on the LCD drawing
+  const v = $("camVid"), sx = v.videoWidth / GW, sy = v.videoHeight / GH, idx = [], U = [], V = [];
+  for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
+    const [u, w] = hApply(CAM.Hc2l, (x + 0.5) * sx, (y + 0.5) * sy);
+    if (u >= 0 && u <= uw && w >= 0 && w <= uh) { idx.push(y * GW + x); U.push(u); V.push(w); }
+  }
+  const pxPerUnit = Math.sqrt(idx.length / (uw * uh));
+  CAM.grid = { idx, U, V, pxPerUnit };
+  $("camInfo").textContent = `Corners set (${idx.length} camera pixels on the glass, ${pxPerUnit.toFixed(1)} per LCD unit). The outlines should sit on the real segments. Then press Auto-map.`;
+}
+$("camOv").addEventListener("click", e => {
+  if (!CAM.stream || CAM.running) return;
+  if (CAM.corners.length >= 4) CAM.corners = [];
+  CAM.corners.push(vidPoint(e));
+  if (CAM.corners.length === 4) camCalibrated();
+  else $("camInfo").textContent = `corner ${CAM.corners.length} of 4 set - next: ${["top-left", "top-right", "bottom-right", "bottom-left"][CAM.corners.length]}`;
+});
+const grabCv = document.createElement("canvas"); grabCv.width = GW; grabCv.height = GH;
+const grabG = grabCv.getContext("2d", { willReadFrequently: true });
+async function grab(n = 3) {    // average luminance of n frames
+  const out = new Float32Array(GW * GH);
+  for (let k = 0; k < n; k++) {
+    grabG.drawImage($("camVid"), 0, 0, GW, GH);
+    const d = grabG.getImageData(0, 0, GW, GH).data;
+    for (let i = 0, j = 0; j < out.length; i += 4, j++) out[j] += (d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11) / n;
+    await new Promise(r => setTimeout(r, 45));
+  }
+  return out;
+}
+let camSeq = 1;
+async function huntTo(o) {      // set the hunt and wait until the server shows it, then let the glass settle
+  const seq = ++camSeq;
+  post({ seg_hunt: Object.assign({ auto: false, whole: false, quiet: true, seq }, o) });
+  for (let t = 0; t < 60 && !(S.seg_hunt && S.seg_hunt.seq === seq); t++) await new Promise(r => setTimeout(r, 25));
+  await new Promise(r => setTimeout(r, +$("camSettle").value || 350));
+}
+function camParts() {           // the drawn LCD's clickable parts, with lines for the 16-segment cells
+  return (W.lcd.hits || []).filter(h => h.key !== "text").map(h => Object.assign({ area: Math.max(1, h.w * h.h) }, h));
+}
+function analyse(base, cur) {
+  const G = CAM.grid, diff = new Float32Array(G.idx.length);
+  let mx = 0;
+  for (let i = 0; i < G.idx.length; i++) { const dv = cur[G.idx[i]] - base[G.idx[i]]; diff[i] = dv; if (dv > mx) mx = dv; }
+  const thr = Math.max(+$("camThr").value || 22, mx * 0.45);
+  if (mx < (+$("camThr").value || 22)) return { keys: [], mx, lit: [] };
+  const count = new Map(), lit = [];
+  for (let i = 0; i < diff.length; i++) {
+    if (diff[i] < thr) continue;
+    const u = G.U[i], v = G.V[i];
+    lit.push([u, v]);
+    let best = null, bd = 1e9;      // the smallest part under the pixel, else the nearest within 2.5 units
+    for (const p of CAM.parts) {
+      const inside = u >= p.x - 0.8 && u <= p.x + p.w + 0.8 && v >= p.y - 0.8 && v <= p.y + p.h + 0.8;
+      const dd = inside ? p.area * 1e-3 : Math.hypot(u - (p.x + p.w / 2), v - (p.y + p.h / 2)) + 100;
+      if (dd < bd) { bd = dd; best = p; }
+    }
+    if (best && bd < 102.5) count.set(best.key, (count.get(best.key) || 0) + 1);
+  }
+  const ppu2 = G.pxPerUnit * G.pxPerUnit, keys = [];
+  for (const [k, n] of count) {
+    const p = CAM.parts.find(q => q.key === k), cover = n / Math.max(1, p.area * ppu2);
+    if (n >= 3 && cover >= +($("camCover").value || 0.18)) keys.push(k);
+  }
+  return { keys, mx, lit };
+}
+async function autoMap() {
+  if (!CAM.Hc2l) { $("camInfo").textContent = "Set the 4 corners first."; return; }
+  if (!S.hardware || !S.drive) { $("camInfo").textContent = "Use the real NuVJ and let Himmel drive it first."; return; }
+  CAM.running = true; document.body.classList.add("camrun");
+  const from = Math.max(0, Math.min(63, +$("camFrom").value || 0)), to = Math.max(from, Math.min(63, +$("camTo").value || 63));
+  let found = 0;
+  try {
+    for (let byte = from; byte <= to && CAM.running; byte++) {
+      await huntTo({ byte, bit: 0, blank: true });
+      const base = await grab(4);
+      CAM.parts = camParts();
+      for (let bit = 0; bit < 7 && CAM.running; bit++) {
+        await huntTo({ byte, bit });
+        const cur = await grab(3), r = analyse(base, cur);
+        CAM.last = { byte, bit, ...r };
+        post({ seg_set: { byte, bit, keys: r.keys } });
+        if (r.keys.length) found++;
+        $("camInfo").textContent = `byte ${byte} bit ${bit}: ${r.keys.join(", ") || "nothing"} (brightest change ${r.mx.toFixed(0)}) - ${found} bits light something so far`;
+      }
+    }
+    if (CAM.running) $("camInfo").textContent = `Done: ${found} bits light something. Check them with ◀ / ▶ in the hunt (the picture lights what is saved).`;
+  } finally {
+    CAM.running = false; document.body.classList.remove("camrun");
+    post({ seg_hunt: { byte: from, bit: 0, quiet: false } });
+  }
+}
+function camOverlay() {         // the camera picture: the drawn LCD's parts projected onto it, and the last result
+  const ov = $("camOv"), v = $("camVid");
+  if (!CAM.stream || !v.videoWidth) return;
+  if (ov.width !== v.videoWidth) { ov.width = v.videoWidth; ov.height = v.videoHeight; }
+  const g = ov.getContext("2d"); g.clearRect(0, 0, ov.width, ov.height);
+  g.lineWidth = 2;
+  for (const [i, c] of CAM.corners.entries()) { g.fillStyle = "#ff9d2e"; g.beginPath(); g.arc(c[0], c[1], 7, 0, 7); g.fill(); g.fillText(String(i + 1), c[0] + 9, c[1] - 9); }
+  if (!CAM.Hl2c) return;
+  const lastKeys = new Set(CAM.last ? CAM.last.keys : []);
+  for (const h of (W.lcd.hits || [])) {
+    const pts = [[h.x, h.y], [h.x + h.w, h.y], [h.x + h.w, h.y + h.h], [h.x, h.y + h.h]].map(p => hApply(CAM.Hl2c, p[0], p[1]));
+    g.strokeStyle = lastKeys.has(h.key) ? "#ff9d2e" : "rgba(120, 255, 180, 0.45)"; g.lineWidth = lastKeys.has(h.key) ? 3 : 1;
+    g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.closePath(); g.stroke();
+  }
+  if (CAM.last) { g.fillStyle = "rgba(255, 60, 60, 0.8)"; for (const [u, w] of CAM.last.lit.slice(0, 3000)) { const [x, y] = hApply(CAM.Hl2c, u, w); g.fillRect(x - 1, y - 1, 2, 2); } }
+}
+setInterval(camOverlay, 120);
+$("camStart").onclick = camStart;
+$("camRun").onclick = () => { if (!CAM.running) autoMap(); };
+$("camStop").onclick = () => { CAM.running = false; };
+$("camCal").onclick = () => { CAM.corners = []; CAM.Hc2l = CAM.Hl2c = null; $("camInfo").textContent = "Click the 4 corners of the blue glass: top-left, top-right, bottom-right, bottom-left."; };
+if (navigator.mediaDevices) camList();
+
 document.addEventListener("keydown", e => {   // arrow keys step the hunt
   if (!S || !S.seg_hunt || document.activeElement === $("hName")) return;
   if (e.key === "ArrowRight") { e.preventDefault(); $("hNext").click(); }
