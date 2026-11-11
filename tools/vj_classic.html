@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Himmel Classic Decks</title>
+<!-- Himmel's classic two-deck view (a nostalgia view for the NuVJ controller). Its own look and names;
+     no art, icons or code from any other software. Model: tools/vj_classic.py (served through the NuVJ
+     live object: /wevents?id=nuvj, /wcmd?id=nuvj). Previews are simple 2D placeholders until Himmel's
+     engine renders the decks. -->
+<style>
+  :root {
+    --bg: #0c0d10; --panel: #15171c; --panel2: #1b1e25; --edge: #2a2e38; --text: #d9dce3; --dim: #8a90a0;
+    --a: #ff9f43; --b: #4fb3ff; --on: #7ef0b0; --warn: #ff6b6b; --cell: #101217;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 12px/1.35 "Segoe UI", system-ui, sans-serif;
+         display: flex; flex-direction: column; user-select: none; }
+  header { display: flex; align-items: center; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--edge); flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 14px; letter-spacing: 1.5px; font-weight: 800; }
+  header h1 span { color: var(--dim); font-weight: 600; letter-spacing: .5px; }
+  .pill { padding: 2px 9px; border-radius: 99px; background: #23262e; font-size: 11px; }
+  .pill.sim { background: #2b2350; color: #c8b8ff; } .pill.ok { background: #143d27; color: #7ff0b0; } .pill.bad { background: #4a1719; color: #ffb3b5; }
+  a { color: var(--b); }
+  button, select, input[type=text] { background: #232731; color: var(--text); border: 1px solid #343946; border-radius: 5px;
+           padding: 4px 9px; font: inherit; cursor: pointer; }
+  button:hover { background: #2d3240; }
+  button.on { background: #2f6f4f; border-color: #46a675; color: #fff; }
+  button.sel { background: #3b5bdb; border-color: #4c6ef5; color: #fff; }
+  main { flex: 1; display: grid; grid-template-columns: 210px 1fr; min-height: 0; }
+  /* browser */
+  #browser { border-right: 1px solid var(--edge); display: flex; flex-direction: column; min-height: 0; background: var(--panel); }
+  .tabs { display: flex; border-bottom: 1px solid var(--edge); }
+  .tabs button { flex: 1; border: 0; border-radius: 0; background: transparent; padding: 7px 2px; color: var(--dim); }
+  .tabs button.sel { color: var(--text); background: var(--panel2); box-shadow: inset 0 -2px 0 var(--a); }
+  #items { flex: 1; overflow: auto; padding: 4px 0; }
+  .grp { padding: 6px 10px 2px; color: var(--dim); font-size: 10px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; }
+  .item { padding: 3px 10px 3px 14px; cursor: grab; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item:hover { background: #222632; } .item.pick { background: #3b5bdb; color: #fff; }
+  .item .k { display: inline-block; width: 16px; color: var(--dim); }
+  #info { border-top: 1px solid var(--edge); padding: 8px 10px; color: var(--dim); min-height: 64px; font-size: 11px; }
+  #trash { margin: 6px 10px; padding: 6px; border: 1px dashed #444a58; border-radius: 6px; text-align: center; color: var(--dim); }
+  #trash.over { border-color: var(--warn); color: var(--warn); }
+  /* stage */
+  #stage { display: grid; grid-template-rows: auto auto; gap: 10px; padding: 10px; overflow: auto; min-height: 0; }
+  #decks { display: grid; grid-template-columns: 1fr 1.15fr 1fr; gap: 10px; align-items: start; }
+  .deck, .master, #props { background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; padding: 8px; }
+  .deck h2, .master h2, #props h2 { margin: 0 0 6px; font-size: 11px; letter-spacing: 1px; display: flex; align-items: center; gap: 8px; }
+  .deck.A h2 .dot { background: var(--a); } .deck.B h2 .dot { background: var(--b); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  canvas.view { width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 6px; display: block; }
+  .deck.A canvas.view { box-shadow: 0 0 0 1px #ff9f4355; } .deck.B canvas.view { box-shadow: 0 0 0 1px #4fb3ff55; }
+  .row { display: flex; align-items: center; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
+  .bank { display: flex; align-items: center; gap: 4px; }
+  .bank b { font: 700 18px/1 Consolas, monospace; min-width: 28px; text-align: center; }
+  .bankdots { display: grid; grid-template-columns: repeat(8, 7px); gap: 2px; }
+  .bankdots i { width: 7px; height: 7px; border-radius: 2px; background: #2a2e38; cursor: pointer; }
+  .bankdots i.used { background: #4b5263; } .bankdots i.cur { background: var(--text); }
+  .posbar { flex: 1; height: 8px; background: #23262e; border-radius: 4px; position: relative; cursor: pointer; min-width: 60px; }
+  .posbar div { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: #5c6475; }
+  input[type=range] { accent-color: var(--a); }
+  .deck.B input[type=range] { accent-color: var(--b); }
+  .knobs { display: flex; gap: 12px; }
+  .knob { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10px; color: var(--dim); min-width: 52px; }
+  .knob canvas { width: 38px; height: 38px; cursor: ns-resize; }
+  .cells { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+  .cell { position: relative; aspect-ratio: 16 / 10; background: var(--cell); border: 1px solid #262a33; border-radius: 6px;
+          overflow: hidden; cursor: pointer; }
+  .cell canvas { width: 100%; height: 100%; display: block; opacity: .9; }
+  .cell .nm { position: absolute; left: 0; right: 0; bottom: 0; padding: 1px 4px; font-size: 9px; background: #000a;
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cell .no { position: absolute; left: 3px; top: 1px; font-size: 9px; color: #fff9; text-shadow: 0 1px 2px #000; }
+  .cell .fx { position: absolute; right: 3px; top: 2px; font-size: 9px; padding: 0 4px; border-radius: 3px; background: #000b; color: #ffd27f; }
+  .cell.empty { border-style: dashed; }
+  .deck.A .cell.playing { box-shadow: 0 0 0 2px var(--a), 0 0 14px #ff9f4377; }
+  .deck.B .cell.playing { box-shadow: 0 0 0 2px var(--b), 0 0 14px #4fb3ff77; }
+  .cell.selected { outline: 2px dashed #fff; outline-offset: 1px; }
+  .cell.over { border-color: #fff; }
+  .master .xf { width: 100%; }
+  .xfrow { display: grid; grid-template-columns: auto 1fr auto; gap: 6px; align-items: center; }
+  .bpm { font: 700 16px/1 Consolas, monospace; }
+  .beat { width: 10px; height: 10px; border-radius: 50%; background: #333; }
+  .beat.hit { background: var(--on); box-shadow: 0 0 8px var(--on); }
+  #props { display: grid; grid-template-columns: 200px 1fr 1fr 1fr; gap: 14px; }
+  #props .sec { color: var(--dim); font-size: 10px; letter-spacing: .6px; text-transform: uppercase; margin: 2px 0 4px; }
+  #props canvas { width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 5px; }
+  .seg { display: flex; gap: 3px; flex-wrap: wrap; }
+  .seg button { padding: 3px 7px; font-size: 11px; }
+  .lbl { color: var(--dim); font-size: 10px; min-width: 44px; display: inline-block; }
+  .muted { color: var(--dim); }
+  @media (max-width: 1100px) { #decks { grid-template-columns: 1fr 1fr; } .master { grid-column: 1 / -1; order: -1; } #props { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 700px) { main { grid-template-columns: 1fr; } #browser { max-height: 240px; } #decks { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>HIMMEL <span>· CLASSIC DECKS</span></h1>
+  <span id="ctl" class="pill">controller…</span>
+  <span class="muted">played from the drawing below, or from the NuVJ</span>
+  <a href="/?weapon=nuvj" target="_blank">controller view ↗</a>
+  <span style="flex:1"></span>
+  <span class="beat" id="beat"></span><span class="bpm" id="bpm">120.0</span><span class="muted">BPM</span>
+  <button id="tap">TAP</button>
+  <button id="fs" title="Show the master output full screen (Esc to leave)">⛶ Output</button>
+</header>
+<main>
+  <aside id="browser">
+    <div class="tabs" id="tabs">
+      <button data-t="media" class="sel">Media</button><button data-t="effects">Effects</button>
+      <button data-t="gens">Generators</button><button data-t="inputs">Inputs</button>
+    </div>
+    <div id="items"></div>
+    <div id="trash">drop here to clear</div>
+    <div id="info">Drag an item onto a cell, or click it and then click a cell. Effects go on a filled cell.</div>
+  </aside>
+  <section id="stage">
+    <div id="decks">
+      <div class="deck A" data-d="A"></div>
+      <div class="master">
+        <h2><span class="dot" style="background:#fff"></span>MASTER</h2>
+        <canvas class="view" id="out" width="640" height="360"></canvas>
+        <div class="row"><span class="lbl">Bright</span><input type="range" id="bright" min="0" max="1" step="0.01" style="flex:1">
+          <span class="lbl" style="text-align:right">Contrast</span><input type="range" id="contrast" min="0" max="1" step="0.01" style="flex:1"></div>
+        <div class="row"><span class="lbl">Master FX</span><select id="mfx"></select><button id="mon">FX on</button>
+          <button id="black">BLACK</button></div>
+        <div class="row knobs" id="mknobs"></div>
+        <div class="xfrow"><button id="instaA">◀ A</button><input type="range" class="xf" id="xf" min="0" max="1" step="0.001"><button id="instaB">B ▶</button></div>
+      </div>
+      <div class="deck B" data-d="B"></div>
+    </div>
+    <div id="props">
+      <div><div class="sec" id="pTitle">Cell</div><canvas id="pPrev" width="320" height="180"></canvas>
+        <div class="row"><button id="pClear">Clear cell</button><button id="pClearFx">Clear effect</button></div></div>
+      <div>
+        <div class="sec">Blend onto deck A (deck B cells)</div><div class="seg" id="pBlend"></div>
+        <div class="sec" style="margin-top:8px">Key (deck B cells)</div><div class="seg" id="pMask"></div>
+        <div class="row"><span class="lbl">Center</span><input type="range" id="pKc" min="0" max="1" step="0.01" style="flex:1"></div>
+        <div class="row"><span class="lbl">Width</span><input type="range" id="pKw" min="0" max="1" step="0.01" style="flex:1"></div>
+      </div>
+      <div>
+        <div class="sec">Play</div><div class="seg" id="pPlay"></div>
+        <div class="sec" style="margin-top:8px">Text (text cells)</div><input type="text" id="pText" style="width:100%">
+      </div>
+      <div>
+        <div class="sec">Effect</div><select id="pFx" style="width:100%"></select>
+        <div class="row knobs" id="pknobs"></div>
+        <div class="muted" id="pHint">PMTR 1 / 2 on the controller turn these on the playing cell.</div>
+      </div>
+    </div>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const cmd = o => fetch("/wcmd?id=nuvj", { method: "POST", body: JSON.stringify({ show: o }) }).catch(() => {});
+let S = null, LIB = null, SHOW = null;
+let sel = { deck: "A", cell: 5 };          // the cell shown in the properties panel
+let pick = null;                           // a browser item clicked, waiting for a cell click
+let tab = "media";
+const ORDER = [7, 8, 9, 4, 5, 6, 1, 2, 3]; // the grid as on the controller: PAD 7 top-left
+
+// ---------- tiny knob widget ----------
+function knob(parent, label, get, set) {
+  const k = document.createElement("div"); k.className = "knob";
+  k.innerHTML = `<canvas width="76" height="76"></canvas><span></span>`;
+  parent.appendChild(k);
+  const cv = k.firstChild, sp = k.lastChild;
+  let drag = null;
+  cv.addEventListener("pointerdown", e => { drag = { y: e.clientY, v: get() }; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener("pointermove", e => { if (drag) set(Math.max(0, Math.min(1, drag.v + (drag.y - e.clientY) / 150))); });
+  cv.addEventListener("pointerup", () => drag = null);
+  cv.addEventListener("wheel", e => { e.preventDefault(); set(Math.max(0, Math.min(1, get() + (e.deltaY < 0 ? 0.03 : -0.03)))); }, { passive: false });
+  const o = { el: k, label, draw(v, name, col) {
+      const g = cv.getContext("2d"); g.clearRect(0, 0, 76, 76);
+      g.lineWidth = 6; g.lineCap = "round";
+      g.strokeStyle = "#2a2e38"; g.beginPath(); g.arc(38, 38, 28, 0.75 * Math.PI, 2.25 * Math.PI); g.stroke();
+      g.strokeStyle = col || "#d9dce3"; g.beginPath(); g.arc(38, 38, 28, 0.75 * Math.PI, (0.75 + 1.5 * v) * Math.PI); g.stroke();
+      g.fillStyle = "#23262e"; g.beginPath(); g.arc(38, 38, 18, 0, 7); g.fill();
+      sp.textContent = name || label;
+    } };
+  return o;
+}
+
+// ---------- decks ----------
+const D = {};
+for (const d of ["A", "B"]) {
+  const el = document.querySelector(`.deck.${d}`);
+  el.innerHTML = `<h2><span class="dot"></span>DECK ${d}<span style="flex:1"></span><span class="muted" id="${d}name"></span></h2>
+    <canvas class="view" width="320" height="180"></canvas>
+    <div class="row"><div class="bank"><button data-b="-1">‹</button><b>01</b><button data-b="1">›</button></div>
+      <div class="bankdots"></div></div>
+    <div class="row"><div class="posbar"><div></div></div></div>
+    <div class="row"><span class="lbl">Speed</span><input type="range" class="speed" min="-2" max="2" step="0.01" style="flex:1"><span class="spv muted"></span></div>
+    <div class="row"><button data-t="latch">LATCH</button><button data-t="auto">AUTO</button><button data-t="sync">SYNC</button>
+      <span style="flex:1"></span><div class="knobs"></div></div>
+    <div class="cells"></div>`;
+  const o = D[d] = { el, view: el.querySelector("canvas.view"), cells: {}, knobs: [] };
+  el.querySelectorAll("[data-b]").forEach(b => b.onclick = () => SHOW && cmd({ op: "bank", deck: d, bank: SHOW.decks[d].bank + +b.dataset.b }));
+  el.querySelectorAll("[data-t]").forEach(b => b.onclick = () => cmd({ op: "toggle", deck: d, what: b.dataset.t }));
+  const dots = el.querySelector(".bankdots");
+  for (let i = 0; i < 16; i++) { const x = document.createElement("i"); x.title = "bank " + (i + 1); x.onclick = () => cmd({ op: "bank", deck: d, bank: i }); dots.appendChild(x); }
+  el.querySelector(".posbar").onclick = e => { const r = e.currentTarget.getBoundingClientRect(); cmd({ op: "pos", deck: d, value: (e.clientX - r.left) / r.width }); };
+  const sp = el.querySelector(".speed");
+  sp.oninput = () => cmd({ op: "speed", deck: d, value: +sp.value });
+  sp.ondblclick = () => cmd({ op: "speed", deck: d, value: 1 });
+  for (const key of ["p1", "p2"]) {
+    o.knobs.push(knob(el.querySelector(".knobs"), key === "p1" ? "PMTR 1" : "PMTR 2",
+      () => { const c = playing(d); return c ? c[key] : 0; },
+      v => { const c = SHOW && SHOW.decks[d].playing; if (c) { playing(d)[key] = v; cmd({ op: "cell", deck: d, cell: c, key, value: v }); } }));
+  }
+  const grid = el.querySelector(".cells");
+  for (const n of ORDER) {
+    const c = document.createElement("div"); c.className = "cell"; c.draggable = true;
+    c.innerHTML = `<canvas width="160" height="100"></canvas><span class="no">${n}</span><span class="fx"></span><span class="nm"></span>`;
+    grid.appendChild(c); o.cells[n] = c;
+    c.onclick = e => {
+      if (pick) { cmd({ op: "assign", deck: d, cell: n, item: pick }); pick = null; drawItems(); selectCell(d, n); return; }
+      selectCell(d, n);
+      if (!e.shiftKey) cmd({ op: "trigger", deck: d, cell: n });
+    };
+    c.oncontextmenu = e => { e.preventDefault(); selectCell(d, n); };
+    c.ondragstart = e => e.dataTransfer.setData("text/plain", JSON.stringify({ cellFrom: { deck: d, cell: n } }));
+    c.ondragover = e => { e.preventDefault(); c.classList.add("over"); };
+    c.ondragleave = () => c.classList.remove("over");
+    c.ondrop = e => {
+      e.preventDefault(); c.classList.remove("over");
+      let x; try { x = JSON.parse(e.dataTransfer.getData("text/plain")); } catch (_) { return; }
+      if (x.cellFrom) cmd({ op: "move", deck: d, cell: n, from_deck: x.cellFrom.deck, from_cell: x.cellFrom.cell, copy: e.ctrlKey });
+      else cmd({ op: "assign", deck: d, cell: n, item: x });
+      selectCell(d, n);
+    };
+  }
+}
+const trash = $("trash");
+trash.ondragover = e => { e.preventDefault(); trash.classList.add("over"); };
+trash.ondragleave = () => trash.classList.remove("over");
+trash.ondrop = e => { e.preventDefault(); trash.classList.remove("over");
+  try { const x = JSON.parse(e.dataTransfer.getData("text/plain")); if (x.cellFrom) cmd({ op: "clear", deck: x.cellFrom.deck, cell: x.cellFrom.cell }); } catch (_) {} };
+
+function playing(d) { const dk = SHOW && SHOW.decks[d]; return dk && dk.playing ? dk.cells[dk.playing - 1] : null; }
+function cellOf(d, n) { const dk = SHOW && SHOW.decks[d]; return dk ? dk.cells[n - 1] : null; }
+function selectCell(d, n) { sel = { deck: d, cell: n }; renderProps(true); }
+
+// ---------- browser ----------
+document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => { tab = b.dataset.t; document.querySelectorAll("#tabs button").forEach(x => x.classList.toggle("sel", x === b)); drawItems(); });
+function drawItems() {
+  if (!LIB) return;
+  const box = $("items"); let h = "";
+  const it = (item, label, k) => `<div class="item${pick && pick.name === item.name && pick.kind === item.kind ? " pick" : ""}" draggable="true" data-i='${esc(JSON.stringify(item))}'><span class="k">${k}</span>${esc(label)}</div>`;
+  if (tab === "media") {
+    h += `<div class="grp">media/ folder</div>`;
+    h += LIB.files.length ? LIB.files.map(f => it({ kind: "file", name: f }, f, "▤")).join("") : `<div class="item muted">no files in media/ yet</div>`;
+  } else if (tab === "effects") {
+    const cats = [...new Set(LIB.effects.map(e => e.cat))];
+    for (const c of cats) h += `<div class="grp">${esc(c)}</div>` + LIB.effects.filter(e => e.cat === c).map(e => it({ kind: "effect", name: e.name }, e.name, "✦")).join("");
+  } else if (tab === "gens") {
+    h += `<div class="grp">Himmel generators</div>` + LIB.generators.map(g => it({ kind: "generator", name: g }, g, "◎")).join("");
+  } else {
+    h += `<div class="grp">Cameras and text</div>` + LIB.sources.map(s => it(s, s.name, s.kind === "camera" ? "●" : "T")).join("");
+  }
+  box.innerHTML = h;
+  box.querySelectorAll(".item[data-i]").forEach(el => {
+    const item = JSON.parse(el.dataset.i);
+    el.ondragstart = e => e.dataTransfer.setData("text/plain", JSON.stringify(item));
+    el.onclick = () => { pick = pick && pick.name === item.name && pick.kind === item.kind ? null : item; drawItems();
+      $("info").textContent = pick ? `Now click a cell to put "${item.name}" there.` : "Drag an item onto a cell, or click it and then click a cell."; };
+  });
+}
+
+// ---------- master controls ----------
+const M = { knobs: [] };
+for (const [key, label] of [["mix", "FX MIX"], ["p1", "FX 1"], ["p2", "FX 2"]]) {
+  M.knobs.push(knob($("mknobs"), label, () => SHOW ? SHOW.master[key] : 0, v => { SHOW.master[key] = v; cmd({ op: "master", key, value: v }); }));
+}
+$("bright").oninput = e => cmd({ op: "master", key: "bright", value: +e.target.value });
+$("contrast").oninput = e => cmd({ op: "master", key: "contrast", value: +e.target.value });
+$("xf").oninput = e => cmd({ op: "master", key: "xf", value: +e.target.value });
+$("mfx").onchange = e => cmd({ op: "master", key: "fx", value: e.target.value || null });
+$("mon").onclick = () => cmd({ op: "master", key: "on", value: !SHOW.master.on });
+$("black").onclick = () => cmd({ op: "master", key: "black", value: !SHOW.master.black });
+for (const d of ["A", "B"]) {
+  const b = $("insta" + d);
+  b.onpointerdown = () => cmd({ op: "master", key: "insta", value: d });
+  b.onpointerup = b.onpointerleave = () => SHOW && SHOW.master.insta === d && cmd({ op: "master", key: "insta", value: null });
+}
+let taps = [];
+$("tap").onclick = () => {
+  const now = performance.now(); taps = taps.filter(t => now - t < 3000).concat(now);
+  if (taps.length > 1) cmd({ op: "master", key: "bpm", value: 60000 / ((taps[taps.length - 1] - taps[0]) / (taps.length - 1)) });
+};
+$("fs").onclick = () => $("out").requestFullscreen && $("out").requestFullscreen();
+
+// ---------- properties ----------
+const pk = [];
+for (const key of ["p1", "p2"]) pk.push(knob($("pknobs"), key.toUpperCase(), () => { const c = cellOf(sel.deck, sel.cell); return c ? c[key] : 0; },
+  v => { const c = cellOf(sel.deck, sel.cell); if (c) { c[key] = v; cmd({ op: "cell", deck: sel.deck, cell: sel.cell, key, value: v }); } }));
+$("pClear").onclick = () => cmd({ op: "clear", deck: sel.deck, cell: sel.cell });
+$("pClearFx").onclick = () => cmd({ op: "clear_effect", deck: sel.deck, cell: sel.cell });
+$("pFx").onchange = e => cmd({ op: "cell", deck: sel.deck, cell: sel.cell, key: "effect", value: e.target.value || null });
+$("pText").oninput = e => cmd({ op: "cell", deck: sel.deck, cell: sel.cell, key: "text", value: e.target.value });
+$("pKc").oninput = e => cmd({ op: "cell", deck: sel.deck, cell: sel.cell, key: "key_center", value: +e.target.value });
+$("pKw").oninput = e => cmd({ op: "cell", deck: sel.deck, cell: sel.cell, key: "key_width", value: +e.target.value });
+const BLEND_LABEL = { mix: "Mix", add: "Add", subtract: "Subtract", multiply: "Multiply", lighten: "Lighter", darken: "Darker" };
+const PLAY_LABEL = { once: "Once", loop: "Loop", pingpong: "Ping-pong" };
+const MASK_LABEL = { none: "None", luma: "Brightness", chroma: "Colour" };
+function segButtons(id, list, labels, key) {
+  $(id).innerHTML = list.map(v => `<button data-v="${v}">${labels[v]}</button>`).join("");
+  $(id).querySelectorAll("button").forEach(b => b.onclick = () => cmd({ op: "cell", deck: sel.deck, cell: sel.cell, key, value: b.dataset.v }));
+}
+let propsKey = "";
+function renderProps(force) {
+  if (!SHOW || !LIB) return;
+  const c = cellOf(sel.deck, sel.cell), bank = SHOW.decks[sel.deck].bank + 1;
+  $("pTitle").textContent = `Deck ${sel.deck} · bank ${String(bank).padStart(2, "0")} · cell ${sel.cell}` + (c ? ` · ${c.name}` : " · empty");
+  const key = JSON.stringify(c) + sel.deck + sel.cell;
+  if (!force && key === propsKey) return;
+  propsKey = key;
+  for (const [id, field] of [["pBlend", "blend"], ["pMask", "mask"], ["pPlay", "play"]])
+    $(id).querySelectorAll("button").forEach(b => { b.classList.toggle("sel", !!c && c[field] === b.dataset.v); b.disabled = !c; });
+  if (document.activeElement !== $("pFx")) $("pFx").value = c && c.effect || "";
+  $("pFx").disabled = !c;
+  if (document.activeElement !== $("pText")) $("pText").value = c ? c.text || "" : "";
+  $("pText").disabled = !c || c.kind !== "text";
+  $("pKc").value = c ? c.key_center : 0.5; $("pKw").value = c ? c.key_width : 0.2;
+  const fx = c && c.effect ? LIB.effects.find(e => e.name === c.effect) : null;
+  pk.forEach((k, i) => k.draw(c ? c["p" + (i + 1)] : 0, fx ? fx.p[i] : "P" + (i + 1), sel.deck === "A" ? "#ff9f43" : "#4fb3ff"));
+}
+
+// ---------- placeholder previews (2D canvas; Himmel's engine replaces these) ----------
+function hash(s) { let h = 2166136261; for (const ch of String(s)) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); return h >>> 0; }
+function hsl(h, s, l, a = 1) { return `hsla(${h % 360},${s}%,${l}%,${a})`; }
+function drawSource(g, w, h, c, t, pos, beat) {
+  const H = hash(c.name) % 360;
+  g.save();
+  if (c.kind === "generator") {
+    const n = c.name;
+    g.fillStyle = "#000"; g.fillRect(0, 0, w, h);
+    if (n === "Wave Line" || n === "Spectrum Bars") {
+      g.strokeStyle = hsl(H + t * 20, 90, 60); g.lineWidth = 3; g.beginPath();
+      for (let x = 0; x <= w; x += 4) {
+        const v = Math.sin(x / 23 + t * 3) * Math.sin(x / 61 - t) * (0.3 + 0.7 * beat);
+        if (n === "Spectrum Bars") { const bh = Math.abs(v) * h * 0.8; g.fillStyle = hsl(H + x, 80, 55); g.fillRect(x, h - bh, 3, bh); }
+        else x ? g.lineTo(x, h / 2 + v * h * 0.4) : g.moveTo(x, h / 2 + v * h * 0.4);
+      }
+      if (n === "Wave Line") g.stroke();
+    } else if (n === "Pulse Ring" || n === "Orbit Dots") {
+      for (let i = 0; i < 6; i++) {
+        const r = ((t * 40 + i * 30) % 180) * (n === "Pulse Ring" ? 1 + beat * 0.3 : 1);
+        g.strokeStyle = hsl(H + i * 40, 90, 60, 1 - r / 180); g.lineWidth = 4;
+        if (n === "Pulse Ring") { g.beginPath(); g.arc(w / 2, h / 2, r, 0, 7); g.stroke(); }
+        else { const a = t * (1 + i * 0.3) + i; g.fillStyle = hsl(H + i * 50, 90, 60); g.beginPath(); g.arc(w / 2 + Math.cos(a) * (30 + i * 12), h / 2 + Math.sin(a) * (20 + i * 9), 6 + beat * 4, 0, 7); g.fill(); }
+      }
+    } else if (n === "Particle Rain") {
+      for (let i = 0; i < 70; i++) { const x = (hash(i) % w), y = ((hash(i * 7) % h) + t * (40 + i % 60)) % h; g.fillStyle = hsl(H + i * 3, 80, 65); g.fillRect(x, y, 2, 6); }
+    } else if (n === "Moire Drift") {
+      g.lineWidth = 2;
+      for (let k = 0; k < 2; k++) { g.strokeStyle = hsl(H + k * 120, 70, 60, 0.8); const cx = w / 2 + Math.sin(t * (0.7 + k)) * 40, cy = h / 2 + Math.cos(t * 0.5) * 20;
+        for (let r = 4; r < 260; r += 8) { g.beginPath(); g.arc(cx, cy, r, 0, 7); g.stroke(); } }
+    } else if (n === "Beat Flash") {
+      g.fillStyle = hsl(H, 10, 95 * beat); g.fillRect(0, 0, w, h);
+    } else if (n === "Colour Wash") {
+      const gr = g.createLinearGradient(0, 0, w, h); gr.addColorStop(0, hsl(H + t * 30, 80, 50)); gr.addColorStop(1, hsl(H + 180 + t * 30, 80, 40));
+      g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    } else if (n === "Grid Tunnel") {
+      g.strokeStyle = hsl(H + t * 10, 90, 60); g.lineWidth = 1.5;
+      for (let i = 0; i < 12; i++) { const s = ((i / 12 + t * 0.3) % 1); const z = s * s; g.globalAlpha = s; g.strokeRect(w / 2 - w * z / 2, h / 2 - h * z / 2, w * z, h * z); }
+      g.globalAlpha = 1;
+    } else {  // Sixties Blobs and anything new
+      for (let i = 0; i < 5; i++) { g.fillStyle = hsl(H + i * 70 + t * 20, 85, 55, 0.7); g.beginPath();
+        g.ellipse(w / 2 + Math.sin(t + i) * w * 0.3, h / 2 + Math.cos(t * 1.3 + i * 2) * h * 0.3, 30 + 20 * Math.sin(t * 2 + i), 22 + 15 * beat, t + i, 0, 7); g.fill(); }
+    }
+  } else if (c.kind === "camera") {
+    const im = g.createImageData(w / 4 | 0, h / 4 | 0);
+    for (let i = 0; i < im.data.length; i += 4) { const v = (Math.random() * 60 + 40) | 0; im.data[i] = v; im.data[i + 1] = v + 10; im.data[i + 2] = v; im.data[i + 3] = 255; }
+    const tmp = cam(im); g.imageSmoothingEnabled = false; g.drawImage(tmp, 0, 0, w, h);
+    g.fillStyle = "#fff"; g.font = "bold 16px Segoe UI"; g.fillText("● " + c.name.toUpperCase(), 10, 24);
+  } else if (c.kind === "text") {
+    g.fillStyle = "#000"; g.fillRect(0, 0, w, h);
+    g.fillStyle = hsl(H + t * 40, 90, 65); g.font = `900 ${Math.round(h * 0.28)}px Segoe UI`; g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillText(c.text || "", w / 2, h / 2);
+  } else {      // a clip: a pattern from its name, moving with the clip's position
+    const H2 = (H + 140) % 360;
+    g.fillStyle = hsl(H, 60, 18); g.fillRect(0, 0, w, h);
+    g.save(); g.translate(w / 2, h / 2); g.rotate((hash(c.name + "r") % 90) * Math.PI / 180 + pos * 2);
+    for (let i = -12; i < 12; i++) { g.fillStyle = hsl(i % 2 ? H : H2, 70, 30 + 20 * ((i + 12 + pos * 20) % 3)); g.fillRect(i * 22 + (pos * 220) % 44, -h, 11, h * 2); }
+    g.restore();
+    g.fillStyle = "#000a"; g.fillRect(0, h - 20, w, 20); g.fillStyle = "#fff"; g.font = "11px Segoe UI"; g.fillText("▤ " + c.name, 6, h - 6);
+  }
+  g.restore();
+}
+let camCanvas = null;
+function cam(im) { if (!camCanvas) camCanvas = document.createElement("canvas"); camCanvas.width = im.width; camCanvas.height = im.height; camCanvas.getContext("2d").putImageData(im, 0, 0); return camCanvas; }
+
+// effects as cheap 2D stand-ins (names and parameters are Himmel's own)
+const scratch = {};
+function buf(key, w, h) { let c = scratch[key]; if (!c) { c = scratch[key] = document.createElement("canvas"); } if (c.width !== w || c.height !== h) { c.width = w; c.height = h; } return c; }
+function applyEffect(dst, src, fx, p1, p2, t, beat, key) {
+  const g = dst.getContext("2d"), w = dst.width, h = dst.height;
+  g.save(); g.clearRect(0, 0, w, h);
+  const F = { "Hue Shift": `hue-rotate(${p1 * 360}deg) saturate(${p2 * 2})`, "Mono": `grayscale(${p1}) sepia(${p2})`, "Negative": `invert(${p1})`,
+              "Posterize": `contrast(${1 + p1 * 4}) saturate(${1 + p1 * 2})`, "Threshold": `grayscale(1) contrast(12) brightness(${0.4 + p1})`,
+              "Soft Blur": `blur(${p1 * 8}px)` }[fx];
+  if (F) { g.filter = F; g.drawImage(src, 0, 0); }
+  else if (fx === "Glow") { g.drawImage(src, 0, 0); g.globalCompositeOperation = "lighter"; g.filter = `blur(${2 + p2 * 12}px) brightness(${0.4 + p1})`; g.drawImage(src, 0, 0); }
+  else if (fx === "Mirror") {
+    const sx = Math.max(0.05, p1) * w;
+    g.drawImage(src, 0, 0, sx, h, 0, 0, sx, h); g.translate(2 * sx, 0); g.scale(-1, 1); g.drawImage(src, 0, 0, sx, h, 0, 0, sx, h);
+    if (p2 > 0.5) { g.setTransform(1, 0, 0, -1, 0, h); g.globalAlpha = 1; g.drawImage(dst, 0, 0, w, h / 2, 0, 0, w, h / 2); }
+  } else if (fx === "Kaleido") {
+    const n = 3 + Math.floor(p1 * 9), a = Math.PI * 2 / n, r = Math.hypot(w, h);
+    g.translate(w / 2, h / 2); g.rotate(t * (p2 - 0.5) * 2);
+    for (let i = 0; i < n; i++) { g.save(); g.rotate(i * a); if (i % 2) g.scale(1, -1); g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, r, 0, a); g.closePath(); g.clip(); g.drawImage(src, -w / 2, -h / 2); g.restore(); }
+  } else if (fx === "Tiles") {
+    const n = 1 + Math.floor(p1 * 6);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) g.drawImage(src, x * w / n + (y % 2) * p2 * w / n, y * h / n, w / n, h / n);
+  } else if (fx === "Tunnel" || fx === "Spin Zoom") {
+    g.translate(w / 2, h / 2);
+    if (fx === "Tunnel") for (let i = 6; i >= 0; i--) { const s = Math.pow(0.7, i - (t * (0.2 + p1) % 1)); g.save(); g.rotate(i * p2 * 0.5); g.globalAlpha = Math.min(1, s); g.drawImage(src, -w * s / 2, -h * s / 2, w * s, h * s); g.restore(); }
+    else { const s = 1 + 0.5 * Math.sin(t * (0.2 + p1 * 2)); g.rotate(t * (p2 - 0.5) * 3); for (let y = -2; y <= 2; y++) for (let x = -2; x <= 2; x++) g.drawImage(src, (x - 0.5) * w / s, (y - 0.5) * h / s, w / s, h / s); }
+  } else if (fx === "RGB Split") {
+    const d = p1 * 18, an = p2 * Math.PI * 2;
+    g.drawImage(src, 0, 0); g.globalCompositeOperation = "screen"; g.globalAlpha = 0.6;
+    g.filter = "sepia(1) saturate(6) hue-rotate(-50deg)"; g.drawImage(src, Math.cos(an) * d, Math.sin(an) * d);
+    g.filter = "sepia(1) saturate(6) hue-rotate(160deg)"; g.drawImage(src, -Math.cos(an) * d, -Math.sin(an) * d);
+  } else if (fx === "Strobe") {
+    g.drawImage(src, 0, 0); const on = p2 > 0.5 ? beat > 0.7 : beat; g.fillStyle = `rgba(255,255,255,${(p2 > 0.5 ? (on ? 1 : 0) : beat) * (0.3 + 0.7 * p1)})`; g.fillRect(0, 0, w, h);
+  } else if (fx === "Shake" || fx === "Bass Punch") {
+    if (fx === "Shake") { const a = p1 * 16 * (Math.random() < 0.3 + p2 * 0.7 ? 1 : 0); g.drawImage(src, (Math.random() - 0.5) * a, (Math.random() - 0.5) * a); }
+    else { const s = 1 + beat * p1 * 0.4; g.translate(w / 2, h / 2); g.scale(s, s); g.drawImage(src, -w / 2, -h / 2); }
+  } else if (fx === "Trails" || fx === "Echo Spiral") {
+    const fb = buf("fb" + key, w, h), fg = fb.getContext("2d");
+    g.globalAlpha = 0.55 + p1 * 0.4;
+    if (fx === "Echo Spiral") { g.translate(w / 2, h / 2); g.rotate((p1 - 0.5) * 0.2); const s = 0.9 + p2 * 0.15; g.scale(s, s); g.translate(-w / 2, -h / 2); }
+    g.drawImage(fb, 0, 0); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = "lighten"; g.drawImage(src, 0, 0);
+    fg.clearRect(0, 0, w, h); fg.drawImage(dst, 0, 0);
+  } else g.drawImage(src, 0, 0);
+  g.restore();
+}
+function keyOut(cv, c) {  // brightness / colour key on a deck B picture (small canvas, per pixel)
+  const g = cv.getContext("2d"), im = g.getImageData(0, 0, cv.width, cv.height), p = im.data;
+  const ce = c.key_center, wd = Math.max(0.02, c.key_width) / 2;
+  for (let i = 0; i < p.length; i += 4) {
+    const r = p[i] / 255, gg = p[i + 1] / 255, b = p[i + 2] / 255;
+    let v;
+    if (c.mask === "luma") v = 0.3 * r + 0.59 * gg + 0.11 * b;
+    else { const mx = Math.max(r, gg, b), mn = Math.min(r, gg, b), d = mx - mn; if (d < 0.08) continue;
+      v = mx === r ? ((gg - b) / d + 6) % 6 : mx === gg ? (b - r) / d + 2 : (r - gg) / d + 4; v /= 6; }
+    let dist = Math.abs(v - ce); if (c.mask === "chroma") dist = Math.min(dist, 1 - dist);
+    if (dist < wd) p[i + 3] = 0;
+  }
+  g.putImageData(im, 0, 0);
+}
+function renderDeck(d, t, beat) {
+  const dk = SHOW.decks[d], c = playing(d), view = D[d].view, w = view.width, h = view.height;
+  const raw = buf("raw" + d, w, h), rg = raw.getContext("2d");
+  rg.clearRect(0, 0, w, h);
+  if (!c) { rg.fillStyle = "#000"; rg.fillRect(0, 0, w, h); }
+  else drawSource(rg, w, h, c, t, dk.pos, beat);
+  const out = buf("fx" + d, w, h);
+  if (c && c.effect) applyEffect(out, raw, c.effect, c.p1, c.p2, t, beat, d);
+  else { const og = out.getContext("2d"); og.clearRect(0, 0, w, h); og.drawImage(raw, 0, 0); }
+  if (d === "B" && c && c.mask !== "none") keyOut(out, c);
+  const vg = view.getContext("2d"); vg.clearRect(0, 0, w, h); vg.drawImage(out, 0, 0);
+  return out;
+}
+const OPS = { mix: "source-over", add: "lighter", subtract: "difference", multiply: "multiply", lighten: "lighten", darken: "darken" };
+function renderMaster(a, b, t, beat) {
+  const m = SHOW.master, out = $("out"), w = out.width, h = out.height;
+  const mixc = buf("mix", w, h), g = mixc.getContext("2d");
+  g.save(); g.globalCompositeOperation = "source-over"; g.globalAlpha = 1; g.fillStyle = "#000"; g.fillRect(0, 0, w, h);
+  const xf = m.insta === "A" ? 0 : m.insta === "B" ? 1 : m.xf;
+  const cb = playing("B"), mode = cb ? cb.blend : "mix";
+  if (mode === "mix") { g.globalAlpha = 1 - xf; g.drawImage(a, 0, 0, w, h); g.globalAlpha = xf; g.globalCompositeOperation = "lighter"; g.drawImage(b, 0, 0, w, h); }
+  else { g.globalAlpha = 1; g.drawImage(a, 0, 0, w, h); g.globalCompositeOperation = OPS[mode]; g.globalAlpha = xf; g.drawImage(b, 0, 0, w, h); }
+  g.restore();
+  let src = mixc;
+  if (m.on && m.fx) { const fxc = buf("mfx", w, h); applyEffect(fxc, mixc, m.fx, m.p1, m.p2, t, beat, "M");
+    const wet = buf("wet", w, h), wg = wet.getContext("2d"); wg.globalAlpha = 1; wg.drawImage(mixc, 0, 0); wg.globalAlpha = m.mix; wg.drawImage(fxc, 0, 0); wg.globalAlpha = 1; src = wet; }
+  const og = out.getContext("2d");
+  og.save(); og.fillStyle = "#000"; og.fillRect(0, 0, w, h);
+  if (!m.black) { og.filter = `brightness(${0.2 + m.bright * 1.6}) contrast(${1 + m.contrast * 2})`; og.drawImage(src, 0, 0); }
+  og.restore();
+}
+
+// ---------- the loop ----------
+let thumbT = 0;
+function frame() {
+  requestAnimationFrame(frame);
+  if (!SHOW) return;
+  const t = performance.now() / 1000, bpm = SHOW.master.bpm || 120;
+  const ph = ((SHOW.t + (t - lastSnapT)) * bpm / 60) % 1, beat = Math.max(0, 1 - ph * 4);
+  $("beat").classList.toggle("hit", ph < 0.15);
+  const a = renderDeck("A", t, beat), b = renderDeck("B", t, beat);
+  renderMaster(a, b, t, beat);
+  if (t - thumbT > 0.5) {           // cell thumbnails, twice a second
+    thumbT = t;
+    for (const d of ["A", "B"]) for (const n of ORDER) {
+      const c = cellOf(d, n), cv = D[d].cells[n].firstChild, g = cv.getContext("2d");
+      g.fillStyle = "#101217"; g.fillRect(0, 0, cv.width, cv.height);
+      if (c) drawSource(g, cv.width, cv.height, c, t, 0.3, 0.3);
+    }
+  }
+  renderProps(false);
+  const c = cellOf(sel.deck, sel.cell), pv = $("pPrev"), pg = pv.getContext("2d");
+  pg.fillStyle = "#000"; pg.fillRect(0, 0, pv.width, pv.height);
+  if (c) { const raw = buf("pv", pv.width, pv.height); drawSource(raw.getContext("2d"), pv.width, pv.height, c, t, 0.5, beat);
+    if (c.effect) { const o = buf("pvo", pv.width, pv.height); applyEffect(o, raw, c.effect, c.p1, c.p2, t, beat, "P"); pg.drawImage(o, 0, 0); } else pg.drawImage(raw, 0, 0); }
+}
+let lastSnapT = performance.now() / 1000, lastRev = -1;
+function render(s) {
+  S = s; SHOW = s.show; lastSnapT = performance.now() / 1000;
+  if (!LIB) { LIB = s.library; drawItems(); segButtons("pBlend", LIB.blends, BLEND_LABEL, "blend"); segButtons("pMask", LIB.masks, MASK_LABEL, "mask"); segButtons("pPlay", LIB.plays, PLAY_LABEL, "play");
+    $("mfx").innerHTML = `<option value="">(none)</option>` + LIB.effects.map(e => `<option>${esc(e.name)}</option>`).join("");
+    $("pFx").innerHTML = `<option value="">(no effect)</option>` + LIB.effects.map(e => `<option>${esc(e.name)}</option>`).join(""); }
+  const ctl = $("ctl");
+  ctl.textContent = s.hardware ? (s.connected ? "NuVJ connected" : "NuVJ not found") : "NuVJ simulated";
+  ctl.className = "pill " + (s.hardware ? (s.connected ? "ok" : "bad") : "sim");
+  const m = SHOW.master;
+  $("bpm").textContent = m.bpm.toFixed(1);
+  for (const id of ["bright", "contrast", "xf"]) if (document.activeElement !== $(id)) $(id).value = m[id];
+  if (document.activeElement !== $("mfx")) $("mfx").value = m.fx || "";
+  $("mon").classList.toggle("on", m.on); $("black").classList.toggle("on", m.black);
+  $("instaA").classList.toggle("sel", m.insta === "A"); $("instaB").classList.toggle("sel", m.insta === "B");
+  const mf = m.fx ? LIB.effects.find(e => e.name === m.fx) : null;
+  M.knobs[0].draw(m.mix, "FX MIX"); M.knobs[1].draw(m.p1, mf ? mf.p[0] : "FX 1"); M.knobs[2].draw(m.p2, mf ? mf.p[1] : "FX 2");
+  for (const d of ["A", "B"]) {
+    const dk = SHOW.decks[d], o = D[d], el = o.el, col = d === "A" ? "#ff9f43" : "#4fb3ff";
+    el.querySelector(".bank b").textContent = String(dk.bank + 1).padStart(2, "0");
+    el.querySelectorAll(".bankdots i").forEach((x, i) => { x.classList.toggle("used", dk.used_banks.includes(i)); x.classList.toggle("cur", i === dk.bank); });
+    el.querySelector(".posbar div").style.width = (dk.pos * 100) + "%";
+    const sp = el.querySelector(".speed"); if (document.activeElement !== sp) sp.value = dk.speed;
+    el.querySelector(".spv").textContent = dk.speed.toFixed(2) + "×";
+    for (const k of ["latch", "auto", "sync"]) el.querySelector(`[data-t=${k}]`).classList.toggle("on", dk[k]);
+    const pc = playing(d), fx = pc && pc.effect ? LIB.effects.find(e => e.name === pc.effect) : null;
+    $(d + "name").textContent = pc ? pc.name + (pc.effect ? " · " + pc.effect : "") : "—";
+    o.knobs.forEach((k, i) => k.draw(pc ? pc["p" + (i + 1)] : 0, fx ? fx.p[i] : "PMTR " + (i + 1), col));
+    for (const n of ORDER) {
+      const c = dk.cells[n - 1], ce = o.cells[n];
+      ce.classList.toggle("empty", !c); ce.classList.toggle("playing", dk.playing === n);
+      ce.classList.toggle("selected", sel.deck === d && sel.cell === n);
+      ce.querySelector(".nm").textContent = c ? c.name : "";
+      ce.querySelector(".fx").textContent = c && c.effect ? "✦ " + c.effect : "";
+      ce.querySelector(".fx").style.display = c && c.effect ? "" : "none";
+    }
+  }
+  if (SHOW.rev !== lastRev) { lastRev = SHOW.rev; thumbT = 0; }
+}
+const es = new EventSource("/wevents?id=nuvj");
+es.onmessage = e => render(JSON.parse(e.data));
+es.onerror = () => { $("ctl").textContent = "server not running"; $("ctl").className = "pill bad"; };
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

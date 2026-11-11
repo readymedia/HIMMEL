@@ -1,0 +1,1010 @@
+{
+ "format": "himmel-weapon/1",
+ "id": "nuvj",
+ "name": "NuVJ",
+ "badge": "◎ HIMMEL · VJ",
+ "hardware": {
+  "maker": "Numark (software by ArKaos)",
+  "model": "NuVJ (2008)",
+  "usb": "to be read from the owner's unit",
+  "note": "Class-compliant USB-MIDI, bus powered (or 6 V 1 A DC). Works with the hardware; not affiliated with Numark or ArKaos."
+ },
+ "driver": "midi-nuvj",
+ "page": "nuvj_live.html",
+ "protocol": {
+  "transport": "USB-MIDI (WinMM on Windows; ports are exclusive, close the NuVJ / GrandVJ software)",
+  "input": "buttons and pads = note on/off, knobs = CC (absolute), BANK, MASTER FX and jog wheels = CC (relative), BANK push = notes 2/3, speed faders and crossfader = pitch bend on channels 1-3, front switches = CC 18 / note 33. From a public forum post, confirmed by the mappings.xml inside the owner's NuVJ 1.0 software; checked on the owner's unit into nuvj_map.json.",
+  "feedback": "SysEx F0 00 01 3F 7F 20 <cmd> 00 <len> <data> F7 (00 01 3F = Numark). cmd 60 init (01 01 01 00), 01 LCD text (8 ASCII), 02 LCD segments (64 bytes), 03 LEDs (8 bytes, one bit per LED), 7A contrast 0..99 (7B = stored; Himmel never sends it). Read from the owner's NuVJ 1.0 software by static analysis; not yet checked on the unit.",
+  "lcd": "custom segment LCD: 8 dot-matrix characters (cmd 01) plus segment memory (cmd 02): the software's 2-digit number is known; the other segments are learned with the segment hunt."
+ },
+ "map": "nuvj_map.json",
+ "status": "simulated with the real feedback protocol; hardware probe, map learning and segment hunt ready; not yet checked on the owner's unit",
+ "panel": {
+  "w": 940,
+  "h": 930
+ },
+ "screens": [
+  {
+   "id": "lcd",
+   "kind": "segment-lcd",
+   "x": 347,
+   "y": 66,
+   "w": 246,
+   "h": 138,
+   "units": [
+    200,
+    112
+   ],
+   "note": "layout from the owner's photo with every segment on (2026-11-11); which bits light which part is learned with the segment hunt",
+   "elements": [
+    {
+     "id": "lbl_edit",
+     "kind": "label",
+     "x": 14.2,
+     "y": 13.4,
+     "text": "EDIT",
+     "size": 6
+    },
+    {
+     "id": "lbl_global",
+     "kind": "label",
+     "x": 42.6,
+     "y": 13.6,
+     "text": "GLOBAL",
+     "size": 6
+    },
+    {
+     "id": "lbl_program",
+     "kind": "label",
+     "x": 77.4,
+     "y": 13.6,
+     "text": "PROGRAM",
+     "size": 6
+    },
+    {
+     "id": "lbl_change",
+     "kind": "label",
+     "x": 112.3,
+     "y": 13.6,
+     "text": "CHANGE",
+     "size": 6
+    },
+    {
+     "id": "lbl_preset",
+     "kind": "label",
+     "x": 177.4,
+     "y": 13.6,
+     "text": "PRESET",
+     "size": 6
+    },
+    {
+     "id": "text",
+     "kind": "dots",
+     "x": 6.4,
+     "y": 18.4,
+     "cells": 8,
+     "cw": 19.7,
+     "ch": 22
+    },
+    {
+     "id": "preset",
+     "kind": "digits",
+     "x": 169.5,
+     "y": 20,
+     "n": 2,
+     "w": 8.4,
+     "h": 17.6
+    },
+    {
+     "id": "lbl_page",
+     "kind": "label",
+     "x": 179,
+     "y": 44.8,
+     "text": "PAGE",
+     "size": 6,
+     "inv": true
+    },
+    {
+     "id": "rule",
+     "kind": "rule",
+     "x": 6.4,
+     "y": 48.3,
+     "w": 183
+    },
+    {
+     "id": "lbl_midich",
+     "kind": "label",
+     "x": 23.3,
+     "y": 54.3,
+     "text": "MIDI CH",
+     "size": 6,
+     "inv": true
+    },
+    {
+     "id": "lbl_prog",
+     "kind": "label",
+     "x": 74.3,
+     "y": 55,
+     "text": "PROG",
+     "size": 6
+    },
+    {
+     "id": "lbl_bankma",
+     "kind": "label",
+     "x": 127,
+     "y": 55,
+     "text": "BANK MA",
+     "size": 6
+    },
+    {
+     "id": "lbl_banklb",
+     "kind": "label",
+     "x": 175.6,
+     "y": 55,
+     "text": "BANK LB",
+     "size": 6
+    },
+    {
+     "id": "bpm",
+     "kind": "digits",
+     "x": 4.6,
+     "y": 60.5,
+     "n": 3,
+     "w": 9.2,
+     "h": 16.5,
+     "half_first": true
+    },
+    {
+     "id": "lbl_ctrl",
+     "kind": "label",
+     "x": 48.6,
+     "y": 62.8,
+     "text": "CTRL",
+     "size": 6
+    },
+    {
+     "id": "lbl_aft",
+     "kind": "label",
+     "x": 46.2,
+     "y": 69.4,
+     "text": "AFT",
+     "size": 6
+    },
+    {
+     "id": "lbl_note",
+     "kind": "label",
+     "x": 49.5,
+     "y": 75.2,
+     "text": "NOTE",
+     "size": 6
+    },
+    {
+     "id": "alpha",
+     "kind": "seg16",
+     "x": 63,
+     "y": 60.5,
+     "cells": 11,
+     "cw": 11.5,
+     "ch": 16.5
+    },
+    {
+     "id": "lbl_bpm",
+     "kind": "label",
+     "x": 28.4,
+     "y": 81.7,
+     "text": "BPM",
+     "size": 6
+    },
+    {
+     "id": "lbl_last",
+     "kind": "label",
+     "x": 132,
+     "y": 81.5,
+     "text": "LAST",
+     "size": 6
+    },
+    {
+     "id": "lbl_data",
+     "kind": "label",
+     "x": 178,
+     "y": 81.5,
+     "text": "DATA",
+     "size": 6
+    },
+    {
+     "id": "box_a",
+     "kind": "box",
+     "x": 13.8,
+     "y": 86.8,
+     "w": 6.4,
+     "h": 7.3,
+     "text": "A"
+    },
+    {
+     "id": "box_b",
+     "kind": "box",
+     "x": 23.3,
+     "y": 86.8,
+     "w": 6.4,
+     "h": 7.3,
+     "text": "B"
+    },
+    {
+     "id": "box_c",
+     "kind": "box",
+     "x": 13.8,
+     "y": 95.4,
+     "w": 6.4,
+     "h": 7.3,
+     "text": "C"
+    },
+    {
+     "id": "box_d",
+     "kind": "box",
+     "x": 23.3,
+     "y": 95.4,
+     "w": 6.4,
+     "h": 7.3,
+     "text": "D"
+    },
+    {
+     "id": "lbl_full",
+     "kind": "label",
+     "x": 58.7,
+     "y": 89.4,
+     "text": "FULL",
+     "size": 6
+    },
+    {
+     "id": "lbl_16levels",
+     "kind": "label",
+     "x": 57.4,
+     "y": 98.7,
+     "text": "16 LEVELS",
+     "size": 6
+    },
+    {
+     "id": "enter",
+     "kind": "box",
+     "x": 81.1,
+     "y": 85.9,
+     "w": 36.7,
+     "h": 16.5,
+     "text": "PRESS\nENTER"
+    },
+    {
+     "id": "last",
+     "kind": "wedge",
+     "x": 128,
+     "y": 85.3,
+     "w": 27,
+     "h": 16.5,
+     "n": 7,
+     "edge": "right"
+    },
+    {
+     "id": "data",
+     "kind": "wedge",
+     "x": 159.6,
+     "y": 85.3,
+     "w": 28.4,
+     "h": 16.5,
+     "n": 7,
+     "edge": "left"
+    }
+   ]
+  }
+ ],
+ "deco": [
+  {
+   "kind": "body",
+   "x": 30,
+   "y": 30,
+   "w": 880,
+   "h": 790,
+   "r": 18
+  },
+  {
+   "kind": "port",
+   "x": 380,
+   "y": 22,
+   "w": 30,
+   "h": 10,
+   "label": "USB"
+  },
+  {
+   "kind": "port",
+   "x": 300,
+   "y": 22,
+   "w": 20,
+   "h": 10,
+   "label": "6V DC"
+  },
+  {
+   "kind": "plate",
+   "x": 66,
+   "y": 246,
+   "w": 258,
+   "h": 556,
+   "r": 14
+  },
+  {
+   "kind": "plate",
+   "x": 616,
+   "y": 246,
+   "w": 258,
+   "h": 556,
+   "r": 14
+  },
+  {
+   "kind": "panel",
+   "x": 340,
+   "y": 236,
+   "w": 260,
+   "h": 228,
+   "r": 12
+  },
+  {
+   "kind": "silver",
+   "x": 436,
+   "y": 322,
+   "w": 68,
+   "h": 132,
+   "r": 8
+  },
+  {
+   "kind": "panel",
+   "x": 340,
+   "y": 478,
+   "w": 260,
+   "h": 234,
+   "r": 8
+  },
+  {
+   "kind": "silver",
+   "x": 340,
+   "y": 734,
+   "w": 260,
+   "h": 66,
+   "r": 6
+  },
+  {
+   "kind": "line",
+   "points": [
+    [
+     100,
+     747
+    ],
+    [
+     100,
+     712
+    ],
+    [
+     130,
+     690
+    ]
+   ]
+  },
+  {
+   "kind": "line",
+   "points": [
+    [
+     840,
+     747
+    ],
+    [
+     840,
+     712
+    ],
+    [
+     810,
+     690
+    ]
+   ]
+  },
+  {
+   "kind": "plaque",
+   "x": 470,
+   "y": 248,
+   "text": "HIMMEL"
+  },
+  {
+   "kind": "body",
+   "x": 30,
+   "y": 836,
+   "w": 880,
+   "h": 84,
+   "r": 10
+  }
+ ],
+ "sections": [
+  {
+   "label": "DECK A",
+   "x": 70,
+   "y": 46,
+   "w": 250
+  },
+  {
+   "label": "DECK B",
+   "x": 620,
+   "y": 46,
+   "w": 250
+  },
+  {
+   "label": "FRONT EDGE (switches you reach from the front)",
+   "x": 60,
+   "y": 846,
+   "w": 300
+  }
+ ],
+ "controls": [
+  {
+   "name": "A Bank",
+   "kind": "encoder",
+   "x": 114,
+   "y": 143,
+   "r": 17,
+   "label": "BANK",
+   "range": 128
+  },
+  {
+   "name": "A PMTR1",
+   "kind": "knob",
+   "x": 198,
+   "y": 143,
+   "r": 17,
+   "label": "PMTR 1",
+   "range": 128
+  },
+  {
+   "name": "A PMTR2",
+   "kind": "knob",
+   "x": 282,
+   "y": 143,
+   "r": 17,
+   "label": "PMTR 2",
+   "range": 128
+  },
+  {
+   "name": "A Latch",
+   "kind": "button",
+   "x": 90,
+   "y": 192,
+   "w": 48,
+   "h": 22,
+   "label": "LATCH",
+   "led_color": "#4aa8ff",
+   "style": "grey"
+  },
+  {
+   "name": "A Auto",
+   "kind": "button",
+   "x": 174,
+   "y": 192,
+   "w": 48,
+   "h": 22,
+   "label": "AUTO",
+   "led_color": "#4aa8ff",
+   "style": "grey"
+  },
+  {
+   "name": "A Sync",
+   "kind": "button",
+   "x": 258,
+   "y": 192,
+   "w": 48,
+   "h": 22,
+   "label": "SYNC",
+   "led_color": "#4aa8ff",
+   "style": "silver"
+  },
+  {
+   "name": "A Pad 7",
+   "kind": "pad",
+   "n": 7,
+   "x": 89,
+   "y": 261,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 7",
+   "range": 127,
+   "style": "strip"
+  },
+  {
+   "name": "A Pad 8",
+   "kind": "pad",
+   "n": 8,
+   "x": 171,
+   "y": 261,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 8",
+   "range": 127,
+   "style": "strip"
+  },
+  {
+   "name": "A Pad 9",
+   "kind": "pad",
+   "n": 9,
+   "x": 254,
+   "y": 261,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 9",
+   "range": 127,
+   "style": "strip"
+  },
+  {
+   "name": "A Pad 4",
+   "kind": "pad",
+   "n": 4,
+   "x": 89,
+   "y": 343,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 4",
+   "range": 127,
+   "style": "strip"
+  },
+  {
+   "name": "A Pad 5",
+   "kind": "pad",
+   "n": 5,
+   "x": 171,
+   "y": 343,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 5",
+   "range": 127,
+   "style": "strip"
+  },
+  {
+   "name": "A Pad 6",
+   "kind": "pad",
+   "n": 6,
+   "x": 254,
+   "y": 343,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 6",
+   "range": 127,
+   "style": "strip"
+  },
+  {
+   "name": "A Pad 1",
+   "kind": "pad",
+   "n": 1,
+   "x": 89,
+   "y": 425,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 1",
+   "range": 127,
+   "style": "strip"
+  },
+  {
+   "name": "A Pad 2",
+   "kind": "pad",
+   "n": 2,
+   "x": 171,
+   "y": 425,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 2",
+   "range": 127,
+   "style": "strip"
+  },
+  {
+   "name": "A Pad 3",
+   "kind": "pad",
+   "n": 3,
+   "x": 254,
+   "y": 425,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 3",
+   "range": 127,
+   "style": "strip"
+  },
+  {
+   "name": "A Jog",
+   "kind": "wheel",
+   "x": 186,
+   "y": 610,
+   "r": 92,
+   "label": "",
+   "range": 128
+  },
+  {
+   "name": "A Scratch",
+   "kind": "button",
+   "x": 74,
+   "y": 747,
+   "w": 52,
+   "h": 26,
+   "label": "SCRATCH",
+   "led_color": "#4aa8ff",
+   "style": "strip"
+  },
+  {
+   "name": "B Bank",
+   "kind": "encoder",
+   "x": 658,
+   "y": 143,
+   "r": 17,
+   "label": "BANK",
+   "range": 128
+  },
+  {
+   "name": "B PMTR1",
+   "kind": "knob",
+   "x": 742,
+   "y": 143,
+   "r": 17,
+   "label": "PMTR 1",
+   "range": 128
+  },
+  {
+   "name": "B PMTR2",
+   "kind": "knob",
+   "x": 826,
+   "y": 143,
+   "r": 17,
+   "label": "PMTR 2",
+   "range": 128
+  },
+  {
+   "name": "B Latch",
+   "kind": "button",
+   "x": 634,
+   "y": 192,
+   "w": 48,
+   "h": 22,
+   "label": "LATCH",
+   "led_color": "#4aa8ff",
+   "style": "grey"
+  },
+  {
+   "name": "B Auto",
+   "kind": "button",
+   "x": 718,
+   "y": 192,
+   "w": 48,
+   "h": 22,
+   "label": "AUTO",
+   "led_color": "#4aa8ff",
+   "style": "grey"
+  },
+  {
+   "name": "B Sync",
+   "kind": "button",
+   "x": 802,
+   "y": 192,
+   "w": 48,
+   "h": 22,
+   "label": "SYNC",
+   "led_color": "#4aa8ff",
+   "style": "silver"
+  },
+  {
+   "name": "B Pad 7",
+   "kind": "pad",
+   "n": 7,
+   "x": 622,
+   "y": 261,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 7",
+   "range": 127,
+   "style": "strip"
+  },
+  {
+   "name": "B Pad 8",
+   "kind": "pad",
+   "n": 8,
+   "x": 705,
+   "y": 261,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 8",
+   "range": 127,
+   "style": "strip"
+  },
+  {
+   "name": "B Pad 9",
+   "kind": "pad",
+   "n": 9,
+   "x": 787,
+   "y": 261,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 9",
+   "range": 127,
+   "style": "strip"
+  },
+  {
+   "name": "B Pad 4",
+   "kind": "pad",
+   "n": 4,
+   "x": 622,
+   "y": 343,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 4",
+   "range": 127,
+   "style": "strip"
+  },
+  {
+   "name": "B Pad 5",
+   "kind": "pad",
+   "n": 5,
+   "x": 705,
+   "y": 343,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 5",
+   "range": 127,
+   "style": "strip"
+  },
+  {
+   "name": "B Pad 6",
+   "kind": "pad",
+   "n": 6,
+   "x": 787,
+   "y": 343,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 6",
+   "range": 127,
+   "style": "strip"
+  },
+  {
+   "name": "B Pad 1",
+   "kind": "pad",
+   "n": 1,
+   "x": 622,
+   "y": 425,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 1",
+   "range": 127,
+   "style": "strip"
+  },
+  {
+   "name": "B Pad 2",
+   "kind": "pad",
+   "n": 2,
+   "x": 705,
+   "y": 425,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 2",
+   "range": 127,
+   "style": "strip"
+  },
+  {
+   "name": "B Pad 3",
+   "kind": "pad",
+   "n": 3,
+   "x": 787,
+   "y": 425,
+   "w": 64,
+   "h": 46,
+   "label": "PAD 3",
+   "range": 127,
+   "style": "strip"
+  },
+  {
+   "name": "B Jog",
+   "kind": "wheel",
+   "x": 754,
+   "y": 610,
+   "r": 92,
+   "label": "",
+   "range": 128
+  },
+  {
+   "name": "B Scratch",
+   "kind": "button",
+   "x": 814,
+   "y": 747,
+   "w": 52,
+   "h": 26,
+   "label": "SCRATCH",
+   "led_color": "#4aa8ff",
+   "style": "strip"
+  },
+  {
+   "name": "Insta A",
+   "kind": "button",
+   "x": 257,
+   "y": 752,
+   "w": 56,
+   "h": 32,
+   "label": "INSTA A",
+   "led_color": "#4aa8ff",
+   "style": "strip"
+  },
+  {
+   "name": "Insta B",
+   "kind": "button",
+   "x": 627,
+   "y": 752,
+   "w": 56,
+   "h": 32,
+   "label": "INSTA B",
+   "led_color": "#4aa8ff",
+   "style": "strip"
+  },
+  {
+   "name": "FX Level",
+   "kind": "knob",
+   "x": 395,
+   "y": 282,
+   "r": 17,
+   "label": "FX LEVEL",
+   "range": 128
+  },
+  {
+   "name": "Master FX",
+   "kind": "button",
+   "x": 445,
+   "y": 272,
+   "w": 50,
+   "h": 20,
+   "label": "MASTER FX",
+   "led_color": "#4aa8ff",
+   "style": "grey"
+  },
+  {
+   "name": "Master FX Select",
+   "kind": "encoder",
+   "x": 545,
+   "y": 282,
+   "r": 17,
+   "label": "MASTER FX",
+   "range": 128
+  },
+  {
+   "name": "Master PMTR1",
+   "kind": "knob",
+   "x": 395,
+   "y": 354,
+   "r": 17,
+   "label": "PMTR 1",
+   "range": 128
+  },
+  {
+   "name": "Insta Black",
+   "kind": "button",
+   "x": 445,
+   "y": 340,
+   "w": 50,
+   "h": 28,
+   "label": "INSTA\nBLACK",
+   "led_color": "#4aa8ff",
+   "style": "grey"
+  },
+  {
+   "name": "Contrast",
+   "kind": "knob",
+   "x": 545,
+   "y": 354,
+   "r": 17,
+   "label": "CONTRAST",
+   "range": 128
+  },
+  {
+   "name": "Master PMTR2",
+   "kind": "knob",
+   "x": 395,
+   "y": 426,
+   "r": 17,
+   "label": "PMTR 2",
+   "range": 128
+  },
+  {
+   "name": "BPM Tap",
+   "kind": "button",
+   "x": 445,
+   "y": 412,
+   "w": 50,
+   "h": 28,
+   "label": "BPM TAP",
+   "led_color": "#4aa8ff",
+   "style": "silver"
+  },
+  {
+   "name": "Bright",
+   "kind": "knob",
+   "x": 545,
+   "y": 426,
+   "r": 17,
+   "label": "BRIGHT",
+   "range": 128
+  },
+  {
+   "name": "A Speed",
+   "kind": "fader",
+   "orient": "v",
+   "x": 425,
+   "y": 520,
+   "len": 170,
+   "label": "A",
+   "range": 16383
+  },
+  {
+   "name": "B Speed",
+   "kind": "fader",
+   "orient": "v",
+   "x": 515,
+   "y": 520,
+   "len": 170,
+   "label": "B",
+   "range": 16383
+  },
+  {
+   "name": "Crossfader",
+   "kind": "fader",
+   "orient": "h",
+   "x": 355,
+   "y": 768,
+   "len": 230,
+   "label": "",
+   "range": 16383
+  },
+  {
+   "name": "Fader Mode",
+   "kind": "switch",
+   "x": 560,
+   "y": 880,
+   "positions": [
+    "A",
+    "B",
+    "C"
+   ],
+   "label": "FADER MODE"
+  },
+  {
+   "name": "Auto Fade Speed",
+   "kind": "knob",
+   "x": 690,
+   "y": 878,
+   "r": 13,
+   "label": "AUTO FADE\nINSTANT · SLOW",
+   "range": 128
+  },
+  {
+   "name": "Fader Start",
+   "kind": "switch",
+   "x": 810,
+   "y": 880,
+   "positions": [
+    "OFF",
+    "ON"
+   ],
+   "label": "FADER START"
+  },
+  {
+   "name": "A Bank Push",
+   "kind": "push",
+   "of": "A Bank",
+   "x": 114,
+   "y": 143,
+   "r": 17,
+   "label": "push"
+  },
+  {
+   "name": "B Bank Push",
+   "kind": "push",
+   "of": "B Bank",
+   "x": 658,
+   "y": 143,
+   "r": 17,
+   "label": "push"
+  }
+ ],
+ "views": {
+  "classic": "vj_classic.html"
+ }
+}

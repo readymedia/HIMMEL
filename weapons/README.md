@@ -22,6 +22,7 @@ A weapon has up to four parts:
 | 1 | **MK2** (Maschine MK2) | USB HID: 16 pads, 8 knobs, encoder, 48 buttons, two 1-bit screens | [`mk2.weapon.json`](mk2.weapon.json) | [`tools/mk2_sim.py`](../tools/mk2_sim.py) | Map verified on hardware, C++ driver done |
 | 3 | **LUMI Keys** (ROLI LUMI Keys) | USB-MIDI, BLOCKS family: 24 keys with strike velocity, pressure and glide, one RGB LED per key, Mode / Octave − / Octave + | [`lumi.weapon.json`](lumi.weapon.json) | [`tools/lumi_sim.py`](../tools/lumi_sim.py) | Simulated, and checked on the owner's LUMI (firmware 1.3.8, 2026-11-10): keys, velocity, buttons, **Himmel's own key LEDs** |
 | 2 | **Lightpad** (ROLI Lightpad Block / Block M) | USB-MIDI: multi-touch surface (x, y, pressure per finger), 15 × 15 RGB LEDs, one Mode button | [`lightpad.weapon.json`](lightpad.weapon.json) | [`tools/lightpad_sim.py`](../tools/lightpad_sim.py) | Simulated, and played on the owner's Lightpad M (2026-11-10): touch, multi-touch, Mode button, orientation, factory note map, **and Himmel's own LED program** (~55 frames/s) |
+| 5 | **NuVJ** (Numark NuVJ, 2008) | USB-MIDI: 2 × 9 pads, 2 jog wheels, 2 speed faders, crossfader, 12 knobs, 2 push BANK encoders, 31 LEDs, front switches, blue segment LCD (feedback by SysEx) | [`nuvj.weapon.json`](nuvj.weapon.json) | [`tools/nuvj_sim.py`](../tools/nuvj_sim.py) | **Checked on the owner's unit (2026-11-11)**: map of all 53 controls verified, 31 LEDs, LCD text and the whole segment map (camera mapper); protocol in [`docs/nuvj-protocol.md`](../docs/nuvj-protocol.md) |
 
 ## The live view: one tool for every weapon
 
@@ -79,6 +80,11 @@ the device.
 - `kind: "surface"` (weapon no. 2): a multi-touch area with an LED grid under it.
   Extra keys: `grid: {cols, rows}`, `max_touches`, `range: {x, y, z}` (raw
   units on the wire). Touches are reported per finger with x, y and pressure.
+- Weapon no. 5 (NuVJ) adds `fader` (`orient` `v`/`h`, `len`, 14-bit `range`), `wheel`
+  (a jog wheel: endless, relative), `switch` (`positions`), screens of `kind: "lcd"`
+  (`text_cols` × `text_rows`) and `deco` kind `panel` (an inset area). A profile may
+  name its own page (`"page": "nuvj_live.html"` in `tools/`); the live view serves
+  it at `/?weapon=<id>`.
 - `deco` (optional): drawing only, never a control. `body` is the device
   outline (`r` = corner radius), `dna` is a connector dot at `x, y`, and `port`
   is a socket or switch the protocol cannot see, with a small label.
@@ -389,6 +395,243 @@ it, it stays awake. To undo: *Uninstall device* and replug.
   changes the colour family), rainbow, test pattern (key 1 red, 12 green,
   13 blue, 24 white), off.
 - **Engine link:** UDP 127.0.0.1:8769 (8768 is the Entrancer engine).
+
+## Weapon no. 5: the NuVJ
+
+The owner's **Numark NuVJ** (2008, made for ArKaos' NuVJ software) is a
+two-deck VJ controller. It is a class-compliant USB-MIDI device, powered by USB
+or 6 V DC. The drawing (`nuvj.weapon.json`, badge "HIMMEL · VJ") follows the
+owner's photos:
+- white deck plates;
+- black rubber pads and buttons whose two light strips glow;
+- knurled jog wheels;
+- the blue segment LCD, with unlit segments showing faintly.
+
+```
+python tools/mk2_live.py --port 8777 --weapon nuvj        then open http://127.0.0.1:8777
+python tools/nuvj_sim.py --selftest                       every control and every feedback message round-trips
+python tools/nuvj_sim.py --ports                          the MIDI ports Windows sees
+```
+
+The NuVJ has its own page (`tools/nuvj_live.html`), served by the same live
+view. Its profile names it with `"page"`.
+
+### The protocol
+
+The full protocol is in [`docs/nuvj-protocol.md`](../docs/nuvj-protocol.md). The effects, generators and mixer of the original NuVJ software (and what Himmel can take from them) are in [`docs/nuvj-effects.md`](../docs/nuvj-effects.md).
+
+- **Controls → host:** notes, CCs and pitch bend.
+  - Endless controls (BANK, MASTER FX, jog wheels) send relative CCs.
+  - The BANK knobs can be pushed (notes 2 and 3).
+- **Host → controls:** SysEx `F0 00 01 3F 7F 20 <cmd> 00 <len> <data> F7`.
+
+  | cmd | What it sets |
+  |---|---|
+  | `60` | init |
+  | `01` | 8 characters of LCD text |
+  | `02` | 64 bytes of LCD segment memory |
+  | `03` | 8 bytes, one bit for each of the 31 LEDs |
+  | `7A` | LCD contrast |
+
+- We read this from the owner's NuVJ 1.0 software: we unpacked the installer
+  and analysed the program statically, without running it. Credited in
+  `THIRD_PARTY_NOTICES.md`.
+- Without these messages the LEDs stay dark and the LCD just says "NuVJ".
+- Himmel never sends `7B`, the command that stores the contrast in the
+  controller.
+
+### How it is built
+
+- **Simulator** (`SimNuVJ`): the drawing is the controller.
+  - Buttons and pads: hold the mouse.
+  - Knobs: drag or scroll.
+  - BANK and MASTER FX: one step at a time. Right-click (or Alt+click) a BANK
+    knob to push it.
+  - Jog wheels: drag around the wheel.
+  - Faders: drag the cap.
+  - Switches: click to step.
+  - It sends the real MIDI bytes. It also decodes the host's feedback SysEx,
+    so its LEDs and LCD show exactly what was sent.
+- **Real device** (`HwNuVJ`): WinMM through the ctypes bindings in
+  `lightpad_hw.py`, so no new dependency.
+  - It finds a port named "NuVJ" or "Numark", or uses the one you pick.
+  - It reconnects after a cable pull and sends init again.
+  - It sends only feedback SysEx with the NuVJ header (never `7B`), short
+    messages, and the MIDI identity request.
+- **Map learning**: click a control in the drawing, then move the real one.
+  - Endless knobs and jog wheels: turn them clockwise.
+  - Switches: walk them through every position.
+  - "Seen" is only ticked by real input. **Mark verified** is enabled when all
+    53 controls are seen.
+- **LEDs and LCD** (`NuvjHost`): the live view stands in for Himmel.
+  - LED modes:
+    - **Himmel**: latch / auto / sync / master FX / insta black as toggles, the
+      playing pad per deck, BPM TAP on the beat;
+    - Follow;
+    - All on;
+    - Chase;
+    - Off.
+  - The LCD is one model: `{text, big, small, bar, icons}`.
+    - The text goes out as `cmd 01`.
+    - The big number goes where the NuVJ software puts its 2-digit value.
+    - Elements learned by the segment hunt are lit through `cmd 02`.
+- **Segment hunt**:
+  1. It lights one segment bit at a time.
+  2. It writes `SEGbb.b` on the text row.
+  3. The owner clicks the part of the drawn LCD that lit up: a digit segment,
+     a bar block, an icon or a label.
+  4. It is saved in `nuvj_map.json` under `lcd_segments`.
+- **Contrast**: the slider sends `cmd 7A` (not stored).
+
+### The classic two-deck view (nostalgia)
+
+`http://127.0.0.1:8777/?weapon=nuvj&view=classic` is **Himmel's own take on the
+simple two-deck VJ workflow** the NuVJ was made for. The original software was
+easy and fun, and this view keeps the workflow without its art, logos or
+names. It runs on its own, or next to the controller view.
+
+**What is on the page**
+- A **browser** with Media (the `media/` folder), Effects (Himmel's planned
+  set), Generators and Inputs.
+- **Two decks.** Each has:
+  - 16 banks of 9 cells, laid out like the pads (7 8 9 on top);
+  - a preview;
+  - a position bar and a speed slider;
+  - LATCH / AUTO / SYNC;
+  - PMTR 1 / 2 knobs named after the playing cell's effect.
+- The **master**:
+  - a preview;
+  - brightness and contrast;
+  - a master effect with mix and two parameters;
+  - BLACK;
+  - the crossfader with A / B cut buttons;
+  - BPM and TAP;
+  - full-screen output.
+- **Cell properties**:
+  - how deck B blends onto A: mix, add, subtract, multiply, lighter, darker;
+  - brightness or colour key with centre and width;
+  - once / loop / ping-pong;
+  - text;
+  - the effect and its two parameters.
+
+**How you play it**
+- Drag an item onto a cell (or click the item, then the cell).
+- Click a cell to trigger it. Shift-click or right-click a cell to edit it.
+- Drag cells around (Ctrl = copy), or drop one on the bin to clear it.
+
+**How it connects**
+- The page and the NuVJ (real or simulated) change the **same model**,
+  `tools/vj_classic.py`, so either one can play it:
+  - the pads trigger cells;
+  - BANK steps the banks;
+  - PMTR turns the playing cell's parameters;
+  - the faders, jog, crossfader and master section all work.
+- The NuVJ's LEDs and LCD follow the model too.
+- **No render engine yet.** The previews are simple 2D stand-ins drawn by
+  the page. Later Himmel's engine renders the decks from the same model.
+
+### NuVJ events in Himmel's event model
+
+The NuVJ uses the generic weapon plan below: one driver process (WinMM), a
+shared block, and the same 16-byte `Event`. `id` = the control's index in the
+profile.
+
+| NuVJ input | Himmel event | Notes |
+|---|---|---|
+| Button / pad note on, note off | `ButtonDown` / `ButtonUp`, or `PadHit` / `PadRelease` for pads | The pads send no pressure: velocity is a fixed 127, so `PadHit` carries full intensity. |
+| Absolute knob CC (PMTR, FX LEVEL, CONTRAST, BRIGHT, AUTO FADE SPEED) | `KnobDelta` (`raw` = the 0..127 value) | The engine can pick up (soft takeover) after a page change. |
+| BANK, MASTER FX, jog wheel (relative CC) | `KnobDelta` (±n ticks) | The direction comes from the learned `cw` flag. |
+| BANK push | `ButtonDown` / `ButtonUp` | |
+| SPEED faders, crossfader (pitch bend) | new `Fader` event: `value` 0..16383 | 14-bit, smooth enough for a crossfade. |
+| FADER MODE, FADER START | new `Switch` event: `value` = position | The engine learns the position on the first move. |
+| LED out | The engine writes an LED level per control. The driver packs them into the 8 LED bytes (`cmd 03`) and sends them on change, plus every 2 s. | |
+| LCD out | The engine writes the LCD model. The driver sends text (`cmd 01`) and segments (`cmd 02`). | |
+
+### What each control could do in Himmel
+
+| Control | In Himmel |
+|---|---|
+| Crossfader | Deck A ↔ deck B mix (the deck / layer mixer). |
+| INSTA A / INSTA B | Hold = cut to that deck, with an auto fade at the AUTO FADE SPEED. |
+| SPEED faders | Clip speed per deck, −2..+2×, centre = 1×. |
+| Jog wheel | Nudge the speed; with SCRATCH held, scrub the clip (HAP frames are random-access). |
+| Pads 1–9 | The 9 clips of the deck's current bank. LED = the playing clip. |
+| BANK (turn / push) | Step through the deck's banks / load the bank. The LCD shows the bank number. |
+| PMTR 1 / 2 (deck) | The two main parameters of the deck's effect chain. |
+| LATCH / AUTO / SYNC | Latch = clips keep playing after the pad is released. Auto = Smart Random inside the bank. Sync = the deck's clip follows the beat. |
+| Master FX section | MASTER FX knob = choose the master effect (name on the LCD), button = on/off, FX LEVEL = wet/dry, PMTR 1/2 = its parameters. |
+| CONTRAST / BRIGHT | Output contrast and brightness. |
+| INSTA BLACK | The show's blackout (toggle; LED and BLACK icon on while black). |
+| BPM TAP | Tap tempo for Himmel's beat clock (LED on the beat); hold 3 s = back to the audio-detected BPM. |
+| FADER START + FADER MODE | Crossfader start: moving away from one side fires the other deck's selected cue (A/B/C = cue, scene or Smart Random). |
+
+### Checked on the owner's unit (2026-11-11)
+
+- **Device.** USB `15e4:0020`; WinMM ports "NuVJ Controller" (in 0, out 1).
+- **Map verified.** All 53 controls are in `nuvj_map.json`.
+  - The 12 top knobs are endless (1 / 127 per tick); Himmel keeps a 0..127
+    value.
+  - Before init the faders send CC 10 / 11 / 12. After Himmel's init they
+    send pitch bend on channels 1–3, and the device reports where its faders
+    and switches are.
+  - The BANK knobs can be pushed (notes 2 and 3).
+- **LEDs.** All 31 work with the `03` bits.
+- **LCD.**
+  - Text (`01`) works.
+  - The segment memory (`02`) is fully mapped: wedges, words, boxes, the
+    188 and PRESET digits, and 11 16-segment characters (15 bits each).
+  - Checked with test text.
+- **How the LCD was mapped: the camera mapper** in the live view's LCD
+  hunt.
+  1. A webcam (here DroidCam) looks at the glass, and the four corners are
+     set by click and drag.
+  2. Each bit is lit on its own while the camera watches.
+  3. The structure found that way was confirmed with a few photos of single
+     bits.
+  4. Bits learned by hand are protected from the camera.
+
+  The browser pane in the Claude app cannot use the camera, so the mapper
+  runs in Chrome.
+
+### Jog Pong (easter egg, played on the owner's NuVJ 2026-11-11)
+
+`tools/nuvj_games.py` is a three-lane pong on the NuVJ's own LCD. It shows
+that Himmel drives every part of the controller.
+
+- **The field** is the 11 16-segment characters. The ball is a bar in the
+  top, middle or bottom lane. The paddles are brackets in the end characters.
+- **The jogs.** The left jog moves A and the right jog moves B (clockwise =
+  down). Spinning as you hit puts an angle on the ball.
+- **Serve.** Push your BANK knob or press SCRATCH; PRESS ENTER blinks for the
+  server.
+- **Score.** A shows in "188" and B under PRESET. First to 5 wins.
+- **The rest of the controller.**
+  - The dot-matrix row shows the messages.
+  - The wedges show the ball speed and the rally.
+  - The pads flash on hits.
+  - The A / B box and the INSTA LED show who serves.
+- **Playing alone.** A side whose jog is idle for 5 s is played by Himmel.
+- **Start / stop.** Hold both SCRATCH buttons, or press **★ Jog Pong** in the
+  live view.
+- **Without hardware.** `python tools/nuvj_games.py` runs a self-test.
+
+### Start-up shows (2026-11-11)
+
+Short light shows on the NuVJ's LEDs and LCD, like the MK2's start-up splash.
+They are in `tools/nuvj_games.py` (`INTROS`).
+
+- **Boot sweep** (4.2 s): a light column sweeps across deck A, the centre and
+  deck B; the 16-segment cells fill one by one and settle into "HIMMEL VJ 5";
+  the numbers count up and the words switch on.
+- **Starburst** (4.0 s): every 16-segment cell is a spinning star, the pads
+  run round each deck, then everything bursts on with "READY".
+- **Made by** (5.4 s): "MADE BY READYMEDIA.NO" scrolls along the 16-segment
+  row while the pads beat like a heart.
+- **When.** One plays when Himmel takes the NuVJ (sends init). The live view's
+  "on connect" picks random (the default), one show, or off. The ✦ buttons
+  play a show at any time.
+- **Skip.** Any button ends the show.
+- **Without hardware.** `python tools/nuvj_games.py` also checks the shows.
 
 ## Plan: how a generic weapon feeds Himmel (not wired yet)
 

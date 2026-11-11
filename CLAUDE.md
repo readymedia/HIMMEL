@@ -211,6 +211,30 @@ The full mapping is `docs/design/hardware-mapping.md` §3 and
       BLOCKS touch messages per key; they are not used yet.
     - Not done: a key map verified key by key, and games on the keys.
     - Weapon no. 4 = the Entrancer (the Touch FX session's branch).
+  - **Weapon no. 5 = the owner's Numark NuVJ (2008, USB-MIDI), started 2026-11-10.**
+    Profile `weapons/nuvj.weapon.json`, `tools/nuvj_sim.py`, own page
+    `tools/nuvj_live.html` (`mk2_live.py --port 8777 --weapon nuvj`, launch config
+    `nuvj-live`). **Protocol in `docs/nuvj-protocol.md`**, read from the owner's NuVJ
+    1.0 software (static analysis, never run): feedback SysEx `F0 00 01 3F 7F 20 cmd 00 len
+    data F7`. It covers init `60`, LCD text `01` (8 chars), segments `02` (64 bytes), LEDs `03`
+    (8 bytes, 31 bits) and contrast `7A`. Never send `7B` (stored). Simulator checked in
+    the browser. **Checked on the owner's unit 2026-11-11** (USB `15e4:0020`, WinMM
+    "NuVJ Controller" in 0 / out 1):
+    - `nuvj_map.json` verified (53 controls). The top knobs are endless; faders send
+      CC 10-12 before init and pitch bend ch 1-3 after it.
+    - All 31 LEDs work.
+    - LCD text works, and the whole segment map is learned with the camera mapper
+      (webcam in Chrome, LCD hunt panel). The layout is in `docs/nuvj-protocol.md`.
+    **Classic two-deck view** (owner's wish 2026-11-10, nostalgia): `?weapon=nuvj&view=classic`,
+    `tools/vj_classic.html` + model `tools/vj_classic.py`. It is the NuVJ software's workflow
+    in Himmel's own look: no logos or art, and nothing so close that it could cause trouble.
+    The GUI and the controller play the same model. 2D placeholder previews stand in until the
+    engine renders it.
+    **Jog Pong** (easter egg, `tools/nuvj_games.py`, played by the owner 2026-11-11): a three-lane
+    pong on the NuVJ's LCD, played with the jogs; hold both SCRATCH buttons to start or stop.
+    **Start-up shows** (`INTROS` in `tools/nuvj_games.py`, 2026-11-11): Boot sweep, Starburst and
+    Made by play on the LEDs and LCD when Himmel takes the NuVJ (random by default, or picked
+    in the live view); the ✦ buttons play them any time, and any button skips.
 - **Visual mapping is the way to work with the controller. Keep it and build on
   it** (the owner wants graphical tools, not terminal tables):
   - `tools/mk2_live.py` + `tools/mk2_live.html`: a browser live view of the MK2
@@ -366,6 +390,16 @@ integrations. The list below is the history of what is done on `main`.
      outputs are tested as windows there; the show PC is the RTX 5090.
 5. Then: the ffmpeg/HAP import pipeline, audio analysis, the cue system, Smart
    Random and the GUI.
+6. **TODO (owner, 2026-11-10): the effect set, after the graphics engine is
+   ready.** Start from `docs/nuvj-effects.md`, "What Himmel takes from this":
+   - cheap single-pass effects (Kaleido, Mirror, RGB split, Tunnel, RotoZoom,
+     BPM strobe, Hue);
+   - feedback effects (Motion Blur, Larsen / Twirl);
+   - audio effects (Bass Zoom, EarthQuake);
+   - the mixer: copy modes, luma / chroma key, crossfade curves and mask wipes.
+   Each effect has two main parameters for PMTR 1 / 2 and knob pages, and some
+   parameters are speeds. Do not start before the engine's effect chain
+   exists.
 
 ## Open source (decided 2026-11-10)
 - Public repo: https://github.com/readymedia/HIMMEL, **MIT license**
