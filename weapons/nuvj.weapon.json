@@ -33,130 +33,262 @@
    "h": 140,
    "units": [
     200,
-    108
+    114
    ],
-   "note": "layout read from a photo; the device protocol is not known yet, so Himmel's meaning of each element is ours",
+   "note": "layout from the owner's photo with every segment on (2026-11-11); which bits light which part is learned with the segment hunt",
    "elements": [
+    {
+     "id": "lbl_edit",
+     "kind": "label",
+     "x": 11,
+     "y": 15,
+     "text": "EDIT",
+     "size": 6
+    },
+    {
+     "id": "lbl_global",
+     "kind": "label",
+     "x": 35,
+     "y": 15,
+     "text": "GLOBAL",
+     "size": 6
+    },
+    {
+     "id": "lbl_program",
+     "kind": "label",
+     "x": 68,
+     "y": 15,
+     "text": "PROGRAM",
+     "size": 6
+    },
+    {
+     "id": "lbl_change",
+     "kind": "label",
+     "x": 102,
+     "y": 15,
+     "text": "CHANGE",
+     "size": 6
+    },
+    {
+     "id": "lbl_preset",
+     "kind": "label",
+     "x": 180,
+     "y": 15,
+     "text": "PRESET",
+     "size": 6
+    },
     {
      "id": "text",
      "kind": "dots",
-     "x": 9,
-     "y": 12,
+     "x": 5,
+     "y": 19,
      "cells": 8,
-     "cw": 15.0,
-     "ch": 20
+     "cw": 20.1,
+     "ch": 22
     },
     {
-     "id": "small",
+     "id": "preset",
      "kind": "digits",
-     "x": 136,
-     "y": 12,
+     "x": 169.5,
+     "y": 19.5,
      "n": 2,
+     "w": 8.5,
+     "h": 18
+    },
+    {
+     "id": "rule",
+     "kind": "rule",
+     "x": 5,
+     "y": 49.5,
+     "w": 186
+    },
+    {
+     "id": "lbl_midich",
+     "kind": "label",
+     "x": 21,
+     "y": 55,
+     "text": "MIDI CH",
+     "size": 6,
+     "inv": true
+    },
+    {
+     "id": "lbl_page",
+     "kind": "label",
+     "x": 181.5,
+     "y": 55,
+     "text": "PAGE",
+     "size": 6,
+     "inv": true
+    },
+    {
+     "id": "lbl_ctrl",
+     "kind": "label",
+     "x": 47.5,
+     "y": 60,
+     "text": "CTRL",
+     "size": 6
+    },
+    {
+     "id": "lbl_prog",
+     "kind": "label",
+     "x": 73.5,
+     "y": 60,
+     "text": "PROG",
+     "size": 6
+    },
+    {
+     "id": "lbl_bankma",
+     "kind": "label",
+     "x": 127,
+     "y": 60,
+     "text": "BANK MA",
+     "size": 6
+    },
+    {
+     "id": "lbl_banklb",
+     "kind": "label",
+     "x": 177,
+     "y": 60,
+     "text": "BANK LB",
+     "size": 6
+    },
+    {
+     "id": "bpm",
+     "kind": "digits",
+     "x": 7.5,
+     "y": 62,
+     "n": 3,
+     "w": 8.2,
+     "h": 18,
+     "half_first": true
+    },
+    {
+     "id": "lbl_aft",
+     "kind": "label",
+     "x": 45,
+     "y": 72,
+     "text": "AFT",
+     "size": 6
+    },
+    {
+     "id": "lbl_note",
+     "kind": "label",
+     "x": 48.5,
+     "y": 79,
+     "text": "NOTE",
+     "size": 6
+    },
+    {
+     "id": "alpha",
+     "kind": "seg16",
+     "x": 62,
+     "y": 62,
+     "cells": 11,
+     "cw": 11.75,
+     "ch": 18
+    },
+    {
+     "id": "box_a",
+     "kind": "box",
+     "x": 13.5,
+     "y": 87.5,
      "w": 10,
-     "h": 20
-    },
-    {
-     "id": "small_label",
-     "kind": "label",
-     "x": 147,
-     "y": 38,
-     "text": "FX"
-    },
-    {
-     "id": "big_label",
-     "kind": "label",
-     "x": 22,
-     "y": 46,
-     "text": "BANK"
-    },
-    {
-     "id": "big",
-     "kind": "digits",
-     "x": 9,
-     "y": 52,
-     "n": 2,
-     "w": 13,
-     "h": 24
-    },
-    {
-     "id": "bar_label",
-     "kind": "label",
-     "x": 106,
-     "y": 46,
-     "text": "VALUE"
-    },
-    {
-     "id": "bar",
-     "kind": "bar",
-     "x": 50,
-     "y": 56,
-     "n": 12,
-     "w": 112,
-     "h": 16
-    },
-    {
-     "id": "sync",
-     "kind": "icon",
-     "shape": "square",
-     "x": 10,
-     "y": 85,
-     "w": 11,
-     "h": 11
-    },
-    {
-     "id": "sync_label",
-     "kind": "label",
-     "x": 37,
-     "y": 93,
-     "text": "SYNC"
-    },
-    {
-     "id": "black",
-     "kind": "icon",
-     "shape": "rect",
-     "x": 60,
-     "y": 84,
-     "w": 30,
-     "h": 13
-    },
-    {
-     "id": "black_label",
-     "kind": "label",
-     "x": 75,
-     "y": 81,
-     "text": "BLACK"
-    },
-    {
-     "id": "deck_a",
-     "kind": "icon",
-     "shape": "tri",
-     "x": 110,
-     "y": 82,
-     "w": 26,
-     "h": 16
-    },
-    {
-     "id": "deck_b",
-     "kind": "icon",
-     "shape": "tri",
-     "x": 150,
-     "y": 82,
-     "w": 26,
-     "h": 16
-    },
-    {
-     "id": "deck_a_label",
-     "kind": "label",
-     "x": 123,
-     "y": 104,
+     "h": 9,
      "text": "A"
     },
     {
-     "id": "deck_b_label",
-     "kind": "label",
-     "x": 163,
-     "y": 104,
+     "id": "box_b",
+     "kind": "box",
+     "x": 25,
+     "y": 87.5,
+     "w": 10,
+     "h": 9,
      "text": "B"
+    },
+    {
+     "id": "box_c",
+     "kind": "box",
+     "x": 13.5,
+     "y": 97.5,
+     "w": 10,
+     "h": 9,
+     "text": "C"
+    },
+    {
+     "id": "box_d",
+     "kind": "box",
+     "x": 25,
+     "y": 97.5,
+     "w": 10,
+     "h": 9,
+     "text": "D"
+    },
+    {
+     "id": "lbl_bpm",
+     "kind": "label",
+     "x": 29.5,
+     "y": 86,
+     "text": "BPM",
+     "size": 6
+    },
+    {
+     "id": "lbl_full",
+     "kind": "label",
+     "x": 56,
+     "y": 94,
+     "text": "FULL",
+     "size": 6
+    },
+    {
+     "id": "lbl_16levels",
+     "kind": "label",
+     "x": 57,
+     "y": 102,
+     "text": "16 LEVELS",
+     "size": 6
+    },
+    {
+     "id": "enter",
+     "kind": "box",
+     "x": 80,
+     "y": 88,
+     "w": 38,
+     "h": 17,
+     "text": "PRESS\nENTER"
+    },
+    {
+     "id": "lbl_last",
+     "kind": "label",
+     "x": 130.5,
+     "y": 87,
+     "text": "LAST",
+     "size": 6
+    },
+    {
+     "id": "lbl_data",
+     "kind": "label",
+     "x": 179.5,
+     "y": 87,
+     "text": "DATA",
+     "size": 6
+    },
+    {
+     "id": "last",
+     "kind": "ramp",
+     "x": 127,
+     "y": 82,
+     "w": 30,
+     "h": 23,
+     "n": 8
+    },
+    {
+     "id": "data",
+     "kind": "ramp",
+     "x": 159,
+     "y": 82,
+     "w": 30,
+     "h": 23,
+     "n": 8
     }
    ]
   }

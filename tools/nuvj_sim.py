@@ -218,6 +218,19 @@ LED_ALWAYS = (7, 0x08)     # the software always sets this bit; what it lights i
 SEG_BITS = {"a": (1, 0x01), "b": (0, 0x02), "c": (0, 0x08), "d": (1, 0x10), "e": (1, 0x08), "f": (1, 0x02), "g": (1, 0x04)}
 DIGIT_SEGMENTS = {"0": "abcdef", "1": "bc", "2": "abged", "3": "abgcd", "4": "fgbc", "5": "afgcd",
                   "6": "afgedc", "7": "abc", "8": "abcdefg", "9": "abcdfg", "-": "g", " ": ""}
+SEG16 = {
+    " ": "", "0": "a1 a2 b c d1 d2 e f j k", "1": "b c j", "2": "a1 a2 b g1 g2 e d1 d2", "3": "a1 a2 b g2 c d1 d2",
+    "4": "f g1 g2 b c", "5": "a1 a2 f g1 g2 c d1 d2", "6": "a1 a2 f e d1 d2 c g1 g2", "7": "a1 a2 b c",
+    "8": "a1 a2 b c d1 d2 e f g1 g2", "9": "a1 a2 b c d1 d2 f g1 g2", "A": "e f a1 a2 b c g1 g2", "B": "a1 a2 b c d1 d2 i l g2",
+    "C": "a1 a2 f e d1 d2", "D": "a1 a2 b c d1 d2 i l", "E": "a1 a2 f e d1 d2 g1", "F": "a1 a2 f e g1", "G": "a1 a2 f e d1 d2 c g2",
+    "H": "f e b c g1 g2", "I": "a1 a2 i l d1 d2", "J": "b c d1 d2 e", "K": "f e g1 j m", "L": "f e d1 d2", "M": "f e b c h j",
+    "N": "f e b c h m", "O": "a1 a2 b c d1 d2 e f", "P": "a1 a2 b f e g1 g2", "Q": "a1 a2 b c d1 d2 e f m",
+    "R": "a1 a2 b f e g1 g2 m", "S": "a1 a2 f g1 g2 c d1 d2", "T": "a1 a2 i l", "U": "f e d1 d2 c b", "V": "f e k j",
+    "W": "f e b c k m", "X": "h j k m", "Y": "h j l", "Z": "a1 a2 j k d1 d2", "-": "g1 g2", "+": "g1 g2 i l", "/": "j k",
+    "*": "g1 g2 h i j k l m", ".": "d2", "_": "d1 d2", "=": "g1 g2 d1 d2", "'": "i", ":": "i l", "%": "a1 f g1 i j k l g2 c d2",
+    "?": "a1 a2 b g2 l", "#": "b c e f g1 g2 i l",
+}
+ALPHA_CELLS, RAMP_STEPS = 11, 8
 NUMBER_DIGITS = ((0x3D, 0x3E), (0x3B, 0x3C))   # the 2-digit number: tens, units (first byte, second byte)
 SEG_ALWAYS = (0x2E, 0x36)                      # set to 1 by the software on every update
 
@@ -684,25 +697,48 @@ class NuvjHost:
         self.flash = (time.time() + secs, text, bar)
 
     def lcd(self):
-        """The LCD as a model that the drawing renders and segments() turns into the device's bytes:
-        text = 8 dot-matrix characters, big / small = 2 seven-segment digits each, bar = 0..12 blocks,
-        icons on/off. This is the interface between Himmel and the device, like the MK2 pages."""
+        """The LCD as a model that the drawing renders and segments() turns into the device's bytes.
+        The glass (owner's photo): text = 8 dot-matrix characters (cmd 01); alpha = 11 16-segment
+        characters; bpm = 3 digits ("188") over the word BPM; preset = 2 digits under PRESET (Himmel: the
+        deck's bank); last / data = two ramps of 8 steps; lit = words and boxes that are on."""
         st, now = self.state, time.time()
         f = st["focus"]
         if self.flash and now < self.flash[0]:
             text, bar = self.flash[1], self.flash[2]
         elif now - self.t0 < 3.0:
-            text, bar = " HIMMEL ", (now - self.t0) / 3.0            # start-up: name + a filling bar
+            text, bar = " HIMMEL ", (now - self.t0) / 3.0            # start-up: name + a filling ramp
         else:
-            text, bar = "%5.1fBPM" % st["bpm"] if st["bpm"] < 1000 else "BPM", st["xf"] / 16383
+            text, bar = "%5.1fBPM" % st["bpm"] if st["bpm"] < 1000 else "BPM", None
         beat = ((now - self.t0) * st["bpm"] / 60.0) % 1.0
+        show = getattr(self.live, "show", None)
+        alpha = "HIMMEL VJ"
+        if show:
+            c = show.playing_cell(f)
+            if c:
+                alpha = (c["effect"] + " " if c.get("effect") else "") + c["name"].rsplit("/", 1)[-1].rsplit(".", 1)[0]
+            else:
+                alpha = "DECK %s  --" % f
+        lit = {"rule", "lbl_bpm", "lbl_preset", "lbl_data", "box_" + f.lower()}
+        if st["toggles"]["Master FX"]:
+            lit.add("box_c")
+        if st["toggles"]["Insta Black"]:
+            lit.add("box_d")
+        if st["toggles"][f + " Sync"] and beat < 0.5:
+            lit.add("lbl_bpm")
+        elif st["toggles"][f + " Sync"]:
+            lit.discard("lbl_bpm")
+        if bar is not None:
+            lit.add("lbl_last")
+        if now < getattr(self, "enter_until", 0):
+            lit.add("enter")                     # "PRESS ENTER" after turning BANK, until it is pushed
         return {
             "text": text,          # text_bytes() makes it 8 characters (7 + "." when longer), as the NuVJ software did
-            "big": "%02d" % (st[f]["bank"] + 1),
-            "small": "%02d" % (st["fx"] + 1) if st["toggles"]["Master FX"] else "",
-            "bar": None if bar is None else max(0, min(12, round(bar * 12))),
-            "icons": {"sync": st["toggles"][f + " Sync"] and beat < 0.5, "black": st["toggles"]["Insta Black"],
-                      "deck_a": f == "A", "deck_b": f == "B"},
+            "alpha": alpha.upper()[:ALPHA_CELLS],
+            "bpm": "%3d" % round(st["bpm"]) if st["bpm"] < 200 else "",
+            "preset": "%02d" % (st[f]["bank"] + 1),
+            "last": None if bar is None else max(0, min(RAMP_STEPS, round(bar * RAMP_STEPS))),
+            "data": round(st["xf"] / 16383 * RAMP_STEPS),
+            "lit": sorted(lit),
         }
 
     # ---- input ----
@@ -754,8 +790,9 @@ class NuvjHost:
                 st["fx"] = (st["fx"] + (1 if ev["delta"] > 0 else -1)) % len(FX_NAMES)
                 self.show(FX_NAMES[st["fx"]], st["fx"] / (len(FX_NAMES) - 1))
             elif name.endswith("Bank"):
+                self.enter_until = time.time() + 3.0
                 st[side]["bank"] = (st[side]["bank"] + (1 if ev["delta"] > 0 else -1)) % 16
-                self.show("BANK %s%3d" % (side, st[side]["bank"] + 1), st[side]["bank"] / 15)
+                self.show("BANK %s%2d" % (side, st[side]["bank"] + 1), st[side]["bank"] / 15)
             elif name.endswith("Jog"):
                 st[side]["jog"] += ev["delta"]
                 scr = self.live.held_now(side + " Scratch")
@@ -783,6 +820,7 @@ class NuvjHost:
             p = c["positions"][pos] if c and 0 <= pos < len(c["positions"]) else "?"
             self.show(("MODE " if name == "Fader Mode" else "FSTART ") + p)
         if name.endswith("Bank Push") and k == "down":
+            self.enter_until = 0
             self.show("LOAD %s%02d" % (side, st[side]["bank"] + 1))
 
     # ---- LEDs and LCD out: feedback SysEx ----
@@ -813,22 +851,21 @@ class NuvjHost:
 
     @staticmethod
     def lit_keys(model):
-        """Every LCD element the model lights, by the keys the segment hunt learns:
-        <digits id>.<i>.<a..g>, bar.<i>, icon ids, <id>_label."""
-        keys = set()
-        for did in ("big", "small"):
-            t = str(model.get(did, "")).rjust(2)[-2:]
-            for i, ch in enumerate(t):
-                keys |= {"%s.%d.%s" % (did, i, sg) for sg in DIGIT_SEGMENTS.get(ch, "")}
-            if model.get(did):
-                keys.add(did + "_label")
-        n = model.get("bar")
-        if n is not None:
-            keys |= {"bar.%d" % i for i in range(n)}
-            keys.add("bar_label")
-        for k, v in (model.get("icons") or {}).items():
+        """Every LCD part the model lights, by the keys the segment hunt learns:
+        <digits id>.<i>.<a..g>, alpha.<i>.<16-seg name>, last.<i> / data.<i>, word and box ids."""
+        keys = set(model.get("lit") or [])
+        for did, n in (("bpm", 3), ("preset", 2)):
+            v = model.get(did)
             if v:
-                keys |= {k, k + "_label"}
+                t = str(v).rjust(n)[-n:]
+                for i, ch in enumerate(t):
+                    keys |= {"%s.%d.%s" % (did, i, sg) for sg in DIGIT_SEGMENTS.get(ch, "")}
+        for i, ch in enumerate(str(model.get("alpha") or "").upper()[:ALPHA_CELLS]):
+            keys |= {"alpha.%d.%s" % (i, sg) for sg in (SEG16.get(ch, SEG16["?"]).split())}
+        for rid in ("last", "data"):
+            n = model.get(rid)
+            if n is not None:
+                keys |= {"%s.%d" % (rid, i) for i in range(n)}
         return keys
 
     def segments(self, model, m):
@@ -837,16 +874,17 @@ class NuvjHost:
         seg = bytearray(64)
         if self.seg_hunt is not None:
             h = self.seg_hunt
-            seg[h["byte"]] = 1 << h["bit"]
+            if h.get("all"):                     # every segment on: a photo shows the whole glass
+                return bytes([0x7F] * 64)
+            seg[h["byte"]] = 0x7F if h.get("whole") else 1 << h["bit"]
             return bytes(seg)
-        for b in SEG_ALWAYS:
-            seg[b] = 1
-        number_into(seg, model.get("big") or "")
         learned = m.get("lcd_segments") or {}
+        if not any(k.startswith("preset.") for k in learned):
+            for b in SEG_ALWAYS:        # until the hunt says otherwise: what the NuVJ software sent
+                seg[b] = 1
+            number_into(seg, model.get("preset") or "")
         lit = self.lit_keys(model)
         for key, (b, mask) in learned.items():
-            if key.startswith("big.") and key[4:5] in "01":
-                continue            # the number is written above; learned big.* keys only confirm it
             if key in lit:
                 seg[b] |= mask
         return bytes(seg)
@@ -865,13 +903,15 @@ class NuvjHost:
             self.sent_t = now
         if self.seg_hunt is not None and self.seg_hunt["auto"] and now - self.seg_hunt["t"] > 1.2:
             h = self.seg_hunt
-            h["bit"] += 1
+            h["bit"] += 7 if h.get("whole") else 1
             if h["bit"] > 6:
                 h["bit"], h["byte"] = 0, (h["byte"] + 1) % 64
             h["t"] = now
         model = self.lcd()
         if self.seg_hunt is not None:
-            model = dict(model, text="SEG%02d.%d" % (self.seg_hunt["byte"], self.seg_hunt["bit"]))
+            h = self.seg_hunt
+            model = dict(model, text="ALL SEGS" if h.get("all") else
+                         "SEG%02d.%s" % (h["byte"], "*" if h.get("whole") else h["bit"]))
         out = {"leds": led_bytes(self.wanted(held)), "text": text_bytes(model["text"]), "segs": self.segments(model, m)}
         cmds = {"leds": CMD_LEDS, "text": CMD_TEXT, "segs": CMD_SEGMENTS}
         for k, data in out.items():
@@ -1127,6 +1167,7 @@ class NuvjLive:
                 "seg_hunt": self.host.seg_hunt,
                 "drive": self.drive,
                 "lcd_segments": dict(self.m.get("lcd_segments") or {}),
+                "lcd_bytes_lit": list(self.m.get("lcd_bytes_lit") or []),
                 "host": {"mode": self.host.mode, "modes": list(NuvjHost.MODES), "bpm": st["bpm"],
                          "A": dict(st["A"]), "B": dict(st["B"]), "toggles": dict(st["toggles"]),
                          "xf": st["xf"]},
@@ -1220,12 +1261,24 @@ class NuvjLive:
                     if "byte" in h:
                         pos = int(h["byte"]) * 7 + int(h.get("bit", 0))
                     pos = (pos + int(h.get("step", 0))) % (64 * 7)
-                    self.host.seg_hunt = {"byte": pos // 7, "bit": pos % 7, "auto": bool(h.get("auto", old["auto"])),
-                                          "t": time.time()}
+                    whole = bool(h.get("whole", old.get("whole", False)))
+                    if whole and "step" in h:          # whole bytes: step a byte at a time
+                        pos = (old["byte"] + (1 if int(h["step"]) > 0 else -1)) % 64 * 7
+                    self.host.seg_hunt = {"byte": pos // 7, "bit": 0 if whole else pos % 7, "whole": whole,
+                                          "all": bool(h.get("all", False)),
+                                          "auto": bool(h.get("auto", old["auto"])), "t": time.time()}
             elif "seg_assign" in d:    # the owner clicked the element that lit: learn its bit
                 key, h = str(d["seg_assign"])[:40], self.host.seg_hunt
                 if not h:
                     pass
+                elif h.get("whole"):
+                    lit = self.m.setdefault("lcd_bytes_lit", [])
+                    if h["byte"] not in lit:
+                        lit.append(h["byte"])
+                        lit.sort()
+                    self.learn_msg = "byte %d lights something (%s); go through it bit by bit later" % (h["byte"], key)
+                    if self.dev.kind == "hw":
+                        save_map(self.m)
                 elif self.dev.kind != "hw":
                     self.learn_msg = "segment hunt on the simulator: nothing is saved (only the real NuVJ teaches segments)"
                 else:

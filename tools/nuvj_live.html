@@ -174,9 +174,13 @@
       map. Nothing lit? Step on. Auto steps every 1.2 s.</div>
     <div class="row">
       <button id="shGo">Start segment hunt</button><button data-sstep="-1">◀ bit</button><button data-sstep="1">bit ▶</button>
-      <button data-sstep="7">byte ▶</button><label><input type="checkbox" id="shAuto"> Auto step</label>
+      <button data-sstep="7">byte ▶</button><label><input type="checkbox" id="shAuto"> Auto step</label><label><input type="checkbox" id="shWhole"> Whole bytes</label>
       <button id="shStop">Stop</button><span id="shInfo" class="mono"></span>
     </div>
+    <div class="row"><span class="help">Something lit that is not in the drawing? Say what and where:</span>
+      <input type="text" id="shName" placeholder="e.g. small text bottom right" style="flex:1;min-width:200px">
+      <button id="shSave">Save what lit</button>
+      <button id="shAll" title="Every segment on, for a photo of the whole glass">All segments on</button></div>
     <div class="row"><label>LCD contrast (not stored) <input type="range" id="lcdC" min="0" max="99" value="50"></label>
       <span id="lcdCV" class="mono"></span>
       <button id="idBtn" title="F0 7E 7F 06 01 F7, from the MIDI standard; the NuVJ software sends it too">Ask the NuVJ who it is</button></div>
@@ -381,65 +385,118 @@ window.addEventListener("resize", fit);
 
 // ---------- LCD: the NuVJ's segment display (dot-matrix cells, 7-segment digits, bar, icons) ----------
 // Classic 5x7 font (the same public-domain shapes as tools/mk2_screens.py): 5 columns, bit 0 = top row.
-const FONT = {" ":"0000000000","!":"00005f0000","%":"2313086462","+":"08083e0808","-":"0808080808",".":"0060600000","/":"2010080402",
+const FONT = {" ":"0000000000","!":"00005f0000","*":"2a1c7f1c2a","#":"147f147f14","(":"001c224100",")":"0041221c00",",":"0050300000","=":"1414141414","%":"2313086462","+":"08083e0808","-":"0808080808",".":"0060600000","/":"2010080402",
   "0":"3e5149453e","1":"00427f4000","2":"4261514946","3":"2141454b31","4":"1814127f10","5":"2745454539","6":"3c4a494930","7":"0171090503",
   "8":"3649494936","9":"064949291e",":":"0036360000","<":"0814224100",">":"0041221408","?":"0201510906","A":"7e1111117e","B":"7f49494936",
   "C":"3e41414122","D":"7f4141221c","E":"7f49494941","F":"7f09090901","G":"3e4149497a","H":"7f0808087f","I":"00417f4100","J":"2040413f01",
   "K":"7f08142241","L":"7f40404040","M":"7f020c027f","N":"7f0408107f","O":"3e4141413e","P":"7f09090906","Q":"3e4151215e","R":"7f09192946",
   "S":"4649494931","T":"01017f0101","U":"3f4040403f","V":"1f2040201f","W":"3f4038403f","X":"6314081463","Y":"0708700807","Z":"6151494543","_":"4040404040"};
 const SEG7 = { "0": "abcdef", "1": "bc", "2": "abged", "3": "abgcd", "4": "fgbc", "5": "afgcd", "6": "afgedc", "7": "abc", "8": "abcdefg", "9": "abcdfg", "-": "g", " ": "" };
+// 16-segment cells (Himmel's own font). Segments: a1 a2 (top halves), b c (right), d1 d2 (bottom halves),
+// e f (left), g1 g2 (middle halves), h i j (upper diagonal-left, centre, diagonal-right), k l m (lower ones).
+const SEG16 = {
+  " ": "", "0": "a1 a2 b c d1 d2 e f j k", "1": "b c j", "2": "a1 a2 b g1 g2 e d1 d2", "3": "a1 a2 b g2 c d1 d2",
+  "4": "f g1 g2 b c", "5": "a1 a2 f g1 g2 c d1 d2", "6": "a1 a2 f e d1 d2 c g1 g2", "7": "a1 a2 b c", "8": "a1 a2 b c d1 d2 e f g1 g2",
+  "9": "a1 a2 b c d1 d2 f g1 g2", "A": "e f a1 a2 b c g1 g2", "B": "a1 a2 b c d1 d2 i l g2", "C": "a1 a2 f e d1 d2",
+  "D": "a1 a2 b c d1 d2 i l", "E": "a1 a2 f e d1 d2 g1", "F": "a1 a2 f e g1", "G": "a1 a2 f e d1 d2 c g2", "H": "f e b c g1 g2",
+  "I": "a1 a2 i l d1 d2", "J": "b c d1 d2 e", "K": "f e g1 j m", "L": "f e d1 d2", "M": "f e b c h j", "N": "f e b c h m",
+  "O": "a1 a2 b c d1 d2 e f", "P": "a1 a2 b f e g1 g2", "Q": "a1 a2 b c d1 d2 e f m", "R": "a1 a2 b f e g1 g2 m",
+  "S": "a1 a2 f g1 g2 c d1 d2", "T": "a1 a2 i l", "U": "f e d1 d2 c b", "V": "f e k j", "W": "f e b c k m", "X": "h j k m",
+  "Y": "h j l", "Z": "a1 a2 j k d1 d2", "-": "g1 g2", "+": "g1 g2 i l", "/": "j k", "*": "g1 g2 h i j k l m", ".": "d2",
+  "_": "d1 d2", "=": "g1 g2 d1 d2", "'": "i", ":": "i l", "%": "a1 f g1 i j k l g2 c d2", "?": "a1 a2 b g2 l", "#": "b c e f g1 g2 i l",
+};
+const SEG16_ALL = ["a1", "a2", "b", "c", "d1", "d2", "e", "f", "g1", "g2", "h", "i", "j", "k", "l", "m"];
+function seg16(g, x, y, w, h, segs, on, hits, prefix) {
+  const t = Math.max(0.9, w * 0.11), hh = h / 2, hw = w / 2, sk = w * 0.08;
+  const L = {   // each segment as a line (x0, y0, x1, y1), with a little italic skew
+    a1: [x + t, y, x + hw - t / 2, y], a2: [x + hw + t / 2, y, x + w - t, y],
+    b: [x + w, y + t, x + w - sk / 2, y + hh - t / 2], c: [x + w - sk / 2, y + hh + t / 2, x + w - sk, y + h - t],
+    d1: [x + t - sk, y + h, x + hw - t / 2 - sk, y + h], d2: [x + hw + t / 2 - sk, y + h, x + w - t - sk, y + h],
+    e: [x - sk / 2, y + hh + t / 2, x - sk, y + h - t], f: [x, y + t, x - sk / 2, y + hh - t / 2],
+    g1: [x + t - sk / 2, y + hh, x + hw - t / 2 - sk / 2, y + hh], g2: [x + hw + t / 2 - sk / 2, y + hh, x + w - t - sk / 2, y + hh],
+    h: [x + t * 1.2, y + t * 1.2, x + hw - t, y + hh - t], i: [x + hw, y + t, x + hw - sk / 2, y + hh - t / 2],
+    j: [x + w - t * 1.2, y + t * 1.2, x + hw + t, y + hh - t], k: [x + hw - t - sk / 2, y + hh + t, x + t * 1.2 - sk, y + h - t * 1.2],
+    l: [x + hw - sk / 2, y + hh + t / 2, x + hw - sk, y + h - t], m: [x + hw + t - sk / 2, y + hh + t, x + w - t * 1.2 - sk, y + h - t * 1.2],
+  };
+  g.lineWidth = t; g.lineCap = "round";
+  for (const k of SEG16_ALL) {
+    const [x0, y0, x1, y1] = L[k];
+    g.strokeStyle = on(segs.includes(k)); g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+    if (hits) hits.push({ key: prefix + k, x: Math.min(x0, x1) - t / 2, y: Math.min(y0, y1) - t / 2, w: Math.abs(x1 - x0) + t, h: Math.abs(y1 - y0) + t });
+  }
+}
 const LCD_BG = "#1f3fd0", LCD_ON = "#eef3ff", LCD_GHOST = "rgba(6, 10, 70, 0.20)";
+// The NuVJ's own glass (from the owner's photo with every segment on): words, an 8-character dot row, a
+// 2-digit PRESET number, a 3-digit number over "BPM", an 11-character 16-segment row, A/B/C/D boxes,
+// a "PRESS ENTER" box and two ramps (LAST, DATA). m = Himmel's LCD model: text, alpha, bpm, preset,
+// last, data (0..n) and lit (the ids of words and boxes that are on).
 function drawLcd(m, note) {
   const s = W && W.lcd; if (!s) return;
-  const g = s.ctx, [uw, uh] = s.units || [200, 108], k = g.canvas.width / uw;
+  const g = s.ctx, [uw, uh] = s.units || [200, 114], k = g.canvas.width / uw;
   const grad = g.createLinearGradient(0, 0, 0, g.canvas.height);
-  grad.addColorStop(0, "#2a4fe6"); grad.addColorStop(1, "#1532b8");
+  grad.addColorStop(0, "#2a5cf0"); grad.addColorStop(1, "#1638c4");
   g.fillStyle = grad; g.fillRect(0, 0, g.canvas.width, g.canvas.height);
   g.save(); g.scale(k, k);
   const on = b => b ? LCD_ON : LCD_GHOST;
+  const lit = new Set(m.lit || []);
   const hits = s.hits = [];            // clickable parts (LCD units) for the segment hunt
+  g.textBaseline = "middle"; g.textAlign = "center";
   for (const e of s.elements || []) {
-    if (e.kind === "dots") {           // a row of 5x7 dot-matrix cells
+    if (e.kind === "dots") {           // a row of 5x7 dot-matrix cells (command 01)
       const t = (m.text || "").padEnd(e.cells).slice(0, e.cells);
       hits.push({ key: "text", x: e.x, y: e.y, w: e.cells * e.cw, h: e.ch });
-      const dw = e.cw / 6, dh = e.ch / 8;
+      const dw = e.cw * 0.8 / 5, dh = e.ch / 7;
       for (let i = 0; i < e.cells; i++) {
         const cols = FONT[t[i]] || FONT[t[i].toUpperCase()] || FONT["?"];
         for (let cx = 0; cx < 5; cx++) {
           const bits = parseInt(cols.substr(cx * 2, 2), 16);
           for (let cy = 0; cy < 7; cy++) {
-            g.fillStyle = on(bits >> cy & 1);
-            g.fillRect(e.x + i * e.cw + cx * dw, e.y + cy * dh, dw * 0.82, dh * 0.82);
+            g.fillStyle = (bits >> cy & 1) ? "#ffd7ef" : "rgba(255, 120, 190, 0.16)";   // the dots are pinkish on the glass
+            g.fillRect(e.x + i * e.cw + cx * dw, e.y + cy * dh, dw * 0.78, dh * 0.78);
           }
         }
       }
-    } else if (e.kind === "digits") {  // 7-segment digits
-      const t = (m[e.id] || "").padStart(e.n).slice(-e.n), lit = (m[e.id] || "") !== "";
-      for (let i = 0; i < e.n; i++) seg7(g, e.x + i * (e.w + 4), e.y, e.w, e.h, lit ? SEG7[t[i]] ?? "" : "", on, hits, `${e.id}.${i}.`);
-    } else if (e.kind === "bar") {     // a bar graph of n blocks
-      const n = m.bar ?? -1, bw = e.w / e.n;
+    } else if (e.kind === "digits") {  // 7-segment digits; "half_first" = the first digit is only a "1"
+      const v = m[e.id] == null ? "" : String(m[e.id]), t = v.padStart(e.n).slice(-e.n);
       for (let i = 0; i < e.n; i++) {
-        const y0 = e.y + (e.h * 0.35) * (1 - i / e.n);
-        g.fillStyle = on(i < n); g.fillRect(e.x + i * bw, y0, bw * 0.78, e.y + e.h - y0);
-        hits.push({ key: `bar.${i}`, x: e.x + i * bw, y: y0, w: bw * 0.78, h: e.y + e.h - y0 });
+        const segs = v === "" ? "" : SEG7[t[i]] ?? "";
+        if (e.half_first && i === 0) seg7(g, e.x - e.w * 0.55, e.y, e.w, e.h, segs.includes("b") ? "bc" : "", on, hits, `${e.id}.${i}.`, "bc");
+        else seg7(g, e.x + i * (e.w + 3) - (e.half_first ? e.w * 0.45 : 0), e.y, e.w, e.h, segs, on, hits, `${e.id}.${i}.`);
       }
-    } else if (e.kind === "icon") {
+    } else if (e.kind === "seg16") {   // 16-segment character cells
+      const t = String(m[e.id] || "").toUpperCase().padEnd(e.cells).slice(0, e.cells);
+      for (let i = 0; i < e.cells; i++) seg16(g, e.x + i * e.cw, e.y, e.cw * 0.78, e.ch, (SEG16[t[i]] ?? SEG16["?"]).split(" "), on, hits, `${e.id}.${i}.`);
+    } else if (e.kind === "ramp") {    // a rising wedge of n steps
+      const n = m[e.id] ?? -1;
+      for (let i = 0; i < e.n; i++) {
+        const sw = e.w / e.n, sh = e.h * (0.25 + 0.75 * (i + 1) / e.n);
+        g.fillStyle = on(i < n); g.fillRect(e.x + i * sw, e.y + e.h - sh, sw * 0.62, sh);
+        hits.push({ key: `${e.id}.${i}`, x: e.x + i * sw, y: e.y + e.h - sh, w: sw * 0.62, h: sh });
+      }
+    } else if (e.kind === "box") {     // a box with dark text (lit = the box is on)
+      const b = lit.has(e.id);
+      g.fillStyle = on(b); g.fillRect(e.x, e.y, e.w, e.h);
+      g.fillStyle = b ? "#1638c4" : "rgba(6, 10, 70, 0.25)"; g.font = `bold ${e.h > 12 ? 5.5 : 7.5}px Segoe UI, sans-serif`;
+      const lines = e.text.split("\n");
+      lines.forEach((ln, i) => g.fillText(ln, e.x + e.w / 2, e.y + e.h * (i + 1) / (lines.length + 1)));
       hits.push({ key: e.id, x: e.x, y: e.y, w: e.w, h: e.h });
-      g.fillStyle = on((m.icons || {})[e.id]);
-      if (e.shape === "tri") { g.beginPath(); g.moveTo(e.x, e.y); g.lineTo(e.x + e.w, e.y); g.lineTo(e.x + e.w / 2, e.y + e.h); g.closePath(); g.fill(); }
-      else if (e.shape === "square") { g.fillRect(e.x, e.y, e.w, e.h); }
-      else { g.fillRect(e.x, e.y, e.w, e.h); g.fillStyle = on(false); g.fillRect(e.x + 3, e.y + 3, e.w - 6, e.h - 6); g.fillStyle = on((m.icons || {})[e.id]); g.fillRect(e.x + 5, e.y + 5, e.w - 10, e.h - 10); }
-    } else if (e.kind === "label") {   // small printed-style segment words; lit when their element is in use
-      const base = e.id.replace(/_label$/, ""), lit = base in (m.icons || {}) ? m.icons[base] : base === "bar" ? (m.bar ?? null) !== null : (m[base] || "") !== "";
-      g.fillStyle = lit ? "#c9d6ff" : LCD_GHOST; g.font = "bold 7px Segoe UI, sans-serif"; g.textAlign = "center"; g.fillText(e.text, e.x, e.y);
+    } else if (e.kind === "rule") {
+      g.fillStyle = on(lit.has(e.id)); g.fillRect(e.x, e.y, e.w, 1.2);
+      hits.push({ key: e.id, x: e.x, y: e.y - 1, w: e.w, h: 3 });
+    } else if (e.kind === "label") {   // a printed-style word that is itself a segment
+      const b = lit.has(e.id);
+      g.font = `600 ${e.size || 6}px Segoe UI, sans-serif`;
       const tw = g.measureText(e.text).width;
-      hits.push({ key: e.id, x: e.x - tw / 2, y: e.y - 7, w: tw, h: 8 });
+      if (e.inv) { g.fillStyle = on(b); g.fillRect(e.x - tw / 2 - 2, e.y - 3.5, tw + 4, 7); g.fillStyle = b ? "#1638c4" : "rgba(6, 10, 70, 0.3)"; }
+      else g.fillStyle = on(b);
+      g.fillText(e.text, e.x, e.y);
+      hits.push({ key: e.id, x: e.x - tw / 2 - 1, y: e.y - 4, w: tw + 2, h: 8 });
     }
   }
   g.restore();
   s.ctx.canvas.title = note;
 }
-function seg7(g, x, y, w, h, segs, on, hits, prefix) {
+function seg7(g, x, y, w, h, segs, on, hits, prefix, only) {
   const t = Math.max(1.6, w * 0.2), hh = h / 2, sk = w * 0.12;   // stroke, half height, italic skew
   const S = {
     a: [[x + t * 0.6 + sk, y], [x + w - t * 0.6 + sk, y], [x + w - t * 1.4 + sk, y + t], [x + t * 1.4 + sk, y + t]],
@@ -451,6 +508,7 @@ function seg7(g, x, y, w, h, segs, on, hits, prefix) {
     c: [[x + w - t + sk / 2, y + hh + t * 0.6], [x + w + sk / 2, y + hh + t * 0.2], [x + w, y + h - t * 0.6], [x + w - t, y + h - t * 1.4]],
   };
   for (const [k, pts] of Object.entries(S)) {
+    if (only && !only.includes(k)) continue;
     g.fillStyle = on(segs.includes(k)); g.beginPath(); pts.forEach(([px_, py], i) => i ? g.lineTo(px_, py) : g.moveTo(px_, py)); g.closePath(); g.fill();
     if (hits) {
       const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
@@ -509,8 +567,15 @@ function render(s) {
       c.el.firstChild.style.left = px(2 + 18 * (v || 0));
     }
   }
-  const lw0 = s.lcd_wire || {}, wired = Object.assign({}, s.lcd || {});   // text and number as really sent
-  if (lw0.inited) { wired.text = lw0.text; if (lw0.number && !lw0.number.includes("?")) wired.big = lw0.number.trim() ? lw0.number : ""; }
+  const lw0 = s.lcd_wire || {}; let wired = Object.assign({}, s.lcd || {});   // text and number as really sent
+  if (lw0.inited) wired.text = lw0.text;
+  if (s.hardware) {   // on the real NuVJ, draw only what the glass can show: the text and learned segments
+    const learned = Object.keys(s.lcd_segments || {});
+    const has = p => learned.some(k => k === p || k.startsWith(p + "."));
+    for (const id of ["alpha", "bpm", "preset", "last", "data"]) if (!has(id)) wired[id] = id === "last" || id === "data" ? null : "";
+    wired.lit = (wired.lit || []).filter(has);
+  }
+  if (s.seg_hunt) wired = { text: wired.text };   // the hunt: only its text row
   drawLcd(wired, s.hardware ? "drawing: what Himmel would write (device LCD protocol unknown)" : "simulated: what Himmel would write");
   // host card
   const h = s.host;
@@ -544,7 +609,8 @@ function render(s) {
   $("driveBtn").classList.toggle("hwon", !!s.drive); $("driveBtn").disabled = !s.hardware;
   const sh = s.seg_hunt;
   if (W && W.lcd && W.lcd.el) W.lcd.el.classList.toggle("hunting", !!sh);
-  $("shInfo").textContent = sh ? `lighting byte ${sh.byte} bit ${sh.bit}${sh.auto ? " (auto)" : ""} - click what lit on the LCD drawing` : "";
+  $("shInfo").textContent = sh ? `lighting byte ${sh.byte} ${sh.whole ? "(all 7 bits)" : "bit " + sh.bit}${sh.auto ? " (auto)" : ""} - click what lit on the LCD drawing` +
+    (s.lcd_bytes_lit && s.lcd_bytes_lit.length ? `; bytes that lit something: ${s.lcd_bytes_lit.join(", ")}` : "") : "";
   if (sh && !$("shAuto").matches(":focus")) $("shAuto").checked = sh.auto;
   const lw = s.lcd_wire || {};
   $("lcdModel").textContent = `Himmel's LCD model: ${JSON.stringify(s.lcd)}\nsent to the glass: text "${lw.text ?? ""}", number ${lw.number ?? "-"}` +
@@ -590,8 +656,11 @@ $("verifyBtn").onclick = () => post({ verify: true });
 $("resetSeen").onclick = () => { if (confirm("Clear all 'seen' marks?")) post({ reset_seen: true }); };
 $("noise").onchange = e => post({ show_noise: e.target.checked });
 $("ledsOk").onclick = () => post({ leds_ok: true });
-$("shGo").onclick = () => post({ seg_hunt: { byte: 0, bit: 0, auto: $("shAuto").checked } });
+$("shGo").onclick = () => post({ seg_hunt: { byte: 0, bit: 0, auto: $("shAuto").checked, whole: $("shWhole").checked } });
+$("shWhole").onchange = e => { if (S && S.seg_hunt) post({ seg_hunt: { whole: e.target.checked } }); };
 $("shStop").onclick = () => post({ seg_hunt: null });
+$("shSave").onclick = () => { const t = $("shName").value.trim(); if (t) { post({ seg_assign: "custom:" + t }); $("shName").value = ""; } };
+$("shAll").onclick = () => post({ seg_hunt: { all: true, auto: false } });
 $("shAuto").onchange = e => { if (S && S.seg_hunt) post({ seg_hunt: { auto: e.target.checked } }); };
 document.querySelectorAll("[data-sstep]").forEach(b => b.onclick = () => post({ seg_hunt: { step: +b.dataset.sstep, auto: false } }));
 $("lcdC").oninput = () => { $("lcdCV").textContent = $("lcdC").value; post({ contrast: +$("lcdC").value }); };
