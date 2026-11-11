@@ -675,6 +675,7 @@ class HwNuVJ(DeviceBase):
 # The host: Himmel's side. Events -> a small VJ state -> LEDs (+ LCD text in the sim)
 # ---------------------------------------------------------------------------
 import vj_classic                      # the classic two-deck show model (tools/vj_classic.py)
+import nuvj_games                      # Jog Pong, a game on the NuVJ's own LCD (tools/nuvj_games.py)
 
 FX_NAMES = tuple(e["name"].upper() for e in vj_classic.EFFECTS)   # Himmel's effect set, as on the LCD
 TOGGLES = ("A Latch", "B Latch", "A Auto", "B Auto", "A Sync", "B Sync", "Master FX", "Insta Black")
@@ -697,6 +698,7 @@ class NuvjHost:
         self.t0 = time.time()
         self.flash = None          # (until, text, bar 0..1 or None): a value shown for a moment
         self.seg_hunt = None       # segment hunt: {"byte", "bit", "auto", "t"} lights one LCD segment bit
+        self.game = None           # a game on the NuVJ (nuvj_games), or None
         self.contrast = None       # a contrast value (0..99) to send once (not stored in the controller)
 
     # ---- the LCD: Himmel's page for the NuVJ's segment display ----
@@ -708,6 +710,8 @@ class NuvjHost:
         The glass (owner's photo): text = 8 dot-matrix characters (cmd 01); alpha = 11 16-segment
         characters; bpm = 3 digits ("188") over the word BPM; preset = 2 digits under PRESET (Himmel: the
         deck's bank); last / data = two ramps of 8 steps; lit = words and boxes that are on."""
+        if self.game is not None:
+            return self.game.lcd()
         st, now = self.state, time.time()
         f = st["focus"]
         if self.flash and now < self.flash[0]:
@@ -838,6 +842,8 @@ class NuvjHost:
     # ---- LEDs and LCD out: feedback SysEx ----
     def wanted(self, held):
         """The controls whose LED should be on now."""
+        if self.game is not None:
+            return self.game.leds(held)
         st = self.state
         names = sorted(LED_BITS)
         t = time.time() - self.t0
@@ -910,6 +916,8 @@ class NuvjHost:
             self.sent.clear()
             return
         now = time.time()
+        if self.game is not None:
+            self.game.tick()
         if not dev.inited:
             dev.receive(feedback(CMD_INIT, INIT_DATA))
             self.sent.clear()
@@ -1046,6 +1054,14 @@ class NuvjLive:
                     e["seen"] = True
                     self._save_soon()
             self.last = ([name] + [x for x in self.last if x != name])[:6]
+            if k == "down" and name.endswith("Scratch") and {"A Scratch", "B Scratch"} <= self.held:
+                self.host.game = None if self.host.game else nuvj_games.JogPong()   # both SCRATCH: game on / off
+                return
+            if self.host.game is not None:            # the game has the controller
+                self.host.events.append((time.strftime("%H:%M:%S"), name, ev))
+                del self.host.events[:-60]
+                self.host.game.on_event(name, ev)
+                return
             self.host.on_event(name, ev)
             self.show.on_event(name, ev, bpm=self.host.state["bpm"])
             self._sync_host()
@@ -1181,6 +1197,7 @@ class NuvjLive:
                              "contrast": dev.contrast, "inited": dev.inited},
                 "seg_hunt": self.host.seg_hunt,
                 "drive": self.drive,
+                "game": self.host.game.name if self.host.game else None,
                 "lcd_segments": {k: seg_bits(v) for k, v in (self.m.get("lcd_segments") or {}).items()},
                 "lcd_bytes_lit": list(self.m.get("lcd_bytes_lit") or []),
                 "lcd_manual": list(self.m.get("lcd_manual") or []),
@@ -1257,6 +1274,10 @@ class NuvjLive:
         with self.lock:
             if "sim_input" in d:
                 self.sim_input(d["sim_input"])
+            elif "game" in d:          # start / stop a game on the NuVJ
+                g = d["game"]
+                self.host.seg_hunt = None
+                self.host.game = nuvj_games.GAMES[g]() if g in nuvj_games.GAMES else None
             elif "drive" in d:         # the real NuVJ: start / stop sending feedback
                 self.drive = bool(d["drive"])
                 self.host.sent.clear()

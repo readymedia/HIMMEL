@@ -1,7 +1,7 @@
 {
  "format": "himmel-map/1",
  "weapon": "nuvj",
- "verified": "2026-11-11",
+ "verified": false,
  "source": "starting table from a public forum post (unverified); entries change when learned on hardware",
  "controls": {
   "A Bank": {
@@ -110,7 +110,7 @@
    "num": 17,
    "enc": "rel",
    "cw": "neg",
-   "learned": false,
+   "learned": true,
    "seen": true
   },
   "B Jog": {

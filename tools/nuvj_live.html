@@ -200,6 +200,9 @@
       deck, BPM Tap blinking on the beat. <b>Follow</b>: a LED lights while you hold its button. LEDs and LCD are sent
       as the NuVJ's own feedback SysEx (<code>F0 00 01 3F 7F 20 …</code>, read from the NuVJ 1.0 software); the drawing
       shows what the device was sent.</div>
+    <div class="row"><button id="gameBtn" title="A three-lane pong on the NuVJ's own LCD, played with the jog wheels">★ Jog Pong</button>
+      <span class="help">Easter egg: turn the jogs to move your paddle, push BANK (or SCRATCH) to serve, first to 5.
+        An idle side is played by Himmel. On the NuVJ: hold both SCRATCH buttons to start or stop.</span></div>
     <div id="hostInfo" class="mono"></div>
   </div>
   <div class="card full" id="hwCard">
@@ -694,6 +697,8 @@ function render(s) {
   }
   $("learnMsg").textContent = s.learn_msg || "";
   $("lcdModel").textContent = "LCD model now: " + JSON.stringify(s.lcd);
+  $("gameBtn").textContent = s.game ? "■ Stop " + s.game : "★ Jog Pong";
+  $("gameBtn").classList.toggle("on", !!s.game);
   $("idBtn").disabled = !s.hardware;
   $("driveBtn").textContent = s.drive ? "■ Stop: listen only" : "Let Himmel drive the LEDs and LCD";
   $("driveBtn").classList.toggle("hwon", !!s.drive); $("driveBtn").disabled = !s.hardware;
@@ -776,6 +781,7 @@ $("shAuto").onchange = e => { if (S && S.seg_hunt) post({ seg_hunt: { auto: e.ta
 document.querySelectorAll("[data-sstep]").forEach(b => b.onclick = () => post({ seg_hunt: { step: +b.dataset.sstep, auto: false } }));
 $("lcdC").oninput = () => { $("lcdCV").textContent = $("lcdC").value; post({ contrast: +$("lcdC").value }); };
 $("idBtn").onclick = () => post({ identity: true });
+$("gameBtn").onclick = () => post({ game: S && S.game ? null : "pong" });
 $("hOpen").onclick = () => post({ seg_hunt: { byte: 0, bit: 0, auto: false, whole: $("hWhole").checked } });
 $("hClose").onclick = () => post({ seg_hunt: null });
 $("hNext").onclick = () => post({ seg_hunt: { step: S && S.seg_hunt && S.seg_hunt.whole ? 7 : 1, auto: false } });
