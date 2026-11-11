@@ -196,6 +196,8 @@ The details are in the mockup (`docs/vj-mockup.html`).
     in Himmel's own look: no logos or art, and nothing so close that it could cause trouble.
     The GUI and the controller play the same model. 2D placeholder previews stand in until the
     engine renders it.
+    **Jog Pong** (easter egg, `tools/nuvj_games.py`, played by the owner 2026-11-11): a three-lane
+    pong on the NuVJ's LCD, played with the jogs; hold both SCRATCH buttons to start or stop.
 - **Visual mapping is the way to work with the controller. Keep it and build on
   it** (the owner wants graphical tools, not terminal tables):
   - `tools/mk2_live.py` + `tools/mk2_live.html`: a browser live view of the MK2

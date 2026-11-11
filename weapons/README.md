@@ -593,6 +593,28 @@ profile.
   The browser pane in the Claude app cannot use the camera, so the mapper
   runs in Chrome.
 
+### Jog Pong (easter egg, played on the owner's NuVJ 2026-11-11)
+
+`tools/nuvj_games.py` is a three-lane pong on the NuVJ's own LCD. It shows
+that Himmel drives every part of the controller.
+
+- **The field** is the 11 16-segment characters. The ball is a bar in the
+  top, middle or bottom lane. The paddles are brackets in the end characters.
+- **The jogs.** The left jog moves A and the right jog moves B (clockwise =
+  down). Spinning as you hit puts an angle on the ball.
+- **Serve.** Push your BANK knob or press SCRATCH; PRESS ENTER blinks for the
+  server.
+- **Score.** A shows in "188" and B under PRESET. First to 5 wins.
+- **The rest of the controller.**
+  - The dot-matrix row shows the messages.
+  - The wedges show the ball speed and the rally.
+  - The pads flash on hits.
+  - The A / B box and the INSTA LED show who serves.
+- **Playing alone.** A side whose jog is idle for 5 s is played by Himmel.
+- **Start / stop.** Hold both SCRATCH buttons, or press **★ Jog Pong** in the
+  live view.
+- **Without hardware.** `python tools/nuvj_games.py` runs a self-test.
+
 ## Plan: how a generic weapon feeds Himmel (not wired yet)
 
 Today `mk2_controller.exe` owns `Local\HimmelMk2`:
