@@ -166,7 +166,8 @@
     <ol class="hsteps">
       <li>Point a webcam straight at the NuVJ's screen (close, sharp, no glare), pick it and press <b>Camera on</b>.</li>
       <li>Click the <b>4 corners of the blue glass</b> in the camera picture: top-left, top-right, bottom-right,
-        bottom-left. Green outlines should then sit on the real segments.</li>
+        bottom-left. Green outlines should then sit on the real segments. Not quite? <b>Drag the orange corners</b>
+        until they do (Alt + arrow keys nudge the last one by a pixel).</li>
       <li>Press <b>Auto-map</b> and leave it (about 4-5 minutes). The NuVJ's text row stays blank meanwhile.</li>
     </ol>
     <div class="row"><select id="camSel" style="max-width:220px"></select><button id="camList" title="Look for cameras again (e.g. after starting OBS Virtual Camera)">↻</button><button id="camStart">Camera on</button>
@@ -871,12 +872,43 @@ function camCalibrated() {
     (pxPerUnit < 2.5 ? " - too few: zoom in or move the camera closer (aim for 3 or more)" : " - good") +
     ". The outlines should sit on the real segments. Then press Auto-map. Bits you learned by hand are kept.";
 }
-$("camOv").addEventListener("click", e => {
+// Click to place the 4 corners; afterwards drag any corner (the outlines follow) to make them fit.
+let camDrag = -1;
+function camHomOnly() {         // quick: only the two homographies (for the outlines while dragging)
+  const [uw, uh] = W.lcd.units || [200, 112], L = [[0, 0], [uw, 0], [uw, uh], [0, uh]];
+  CAM.Hc2l = homography(CAM.corners, L); CAM.Hl2c = homography(L, CAM.corners);
+}
+$("camOv").addEventListener("pointerdown", e => {
   if (!CAM.stream || CAM.running) return;
-  if (CAM.corners.length >= 4) CAM.corners = [];
-  CAM.corners.push(vidPoint(e));
+  const p = vidPoint(e), v = $("camVid"), r = $("camOv").getBoundingClientRect(), near = 28 * v.videoWidth / r.width;
+  if (CAM.corners.length === 4) {
+    let best = -1, bd = near;
+    CAM.corners.forEach((c, i) => { const d = Math.hypot(c[0] - p[0], c[1] - p[1]); if (d < bd) { bd = d; best = i; } });
+    if (best >= 0) { camDrag = best; CAM.nudge = best; $("camOv").setPointerCapture(e.pointerId); }
+    return;
+  }
+  CAM.corners.push(p);
   if (CAM.corners.length === 4) camCalibrated();
   else $("camInfo").textContent = `corner ${CAM.corners.length} of 4 set - next: ${["top-left", "top-right", "bottom-right", "bottom-left"][CAM.corners.length]}`;
+});
+$("camOv").addEventListener("pointermove", e => {
+  if (camDrag < 0) {            // show a move cursor over a corner
+    if (CAM.corners.length === 4) {
+      const p = vidPoint(e), v = $("camVid"), r = $("camOv").getBoundingClientRect(), near = 28 * v.videoWidth / r.width;
+      $("camOv").style.cursor = CAM.corners.some(c => Math.hypot(c[0] - p[0], c[1] - p[1]) < near) ? "move" : "crosshair";
+    }
+    return;
+  }
+  CAM.corners[camDrag] = vidPoint(e);
+  camHomOnly();
+});
+$("camOv").addEventListener("pointerup", () => { if (camDrag >= 0) { camDrag = -1; camCalibrated(); } });
+document.addEventListener("keydown", e => {   // arrow keys nudge the last dragged corner by one camera pixel
+  if (!CAM.Hc2l || CAM.running || CAM.nudge === undefined || document.activeElement.tagName === "INPUT") return;
+  const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+  if (!d || !e.altKey) return;
+  e.preventDefault();
+  const c = CAM.corners[CAM.nudge]; c[0] += d[0]; c[1] += d[1]; camCalibrated();
 });
 const grabCv = document.createElement("canvas"); grabCv.width = GW; grabCv.height = GH;
 const grabG = grabCv.getContext("2d", { willReadFrequently: true });
@@ -959,7 +991,12 @@ function camOverlay() {         // the camera picture: the drawn LCD's parts pro
   if (ov.width !== v.videoWidth) { ov.width = v.videoWidth; ov.height = v.videoHeight; }
   const g = ov.getContext("2d"); g.clearRect(0, 0, ov.width, ov.height);
   g.lineWidth = 2;
-  for (const [i, c] of CAM.corners.entries()) { g.fillStyle = "#ff9d2e"; g.beginPath(); g.arc(c[0], c[1], 7, 0, 7); g.fill(); g.fillText(String(i + 1), c[0] + 9, c[1] - 9); }
+  const cr = Math.max(7, ov.width / 120);
+  for (const [i, c] of CAM.corners.entries()) {
+    g.fillStyle = i === CAM.nudge ? "#ffd27f" : "#ff9d2e"; g.beginPath(); g.arc(c[0], c[1], cr, 0, 7); g.fill();
+    g.strokeStyle = "#000"; g.lineWidth = 2; g.beginPath(); g.moveTo(c[0] - cr * 1.6, c[1]); g.lineTo(c[0] + cr * 1.6, c[1]); g.moveTo(c[0], c[1] - cr * 1.6); g.lineTo(c[0], c[1] + cr * 1.6); g.stroke();
+    g.font = `${cr * 2}px Segoe UI`; g.fillStyle = "#ff9d2e"; g.fillText(String(i + 1), c[0] + cr * 1.4, c[1] - cr * 1.4);
+  }
   if (!CAM.Hl2c) return;
   const lastKeys = new Set(CAM.last ? CAM.last.keys : []);
   for (const h of (W.lcd.hits || [])) {
