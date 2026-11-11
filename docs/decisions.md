@@ -16,6 +16,13 @@ Status values:
 
 | # | Decision | Status | Details |
 |---|---|---|---|
+| D61 | **Every clip is an instrument:** full clip transport (direction; LOOP, PING-PONG, ONCE hold / eject / next, RANDOM, CHOP, STEP, SCRATCH; in / out + inner loop; 16 cue points; beat loop with catch-up; FREE / BPM / TIMECODE time base) | DECIDED (owner asked for it); the details are PROPOSED | `design/clips-and-playback.md` §2 |
+| D62 | **Trigger styles** NORMAL / TOGGLE / PIANO / LEGATO, restart / continue, fade in / out per clip, beat snap only on PROGRAM, clip target own / free, HIT layer, autopilot per layer | PROPOSED | `design/clips-and-playback.md` §3 |
+| D63 | **Effect levels** clip / layer / deck / master / output, and **parameter scopes** SLOT / LOOK / GLOBAL / MOVE; clip variants A–D; all edits tried on PREVIEW first | DECIDED (owner: per clip, global or per scene); the model is PROPOSED | `design/clips-and-playback.md` §4 |
+| D64 | **MK2 pads as an instrument:** pads follow the selected group (PREVIEW / PROGRAM); **PRESS** = velocity starts and pressure moves one target per clip / effect (a strobe gets faster and brighter the harder you press); **SLICE** mode = `PATTERN` twice; `SOLO` + pad = HIT on PROGRAM; FX-pad latch and velocity variation | DECIDED (owner: pressure drives effects on preview and live); the mapping is PROPOSED | `design/clips-and-playback.md` §8, `design/hardware-mapping.md` §3.4 |
+| D65 | **Photosensitivity cap** on strobe / flash PRESS ranges (`GUESS:` 3 full flashes / s by default, a show setting) | PROPOSED | `design/clips-and-playback.md` §8.2 |
+| D66 | **Clip audio** ignored by default; optional playback later for installations | PROPOSED | `design/clips-and-playback.md` §7 |
+| D67 | **Live sampler** (`REC` held + empty pad): N beats of a camera / input / PROGRAM into a looping clip, in GPU memory, saved as HAP in the background | PROPOSED | `design/clips-and-playback.md` §6 |
 | D54 | **One canvas over the outputs** (Modul8 style). Screens butt; projectors overlap by the blend, and the canvas width follows. **The GUI monitors take the canvas shape** (1 output: 16:9 side by side; 2–3: full-width PREVIEW and PROGRAM strips with output lines and hatched blend zones) | DECIDED (owner); the details are PROPOSED | `design/gui.md` §4.2, §12 |
 | D55 | **Outputs step: Screens or Projectors first**; screens need no mapping; then 1 / 2 / 3 side by side, then the blend overlap with a live canvas size | DECIDED (owner) | `design/gui.md` §3 |
 | D56 | **Layer places that snap:** FILL ALL (zoom + crop), OUT 1–3, FIT, REPEAT, FREE; LAYER page knob 1 = PLACE | PROPOSED | `design/gui.md` §12 |

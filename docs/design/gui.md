@@ -543,5 +543,59 @@ Reached from step 3, or OUTPUTS › Mapping. **Screens skip this entirely.**
 Perform · MAIN = MK2 also has a **CANVAS 1 / 2 / 3 screens / 3 projectors
 blend** switch in its status strip, which shows how the monitors adapt.
 
+12. Clip editor and pads: the transport strip (in / out, cue points,
+    slices, play modes), effect levels with scope badges, and the MK2 pads in
+    SLICE mode with pressure shown (interactive).
+
 **v2** (still valid for these): wizard 1 Add clips,
 Library, Shuffle close-up, the MK2 screen pages, the VJ table.
+
+## 16. The clip editor (transport, loops, effect levels)
+
+Spec: [`clips-and-playback.md`](clips-and-playback.md). The editor is a
+**drawer under the monitors** that opens when a layer is selected and the
+CLIP knob page is shown (or on double-click on a clip pad). It edits the
+clip **on the selected layer**: on PREVIEW by default, on PROGRAM only in
+LIVE EDIT (the drawer then has the red bar). It never covers the monitors.
+
+**Row 1: the timeline.**
+- A filmstrip of the clip (thumbnails every few seconds) with the waveform-like
+  **motion curve** from import analysis under it.
+- **In / out brackets** (drag; `SHIFT` + drag the range = move it). The beat
+  grid is drawn when BPM sync is on; brackets snap to beats and to analysed
+  cuts.
+- An optional **inner loop** pair (thinner brackets).
+- **Cue markers 1–16**, numbered and coloured like the pad they sit on.
+  When there are none, the 16 equal slices are drawn faintly.
+- The **playhead** (white). In catch-up modes a faint ghost playhead shows
+  where the clip would be.
+
+**Row 2: the transport chips** (each is one click, and each has its MK2 knob
+on the CLIP page):
+- Direction `◀ ‖ ▶`.
+- Mode: LOOP · PING-PONG · ONCE (hold / eject / next) · RANDOM · CHOP · STEP
+  · SCRATCH. Mode options appear next to it (interval, distance, slices).
+- Time base: FREE ×speed · BPM *n* beats · TIMECODE.
+- Trigger: NORMAL · TOGGLE · PIANO · LEGATO; start RESTART / CONTINUE; fade
+  in / out times; beat snap; target OWN / FREE.
+- Autopilot: off · NEXT · RANDOM · PREV after *n* loops.
+
+**Row 3: the clip's effects and PRESS.**
+- The 4 clip-level FX slots as small tiles, each with its **level tag**
+  (CLIP / LAYER / DECK / MASTER / OUTPUT appear in the same style elsewhere).
+- Parameter **scope badges**: none = this slot, `L` = per look, `G` = global,
+  `~` = moving (LFO / REACT). Right-click to change.
+- **PRESS:** which parameter the pads, Block Z and LUMI pressure push, with
+  its range drawn as a bar that fills live while a pad is held.
+- **Variants A B C D** as four small swatches; click = switch, the dice icon
+  = dice this clip only, `REC` icon = save as the current variant.
+
+**Pads in the GUI follow the mode.** In SLICE mode the 4 × 4 clip grid turns
+into the 16 slices of the clip (a thumbnail of each slice start), with the
+playhead square lit white, the in / out range in the clip's colour, and a
+**pressure ring** around any held pad.
+
+**Test it on PREVIEW:** the drawer has **TRY** (copy the PROGRAM layer to
+PREVIEW and open it here), **A / B** (hold: show the state before this edit),
+and **AUDITION** in the library (the hovered clip plays in PREVIEW with
+variant A, nothing is loaded).

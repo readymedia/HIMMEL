@@ -69,6 +69,11 @@ watch / drop
 | **Type** | Optional local image model (ONNX, a CLIP-style zero-shot) over a set of words | abstract, nature, water, city, people, dance, text, particles, geometry, fire, space, retro, … | Type filters, the mood clip filter |
 | **Similarity fingerprint** | An embedding vector from the same model, or a colour + motion histogram if there is no model | Vector | "Find similar" |
 | **Loop quality** | SSIM between the last and first frames | 0–1, plus a "needs crossfade" flag | Seamless loops |
+| **Best loop points** | Search for the in / out pair with the most similar frames (SSIM on a proxy) within ±10 % of the clip ends; propose in / out | Two frame numbers + a score | Default in / out; "loopable" vs "ping-pong" vs "one-shot" |
+| **Loop style** | From loop quality + the best loop score + motion direction | loopable / ping-pong / one-shot | Default play mode (`clips-and-playback.md` §2.2) |
+| **Slices** | The cuts found by shot detection; if fewer than 4, equal 16ths | Up to 16 frame numbers | SLICE mode on the pads |
+| **Natural beats** | Periodicity of the motion curve (autocorrelation) → the most likely length in beats at 120 BPM | 1–64 beats | BPM time base, speed default |
+| **Motion curve** | Motion amount per frame, stored as a small array | 1 value / frame | The clip editor timeline, CHOP slice choice |
 | **Bars** | Duration at the show BPM | 1, 2, 4, 8, … or "free" | Beat-synced playback, rolls |
 | **Flicker warning** | Flash and red-flash frequency check against photosensitivity guidelines (3 flashes / s) | ok / warn / bad | Safe mode excludes it; a GUI badge |
 | **Tracking** *(optional)* | Pose / person segmentation once, stored as a low-res sidecar per frame | Masks, keypoints | Tracking effects at zero live cost (`engine.md` §6) |

@@ -15,6 +15,7 @@ Nothing yet: this file was created with the v2 plan.
 2. The generic weapon block `Local\HimmelWeapon<N>` + touch events (plan in `weapons/README.md`).
 3. `weapon_blocks.exe` (Lightpad in C++), with modes TOUCH/MIX/SCENES/MOOD.
 4. The `roles` section in the profiles; the Perform mapping of `docs/design/hardware-mapping.md` in the engine's input layer.
+- Phase 1c (MK2): SLICE mode (`PATTERN` twice), PRESS (velocity start, aftertouch move, release; per-pad dead zone first), `SOLO` + pad = HIT, `SHIFT` + pad = load + TAKE, FX-pad latch + velocity variation, CLIP knob page + timeline on the left screen, `SELECT` + wheel = scratch. Block SCRUB mode, LUMI SLICE KEYS. Spec: `docs/design/clips-and-playback.md` §8, `docs/design/hardware-mapping.md` §3.4.
 
 ## GUESSES
 - None recorded yet.

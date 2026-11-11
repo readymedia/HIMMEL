@@ -56,8 +56,8 @@ and without one dropped frame in an 8-hour soak.
 |---|---|---|---|---|---|---|---|---|---|
 | 46 (now) | **P0 merge**, interfaces | P1 design | — | — | — | P0 merge help | — | mockups v2 ✓ | latency test |
 | 47 | P1 command protocol | **P1 decks / layers / slots** | metadata | **P3 ingest** | model + formats | P1 mapping layer | — | wait for D43 | soak rig |
-| 48 | merges | P1 graph + previews, **P2 I/O** | **P4 tier 1** | P3 analysis | **P5 scenes / save** | P2 weapon block | **P7 audio** | **P6 bridge + wizard** | soak 2 h |
-| 49 | merges | P2 outputs, curtains | P4 tier 1 | P3 DB + browse | P5 shuffle v1 | **P8 Lightpad C++** | P7 clocks | P6 Perform v1 | soak 8 h |
+| 48 | merges | P1 graph + previews, **P1c clip transport**, **P2 I/O** | **P4 tier 1** | P3 analysis | **P5 scenes / save** | P2 weapon block | **P7 audio** | **P6 bridge + wizard** | soak 2 h |
+| 49 | merges | P2 outputs, curtains, sampler | P4 tier 1 (+ time FX) | P3 DB + browse, loop analysis | P5 shuffle v1, variants | **P1c pads: SLICE, PRESS**, P8 Lightpad C++ | P7 clocks | P6 Perform v1 | soak 8 h |
 | 50 | | budget guard | P4 tier 2, ISF | starter library | P5 moods ×16 | P8 modes | Link / ProDJ bridges | P6 library + shuffle UI | latency rigs |
 | 51 | release 0.1 | polish | safety gate | background throttling | **P9 cues / songs** | roles / NuVJ | reactions | P6 show view | release check |
 | 52–1 | holidays / buffer | | | | P9 Assist / Autopilot | | | P6 audience view | |
@@ -112,6 +112,30 @@ and without one dropped frame in an 8-hour soak.
 9. **Done when:** 2 decks × 4 HAP layers + 8 effects play from the MK2, TAKE
    and CUT work, and a 2-hour soak has no missed frame.
 
+### Phase 1c: clip transport and the pads as an instrument (E + C, weeks 48–49)
+
+Spec: `design/clips-and-playback.md`.
+
+1. **The playhead state machine** in the clip player's worker: direction,
+   play modes (LOOP, PING-PONG, ONCE hold / eject / next, RANDOM, CHOP, STEP,
+   SCRATCH), in / out, inner loop, 16 cue points, seeded randomness.
+2. **Time base:** FREE / BPM (range = n beats) / TIMECODE; speed glide;
+   beat loop with catch-up (shadow playhead).
+3. **Triggering:** NORMAL / TOGGLE / PIANO / LEGATO, restart / continue,
+   fade in / out per clip, beat snap (PROGRAM only), clip target (own / free),
+   the HIT layer, autopilot per layer, layer transitions.
+4. **Zero-latency jumps:** the first frame of each cue / slice kept warm for
+   the selected clip and for PROGRAM clips.
+5. **Effect levels + parameter scopes** (SLOT / LOOK / GLOBAL / MOVE) and
+   clip variants A–D in the model; MOVE modulators (LFO, envelope, steps).
+6. **MK2 (C):** SLICE mode (`PATTERN` twice), PRESS (velocity start,
+   aftertouch move, release), `SOLO` + pad = HIT, `SHIFT` + pad = load and
+   TAKE, FX-pad latch and velocity variation, the CLIP knob page with the
+   timeline on the left screen, `SELECT` + wheel = scratch.
+7. **Done when:** on the MK2 alone you can set in / out on a clip, chop it
+   from the pads on the beat, squeeze a strobe harder and faster, and fire a
+   hit over PROGRAM, all with input → glass under 3 frames.
+
 ### Phase 2: inputs and outputs (E + C, weeks 48–49)
 
 1. USB cameras and USB capture cards as layer sources (3 cameras, a fallback
@@ -125,6 +149,8 @@ and without one dropped frame in an 8-hour soak.
    output.
 6. **The generic weapon block** `Local\HimmelWeapon<N>` (C), with touch
    events and roles.
+7. **The live sampler:** record N beats of a camera / input / PROGRAM into a
+   looping clip (`REC` held + empty pad), written to HAP in the background.
 
 ### Phase 3: ingest pipeline and library (M, weeks 47–50)
 
@@ -136,7 +162,8 @@ and without one dropped frame in an 8-hour soak.
    - warm / cool;
    - motion;
    - cuts;
-   - loop quality;
+   - loop quality, best loop points, loop style, slices, natural beats,
+     motion curve (`design/library-and-analysis.md` §3);
    - flicker;
    - bars;
    - energy;
@@ -153,7 +180,8 @@ and without one dropped frame in an 8-hour soak.
 
 ### Phase 4: the first effect and generator set (F, weeks 48–51)
 
-1. The effect metadata format (`interfaces/effect-metadata.md`).
+1. The effect metadata format (`interfaces/effect-metadata.md`), with `press`,
+   `scopes` and `subtle` / `extreme` presets.
 2. Tier 1 effects (~30) and tier 1 generators (~12) from
    `design/effects-and-generators.md`, each with a PNG + timing check,
    including the **text generator** (§5 there: sources, styles, SDF glyphs).
@@ -177,6 +205,8 @@ and without one dropped frame in an 8-hour soak.
 4b. **ROTATE** saved presets on every level, `REC` saves at the level,
    auto-rotate every n bars (`design/presets-and-shuffle.md` §2).
 5. "Fill bank from mood".
+5b. Clip variants A–D on the dice / ROTATE / `REC`; the MOTION lock holds the
+   transport.
 6. **Done when:** a beginner can make a good 16-scene bank in under
    2 minutes with `>` and `REC`.
 
@@ -195,7 +225,10 @@ and without one dropped frame in an 8-hour soak.
    - the MK2 screen mirror + knob strip;
    - the shuffle panel;
    - the outputs band with "show next";
-   - the weapon band.
+   - the weapon band;
+   - **the clip editor drawer** (timeline, in / out, cues, transport chips,
+     effect levels with scope badges, PRESS, variants; TRY / A-B / AUDITION;
+     `design/gui.md` §16).
 4. Library view, Show view, Outputs view.
 5. The audience view (the weapon drawing on a second screen, with Explain).
 6. The weapon-adaptive layouts: main weapon (MK2, NuVJ, keyboard) +
@@ -221,7 +254,8 @@ and without one dropped frame in an 8-hour soak.
    - restoring the pressure setting on exit;
    - `--sim`;
    - supervised.
-2. Modes TOUCH / MIX / SCENES / MOOD with LED feedback (red border on LIVE).
+2. Modes TOUCH / MIX / SCENES / MOOD / **SCRUB** with LED feedback (red
+   border on LIVE).
 3. The MK2 Touch FX page with the 15 × 15 LED mirror.
 
 ### Phase 9: show structure and the first gig (S + Q, weeks 51–3)
@@ -248,7 +282,8 @@ canvas can come earlier if a gig needs it.
 ### Phase 12: Overlay mode and pro I/O
 
 DeckLink / AJA with GPU-direct; fill + key out, genlocked; NDI with alpha;
-live analysis of the program feed; soft tracking.
+live analysis of the program feed; soft tracking; **recording the output to
+a file** (HAP / ProRes, a worker, never the render loop).
 
 ### Phase 13: integrations
 
@@ -261,8 +296,11 @@ live analysis of the program feed; soft tracking.
 | V-4 | The table box |
 | KF4 | Capture as a camera |
 | Generic MIDI | Learn |
+| DMX / Art-Net in | A lighting desk drives looks, dimmer and FX (optional) |
+| Clip audio | Optional playback for installations (D66) |
 
 ## 5. Open questions (see `decisions.md`)
 
 D42 mapping changes · D43 GUI technology · D44 Lightpad modes · D45 the 16
-moods · D46 layers per deck · D47 merge now.
+moods · D46 layers per deck · D47 merge now · D61–D67 clip transport and
+pads.

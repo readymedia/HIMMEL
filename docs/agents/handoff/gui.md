@@ -15,6 +15,7 @@ Nothing yet: this file was created with the v2 plan.
 2. The `himmel_ui` bridge: serves the web app, relays commands/state, previews from shared memory.
 3. Wizard (4 steps) + weapon select (reuse the live-view weapon renderer).
 4. Perform v1: monitors with tallies, crossfader/TAKE, layer strips, pads, the knob strip (screen mirror), the shuffle panel, outputs band.
+- The clip editor drawer (`docs/design/gui.md` §16): timeline, in/out, cues, transport chips, effect levels + scope badges, PRESS bar, variants A–D, TRY / A-B / AUDITION; SLICE pads in the GUI.
 
 ## GUESSES
 - None recorded yet.

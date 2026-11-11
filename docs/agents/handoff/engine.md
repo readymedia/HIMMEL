@@ -15,6 +15,8 @@ Nothing yet: this file was created with the v2 plan.
 2. The command ring + status/preview blocks for the GUI (`docs/interfaces/command-protocol.md`, write it first with LEAD).
 3. Curtain windows in the supervisor.
 4. Off-air deck at thumbnail size; GPU meter per layer/effect.
+5. Phase 1c: the playhead state machine in the ClipPlayer worker (play modes, in/out, inner loop, cue points, beat loop + catch-up, FREE/BPM/TIMECODE), trigger styles, HIT layer, warm cue frames, parameter scopes + MOVE modulators (`docs/design/clips-and-playback.md` §2–5, §10).
+6. Phase 2: the live sampler (§6 there).
 
 ## GUESSES
 - None recorded yet.

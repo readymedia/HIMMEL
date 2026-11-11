@@ -14,6 +14,7 @@ Nothing yet: this file was created with the v2 plan.
 1. Write the effect metadata format (`docs/design/effects-and-generators.md` §1) as `docs/interfaces/effect-metadata.md`.
 2. Port the Touch FX effects to stand-alone slot effects with metadata.
 3. Tier 1 effects and generators, each with a PNG + timing check.
+- Metadata: `press`, `scopes`, `subtle`/`extreme` presets. New effects in the table (levels, tint, flip, 3D turn, twirl, luma to alpha, tier-1 time helpers: beat loop, reverse, step, loop seam).
 
 ## GUESSES
 - None recorded yet.

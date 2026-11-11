@@ -56,6 +56,9 @@ the main weapon (MK2 or NuVJ), side arms (Block, LUMI, Ohm64) only add control;
 MK2: left screen/knobs 1–4/groups A–D = PREVIEW, right/5–8/E–H = PROGRAM, wheel
 = TAKE (proposed D48–D53); dice on knob 2 / `TRANSPORT < >`; scenes saved with `REC`;
 moods on a 4×4 energy × style map; clips analysed and tagged on import.
+Every clip has a full transport (loop, ping-pong, random, chop, step, scratch,
+in/out, cue points, beat loops); pads play PREVIEW or PROGRAM, pressure drives
+the clip's effect, `PATTERN` twice = SLICE (`docs/design/clips-and-playback.md`).
 - **Show:** outputs, mapping (keystone, mesh warp, edge blend), cameras, banks,
   audio and sync sources.
 - **Bank:** clips and loops, with analysis (colors, motion, mood such as

@@ -56,6 +56,8 @@ whole night without failing.
 | **Music in** | Line or mic, loopback from apps on the PC, DJ sync (Pro DJ Link, Ableton Link, MIDI clock, timecode). Effects react to bands, beats, drops and energy. | [`music.md`](music.md) |
 | **Wizard start** | 1 Add clips, 2 Choose weapon, 3 Set outputs, 4 Play. | [`gui.md`](gui.md) |
 | **VJ table** | A second, playful view: lay the boxes on a table and patch cables. It uses the same engine and goes to the same outputs. | [`gui.md`](gui.md) §9, `docs/vj-table-design.md` |
+| **Every clip is an instrument** | Loop, ping-pong, random, chop, step and scratch; in / out and cue points; beat loops. Effects sit on the clip, layer, deck, master or output, and each value can be fixed, per scene, global or moving. Tried on PREVIEW first. | [`clips-and-playback.md`](clips-and-playback.md) |
+| **Pads you play** | The MK2 pads trigger on PREVIEW or PROGRAM, and how hard you press drives the clip's effect (a strobe gets faster and brighter). SLICE mode puts the playhead under your fingers. | [`clips-and-playback.md`](clips-and-playback.md) §8 |
 | **Overlay mode** | A separate mode: effects keyed over a live production mixer (fill + key), so the live picture keeps its lip sync. | [`engine.md`](engine.md) §8 |
 | **Add-ons** | Built-in effects are tested and show-safe. Add-ons (ISF shaders, generators you describe to Claude) sit on their own shelf, behind a safety gate. | [`engine.md`](engine.md) §7 |
 | **Nostalgia** | The NuVJ works alone in a classic two-deck setup, with rebuilt NuVJ-style effects. | [`hardware-mapping.md`](hardware-mapping.md) §4 |

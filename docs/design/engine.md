@@ -36,6 +36,17 @@ MAIN / A / B / OWN / TABLE ──► OUTPUT n (output FX ▸ warp/blend ▸ swap
 - **The levels where effects can sit:** clip (saved with the clip), layer,
   deck, master and output. Every slot works the same way: 4 per level, and
   the knob layout is "1–4 parameters, 5 mix, 6 audio, 7 sync, 8 variation".
+- **Clip transport** (play modes, in / out, cue points, slices, beat loops,
+  catch-up, scratch, BPM / timecode time base, trigger styles, autopilot,
+  layer transitions, the HIT layer, the live sampler) is specified in
+  [`clips-and-playback.md`](clips-and-playback.md); the engine notes are in
+  its §10. The playhead runs in the decode worker; the render loop only takes
+  the ready frame.
+- **Parameter values** are resolved per frame from four sources in order:
+  MOVE / REACT modulation on top of GLOBAL, LOOK or SLOT values
+  (`clips-and-playback.md` §4.2). The resolved values are written by the
+  control thread into the frame's parameter block, never computed with
+  allocation in the render loop.
 - **Blending** is part of the layer, not an effect: normal, add, screen,
   multiply, difference, lighten, luma key and chroma key, with crossfade
   curves and wipe shapes in the mixer.

@@ -43,6 +43,13 @@ Every saved thing gets an automatic name, so it needs no typing. The name is
 made of the mood word, a palette word and a number, for example "TECHNO
 Ice 07". Names are optional and can be edited later.
 
+**Effect control levels and parameter scopes** (where an effect sits and
+whether a value is fixed, per look, global or moving) are specified in
+[`clips-and-playback.md`](clips-and-playback.md) §4–5. Clips can carry up to
+four **variants** (A–D: transport + clip FX + PRESS), which ROTATE goes
+through when the CLIP level is selected. The MOTION lock also holds the clip
+transport (play mode, speed, in / out).
+
 ## 2. Shuffle: roll, mutate, back
 
 | Action | Button | What happens |

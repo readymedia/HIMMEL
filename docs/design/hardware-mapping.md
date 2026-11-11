@@ -99,6 +99,7 @@ program. The full table is in `gui.md` §5.
 | Page | Knobs 1–4 (PREVIEW) | Knobs 5–8 (PROGRAM) |
 |---|---|---|
 | LAYER | **PLACE** (snap: FILL ALL / OUT 1–3 / FIT / REPEAT / FREE), ZOOM / crop, PAN (`SHIFT` = up / down), OPACITY | The opacities of program layers E–H |
+| CLIP | **IN** (`SHIFT` = move range), **OUT** (`SHIFT` = length in beats), **MODE** (loop / ping-pong / once / random / chop / step / scratch), **SPEED** or beats per loop | Program layer: speed, play mode, chop / random interval, beat-loop length |
 | FX | Choose, param 1, param 2, audio link | Master FX: choose, param 1, param 2, mix |
 | MIX | Fade time, curve, preview dim, transition | Master dim, outputs 1–3, output 4, safe limit |
 | REACT | Signal, amount, attack, release | REACT macro, bass, mid, high |
@@ -110,15 +111,31 @@ thumbnails** on the right.
 
 | Mode (button) | Pads | Tap | Pressure (aftertouch) |
 |---|---|---|---|
-| **CLIPS** (`PATTERN`, **default**) | 16 clips of the selected layer's bank; `Master ◀ ▶` = bank | Load into the selected layer (PREVIEW at once, PROGRAM on the beat); velocity = punch-in | **Squeeze:** pushes the layer's main FX amount while held |
+| **CLIPS** (`PATTERN`, **default**) | 16 clips of the selected layer's bank; `Master ◀ ▶` = bank | Load into the selected layer (A–D = PREVIEW at once; E–H = PROGRAM, on the beat); velocity = punch-in; the clip's trigger style applies (normal / toggle / piano / legato) | **PRESS:** the clip's pressure target (e.g. strobe rate + brightness, blur size) |
+| **SLICE** (`PATTERN` again; LED blinks) | 16 cue points / slices of the selected layer's clip | Jump (on GRID on PROGRAM); hold = loop the slice; hold A + tap B = in / out; two held = ping-pong | **Harder = shorter beat loop** (1 → 1/16 beat) |
 | **LOOKS** (`SCENE`) | 16 saved looks | Into PREVIEW; `SHIFT` + tap = straight to PROGRAM; hold = morph | Morph speed |
-| **FX PADS** (`PAD MODE`) | 16 momentary effects on PROGRAM | On while held, velocity = punch | Depth |
+| **FX PADS** (`PAD MODE`) | 16 momentary effects on PROGRAM | On while held; velocity = punch + variation (soft = subtle, hard = extreme); `SHIFT` + pad = latch | The effect's PRESS target |
 | **OUTPUTS** (`NAVIGATE`) | Pads 1–6 = outputs; Top buttons = MAIN / A / B / OWN / TABLE | Choose the output | — |
 
 Modifiers: `DUPLICATE` = copy (pad → pad, group → group), `SELECT` = pick
 without firing, `SOLO` = peek (hold: PREVIEW shows only the selected layer,
 and the output thumbnails show "next"), `MUTE` = mute the layer;
 `SHIFT + MUTE` = **PANIC** (safe scene).
+
+**Pads on PREVIEW and PROGRAM** (full spec: `clips-and-playback.md` §8):
+- The pads follow the selected group: A–D = PREVIEW, E–H = PROGRAM (LIVE EDIT).
+- `SHIFT` + clip pad (PREVIEW selected) = load and TAKE that layer at once.
+- **`SOLO` held + clip pad = HIT:** the clip plays on top of PROGRAM (the hit
+  layer) while held; velocity = start opacity, pressure = PRESS, release =
+  the clip's fade-out.
+- **`REC` held + empty clip pad = SAMPLE** 4 beats of the selected layer's
+  source into that pad (the wheel sets the length while `REC` is held).
+- In SLICE: `REC` + pad = store a cue point, `ERASE` + pad = clear it,
+  `SHIFT` + pad = reverse from there, `NOTE REPEAT` + pad = retrigger
+  (pressure = rate).
+- The per-pad noise floor (Pad 12) applies before velocity and pressure.
+- Strobe and flash PRESS ranges are capped by the show's photosensitivity
+  limit.
 
 **Pad LEDs:**
 
@@ -137,7 +154,9 @@ and the output thumbnails show "next"), `MUTE` = mute the layer;
 | `CONTROL` / `STEP` / `BROWSE` / `SAMPLING` | Views: PERFORM, CUES, LIBRARY, MUSIC |
 | `PAGE ◀ ▶` | Knob pages (`SHIFT` = jump to PLAY) |
 | `ALL` | The dice scope = the whole look (default: the selected layer) |
-| `AUTO WRITE` + knob | Link that knob to an audio signal |
+| `AUTO WRITE` + knob | Link that knob to an audio signal (REACT); `SHIFT` + `AUTO WRITE` + knob = add an LFO (MOVE) |
+| `SELECT` held + wheel | **Scratch** the selected layer's playhead (instead of TAKE) |
+| `SHIFT` + `SELECT` + knob | Cycle that parameter's scope: slot / LOOK / GLOBAL / MOVE |
 | `Transport ◀ / ▶` | Dice back / forward (the same as knob 2); `SHIFT + ▶` = mutate; **`SHIFT + ◀ / ▶` held with knob 2 = rotate** (see below) |
 | `GRID` | On the beat (quantise) |
 | `REC` | Save the preview look to the next free LOOKS pad (`REC` + pad = that pad) |
@@ -168,6 +187,7 @@ and the output thumbnails show "next"), `MUTE` = mute the layer;
 | `SHIFT` + `▶` | **MUTATE** |
 | `SHIFT` + knob 2 | **ROTATE** through saved presets of the current level |
 | FX page, `SHIFT` + knob 1 | Rotate the effect's own presets |
+| PLAY page, `SHIFT` + knob 1 | Rotate the selected clip's variants A–D |
 | `SHIFT` + knob 8 | Rotate the master FX presets |
 | `REC` | Save at the current level |
 | `SHIFT` + `REC` | Toggle **auto-rotate** for the current level (every 8 bars by default; the MIX page sets the interval) |
@@ -209,7 +229,7 @@ panel, and the tallies follow the real crossfader.
 | `LATCH` | Lock the deck's look (no dice) |
 | `AUTO` | Dice (long press = mutate) |
 | `SYNC` | On the beat |
-| Jog / `SCRATCH` | Scrub the clip; hold `SCRATCH` = grab |
+| Jog / `SCRATCH` | Scrub the clip; hold `SCRATCH` = grab (the playhead SCRATCH mode, `clips-and-playback.md` §2.5); `SHIFT` + jog = in / out |
 | A / B channel faders | Deck levels |
 | Crossfader, `FADER MODE`, `AUTO FADE`, `FADER START` | The crossfader, its curve, TAKE time, start on fader move |
 | `INSTA A` / `INSTA B` / `INSTA BLACK` | Flash deck A / B / black |
@@ -232,6 +252,7 @@ Switch modes with a double-tap on MODE, or `SHIFT + PAD MODE` on the MK2.
 | **MIX** | A sideways swipe = crossfader; the top row = TAKE, the bottom row = CUT. This gives the MK2 a real fader. |
 | **LOOKS** | 4 × 4 looks with strike velocity (a second pad surface while the MK2 pads stay on clips). |
 | **MOOD** | The mood map (X = calm → intense, Y = warm → cold) steers the dice. MODE = dice now. |
+| **SCRUB** | X = the selected layer's playhead between in and out (SCRATCH while touched), Y = speed, pressure = PRESS target; lift = back to the play mode. The strip under the finger glows in the clip's colour. |
 
 ### LUMI Keys
 
@@ -242,6 +263,7 @@ MODE switches the layout; OCT ± shifts the range.
 | **FX KEYS** (default) | Left half = colour washes over PROGRAM (strike = punch, pressure = depth, glide = hue). Right half = FX hits. |
 | **LOOK KEYS** | Keys = looks from calm to peak |
 | **CLIP KEYS** | 24 clips of the selected layer's bank |
+| **SLICE KEYS** | The selected clip's 16 slices / cue points on 16 keys (chromatic chop); strike = jump, pressure = beat-loop length, slide = speed bend |
 
 ### Ohm64
 
@@ -249,6 +271,7 @@ MODE switches the layout; OCT ± shifts the range.
 - **The crossfader = the crossfader** (soft takeover with the wheel).
 - The 8 × 8 grid = 64 clips.
 - 16 knobs = the FX parameters of the selected layer.
+- `SHIFT` + grid row = that layer's 8 cue points / slices.
 
 ### KPE1 / Entrancer
 

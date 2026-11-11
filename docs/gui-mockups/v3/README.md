@@ -20,3 +20,4 @@ The spec is [`../../design/gui.md`](../../design/gui.md) §4 and §8, and
 | `V3Mapping.dc.html` | Mapping for projectors: pen-tool masks, a crosshair on the real projection, Block / MK2 control |
 | `V3Presets.dc.html` | Dice, mutate and rotate on every level; REC saves at the level; auto-rotate |
 | `V3TwoScreens.dc.html` | One or two GUI screens: the main layout on 1, the room and side arms on 2 |
+- `V3ClipPads.dc.html`: clip editor + pads (transport modes, in / out, cue points, SLICE pads, PRESS, effect levels and scope badges, variants A–D). Interactive.

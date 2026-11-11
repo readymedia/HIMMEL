@@ -29,12 +29,21 @@ in one JSON file per effect, next to the shader.
 | `cost` | class `S` / `M` / `L` + the ms measured at Prepare | Budget, browser dimming |
 | `passes`, `state` | 1, `none` / `feedback` / `history` | Graph, off-air shrink |
 | `compat` | `{avoid:["dark-source"], not_with:["kaleido"]}` | Shuffle rules |
-| `presets[]` | named or unnamed parameter sets | `SHIFT + pad`, good ranges |
+| `presets[]` | named or unnamed parameter sets, incl. `subtle` and `extreme` | `SHIFT + pad`, good ranges, FX-pad velocity |
+| `press` | `{param:"rate", lo:0.25, hi:0.03125, curve:"exp", release_beats:0.5}` | Pad velocity / pressure, Block Z, LUMI pressure (`clips-and-playback.md` §8.2) |
+| `scopes` | which params may be LOOK / GLOBAL / MOVE (default: all) | Parameter scope badges (`clips-and-playback.md` §4.2) |
 | `tier`, `shelf` | 1 / 2 / 3, `builtin` / `addon` | Roadmap, safety |
 | `help` | two lines | The MK2 screen and the Help menu |
 
 The knob layout on every FX page: **1–4 parameters (1–2 = the main ones),
 5 MIX, 6 AUDIO, 7 SYNC, 8 VARIATION.**
+
+**Control levels.** Every effect can sit on a clip, a layer, a deck, the
+master or an output, and every parameter value can be fixed in its slot,
+different per look / scene, shared globally, or moved by a modulator. Presets
+and the dice work on whichever level is selected, and everything is tried on
+PREVIEW first. The full model is in
+[`clips-and-playback.md`](clips-and-playback.md) §4–5.
 
 ## 2. Effects
 
@@ -53,6 +62,9 @@ GTX 1070. A ✓ marks the effects already built as Touch FX.
 | Palette map (to the mood palette) | Colour | Strength / shift | beat → shift | S | 1 | — |
 | Colour pass (keep one hue) | Colour | Kept hue / width | — | S | 2 | V-4 |
 | Film look (LUTs) | Colour | Look / strength | — | S | 2 | — |
+| Levels / gamma | Colour | Black–white points / gamma | — | S | 1 | All |
+| Tint / colour balance | Colour | Shadows–highlights tint / amount | — | S | 1 | Modul8, Resolume |
+| Gradient map | Colour | Gradient / mix | beat → shift | S | 2 | — |
 | Mirror | Space | Axis / position | — | S | 1 | V-4, NuVJ |
 | Kaleido ✓ | Space | Segments / turn | mid → turn | S | 1 | NuVJ, Entrancer |
 | Tile / multi ✓(Grid) | Space | Tiles / mirror | beat → tiles | S–M | 1 | V-4, NuVJ, Entrancer |
@@ -61,22 +73,36 @@ GTX 1070. A ✓ marks the effects already built as Touch FX.
 | Slide / scroll ✓ | Space | Shift X / shift Y | — | S | 1 | NuVJ, Entrancer |
 | Tunnel | Space | Depth / speed | kick → speed | S | 2 | NuVJ |
 | Lens (fisheye / sphere) | Space | Strength / radius | — | S | 2 | — |
+| Flip / rotate 90 | Space | Axis / step | beat → flip | S | 1 | All |
+| 3D turn (perspective) | Space | Turn X / turn Y | — | S | 1 | Resolume, Modul8 |
+| Polar warp | Space | Amount / turn | — | S | 2 | — |
+| Radial copies | Space | Copies / spread | beat → copies | S | 2 | — |
+| Infinite zoom (picture in itself) | Space | Zoom speed / copies | kick → speed | M | 3 | — |
 | Wave / ripple ✓(Waves) | Distort | Frequency / height | bass → height | S | 1 | NuVJ |
 | Bulge / pinch ✓ | Distort | Strength / centre | — | S | 1 | Entrancer |
 | Shake | Distort | Amount / speed | kick | S | 1 | V-4, NuVJ |
 | Displace | Distort | Amount / scale | bass | S | 2 | — |
+| Twirl | Distort | Angle / radius | mid → angle | S | 1 | — |
+| Shatter / fragments | Distort | Pieces / spread | drop → spread | M | 3 | — |
 | Blur | Blur | Size / direction | — | M | 1 | — |
+| Zoom / radial blur | Blur | Amount / centre | kick → amount | M | 2 | — |
 | Glow / bloom | Light | Amount / threshold | energy | M | 1 | — |
 | Strobe ✓ | Light | Beat division / colour | kick | S | 1 | All |
 | Flash | Light | Strength / fade | drop | S | 1 | — |
 | Light rays | Light | Amount / length | bass | M | 2 | — |
 | Spot / vignette | Light | Size / pulse | kick → pulse | S | 2 | — |
 | Glint (star sparkles) | Light | Amount / rays | hi-hat | M | 3 | — |
+| Light leak | Light | Amount / colour | — | S | 2 | — |
+| Drop shadow / outline (alpha) | Light | Size / colour | — | S | 2 | — |
 | Edge detect / neon edges | Stylize | Strength / colour | mid | S | 1 | NuVJ |
 | Pixelate / mosaic | Stylize | Size / shape | kick → size | S | 1 | — |
 | Silhouette | Stylize | Threshold / colour | — | S | 2 | — |
 | Halftone dots | Stylize | Size / angle | — | S | 2 | — |
 | CRT / scanlines | Stylize | Lines / curve | — | S | 2 | — |
+| Sharpen | Stylize | Amount / radius | — | S | 2 | — |
+| Dither (1-bit / few colours) | Stylize | Levels / pattern | — | S | 2 | — |
+| Emboss / relief | Stylize | Depth / angle | — | S | 3 | — |
+| Toon (flat colours + lines) | Stylize | Levels / line | — | M | 3 | — |
 | Text mosaic (ASCII-style) | Stylize | Size / charset | — | M | 3 | — |
 | RGB split | Glitch | Distance / angle | kick → distance | S | 1 | NuVJ |
 | Glitch blocks | Glitch | Amount / block size | snare | S | 2 | — |
@@ -90,6 +116,12 @@ GTX 1070. A ✓ marks the effects already built as Touch FX.
 | Echo | Time | Count / spacing in beats | beat | M | 2 | — |
 | Slitscan | Time | Direction / time span | bass → span | M | 3 | — |
 | Echo grid | Time | Delay / tiles | — | M | 3 | Entrancer |
+| Beat loop / loop roll | Time | Length in beats / catch-up | hi-hat → length | S | 1 | Resolume |
+| Reverse (momentary) | Time | — / catch-up | — | S | 1 | All |
+| Step (stop-motion) | Time | Frames per step / division | beat | S | 1 | — |
+| Loop seam (crossfade the loop point) | Time | Frames / curve | — | S | 1 | — |
+| Frame blend (smooth slow motion) | Time | Amount / — | — | S | 2 | — |
+| Time ghost (delay by brightness) | Time | Depth / direction | bass | M | 3 | — |
 | Trails / motion blur ✓ | Feedback | Decay / drift | — | S | 1 | NuVJ, Entrancer |
 | Spiral feedback | Feedback | Zoom / twist | — | S | 2 | NuVJ |
 | Bass punch | Audio | Amount / band | bass | S | 2 | NuVJ |
@@ -97,6 +129,8 @@ GTX 1070. A ✓ marks the effects already built as Touch FX.
 | Luma key | Key | Level / softness | — | S | 1 | NuVJ, V-4 |
 | Chroma key | Key | Colour / tolerance | — | S | 1 | NuVJ, V-4 |
 | Mask (shape / clip) | Key | Shape / feather | beat → size | S | 2 | — |
+| Luma to alpha | Key | Level / softness | — | S | 1 | Resolume |
+| Iris (shape reveal) | Key | Size / shape | kick → size | S | 2 | — |
 | Crop / edge fade | Utility | Edges / softness | — | S | 1 | All |
 | Motion trigger | Camera | Sensitivity / what it fires | — | S | 2 | — |
 | Person cut-out (tracking) | Camera | Threshold / background | — | M | 3 | — |
@@ -104,6 +138,10 @@ GTX 1070. A ✓ marks the effects already built as Touch FX.
 | Camera mosaic (3 cams) | Camera | Layout / switch on beat | beat | S | 2 | — |
 | Hands → particles (tracking) | Tracking | Amount / colour | onset | M | 3 | — |
 | Body glow (tracking) | Tracking | Width / glow | energy | M | 3 | — |
+
+The **Time** effects marked tier 1 are the transport helpers that make any
+clip loop well; they are also play modes and pad gestures
+([`clips-and-playback.md`](clips-and-playback.md) §2, §8).
 
 Mixing between layers is not an effect but part of the layer:
 - blend modes (normal, add, screen, multiply, difference, lighten, luma key,
@@ -133,6 +171,9 @@ Mixing between layers is not an effect but part of the layer:
 | Fractal zoom | Math | Zoom / colour | — | 3 | Classic |
 | Raymarched shapes | 3D look | Shape / morph | bass → morph | 3 | — |
 | Reaction-diffusion | Texture | Feed / speed | bass | 3 | — |
+| Feedback source (PROGRAM fed back in) | Feedback | Zoom / turn | — | 2 | Resolume |
+| Light beams / searchlights | Light | Beams / sweep | beat → sweep | 2 | Resolume |
+| Live sample (recorded clip) | Source | Transport | — | 2 | Resolume, VDMX |
 | ISF shader (user, add-on) | Any | Defined by the shader | — | 2 | ISF standard |
 
 Sources that are neither effects nor generators: clips (HAP), USB cameras,
@@ -141,8 +182,10 @@ of them the same way.
 
 ## 4. FX pads (momentary, on LIVE)
 
-The default set for `PAD MODE` (velocity = intensity, aftertouch = amount),
-replaced per mood:
+The default set for `PAD MODE`: velocity = punch and picks the variation
+(soft = the `subtle` preset, hard = `extreme`), aftertouch = the effect's
+`press` target, `SHIFT` + pad = latch. Replaced per mood. Details:
+[`clips-and-playback.md`](clips-and-playback.md) §8.5.
 
 > Strobe · Flash · Stutter · Freeze · Invert · RGB split · Zoom pulse ·
 > Kaleido · Mirror · Shake · Tunnel · Blur · Glitch blocks · Echo ·

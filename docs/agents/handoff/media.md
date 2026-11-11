@@ -15,6 +15,7 @@ Nothing yet: this file was created with the v2 plan.
 2. Analysis v1: palette, brightness/contrast, motion (low-res flow), cuts, loop quality, flicker, energy, mood scores by rules.
 3. Background throttling tied to the engine status block.
 4. Hap Q Alpha.
+- Import analysis additions: best loop points, loop style, slices, natural beats, motion curve (`docs/design/library-and-analysis.md` §3).
 
 ## GUESSES
 - None recorded yet.
