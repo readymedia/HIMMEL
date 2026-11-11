@@ -230,7 +230,7 @@ SEG16 = {
     "*": "g1 g2 h i j k l m", ".": "d2", "_": "d1 d2", "=": "g1 g2 d1 d2", "'": "i", ":": "i l", "%": "a1 f g1 i j k l g2 c d2",
     "?": "a1 a2 b g2 l", "#": "b c e f g1 g2 i l",
 }
-ALPHA_CELLS, RAMP_STEPS = 11, 8
+ALPHA_CELLS, RAMP_STEPS = 11, 7
 NUMBER_DIGITS = ((0x3D, 0x3E), (0x3B, 0x3C))   # the 2-digit number: tens, units (first byte, second byte)
 SEG_ALWAYS = (0x2E, 0x36)                      # set to 1 by the software on every update
 

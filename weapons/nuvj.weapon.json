@@ -30,109 +30,101 @@
    "x": 347,
    "y": 66,
    "w": 246,
-   "h": 140,
+   "h": 138,
    "units": [
     200,
-    114
+    112
    ],
    "note": "layout from the owner's photo with every segment on (2026-11-11); which bits light which part is learned with the segment hunt",
    "elements": [
     {
      "id": "lbl_edit",
      "kind": "label",
-     "x": 11,
-     "y": 15,
+     "x": 14.2,
+     "y": 13.4,
      "text": "EDIT",
      "size": 6
     },
     {
      "id": "lbl_global",
      "kind": "label",
-     "x": 35,
-     "y": 15,
+     "x": 42.6,
+     "y": 13.6,
      "text": "GLOBAL",
      "size": 6
     },
     {
      "id": "lbl_program",
      "kind": "label",
-     "x": 68,
-     "y": 15,
+     "x": 77.4,
+     "y": 13.6,
      "text": "PROGRAM",
      "size": 6
     },
     {
      "id": "lbl_change",
      "kind": "label",
-     "x": 102,
-     "y": 15,
+     "x": 112.3,
+     "y": 13.6,
      "text": "CHANGE",
      "size": 6
     },
     {
      "id": "lbl_preset",
      "kind": "label",
-     "x": 180,
-     "y": 15,
+     "x": 177.4,
+     "y": 13.6,
      "text": "PRESET",
      "size": 6
     },
     {
      "id": "text",
      "kind": "dots",
-     "x": 5,
-     "y": 19,
+     "x": 6.4,
+     "y": 18.4,
      "cells": 8,
-     "cw": 20.1,
+     "cw": 19.7,
      "ch": 22
     },
     {
      "id": "preset",
      "kind": "digits",
      "x": 169.5,
-     "y": 19.5,
+     "y": 20,
      "n": 2,
-     "w": 8.5,
-     "h": 18
-    },
-    {
-     "id": "rule",
-     "kind": "rule",
-     "x": 5,
-     "y": 49.5,
-     "w": 186
-    },
-    {
-     "id": "lbl_midich",
-     "kind": "label",
-     "x": 21,
-     "y": 55,
-     "text": "MIDI CH",
-     "size": 6,
-     "inv": true
+     "w": 8.4,
+     "h": 17.6
     },
     {
      "id": "lbl_page",
      "kind": "label",
-     "x": 181.5,
-     "y": 55,
+     "x": 179,
+     "y": 44.8,
      "text": "PAGE",
      "size": 6,
      "inv": true
     },
     {
-     "id": "lbl_ctrl",
+     "id": "rule",
+     "kind": "rule",
+     "x": 6.4,
+     "y": 48.3,
+     "w": 183
+    },
+    {
+     "id": "lbl_midich",
      "kind": "label",
-     "x": 47.5,
-     "y": 60,
-     "text": "CTRL",
-     "size": 6
+     "x": 23.3,
+     "y": 54.3,
+     "text": "MIDI CH",
+     "size": 6,
+     "inv": true
     },
     {
      "id": "lbl_prog",
      "kind": "label",
-     "x": 73.5,
-     "y": 60,
+     "x": 74.3,
+     "y": 55,
      "text": "PROG",
      "size": 6
     },
@@ -140,155 +132,165 @@
      "id": "lbl_bankma",
      "kind": "label",
      "x": 127,
-     "y": 60,
+     "y": 55,
      "text": "BANK MA",
      "size": 6
     },
     {
      "id": "lbl_banklb",
      "kind": "label",
-     "x": 177,
-     "y": 60,
+     "x": 175.6,
+     "y": 55,
      "text": "BANK LB",
      "size": 6
     },
     {
      "id": "bpm",
      "kind": "digits",
-     "x": 7.5,
-     "y": 62,
+     "x": 15.5,
+     "y": 60.5,
      "n": 3,
-     "w": 8.2,
-     "h": 18,
+     "w": 8.6,
+     "h": 16.5,
      "half_first": true
+    },
+    {
+     "id": "lbl_ctrl",
+     "kind": "label",
+     "x": 48.6,
+     "y": 62.8,
+     "text": "CTRL",
+     "size": 6
     },
     {
      "id": "lbl_aft",
      "kind": "label",
-     "x": 45,
-     "y": 72,
+     "x": 46.2,
+     "y": 69.4,
      "text": "AFT",
      "size": 6
     },
     {
      "id": "lbl_note",
      "kind": "label",
-     "x": 48.5,
-     "y": 79,
+     "x": 49.5,
+     "y": 75.2,
      "text": "NOTE",
      "size": 6
     },
     {
      "id": "alpha",
      "kind": "seg16",
-     "x": 62,
-     "y": 62,
+     "x": 63,
+     "y": 60.5,
      "cells": 11,
-     "cw": 11.75,
-     "ch": 18
-    },
-    {
-     "id": "box_a",
-     "kind": "box",
-     "x": 13.5,
-     "y": 87.5,
-     "w": 10,
-     "h": 9,
-     "text": "A"
-    },
-    {
-     "id": "box_b",
-     "kind": "box",
-     "x": 25,
-     "y": 87.5,
-     "w": 10,
-     "h": 9,
-     "text": "B"
-    },
-    {
-     "id": "box_c",
-     "kind": "box",
-     "x": 13.5,
-     "y": 97.5,
-     "w": 10,
-     "h": 9,
-     "text": "C"
-    },
-    {
-     "id": "box_d",
-     "kind": "box",
-     "x": 25,
-     "y": 97.5,
-     "w": 10,
-     "h": 9,
-     "text": "D"
+     "cw": 11.5,
+     "ch": 16.5
     },
     {
      "id": "lbl_bpm",
      "kind": "label",
-     "x": 29.5,
-     "y": 86,
+     "x": 28.4,
+     "y": 81.7,
      "text": "BPM",
      "size": 6
     },
     {
-     "id": "lbl_full",
-     "kind": "label",
-     "x": 56,
-     "y": 94,
-     "text": "FULL",
-     "size": 6
-    },
-    {
-     "id": "lbl_16levels",
-     "kind": "label",
-     "x": 57,
-     "y": 102,
-     "text": "16 LEVELS",
-     "size": 6
-    },
-    {
-     "id": "enter",
-     "kind": "box",
-     "x": 80,
-     "y": 88,
-     "w": 38,
-     "h": 17,
-     "text": "PRESS\nENTER"
-    },
-    {
      "id": "lbl_last",
      "kind": "label",
-     "x": 130.5,
-     "y": 87,
+     "x": 132,
+     "y": 81.5,
      "text": "LAST",
      "size": 6
     },
     {
      "id": "lbl_data",
      "kind": "label",
-     "x": 179.5,
-     "y": 87,
+     "x": 178,
+     "y": 81.5,
      "text": "DATA",
      "size": 6
     },
     {
+     "id": "box_a",
+     "kind": "box",
+     "x": 13.8,
+     "y": 86.8,
+     "w": 6.4,
+     "h": 7.3,
+     "text": "A"
+    },
+    {
+     "id": "box_b",
+     "kind": "box",
+     "x": 23.3,
+     "y": 86.8,
+     "w": 6.4,
+     "h": 7.3,
+     "text": "B"
+    },
+    {
+     "id": "box_c",
+     "kind": "box",
+     "x": 13.8,
+     "y": 95.4,
+     "w": 6.4,
+     "h": 7.3,
+     "text": "C"
+    },
+    {
+     "id": "box_d",
+     "kind": "box",
+     "x": 23.3,
+     "y": 95.4,
+     "w": 6.4,
+     "h": 7.3,
+     "text": "D"
+    },
+    {
+     "id": "lbl_full",
+     "kind": "label",
+     "x": 58.7,
+     "y": 89.4,
+     "text": "FULL",
+     "size": 6
+    },
+    {
+     "id": "lbl_16levels",
+     "kind": "label",
+     "x": 57.4,
+     "y": 98.7,
+     "text": "16 LEVELS",
+     "size": 6
+    },
+    {
+     "id": "enter",
+     "kind": "box",
+     "x": 81.1,
+     "y": 85.9,
+     "w": 36.7,
+     "h": 16.5,
+     "text": "PRESS\nENTER"
+    },
+    {
      "id": "last",
-     "kind": "ramp",
-     "x": 127,
-     "y": 82,
-     "w": 30,
-     "h": 23,
-     "n": 8
+     "kind": "wedge",
+     "x": 128,
+     "y": 85.3,
+     "w": 27,
+     "h": 16.5,
+     "n": 7,
+     "edge": "right"
     },
     {
      "id": "data",
-     "kind": "ramp",
-     "x": 159,
-     "y": 82,
-     "w": 30,
-     "h": 23,
-     "n": 8
+     "kind": "wedge",
+     "x": 159.6,
+     "y": 85.3,
+     "w": 28.4,
+     "h": 16.5,
+     "n": 7,
+     "edge": "left"
     }
    ]
   }

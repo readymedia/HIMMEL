@@ -431,7 +431,20 @@
  "leds": {
   "checked": "2026-11-11"
  },
- "lcd_segments": {},
+ "lcd_segments": {
+  "lbl_last": [
+   0,
+   1
+  ],
+  "lbl_data": [
+   0,
+   2
+  ],
+  "custom:det viser en strek p\u00e5 de nede til": [
+   1,
+   1
+  ]
+ },
  "lcd_bytes_lit": [
   1
  ]

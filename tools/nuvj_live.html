@@ -489,10 +489,18 @@ function drawLcd(m, note) {
         g.fillStyle = on(i < n); g.fillRect(e.x + i * sw, e.y + e.h - sh, sw * 0.62, sh);
         hits.push({ key: `${e.id}.${i}`, x: e.x + i * sw, y: e.y + e.h - sh, w: sw * 0.62, h: sh });
       }
+    } else if (e.kind === "wedge") {   // a wedge of n horizontal stripes, longest on top; the square edge on one side
+      const n = m[e.id] ?? -1, sh = e.h / e.n;
+      for (let i = 0; i < e.n; i++) {        // i = 0 is the bottom (shortest) stripe
+        const len = e.w * (i + 1) / e.n, y0 = e.y + e.h - (i + 1) * sh;
+        const x0 = e.edge === "right" ? e.x + e.w - len : e.x;
+        g.fillStyle = on(i < n); g.fillRect(x0, y0, len, sh * 0.6);
+        hits.push({ key: `${e.id}.${i}`, x: x0, y: y0, w: len, h: sh * 0.6 });
+      }
     } else if (e.kind === "box") {     // a box with dark text (lit = the box is on)
       const b = lit.has(e.id);
       g.fillStyle = on(b); g.fillRect(e.x, e.y, e.w, e.h);
-      g.fillStyle = b ? "#1638c4" : "rgba(6, 10, 70, 0.25)"; g.font = `bold ${e.h > 12 ? 5.5 : 7.5}px Segoe UI, sans-serif`;
+      g.fillStyle = b ? "#1638c4" : "rgba(6, 10, 70, 0.25)"; g.font = `bold ${e.h > 12 ? 5.5 : 6.5}px Segoe UI, sans-serif`;
       const lines = e.text.split("\n");
       lines.forEach((ln, i) => g.fillText(ln, e.x + e.w / 2, e.y + e.h * (i + 1) / (lines.length + 1)));
       hits.push({ key: e.id, x: e.x, y: e.y, w: e.w, h: e.h });
