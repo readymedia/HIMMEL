@@ -48,7 +48,7 @@ whole night without failing.
 | Idea | Short version | Where |
 |---|---|---|
 | **Weapons** | A controller is a weapon. "Choose your weapon" at start-up. The GUI adapts to the weapon. Weapons you do not own can be simulated on screen. | [`gui.md`](gui.md), [`hardware-mapping.md`](hardware-mapping.md), [`../../weapons/README.md`](../../weapons/README.md) |
-| **Main instrument** | MK2 (the brain: browse, scenes, knob pages, screens) + Lightpad Block (the hand: touch effects, crossfader, mood). The other controllers are integrations. | [`hardware-mapping.md`](hardware-mapping.md) |
+| **Main weapon + side arms** | One **main weapon** (MK2 or NuVJ) decides the GUI layout. **Side arms** (Block, LUMI, Ohm64, KPE1) only add control. The GUI **mimics** the main weapon: PREVIEW on the left, PROGRAM on the right, the pads as clip thumbnails, the knobs as tiles that show what turning will do. | [`hardware-mapping.md`](hardware-mapping.md), [`gui.md`](gui.md) |
 | **Two decks + crossfader** | Deck A and Deck B, each a stack of layers. You build on the deck that is not live (PREVIEW), then take it LIVE with a crossfade, as on the NuVJ. It is always clear what is live. | [`gui.md`](gui.md), [`engine.md`](engine.md) |
 | **Effects at every level** | Clip, layer, deck (group), master and output. The same knob layout everywhere. | [`effects-and-generators.md`](effects-and-generators.md) |
 | **Shuffle with locks and history** | `>` rolls a new look within the mood, `<` goes back. Locks keep the parts you like. | [`presets-and-shuffle.md`](presets-and-shuffle.md) |

@@ -2,7 +2,7 @@
 Updated: 2026-11-11 by the planning session (claude.ai) · Branch: claude/roadmap · Last commit: see git log
 
 ## State in one paragraph
-There is no operator GUI yet. The browser live view (`tools/mk2_live.py` + `.html`, plus the per-weapon pages on the branches) already draws every weapon from its profile, and the VJ table mockup exists (`docs/vj-table-mockup.html`, rack-design branch). The v2 design: `docs/design/gui.md` + the mockups in `docs/gui-mockups/v2/`.
+There is no operator GUI yet. The browser live view (`tools/mk2_live.py` + `.html`, plus the per-weapon pages on the branches) already draws every weapon from its profile, and the VJ table mockup exists (`docs/vj-table-mockup.html`, rack-design branch). The v2 design: `docs/design/gui.md` + the mockups in `docs/gui-mockups/v3/` (and v2).
 
 ## Done (with commits)
 See `CLAUDE.md` "Next steps" history and `docs/roadmap.md` "What we have".

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Himmel v3 – Choose your weapon: main + side arms</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080A}
+.hw{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.06em;color:#8C96A3}
+.lbl{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#9AA4B2;font-weight:800}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="min-height:900px;width:100%;box-sizing:border-box;background:radial-gradient(ellipse at 50% 0%,#1A1330 0,#07080A 62%);color:#E8ECF1;font-family:Inter,system-ui,sans-serif;display:flex;flex-direction:column;gap:16px;padding:22px 32px">
+<div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+<b style="letter-spacing:.2em">HIMMEL</b>
+<span style="font-size:13px;color:#7EE2A0">✓ 1 CLIPS</span><span style="font-size:13px;font-weight:800;padding:6px 12px;border-radius:16px;background:#E8ECF1;color:#0B0D10">2 WEAPON</span><span style="font-size:13px;color:#9AA4B2">3 OUTPUTS</span><span style="font-size:13px;color:#9AA4B2">4 PLAY</span>
+</div>
+<div style="text-align:center"><h1 style="margin:0;font-size:52px;font-weight:900;letter-spacing:.12em">CHOOSE YOUR WEAPON</h1>
+<div style="font-size:15px;color:#C9D1DB;margin-top:4px">Touch any control on a connected device to pick it. One <b>main weapon</b> sets up the screen. <b>Side arms</b> add extra hands.</div></div>
+
+<div style="display:flex;gap:10px;align-items:center"><span class="lbl">Main weapon</span><span style="font-size:13px;color:#9AA4B2">pick one · it decides the layout of the GUI, the pages and the screens</span></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px">
+<button onClick="{{ pickMk2 }}" style="text-align:left;border-radius:18px;padding:16px;background:#12161C;border:{{ mk2Border }};color:#E8ECF1;font-family:Inter;display:flex;gap:14px;align-items:center">
+<div style="width:200px;height:150px;flex:none;border-radius:8px;background:#E9ECEF;padding:8px;box-sizing:border-box;display:grid;grid-template-rows:auto 1fr;gap:6px"><div style="display:flex;gap:4px"><span style="flex:1;height:28px;background:#0A2238;border-radius:2px"></span><span style="flex:1;height:28px;background:#0A2238;border-radius:2px"></span></div><div style="display:flex;gap:6px"><div style="width:62px;display:grid;grid-template-columns:repeat(4,1fr);gap:2px;align-content:start"><span style="height:9px;background:#2EC5FF"></span><span style="height:9px;background:#2EC5FF"></span><span style="height:9px;background:#2EC5FF"></span><span style="height:9px;background:#999"></span><span style="height:9px;background:#FF9F1C"></span><span style="height:9px;background:#FF9F1C"></span><span style="height:9px;background:#999"></span><span style="height:9px;background:#999"></span></div><div style="flex:1;display:grid;grid-template-columns:repeat(4,1fr);gap:2px"><span style="background:#2EC5FF"></span><span style="background:#BFE9FF"></span><span style="background:#1E8FB8"></span><span style="background:#ccc"></span><span style="background:#0B3A55"></span><span style="background:#4A6A80"></span><span style="background:#B78CFF"></span><span style="background:#ccc"></span><span style="background:#FF9F1C"></span><span style="background:#ccc"></span><span style="background:#2EC5FF"></span><span style="background:#ccc"></span><span style="background:#123"></span><span style="background:#ccc"></span><span style="background:#ccc"></span><span style="background:#ccc"></span></div></div></div>
+<div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;gap:8px;align-items:center"><b style="font-size:22px;letter-spacing:.08em">MK2</b><span style="font-size:11px;font-weight:800;color:#30D158;border:1px solid #30D158;border-radius:4px;padding:1px 6px">CONNECTED</span></div><span class="hw">2 screens · 8 knobs · wheel · 16 pressure pads · 48 buttons</span><span style="font-size:13px;color:#C9D1DB">Layout: PREVIEW screen + PROGRAM screen, wheel = TAKE, 4×4 clip grid.</span><span style="font-size:12px;color:#9AA4B2">The all-rounder. Recommended.</span></div>
+</button>
+<button onClick="{{ pickNuvj }}" style="text-align:left;border-radius:18px;padding:16px;background:#12161C;border:{{ nuvjBorder }};color:#E8ECF1;font-family:Inter;display:flex;gap:14px;align-items:center">
+<div style="width:200px;height:150px;flex:none;border-radius:8px;background:#2A2D33;padding:8px;box-sizing:border-box;display:flex;gap:6px;align-items:center"><div style="display:grid;grid-template-columns:repeat(3,16px);gap:3px"><span style="height:16px;background:#5A6;border-radius:2px"></span><span style="height:16px;background:#5A6;border-radius:2px"></span><span style="height:16px;background:#5A6;border-radius:2px"></span><span style="height:16px;background:#5A6;border-radius:2px"></span><span style="height:16px;background:#5A6;border-radius:2px"></span><span style="height:16px;background:#5A6;border-radius:2px"></span><span style="height:16px;background:#5A6;border-radius:2px"></span><span style="height:16px;background:#5A6;border-radius:2px"></span><span style="height:16px;background:#5A6;border-radius:2px"></span></div><div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px"><span style="background:#9FB98A;color:#223;font:10px 'JetBrains Mono';padding:1px 4px">TECHNO</span><span style="width:50px;height:8px;background:#111;border-radius:4px"></span></div><div style="display:grid;grid-template-columns:repeat(3,16px);gap:3px"><span style="height:16px;background:#5A6;border-radius:2px"></span><span style="height:16px;background:#5A6;border-radius:2px"></span><span style="height:16px;background:#5A6;border-radius:2px"></span><span style="height:16px;background:#5A6;border-radius:2px"></span><span style="height:16px;background:#5A6;border-radius:2px"></span><span style="height:16px;background:#5A6;border-radius:2px"></span><span style="height:16px;background:#5A6;border-radius:2px"></span><span style="height:16px;background:#5A6;border-radius:2px"></span><span style="height:16px;background:#5A6;border-radius:2px"></span></div></div>
+<div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;gap:8px;align-items:center"><b style="font-size:22px;letter-spacing:.08em">NUVJ</b><span style="font-size:11px;font-weight:800;color:#9AA4B2;border:1px solid #3A434F;border-radius:4px;padding:1px 6px">SIMULATE</span></div><span class="hw">2 decks · 2×9 pads · jogs · real crossfader</span><span style="font-size:13px;color:#C9D1DB">Layout: deck A | master | deck B, the real crossfader in the middle.</span><span style="font-size:12px;color:#9AA4B2">The classic. Great on its own.</span></div>
+</button>
+</div>
+
+<div style="display:flex;gap:10px;align-items:center;margin-top:4px"><span class="lbl">Side arms</span><span style="font-size:13px;color:#9AA4B2">add any · they never move the layout, they only add control</span></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">
+<div style="border-radius:14px;padding:12px;background:#12161C;border:2px solid #30D158;display:flex;gap:10px;align-items:center"><div style="width:70px;height:70px;border-radius:8px;flex:none;background-image:radial-gradient(circle at 62% 41%,#FFE 0 4px,#B78CFF 5px 10px,transparent 11px),repeating-linear-gradient(0deg,#1a1a24 0 4px,#22222e 4px 5px)"></div><div style="display:flex;flex-direction:column;gap:3px"><b>BLOCK <span style="font-size:10px;color:#30D158">✓ ADDED</span></b><span class="hw">touch · pressure · 15×15 LED</span><span style="font-size:12px;color:#C9D1DB">Touch FX on program, crossfader, mood map</span></div></div>
+<div style="border-radius:14px;padding:12px;background:#12161C;border:2px solid #30D158;display:flex;gap:10px;align-items:center"><div style="width:70px;height:70px;border-radius:8px;flex:none;background:#111;display:flex;gap:2px;padding:6px;box-sizing:border-box;align-items:stretch"><span style="flex:1;background:#FF3B6B"></span><span style="flex:1;background:#FF9F1C"></span><span style="flex:1;background:#30D158"></span><span style="flex:1;background:#2EC5FF"></span><span style="flex:1;background:#B78CFF"></span></div><div style="display:flex;flex-direction:column;gap:3px"><b>LUMI <span style="font-size:10px;color:#30D158">✓ ADDED</span></b><span class="hw">24 keys · strike · pressure · glide</span><span style="font-size:12px;color:#C9D1DB">FX hits and colour washes on the keys</span></div></div>
+<div style="border-radius:14px;padding:12px;background:#12161C;border:1px solid #2A313A;display:flex;gap:10px;align-items:center"><div style="width:70px;height:70px;border-radius:8px;flex:none;background:#1B1F26;display:grid;grid-template-columns:repeat(8,1fr);gap:1px;padding:6px;box-sizing:border-box"><span style="background:#2EC5FF"></span><span style="background:#2EC5FF"></span><span style="background:#333"></span><span style="background:#2EC5FF"></span><span style="background:#333"></span><span style="background:#2EC5FF"></span><span style="background:#333"></span><span style="background:#333"></span><span style="background:#333"></span><span style="background:#2EC5FF"></span><span style="background:#333"></span><span style="background:#333"></span><span style="background:#2EC5FF"></span><span style="background:#333"></span><span style="background:#2EC5FF"></span><span style="background:#333"></span></div><div style="display:flex;flex-direction:column;gap:3px"><b>OHM64</b><span class="hw">8×8 grid · 8 faders · 16 knobs · crossfader</span><span style="font-size:12px;color:#C9D1DB">Faders for layers, a real crossfader for the MK2</span></div></div>
+<div style="border-radius:14px;padding:12px;background:#12161C;border:1px solid #2A313A;display:flex;gap:10px;align-items:center"><div style="width:70px;height:70px;border-radius:8px;flex:none;background:#3A3A80;display:flex;align-items:center;justify-content:center"><span style="width:40px;height:40px;border-radius:4px;background:radial-gradient(circle,#B78CFF,#1A1A40);border:2px solid #aaa"></span></div><div style="display:flex;flex-direction:column;gap:3px"><b>KPE1 (Entrancer)</b><span class="hw">X/Y pad · hold · motion</span><span style="font-size:12px;color:#C9D1DB">Touch FX, like the Block</span></div></div>
+</div>
+
+<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;background:#12161C;border:1px solid #2A313A;border-radius:14px;padding:14px 18px;margin-top:auto">
+<span class="lbl">Loadout</span>
+<span style="font-size:16px;font-weight:800">{{ loadout }}</span>
+<span style="font-size:13px;color:#9AA4B2">Saved with the show. Unplug a side arm mid-show: nothing breaks, its panel greys out.</span>
+<div style="flex:1"></div>
+<span style="font-size:13px;color:#9AA4B2">Main-capable: MK2, NuVJ · Side arms: Block, LUMI, Ohm64, KPE1, any MIDI (learn)</span>
+<span style="height:46px;line-height:46px;padding:0 20px;border-radius:10px;background:#E8ECF1;color:#0B0D10;font:800 15px Inter;letter-spacing:.08em">NEXT: OUTPUTS →</span>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+constructor(props) { super(props); this.state = { main: 'mk2' }; }
+renderVals() {
+const mk2 = this.state.main === 'mk2';
+return {
+mk2Border: mk2 ? '3px solid #30D158' : '1px solid #2A313A',
+nuvjBorder: mk2 ? '1px solid #2A313A' : '3px solid #30D158',
+loadout: (mk2 ? 'MK2' : 'NuVJ') + ' + Block + LUMI',
+pickMk2: () => this.setState({ main: 'mk2' }),
+pickNuvj: () => this.setState({ main: 'nuvj' })
+};
+}
+}
+</script>
+</body>
+</html>

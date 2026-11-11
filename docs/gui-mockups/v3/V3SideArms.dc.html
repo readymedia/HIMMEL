@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Himmel v3 – Side arms</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0D10}
+.hw{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;color:#8C96A3}
+.lbl{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#9AA4B2;font-weight:700}
+</style>
+</helmet>
+<div style="min-height:900px;width:100%;box-sizing:border-box;background:#0B0D10;color:#E8ECF1;font-family:Inter,system-ui,sans-serif;display:flex;flex-direction:column;gap:14px;padding:20px 28px">
+<div><h1 style="margin:0;font-size:30px;font-weight:900">Side arms: extra hands, same layout</h1>
+<div style="font-size:14px;color:#9AA4B2;margin-top:4px">A side arm docks as a card next to the pads. It shows what it does right now and where it acts (red = PROGRAM, green = PREVIEW). It never takes over the main weapon's job; where it has something the main lacks (a real crossfader), both work and the GUI shows both.</div></div>
+
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px">
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:8px"><b style="font-size:18px">BLOCK</b><span class="hw">double-tap MODE = next mode · or SHIFT+PAD MODE on the MK2</span></div>
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">
+<div style="display:flex;flex-direction:column;gap:5px"><div style="aspect-ratio:1;border-radius:8px;border:3px solid #FF3B30;box-sizing:border-box;background-image:radial-gradient(circle at 62% 41%,#FFE 0 5px,#B78CFF 6px 14px,transparent 15px),repeating-linear-gradient(0deg,#1a1a24 0 6px,#22222e 6px 7px)"></div><b style="font-size:12px">TOUCH</b><span style="font-size:11px;color:#C9D1DB">X = effect, Y = amount, press = depth, 2nd finger = 3rd param. MODE = hold.</span><span style="font-size:10px;color:#FF6B61">→ PROGRAM</span></div>
+<div style="display:flex;flex-direction:column;gap:5px"><div style="aspect-ratio:1;border-radius:8px;border:2px solid #E8ECF1;box-sizing:border-box;background:linear-gradient(90deg,#0B3A55,#2EC5FF 45%,#FF3B30 46%,#FF9F1C);position:relative"><span style="position:absolute;left:43%;top:0;bottom:0;width:6px;background:#fff"></span><span style="position:absolute;left:4px;right:4px;top:4px;height:10px;background:rgba(255,59,48,.6);border-radius:2px"></span></div><b style="font-size:12px">MIX</b><span style="font-size:11px;color:#C9D1DB">Swipe sideways = crossfader. Top row = TAKE, bottom row = CUT.</span><span style="font-size:10px;color:#9AA4B2">gives the MK2 a fader</span></div>
+<div style="display:flex;flex-direction:column;gap:5px"><div style="aspect-ratio:1;border-radius:8px;box-sizing:border-box;display:grid;grid-template-columns:repeat(4,1fr);gap:3px;padding:4px;background:#111"><span style="background:#2EC5FF;border-radius:2px"></span><span style="background:#B78CFF;border-radius:2px"></span><span style="background:#FFB347;border-radius:2px;box-shadow:0 0 0 2px #FF3B30"></span><span style="background:#333;border-radius:2px"></span><span style="background:#7A4FC0;border-radius:2px"></span><span style="background:#1E8FB8;border-radius:2px;box-shadow:0 0 0 2px #30D158"></span><span style="background:#B86A10;border-radius:2px"></span><span style="background:#5A3A99;border-radius:2px"></span><span style="background:#203A52;border-radius:2px"></span><span style="background:#3A2A55;border-radius:2px"></span><span style="background:#4A3010;border-radius:2px"></span><span style="background:#333;border-radius:2px"></span><span style="background:#FF3B6B;border-radius:2px"></span><span style="background:#E8ECF1;border-radius:2px"></span><span style="background:#FF9F1C;border-radius:2px"></span><span style="background:#333;border-radius:2px"></span></div><b style="font-size:12px">LOOKS</b><span style="font-size:11px;color:#C9D1DB">4×4 saved looks with strike velocity, while the MK2 pads stay on clips.</span><span style="font-size:10px;color:#30D158">→ PREVIEW (press harder = LIVE)</span></div>
+<div style="display:flex;flex-direction:column;gap:5px"><div style="aspect-ratio:1;border-radius:8px;box-sizing:border-box;background:linear-gradient(0deg,rgba(0,0,0,0),rgba(0,0,0,0)),linear-gradient(90deg,#2B3A20,#203A52 50%,#4A1030);position:relative"><span style="position:absolute;left:66%;top:30%;width:12px;height:12px;border-radius:50%;background:#fff;box-shadow:0 0 0 4px #B78CFF"></span></div><b style="font-size:12px">MOOD</b><span style="font-size:11px;color:#C9D1DB">Touch the map: X = calm → intense, Y = warm → cold. MODE = dice now.</span><span style="font-size:10px;color:#D2B8FF">steers the dice</span></div>
+</div>
+</div>
+
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:8px"><b style="font-size:18px">LUMI</b><span class="hw">MODE = layout · OCT − / + = shift the keys</span></div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<div><div class="lbl" style="margin-bottom:4px">FX KEYS (default)</div><div style="display:flex;gap:2px;height:46px"><span style="flex:1;background:#FF3B6B;border-radius:0 0 3px 3px"></span><span style="flex:1;background:#FF9F1C;border-radius:0 0 3px 3px"></span><span style="flex:1;background:#FFD60A;border-radius:0 0 3px 3px"></span><span style="flex:1;background:#30D158;border-radius:0 0 3px 3px"></span><span style="flex:1;background:#2EC5FF;border-radius:0 0 3px 3px"></span><span style="flex:1;background:#5A6AFF;border-radius:0 0 3px 3px"></span><span style="flex:1;background:#B78CFF;border-radius:0 0 3px 3px"></span><span style="flex:1;background:#E8ECF1;border-radius:0 0 3px 3px"></span><span style="flex:1;background:#3A0D0A;border:1px solid #FF3B30;border-radius:0 0 3px 3px"></span><span style="flex:1;background:#1A2A3A;border-radius:0 0 3px 3px"></span><span style="flex:1;background:#2A1A3A;border-radius:0 0 3px 3px"></span><span style="flex:1;background:#1A3A2A;border-radius:0 0 3px 3px"></span><span style="flex:1;background:#3A2A10;border-radius:0 0 3px 3px"></span><span style="flex:1;background:#000;border:1px solid #3A434F;border-radius:0 0 3px 3px"></span></div><div style="font-size:11px;color:#C9D1DB;margin-top:4px">Left half = colour washes over program (strike = punch, pressure = depth, glide = shift hue). Right half = FX hits (strobe, stutter, kaleido, freeze …).</div></div>
+<div><div class="lbl" style="margin-bottom:4px">LOOK KEYS</div><div style="font-size:11px;color:#C9D1DB">Each key = a saved look, low = calm, high = peak. Play a "melody" of looks.</div></div>
+<div><div class="lbl" style="margin-bottom:4px">CLIP KEYS</div><div style="font-size:11px;color:#C9D1DB">Each key = a clip in the selected layer's bank (24 instead of 16).</div></div>
+</div>
+</div>
+
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:8px"><b style="font-size:18px">OHM64</b><span style="font-size:12px;color:#9AA4B2">side arm for now (could become a main later)</span></div>
+<div style="display:flex;gap:12px;align-items:center">
+<div style="width:200px;height:110px;border-radius:8px;background:#1B1F26;padding:8px;box-sizing:border-box;display:flex;gap:6px;flex:none"><div style="display:flex;gap:3px;align-items:flex-end"><span style="width:6px;height:60px;background:#30D158"></span><span style="width:6px;height:40px;background:#30D158"></span><span style="width:6px;height:70px;background:#30D158"></span><span style="width:6px;height:20px;background:#30D158"></span></div><div style="flex:1;display:grid;grid-template-columns:repeat(8,1fr);gap:1px"><span style="background:#2EC5FF"></span><span style="background:#333"></span><span style="background:#2EC5FF"></span><span style="background:#333"></span><span style="background:#2EC5FF"></span><span style="background:#2EC5FF"></span><span style="background:#333"></span><span style="background:#333"></span><span style="background:#333"></span><span style="background:#2EC5FF"></span><span style="background:#333"></span><span style="background:#2EC5FF"></span><span style="background:#333"></span><span style="background:#333"></span><span style="background:#2EC5FF"></span><span style="background:#333"></span></div><div style="display:flex;gap:3px;align-items:flex-end"><span style="width:6px;height:70px;background:#FF3B30"></span><span style="width:6px;height:70px;background:#FF3B30"></span><span style="width:6px;height:30px;background:#FF3B30"></span><span style="width:6px;height:10px;background:#FF3B30"></span></div></div>
+<div style="font-size:12px;color:#C9D1DB;line-height:1.5">Faders 1–4 = preview layers A–D, faders 5–8 = program layers E–H.<br>Crossfader = <b>the real crossfader</b> (soft takeover with the MK2 wheel).<br>8×8 grid = 64 clips of the bank · 16 knobs = FX params of the selected layer.</div>
+</div>
+</div>
+
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:8px"><b style="font-size:18px">KPE1 · Entrancer</b></div>
+<div style="font-size:12px;color:#C9D1DB;line-height:1.5">Its pad = Touch FX (the same as the Block's TOUCH mode). Program keys 1–8 = 8 favourite effects. HOLD = hold. PAD MOTION = record a gesture loop on the beat. TAP/BPM = tap tempo.</div>
+<div class="lbl" style="margin-top:6px">Rules for every side arm</div>
+<ul style="margin:0;padding-left:18px;font-size:12px;color:#C9D1DB;line-height:1.6">
+<li>Its card shows its mode, its target (PROGRAM red / PREVIEW green) and live values.</li>
+<li>It adds; it never remaps the main weapon.</li>
+<li>Faders and crossfaders use soft takeover: they act only after they pass the current value, so nothing jumps.</li>
+<li>Unplugged mid-show: the card greys out, the show goes on.</li>
+<li>Any MIDI device can be a side arm with click-then-press learning.</li>
+</ul>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

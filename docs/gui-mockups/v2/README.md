@@ -1,6 +1,6 @@
 # GUI mockups v2 (dark, 2026-11-11)
 
-Copies of the v2 artboards from the design canvas "Himmel – GUI mockups"
+Partly superseded by `../v3/` (Perform, weapon select). Copies of the v2 artboards from the design canvas "Himmel – GUI mockups"
 (page "v2 · Dark (current)"): https://claude.ai/artifact/HvLHtroo7BhQZ5G6RJ9evE
 
 They are design-canvas files (`.dc.html`): read them for **content and

@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Himmel v3 – Perform with MK2 as main weapon</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0D10}
+.mono{font-family:'JetBrains Mono',monospace}
+.hw{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;color:#8C96A3}
+.lbl{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#9AA4B2;font-weight:700}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="min-height:900px;width:100%;box-sizing:border-box;background:#0B0D10;color:#E8ECF1;font-family:Inter,system-ui,sans-serif;display:flex;flex-direction:column;gap:8px;padding:8px 12px">
+
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#12161B;border:1px solid #232A33;border-radius:8px;padding:5px 12px;font-size:12px">
+<b style="letter-spacing:.2em;font-size:14px">HIMMEL</b>
+<span style="padding:2px 8px;border-radius:12px;background:#E8ECF1;color:#0B0D10;font-weight:800">MAIN · MK2</span>
+<span style="padding:2px 8px;border-radius:12px;border:1px solid #1F5A33;color:#7EE2A0">+ BLOCK</span>
+<span style="padding:2px 8px;border-radius:12px;border:1px solid #1F5A33;color:#7EE2A0">+ LUMI</span>
+<span class="mono" style="font-size:16px;margin-left:8px">128.0</span><span style="display:flex;gap:2px"><span style="width:9px;height:9px;background:#E8ECF1"></span><span style="width:9px;height:9px;background:#3A434F"></span><span style="width:9px;height:9px;background:#3A434F"></span><span style="width:9px;height:9px;background:#3A434F"></span></span><span class="hw">LINK</span>
+<span style="color:#D2B8FF">MOOD · Techno · cold</span>
+<div style="flex:1"></div>
+<span style="color:#7EE2A0">✓ sync ✓ audio ✓ cams</span><span style="color:#FFD60A">◐ import 12</span><span class="mono">GPU 1.9 / 4.0 ms</span>
+<span style="padding:2px 9px;border:2px solid #FF3B30;border-radius:6px;color:#FF6B61;font-weight:800">PANIC <span class="hw">SHIFT+MUTE</span></span>
+</div>
+
+<sc-if value="{{ isProg }}" hint-placeholder-val="{{ false }}">
+<div style="background:#3A0D0A;border:2px solid #FF3B30;border-radius:8px;padding:6px 12px;display:flex;gap:10px;align-items:center;font-weight:800;letter-spacing:.06em;color:#FFE1DE">● LIVE EDIT · you are playing PROGRAM layer F directly. The audience sees every change. <span style="font-weight:500;color:#FFB4AE">Pick a top-row group (A–D) to go back to preparing.</span></div>
+</sc-if>
+
+<div style="display:flex;gap:10px;align-items:stretch">
+<div style="width:132px;flex:none;display:grid;grid-template-columns:1fr 1fr;gap:5px;align-content:start;padding-top:22px">
+<div style="background:#E8ECF1;color:#0B0D10;border-radius:5px;padding:5px 4px;text-align:center;font-size:11px;font-weight:800">PERFORM<div class="hw" style="color:#3A434F">CONTROL</div></div>
+<div style="background:#1B2027;border-radius:5px;padding:5px 4px;text-align:center;font-size:11px;font-weight:700">CUES<div class="hw">STEP</div></div>
+<div style="background:#1B2027;border-radius:5px;padding:5px 4px;text-align:center;font-size:11px;font-weight:700">LIBRARY<div class="hw">BROWSE</div></div>
+<div style="background:#1B2027;border-radius:5px;padding:5px 4px;text-align:center;font-size:11px;font-weight:700">MUSIC<div class="hw">SAMPLING</div></div>
+<div style="background:#1B2027;border-radius:5px;padding:5px 4px;text-align:center;font-size:11px;font-weight:700">◀ PAGE<div class="hw">PAGE ◀</div></div>
+<div style="background:#1B2027;border-radius:5px;padding:5px 4px;text-align:center;font-size:11px;font-weight:700">PAGE ▶<div class="hw">PAGE ▶</div></div>
+<div style="background:#1B2027;border-radius:5px;padding:5px 4px;text-align:center;font-size:11px;font-weight:700">WHOLE LOOK<div class="hw">ALL</div></div>
+<div style="background:#1B2027;border-radius:5px;padding:5px 4px;text-align:center;font-size:11px;font-weight:700">LINK AUDIO<div class="hw">AUTO</div></div>
+<div style="grid-column:span 2;margin-top:6px;font-size:10px;color:#6B7684;line-height:1.4">Page 1/5 · PLAY<br>Pages: PLAY · LAYER · FX · MIX · REACT</div>
+</div>
+
+<div style="flex:1;min-width:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px">
+<div style="display:flex;flex-direction:column;gap:6px;border-radius:10px;padding:6px;background:linear-gradient(180deg,rgba(48,209,88,.10),rgba(48,209,88,.02));border:1px solid #1F5A33">
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px">
+<button style="height:30px;border-radius:5px;border:1px solid #6A4FA0;background:#221A33;color:#E9DDFF;font:800 10px Inter;letter-spacing:.06em">CLIP · free<div class="hw" style="font-size:9px">TOP 1</div></button>
+<button style="height:30px;border-radius:5px;border:1px solid #6A4FA0;background:#221A33;color:#E9DDFF;font:800 10px Inter;letter-spacing:.06em">FX · free<div class="hw" style="font-size:9px">TOP 2</div></button>
+<button style="height:30px;border-radius:5px;border:1px solid #2A313A;background:#0F1318;color:#5C6673;font:800 10px Inter;letter-spacing:.06em">COLOUR · held<div class="hw" style="font-size:9px">TOP 3</div></button>
+<button style="height:30px;border-radius:5px;border:1px solid #6A4FA0;background:#221A33;color:#E9DDFF;font:800 10px Inter;letter-spacing:.06em">MOTION · free<div class="hw" style="font-size:9px">TOP 4</div></button>
+</div>
+<div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:900;color:#30D158;letter-spacing:.12em">PREVIEW</span><span style="font-size:11px;color:#9AA4B2">prepare here · the audience can't see this · left screen</span></div>
+<div style="aspect-ratio:16/9;max-height:230px;border-radius:6px;border:3px solid #30D158;background:radial-gradient(circle at 35% 40%,#2EC5FF 0,#0B3A55 35%,#05121C 72%);position:relative"><div style="position:absolute;inset:0;background:repeating-conic-gradient(from 0deg at 50% 50%,rgba(255,255,255,.07) 0 15deg,transparent 15deg 30deg)"></div><span class="mono" style="position:absolute;left:8px;bottom:6px;font-size:11px;color:#BFE9FF">look #23 · Techno Ice · layers A B C</span></div>
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px">
+<div style="background:#14181D;border:1px solid #234A30;border-radius:8px;padding:5px;display:flex;flex-direction:column;gap:4px"><div style="height:46px;display:flex;gap:2px;align-items:center"><span style="flex:1;height:30px;border-radius:2px;background:linear-gradient(135deg,#102030,#2EC5FF);opacity:.45"></span><span style="flex:1.6;height:44px;border-radius:3px;background:linear-gradient(135deg,#0B3A55,#2EC5FF);outline:2px solid #30D158"></span><span style="flex:1;height:30px;border-radius:2px;background:linear-gradient(135deg,#123,#BFE9FF);opacity:.45"></span></div><b style="font-size:11px">SCROLL CLIPS</b><span class="hw">KNOB 1 · turn = next clip</span></div>
+<div style="background:#14181D;border:1px solid #234A30;border-radius:8px;padding:5px;display:flex;flex-direction:column;gap:4px"><div style="height:46px;position:relative"><span style="position:absolute;left:18%;top:8px;width:46%;height:32px;border-radius:3px;background:#301040;transform:rotate(-10deg);opacity:.6"></span><span style="position:absolute;left:30%;top:4px;width:46%;height:34px;border-radius:3px;background:linear-gradient(135deg,#0B3A55,#2EC5FF);outline:2px solid #B78CFF"></span><span class="mono" style="position:absolute;right:2px;bottom:0;font-size:10px;color:#D2B8FF">#23</span></div><b style="font-size:11px">DICE THE LOOK</b><span class="hw">KNOB 2 · right new · left back</span></div>
+<div style="background:#14181D;border:1px solid #234A30;border-radius:8px;padding:5px;display:flex;flex-direction:column;gap:4px"><div style="height:46px;display:flex;gap:2px"><span style="flex:1;border-radius:3px;background:#0B3A55"></span><span style="flex:1;border-radius:3px;background:repeating-conic-gradient(from 0deg at 50% 50%,#2EC5FF 0 30deg,#0B3A55 30deg 60deg)"></span><span style="flex:1;border-radius:3px;background:repeating-conic-gradient(from 0deg at 50% 50%,#2EC5FF 0 10deg,#0B3A55 10deg 20deg)"></span></div><b style="font-size:11px">FX · KALEIDO 6</b><span class="hw">KNOB 3 · less ◀ ▶ more</span></div>
+<div style="background:#14181D;border:1px solid #234A30;border-radius:8px;padding:5px;display:flex;flex-direction:column;gap:4px"><div style="height:46px;border-radius:3px;background:linear-gradient(90deg,#0B3A55 0 50%,transparent 50%),repeating-linear-gradient(90deg,#2EC5FF 0 3px,#0B3A55 3px 9px)"></div><b style="font-size:11px">SPEED ×1.5</b><span class="hw">KNOB 4 · beat-locked steps</span></div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:6px;border-radius:10px;padding:6px;background:linear-gradient(180deg,rgba(255,59,48,.12),rgba(255,59,48,.02));border:1px solid #6A2420">
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px">
+<button style="height:30px;border-radius:5px;border:1px solid #6A2420;background:#1B1214;color:#FFD9D6;font:800 10px Inter">FREEZE hold<div class="hw" style="font-size:9px">TOP 5</div></button>
+<button style="height:30px;border-radius:5px;border:1px solid #6A2420;background:#1B1214;color:#FFD9D6;font:800 10px Inter">STROBE hold<div class="hw" style="font-size:9px">TOP 6</div></button>
+<button style="height:30px;border-radius:5px;border:1px solid #6A2420;background:#1B1214;color:#FFD9D6;font:800 10px Inter">BLACK hold<div class="hw" style="font-size:9px">TOP 7</div></button>
+<button style="height:30px;border-radius:5px;border:2px solid #FFD60A;background:#2A2410;color:#FFE98A;font:800 10px Inter">ASSIST on<div class="hw" style="font-size:9px">TOP 8</div></button>
+</div>
+<div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:900;color:#FF3B30;letter-spacing:.12em">● PROGRAM</span><span style="font-size:11px;color:#9AA4B2">on air → OUT 1·2·3 · right screen</span></div>
+<div style="aspect-ratio:16/9;max-height:230px;border-radius:6px;border:3px solid #FF3B30;background:radial-gradient(ellipse at 50% 60%,#FFB347 0,#FF9F1C 18%,#5A2A00 45%,#120700 75%);position:relative"><div style="position:absolute;inset:0;background:repeating-radial-gradient(circle at 50% 60%,rgba(255,255,255,.07) 0 6px,transparent 6px 22px)"></div><span class="mono" style="position:absolute;right:8px;top:6px;font-size:11px;color:#FFD9A8">Deep House Glow · layers E F</span></div>
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px">
+<div style="background:#14181D;border:1px solid #4A2220;border-radius:8px;padding:5px;display:flex;flex-direction:column;gap:4px"><div style="height:46px;display:flex;gap:3px;align-items:flex-end"><span style="flex:1;height:30%;background:#FF9F1C"></span><span style="flex:1;height:50%;background:#FF9F1C"></span><span style="flex:1;height:70%;background:#FF9F1C"></span><span style="flex:1;height:85%;background:#FF6B30"></span><span style="flex:1;height:20%;background:#3A434F"></span></div><b style="font-size:11px">INTENSITY</b><span class="hw">KNOB 5 · energy macro</span></div>
+<div style="background:#14181D;border:1px solid #4A2220;border-radius:8px;padding:5px;display:flex;flex-direction:column;gap:4px"><div style="height:46px;display:flex;align-items:center;justify-content:center"><span style="width:44px;height:44px;border-radius:50%;background:conic-gradient(#f33,#f93,#ff3,#3f6,#3cf,#36f,#c3f,#f33);display:flex;align-items:center;justify-content:center"><span style="width:26px;height:26px;border-radius:50%;background:radial-gradient(#FFB347,#5A2A00)"></span></span></div><b style="font-size:11px">COLOUR · amber</b><span class="hw">KNOB 6 · turn the hue</span></div>
+<div style="background:#14181D;border:1px solid #4A2220;border-radius:8px;padding:5px;display:flex;flex-direction:column;gap:4px"><div style="height:46px;border-radius:3px;background:radial-gradient(circle,#FFB347 0 8%,transparent 9%),repeating-radial-gradient(circle,#5A2A00 0 5px,#FF9F1C 5px 7px)"></div><b style="font-size:11px">SPACE · zoom in</b><span class="hw">KNOB 7 · tunnel ◀ ▶ out</span></div>
+<div style="background:#14181D;border:1px solid #4A2220;border-radius:8px;padding:5px;display:flex;flex-direction:column;gap:4px"><div style="height:46px;border-radius:3px;background:linear-gradient(90deg,#5A2A00 0 40%,#FFE1B0 40% 42%,transparent 42%),repeating-linear-gradient(0deg,#FF9F1C 0 2px,#3A1A00 2px 6px)"></div><b style="font-size:11px">MASTER FX 40 %</b><span class="hw">KNOB 8 · glow on live</span></div>
+</div>
+</div>
+</div>
+
+<div style="width:150px;flex:none;display:flex;flex-direction:column;gap:6px;padding-top:22px">
+<span class="lbl">Outputs</span>
+<div style="border:2px solid #FF3B30;border-radius:6px;height:58px;background:radial-gradient(ellipse at 70% 60%,#FF9F1C,#120700 70%);position:relative"><span style="position:absolute;left:4px;top:2px;font-size:10px;font-weight:800">1 ● MAIN</span></div>
+<div style="border:2px solid #FF3B30;border-radius:6px;height:58px;background:radial-gradient(ellipse at 50% 60%,#FFB347,#120700 70%);position:relative"><span style="position:absolute;left:4px;top:2px;font-size:10px;font-weight:800">2 ● MAIN</span></div>
+<div style="border:2px solid #FF3B30;border-radius:6px;height:58px;background:radial-gradient(ellipse at 30% 60%,#FF9F1C,#120700 70%);position:relative"><span style="position:absolute;left:4px;top:2px;font-size:10px;font-weight:800">3 ● MAIN</span></div>
+<div style="border:2px solid #FF3B30;border-radius:6px;height:40px;background:#1E1030;position:relative"><span style="position:absolute;left:4px;top:2px;font-size:10px;font-weight:800">4 ● OWN logo</span></div>
+<span class="hw">NAVIGATE + pad = route</span>
+</div>
+</div>
+
+<div style="display:flex;gap:10px;align-items:stretch;flex-wrap:wrap">
+<div style="width:300px;flex:none;display:flex;flex-direction:column;gap:8px">
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:10px;padding:8px;display:flex;gap:10px;align-items:center">
+<div style="display:flex;flex-direction:column;gap:4px">
+<span style="font-size:10px;font-weight:700;background:#1B2027;border-radius:4px;padding:3px 6px">DIM <span class="hw">VOLUME</span></span>
+<span style="font-size:10px;font-weight:700;background:#1B2027;border-radius:4px;padding:3px 6px">MOOD <span class="hw">SWING</span></span>
+<span style="font-size:10px;font-weight:700;background:#1B2027;border-radius:4px;padding:3px 6px">TAP <span class="hw">TEMPO</span></span>
+</div>
+<div style="width:96px;height:96px;border-radius:50%;background:conic-gradient(#FF3B30 0 0%,#30D158 0 0%,#2A313A 0);position:relative;flex:none;box-shadow:inset 0 0 0 7px #2A313A">
+<div style="position:absolute;inset:0;border-radius:50%;background:conic-gradient(#FF3B30 0 64%,transparent 64%);-webkit-mask:radial-gradient(circle,transparent 40px,#000 41px);mask:radial-gradient(circle,transparent 40px,#000 41px)"></div>
+<div style="position:absolute;inset:14px;border-radius:50%;background:#0F1318;display:flex;flex-direction:column;align-items:center;justify-content:center"><b style="font-size:13px">TAKE</b><span class="mono" style="font-size:11px;color:#FFB4AE">64 %</span><span class="hw" style="font-size:8px">WHEEL</span></div>
+</div>
+<div style="font-size:11px;color:#9AA4B2;line-height:1.45">Turn the <b style="color:#E8ECF1">wheel</b> = crossfade PREVIEW → PROGRAM. One turn = done, roles swap.<br>Push = auto TAKE.</div>
+</div>
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:5px">
+<div style="display:flex;justify-content:space-between"><span class="lbl" style="color:#30D158">Preview layers</span><span class="hw">GROUP A–D</span></div>
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px">
+<button onClick="{{ pickPrev }}" style="height:44px;border-radius:5px;border:2px solid {{ prevSel }};background:linear-gradient(135deg,#0B3A55,#2EC5FF);color:#fff;font:800 11px Inter">A</button>
+<button style="height:44px;border-radius:5px;border:1px solid #234A30;background:repeating-linear-gradient(90deg,#103040 0 4px,#2EC5FF 4px 6px);color:#fff;font:800 11px Inter">B</button>
+<button style="height:44px;border-radius:5px;border:1px solid #234A30;background:#2A2F37;color:#fff;font:800 11px Inter">C cam</button>
+<button style="height:44px;border-radius:5px;border:1px dashed #234A30;background:#101418;color:#5C6673;font:800 11px Inter">D</button>
+</div>
+<div style="display:flex;justify-content:space-between"><span class="lbl" style="color:#FF6B61">Program layers</span><span class="hw">GROUP E–H</span></div>
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px">
+<button style="height:44px;border-radius:5px;border:1px solid #4A2220;background:linear-gradient(135deg,#5A2A00,#FF9F1C);color:#fff;font:800 11px Inter">E</button>
+<button onClick="{{ pickProg }}" style="height:44px;border-radius:5px;border:2px solid {{ progSel }};background:radial-gradient(circle,#FFD9A8,#5A2A00);color:#fff;font:800 11px Inter">F</button>
+<button style="height:44px;border-radius:5px;border:1px solid #4A2220;background:#161A20;color:#6B7684;font:800 11px Inter">G muted</button>
+<button style="height:44px;border-radius:5px;border:1px dashed #4A2220;background:#101418;color:#5C6673;font:800 11px Inter">H</button>
+</div>
+<span style="font-size:10px;color:#6B7684">Top row = prepare · bottom row = live. Click A or F to try.</span>
+</div>
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:10px;padding:8px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;text-align:center;font-size:10px;font-weight:800">
+<div style="background:#1B2027;border-radius:4px;padding:4px 0">CUT<div class="hw">RESTART</div></div>
+<div style="background:#221A33;border-radius:4px;padding:4px 0;color:#D2B8FF">◀ BACK<div class="hw">◀</div></div>
+<div style="background:#221A33;border-radius:4px;padding:4px 0;color:#D2B8FF">DICE ▶<div class="hw">▶</div></div>
+<div style="background:#1B2027;border-radius:4px;padding:4px 0">ON BEAT<div class="hw">GRID</div></div>
+<div style="background:#3A0D0A;border:1px solid #FF3B30;border-radius:4px;padding:4px 0;color:#FFE1DE">TAKE<div class="hw">PLAY</div></div>
+<div style="background:#1B2027;border-radius:4px;padding:4px 0;color:#FFB4AE">SAVE<div class="hw">REC</div></div>
+<div style="background:#1B2027;border-radius:4px;padding:4px 0">UNDO<div class="hw">ERASE</div></div>
+<div style="background:#1B2027;border-radius:4px;padding:4px 0">SHIFT<div class="hw">SHIFT</div></div>
+</div>
+</div>
+
+<div style="width:92px;flex:none;display:flex;flex-direction:column;gap:4px">
+<span class="lbl">Pads show</span>
+<button onClick="{{ modeScenes }}" style="height:40px;border-radius:5px;border:1px solid #3A434F;background:#1B2027;color:#E8ECF1;font:800 10px Inter">LOOKS<div class="hw" style="font-size:9px">SCENE</div></button>
+<button onClick="{{ modeClips }}" style="height:40px;border-radius:5px;border:2px solid #E8ECF1;background:#2A313A;color:#fff;font:800 10px Inter">CLIPS<div class="hw" style="font-size:9px">PATTERN</div></button>
+<button onClick="{{ modeFx }}" style="height:40px;border-radius:5px;border:1px solid #3A434F;background:#1B2027;color:#E8ECF1;font:800 10px Inter">FX PADS<div class="hw" style="font-size:9px">PAD MODE</div></button>
+<button style="height:40px;border-radius:5px;border:1px solid #3A434F;background:#1B2027;color:#E8ECF1;font:800 10px Inter">OUTPUTS<div class="hw" style="font-size:9px">NAVIGATE</div></button>
+<button style="height:34px;border-radius:5px;border:1px solid #2A313A;background:#14181D;color:#9AA4B2;font:700 10px Inter">COPY<div class="hw" style="font-size:9px">DUPLICATE</div></button>
+<button style="height:34px;border-radius:5px;border:1px solid #2A313A;background:#14181D;color:#9AA4B2;font:700 10px Inter">PICK<div class="hw" style="font-size:9px">SELECT</div></button>
+<button style="height:34px;border-radius:5px;border:1px solid #2A313A;background:#14181D;color:#9AA4B2;font:700 10px Inter">PEEK<div class="hw" style="font-size:9px">SOLO</div></button>
+<button style="height:34px;border-radius:5px;border:1px solid #2A313A;background:#14181D;color:#9AA4B2;font:700 10px Inter">MUTE<div class="hw" style="font-size:9px">MUTE</div></button>
+</div>
+
+<div style="flex:1;min-width:420px;background:#14181D;border:1px solid #2A313A;border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:6px">
+<sc-if value="{{ showClips }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;align-items:center;gap:8px"><span class="lbl">Clips · bank “Water &amp; ice” 2/9</span><span style="font-size:11px">→ loads into <b style="color:{{ targetColor }}">{{ targetName }}</b></span><div style="flex:1"></div><span class="hw">MASTER ◀ ▶ = bank · pressure = squeeze FX</span></div>
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px">
+<div style="aspect-ratio:16/9;border-radius:5px;background:linear-gradient(135deg,#0B3A55,#2EC5FF);box-shadow:0 0 0 3px #30D158;position:relative"><span style="position:absolute;left:4px;bottom:2px;font-size:10px;font-weight:700">in A</span></div>
+<div style="aspect-ratio:16/9;border-radius:5px;background:radial-gradient(circle,#BFE9FF,#123);position:relative"><span style="position:absolute;inset:0;border-radius:5px;box-shadow:inset 0 0 0 4px rgba(255,255,255,.85)"></span><span style="position:absolute;left:4px;bottom:2px;font-size:10px;font-weight:700">pressed · 78 %</span></div>
+<div style="aspect-ratio:16/9;border-radius:5px;background:linear-gradient(0deg,#123,#2EC5FF)"></div>
+<div style="aspect-ratio:16/9;border-radius:5px;background:repeating-radial-gradient(circle at 50% 120%,#1E8FB8 0 5px,#0B3A55 5px 12px)"></div>
+<div style="aspect-ratio:16/9;border-radius:5px;background:linear-gradient(180deg,#0E2A3A,#2EC5FF 70%,#fff)"></div>
+<div style="aspect-ratio:16/9;border-radius:5px;background:linear-gradient(135deg,#123,#4A6A80)"></div>
+<div style="aspect-ratio:16/9;border-radius:5px;background:linear-gradient(45deg,#301040,#2EC5FF)"></div>
+<div style="aspect-ratio:16/9;border-radius:5px;background:radial-gradient(ellipse at 40% 60%,#BFE9FF,#2EC5FF 25%,#0B3A55 60%,#05121C)"></div>
+<div style="aspect-ratio:16/9;border-radius:5px;background:linear-gradient(135deg,#5A2A00,#FF9F1C);box-shadow:0 0 0 3px #FF3B30;position:relative"><span style="position:absolute;left:4px;bottom:2px;font-size:10px;font-weight:700">LIVE in E</span></div>
+<div style="aspect-ratio:16/9;border-radius:5px;background:repeating-linear-gradient(0deg,#123 0 4px,#2EC5FF 4px 6px)"></div>
+<div style="aspect-ratio:16/9;border-radius:5px;background:conic-gradient(from 30deg,#0B3A55,#2EC5FF,#0B3A55)"></div>
+<div style="aspect-ratio:16/9;border-radius:5px;background:#1B2027;position:relative"><span style="position:absolute;left:4px;bottom:2px;font-size:10px;color:#FFD60A">analysing…</span></div>
+<div style="aspect-ratio:16/9;border-radius:5px;background:radial-gradient(circle at 60% 40%,#fff,#9cf 15%,#123 60%)"></div>
+<div style="aspect-ratio:16/9;border-radius:5px;background:linear-gradient(90deg,#0B3A55,#BFE9FF)"></div>
+<div style="aspect-ratio:16/9;border-radius:5px;background:linear-gradient(135deg,#0E2A3A,#1E8FB8)"></div>
+<div style="aspect-ratio:16/9;border-radius:5px;border:1px dashed #3A434F"></div>
+</div>
+<div style="font-size:10px;color:#6B7684">Pad LED = the clip's own colour · green ring = in a preview layer · red pulse = on program · white = your finger. Tap = load (velocity = punch-in), hold harder = squeeze the layer's FX.</div>
+</sc-if>
+<sc-if value="{{ showFx }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:8px"><span class="lbl" style="color:#FF6B61">FX pads · hit PROGRAM</span><div style="flex:1"></div><span class="hw">velocity = punch · pressure = depth · release = off</span></div>
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px">
+<div style="aspect-ratio:16/9;border-radius:5px;background:#3A0D0A;border:1px solid #FF3B30;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px">STROBE</div><div style="aspect-ratio:16/9;border-radius:5px;background:#2A2A2A;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px">FLASH</div><div style="aspect-ratio:16/9;border-radius:5px;background:#1A2A3A;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px">STUTTER</div><div style="aspect-ratio:16/9;border-radius:5px;background:#1A2A3A;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px">FREEZE</div>
+<div style="aspect-ratio:16/9;border-radius:5px;background:#2A1A3A;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px">KALEIDO</div><div style="aspect-ratio:16/9;border-radius:5px;background:#FFE1B0;color:#3A1A00;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:800;font-size:12px;box-shadow:0 0 0 3px #fff">RGB SPLIT<span style="font-size:10px">held · 82 %</span></div><div style="aspect-ratio:16/9;border-radius:5px;background:#2A1A3A;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px">MIRROR</div><div style="aspect-ratio:16/9;border-radius:5px;background:#2A1A3A;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px">TUNNEL</div>
+<div style="aspect-ratio:16/9;border-radius:5px;background:#1A3A2A;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px">ZOOM PUNCH</div><div style="aspect-ratio:16/9;border-radius:5px;background:#1A3A2A;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px">SHAKE</div><div style="aspect-ratio:16/9;border-radius:5px;background:#1A3A2A;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px">INVERT</div><div style="aspect-ratio:16/9;border-radius:5px;background:#1A3A2A;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px">BLUR</div>
+<div style="aspect-ratio:16/9;border-radius:5px;background:#3A2A10;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px">GLITCH</div><div style="aspect-ratio:16/9;border-radius:5px;background:#3A2A10;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px">ECHO</div><div style="aspect-ratio:16/9;border-radius:5px;background:#000;border:1px solid #3A434F;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px">BLACK</div><div style="aspect-ratio:16/9;border-radius:5px;background:#E8ECF1;color:#0B0D10;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px">WHITE</div>
+</div>
+</sc-if>
+<sc-if value="{{ showScenes }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:8px"><span class="lbl">Looks · bank 2</span><div style="flex:1"></div><span class="hw">tap = to PREVIEW · SHIFT+tap = straight to PROGRAM · REC+pad = save</span></div>
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px">
+<div style="aspect-ratio:16/9;border-radius:5px;background:#FF3B6B"></div><div style="aspect-ratio:16/9;border-radius:5px;background:#E8ECF1"></div><div style="aspect-ratio:16/9;border-radius:5px;background:#FF9F1C"></div><div style="aspect-ratio:16/9;border-radius:5px;border:1px dashed #3A434F"></div>
+<div style="aspect-ratio:16/9;border-radius:5px;background:#B78CFF"></div><div style="aspect-ratio:16/9;border-radius:5px;background:#2EC5FF;box-shadow:0 0 0 3px #30D158"></div><div style="aspect-ratio:16/9;border-radius:5px;background:#FFB347;box-shadow:0 0 0 3px #FF3B30"></div><div style="aspect-ratio:16/9;border-radius:5px;border:1px dashed #3A434F"></div>
+<div style="aspect-ratio:16/9;border-radius:5px;background:#7A4FC0"></div><div style="aspect-ratio:16/9;border-radius:5px;background:#1E8FB8"></div><div style="aspect-ratio:16/9;border-radius:5px;background:#B86A10"></div><div style="aspect-ratio:16/9;border-radius:5px;background:#5A3A99"></div>
+<div style="aspect-ratio:16/9;border-radius:5px;background:#203A52"></div><div style="aspect-ratio:16/9;border-radius:5px;background:#3A2A55"></div><div style="aspect-ratio:16/9;border-radius:5px;background:#4A3010"></div><div style="aspect-ratio:16/9;border-radius:5px;border:1px dashed #3A434F"></div>
+</div>
+</sc-if>
+</div>
+
+<div style="width:230px;flex:none;display:flex;flex-direction:column;gap:8px">
+<span class="lbl">Side arms</span>
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:10px;padding:8px;display:flex;gap:8px;align-items:center">
+<div style="width:70px;height:70px;border-radius:6px;border:3px solid #FF3B30;box-sizing:border-box;background-image:radial-gradient(circle at 62% 41%,#FFE 0 4px,#B78CFF 5px 10px,transparent 11px),repeating-linear-gradient(0deg,#1a1a24 0 4px,#22222e 4px 5px);flex:none"></div>
+<div style="font-size:11px;line-height:1.4"><b>BLOCK · TOUCH</b><br>X = kaleido → glow<br>Y = amount · press = depth<br><span style="color:#FF6B61">→ PROGRAM</span></div>
+</div>
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:6px">
+<div style="font-size:11px"><b>LUMI · FX KEYS</b> <span style="color:#9AA4B2">24 keys</span></div>
+<div style="display:flex;gap:1px;height:34px"><span style="flex:1;background:#FF3B6B"></span><span style="flex:1;background:#FF9F1C"></span><span style="flex:1;background:#FFD60A"></span><span style="flex:1;background:#30D158"></span><span style="flex:1;background:#2EC5FF"></span><span style="flex:1;background:#5A6AFF"></span><span style="flex:1;background:#B78CFF"></span><span style="flex:1;background:#E8ECF1"></span><span style="flex:1;background:#FF3B6B;opacity:.5"></span><span style="flex:1;background:#FF9F1C;opacity:.5"></span><span style="flex:1;background:#FFD60A;opacity:.5"></span><span style="flex:1;background:#30D158;opacity:.5"></span></div>
+<div style="font-size:10px;color:#9AA4B2">Low keys = colour wash, high keys = FX hits · strike = punch · glide = sweep</div>
+</div>
+<div style="font-size:10px;color:#6B7684;line-height:1.4">Side arms never move the layout. They only add control: touch, keys, faders.</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+constructor(props) {
+super(props);
+this.state = { target: 'prev', mode: 'clips' };
+}
+renderVals() {
+const prog = this.state.target === 'prog';
+return {
+isProg: prog,
+prevSel: prog ? '#234A30' : '#E8ECF1',
+progSel: prog ? '#FFFFFF' : '#4A2220',
+targetName: prog ? 'PROGRAM layer F (live)' : 'PREVIEW layer A',
+targetColor: prog ? '#FF6B61' : '#30D158',
+showClips: this.state.mode === 'clips',
+showFx: this.state.mode === 'fx',
+showScenes: this.state.mode === 'scenes',
+pickPrev: () => this.setState({ target: 'prev' }),
+pickProg: () => this.setState({ target: 'prog' }),
+modeClips: () => this.setState({ mode: 'clips' }),
+modeFx: () => this.setState({ mode: 'fx' }),
+modeScenes: () => this.setState({ mode: 'scenes' })
+};
+}
+}
+</script>
+</body>
+</html>

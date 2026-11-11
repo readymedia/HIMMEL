@@ -1,228 +1,260 @@
-# Hardware mapping: the main instrument and the other weapons
+# Hardware mapping (v3): main weapon, side arms, PREVIEW / PROGRAM
 
-Status: proposal for the owner, 2026-11-11. This page goes with
-[`gui.md`](gui.md): the GUI shows the same functions, in the same places, with
-the same names. Control names are the names in `weapons/mk2.weapon.json` and
-`maschine_mk2_map.json`.
+Status: proposal for the owner, 2026-11-11 (v3, after the owner's feedback on
+v2). This page goes with [`gui.md`](gui.md). **The GUI mimics the main weapon:
+it is laid out like the controller in front of you, so you know where to
+press and what will happen.** It is not a mirror of the device. Control names
+are the names in `weapons/*.weapon.json`.
 
-Decisions this builds on (kept as they are):
-- The master encoder is the browse/select wheel; `SHIFT` + encoder opens the
-  system menu (2026-11-09).
-- `SHIFT + PATTERN` picks the theme/mood; `SHIFT + MUTE` is panic;
-  `SHIFT + ERASE` is undo (design spec v1).
-- `AUTO WRITE` + knob links that knob to an audio signal (design spec v1).
+## 1. Main weapon and side arms
 
-What changes compared with v1:
-- **Next / previous preset moves to `TRANSPORT < >`** (v1 used
-  `DUPLICATE + < >`).
-- **`PLAY` = TAKE** and **`RESTART` = CUT** (the crossfader between the
-  decks).
-- **`SAMPLING` = the music page** (the latency test moves to the system menu).
-- **The groups are split: A–D = Deck A, E–H = Deck B.**
-
-## 1. MK2: the brain
-
-### 1.1 Zones
-
-| Zone | Controls | Job in Perform |
+| Role | What it does | Weapons |
 |---|---|---|
-| Top row (above the screens) | `Top 1`–`Top 8` | Context buttons. In Perform: **the 8 shuffle locks**. In browsers: categories / filters. Labels sit on the top line of the screens. |
-| Screens | Left + right, 256 × 64 each | Page name, deck states, knob labels / values (bottom), Top-button labels (top), the main info in the middle. |
-| Knobs | `Knob 1`–`Knob 8` | The current page (MACRO, LAYER, FX1–4, MIX, REACT). Relative (deltas), so values never jump. |
-| Left column | `Control`, `Step`, `Browse`, `Sampling`, `Page <`, `Page >`, `All`, `Auto Write` | Views and pages |
-| Master section | Master encoder (turn / push), `Volume`, `Swing`, `Tempo`, `Note Repeat`, `Master <`, `Master >`, `Enter` | Browse wheel, mix, mood, tempo, stutter |
-| Groups | `Group A`–`Group H` (RGB) | **Layers: A–D = Deck A layers 1–4, E–H = Deck B layers 1–4** |
-| Transport | `Restart`, `Transport <`, `Transport >`, `Grid`, `Play`, `Rec`, `Erase`, `Shift` | **CUT, history back, roll / forward, quantise, TAKE, save, undo, shift** |
-| Pad modes | `Scene`, `Pattern`, `Pad Mode`, `Navigate`, `Duplicate`, `Select`, `Solo`, `Mute` | What the 16 pads do, plus copy, select, preview-solo and mute |
-| Pads | `Pad 1`–`Pad 16` (RGB, velocity, aftertouch) | Scenes (default), clips, FX pads, cues or outputs |
+| **Main weapon** (exactly one) | Sets up the GUI layout, the pages, the screens and the LEDs. Everything can be done from it alone. | **MK2** (default), **NuVJ** (classic two-deck) |
+| **Side arms** (zero or more) | **Only add control** (touch effects, more pads, keys, faders, a real crossfader). They never change the layout and never take over the main weapon's job. Each shows up as a docked card. | **Block**, **LUMI**, **Ohm64** (side arm for now, could become a main weapon later), **KPE1 / Entrancer**, any MIDI device (learn) |
 
-### 1.2 Every control in Perform
+Rules for side arms:
+- Each card shows the mode, the target (red = PROGRAM, green = PREVIEW) and
+  live values.
+- Faders and crossfaders use **soft takeover**: a fader acts only after it
+  has passed the current value, so nothing jumps.
+- If a side arm is unplugged mid-show, its card greys out and the show goes
+  on.
+- If a side arm has something the main lacks (Ohm64 / Block MIX: a
+  crossfader), both work and the GUI shows both.
 
-| Control | Press | With `SHIFT` | Notes |
+## 2. One idea: PREVIEW on the left, PROGRAM on the right
+
+The MK2 has two screens with four knobs under each. Himmel uses that shape:
+
+- **Left screen = PREVIEW** (green): you prepare here, the audience cannot
+  see it. Knobs 1–4 under it change the preview.
+- **Right screen = PROGRAM** (red): this is what is live. Knobs 5–8 under it
+  change what is live.
+- **Group buttons, top row A–D = the PREVIEW layers 1–4; bottom row E–H = the
+  PROGRAM layers 1–4.** These are *roles*, not fixed decks: after a TAKE the
+  two stacks swap, and the rows keep meaning prepare / live. (The engine
+  still has decks A / B; the MK2 shows them as roles. The NuVJ shows them as
+  fixed decks, as on its panel.)
+- **Choosing a group in the bottom row means you play PROGRAM directly.** The
+  GUI then shows a red "LIVE EDIT" bar, and the MK2 screen inverts its top
+  line. Choose a top-row group to go back to preparing.
+
+## 3. MK2 as the main weapon (PERFORM)
+
+### 3.1 The crossfader: the wheel
+
+The MK2 has no fader. **The master encoder (the wheel) becomes an endless
+T-bar:**
+- **Turning blends PREVIEW into PROGRAM.** One full turn (30 detents) = done.
+  Then the roles swap and the wheel starts again from 0. Turning back half
+  way reverses the blend.
+- **Pushing the wheel**, or `PLAY`, = **automatic TAKE** over the fade time,
+  on the beat when GRID is on.
+- `RESTART` = **CUT**.
+- **Hold a master button + turn the wheel** for other big values:
+
+  | Hold | Wheel sets |
+  |---|---|
+  | `VOLUME` | Master dimmer |
+  | `SWING` | Mood (energy) |
+  | `TEMPO` | BPM nudge (tap with `TEMPO` alone) |
+
+- `SHIFT` + wheel = the system menu (kept from 2026-11-09).
+- In LIBRARY (`BROWSE`) the wheel scrolls the list. The screen says so, and
+  nothing is crossfaded there.
+
+This replaces "encoder = browse / select" (D11). Browsing in Perform moves to
+knob 1 (SCROLL) and to `BROWSE`. See D48 in `docs/decisions.md`.
+
+The real crossfader can also come from a side arm (Block MIX mode, Ohm64
+crossfader), with soft takeover.
+
+### 3.2 Top buttons (above the screens)
+
+| Button | In PERFORM | With `SHIFT` |
+|---|---|---|
+| `Top 1`–`Top 4` (over PREVIEW) | **What the dice may change**: CLIP, FX, COLOUR, MOTION (lit = free, dark = held) | LAYOUT, SOURCE, REACT, MOOD-drift |
+| `Top 5` (over PROGRAM) | **FREEZE** while held | Latch |
+| `Top 6` | **STROBE** while held (beat-locked, safe limits) | Latch |
+| `Top 7` | **BLACK** while held | Latch |
+| `Top 8` | **ASSIST** on / off | Autopilot |
+
+### 3.3 Knobs: the PLAY page (default)
+
+| Knob | Acts on | Function | GUI tile |
 |---|---|---|---|
-| `Play` | **TAKE:** crossfade PREVIEW → LIVE over the fade time | TAKE at the next bar, even with GRID off | After a TAKE the decks swap roles |
-| `Restart` | **CUT:** instant swap | Black-out MAIN (toggle) | |
-| `Transport >` | **ROLL:** a new shuffle in the scope, or forward in history if you went back | **MUTATE:** a small variation of the current look | Changes go to the PREVIEW deck unless the scope is a LIVE item |
-| `Transport <` | **BACK** one step in the shuffle history | Jump to the oldest kept roll | History holds 64 rolls per deck |
-| `Rec` | **SAVE:** the PREVIEW deck as a scene in the next free pad (that pad blinks) | Save the LIVE deck | `REC + pad` = save to that pad |
-| `Erase` | Undo | Redo | v1 had undo on `SHIFT + ERASE`; now undo needs no shift |
-| `Grid` | Quantise on / off (changes land on the next beat or bar) | Choose beat / bar / 4 bars | The LED is lit when on |
-| `Shift` | Hold for the second functions | | |
-| `Group A`–`D` | Select layer 1–4 of Deck A | Mute / unmute that layer | Press the selected one again = deck scope; again = master |
-| `Group E`–`H` | Select layer 1–4 of Deck B | Mute / unmute | Same |
-| `All` | Scope = the whole deck of the selected layer | Scope = both decks + master | Shown as a breadcrumb in the GUI |
-| `Select` | Hold + pad = select a scene without loading it (for Rec / Duplicate) | | |
-| `Duplicate` | Hold + pad = copy a scene to another pad. Hold + group = copy that layer to the same slot on the other deck | Copy the whole LIVE deck into PREVIEW | "Take what is live and tweak it" |
-| `Solo` | Hold = PREVIEW shows only the selected layer; the outputs band shows "next" | | Never changes LIVE |
-| `Mute` | Mute the selected layer (instant on PREVIEW, quantised on LIVE) | **PANIC:** the safe scene, LIVE, instant | |
-| `Scene` | Pads = **scenes** (default) | Hold + pad = save over that scene | v1: `SHIFT + SCENE + pad` saves |
-| `Pattern` | Pads = **clips** of the selected layer's bank | **Mood picker:** 16 moods on the pads | Rows = energy, columns = style |
-| `Pad Mode` | Pads = **FX pads** (momentary performance effects on LIVE) | Lightpad mode picker on Top 5–8 | |
-| `Navigate` | Pads 1–6 = **outputs** (Top 1–5 = MAIN / A / B / OWN / TABLE for the selected output) | Show next on / off | v1: Navigate = span / mirror; now in the output pages |
-| `Step` | Pads = **cues** of the current song; `Transport < >` = previous / next cue; `Play` = GO | Song list on the screens | |
-| `Control` | Home: back to Perform, pads to Scenes, knobs to MACRO | | The escape button |
-| `Browse` | **Library:** encoder scrolls, Top 1–8 = mood / colour / motion / NEW / FAV filters, pads = 16 results, push or pad = load into the selected layer on PREVIEW | `SHIFT + BROWSE` = Explain mode | On an FX page: opens the effect browser |
-| `Sampling` | **Music page:** input levels, bands, BPM, clock source, AV offset on the knobs | | v1 used this for the latency test |
-| `Page <` / `Page >` | Knob page: MACRO · LAYER · FX1 · FX2 · FX3 · FX4 · MIX · REACT | `SHIFT + PAGE` = MACRO | |
-| `Auto Write` | Hold + turn a knob = link it to an audio signal (turn to choose the signal) | Hold + turn a knob = remove its audio link | The A-mark shows on the screen |
-| Master encoder turn | Browse / select in the current list | System menu (fun modes, latency test, settings) | Decided 2026-11-09 |
-| Master encoder push | Load / confirm | Effect on / off in the selected FX slot | |
-| `Volume` | **MIX page** on the knobs (crossfader, fade time, curve, master dimmer, deck A / B level, output dimmer, preview level) | | |
-| `Swing` | **Mood page:** knobs 1–2 = energy / style, 3 = colour from mood ↔ from clip, 4 = variation | | |
-| `Tempo` | Tap tempo | Clock-source menu | |
-| `Note Repeat` | Hold = **beat stutter** on LIVE; the encoder sets the rate while held | | |
-| `Master <` / `Master >` | Previous / next scene bank | Previous / next song | |
-| `Enter` | GO (next cue), the same as `Play` in Step mode | | For cue-based shows |
+| 1 | PREVIEW, selected layer | **SCROLL**: the next / previous clip in the bank loads at once | A film strip |
+| 2 | PREVIEW | **DICE**: right = a new look, left = back through history | A fanned deck of cards |
+| 3 | PREVIEW, selected layer | **FX amount** of the layer's main effect | before / now / more |
+| 4 | PREVIEW, selected layer | **SPEED** (beat-locked steps; `SHIFT` = free) | Streaks |
+| 5 | PROGRAM | **INTENSITY** (the energy macro) | Level bars |
+| 6 | PROGRAM | **COLOUR** (palette turn; fully left = the clip's own colours) | A colour ring |
+| 7 | PROGRAM | **SPACE** (mirror / tiles ← flat → tunnel / zoom) | Tunnel rings |
+| 8 | PROGRAM | **MASTER FX** amount (`SHIFT` + turn = choose the effect) | A dry / wet wipe |
 
-### 1.3 Pads
+The other pages (`PAGE ◀ ▶`) follow the same split: left = preview, right =
+program. The full table is in `gui.md` §5.
 
-- **Scenes:** 16 per bank. Rows go from calm at the bottom to peak at the top.
-  The colour is the scene's main colour; the brightness is its energy; the
-  active scene pulses on the beat; empty pads are dark.
-  - Tap = load into PREVIEW.
-  - `SHIFT` + tap = straight to LIVE (morph).
-  - Hold = longer morph: a short press is a cut on the beat, 1 s = 1 bar,
-    2 s = 4 bars.
-  - Velocity scales the morph's "kick" (for example a flash on arrival).
-- **Clips:** the selected layer's bank. Tap = load; aftertouch = speed nudge
-  while held.
-- **FX pads:** hold = on, velocity = intensity, aftertouch = amount. They go
-  to LIVE (stutter, strobe, flash, kaleido, invert, freeze, zoom punch,
-  RGB split, …). They are set per mood.
-- **Cues:** the next cue is outlined; tap = arm it in PREVIEW.
-- **Outputs:** pads 1–6, coloured by source (MAIN white, A cyan, B amber,
-  OWN violet, TABLE green).
+| Page | Knobs 1–4 (PREVIEW) | Knobs 5–8 (PROGRAM) |
+|---|---|---|
+| LAYER | Opacity, blend, zoom, position | The opacities of program layers E–H |
+| FX | Choose, param 1, param 2, audio link | Master FX: choose, param 1, param 2, mix |
+| MIX | Fade time, curve, preview dim, transition | Master dim, outputs 1–3, output 4, safe limit |
+| REACT | Signal, amount, attack, release | REACT macro, bass, mid, high |
 
-### 1.4 LEDs
+### 3.4 Pads: clips by default
 
-- **Group buttons:** the layer's colour (its source's main colour). The LIVE
-  deck is at full brightness and the PREVIEW deck at 30 %. The selected layer
-  blinks once on selection and then shows white on its second LED. A muted
-  layer is off.
-- **Play:** red while a TAKE is running, dim red at rest. **Restart:** dim.
-- **Transport >:** lit violet when MUTATE / ROLL is available.
-  **Transport <:** lit when there is history to go back to.
-- **Rec:** blinks red while a pad is waiting for a save target. **Grid:** lit
-  when quantise is on.
-- **Top 1–8 (locks):** lit = free to change, off = locked.
-- **Pad-mode buttons:** the active mode is lit.
+The pads sit on the right of the MK2, so the GUI puts a **4 × 4 grid of clip
+thumbnails** on the right.
 
-### 1.5 Screens in Perform
+| Mode (button) | Pads | Tap | Pressure (aftertouch) |
+|---|---|---|---|
+| **CLIPS** (`PATTERN`, **default**) | 16 clips of the selected layer's bank; `Master ◀ ▶` = bank | Load into the selected layer (PREVIEW at once, PROGRAM on the beat); velocity = punch-in | **Squeeze:** pushes the layer's main FX amount while held |
+| **LOOKS** (`SCENE`) | 16 saved looks | Into PREVIEW; `SHIFT` + tap = straight to PROGRAM; hold = morph | Morph speed |
+| **FX PADS** (`PAD MODE`) | 16 momentary effects on PROGRAM | On while held, velocity = punch | Depth |
+| **OUTPUTS** (`NAVIGATE`) | Pads 1–6 = outputs; Top buttons = MAIN / A / B / OWN / TABLE | Choose the output | — |
 
-```
-LEFT 256×64                                   RIGHT 256×64
-CLIP  SOURCE  FX    COLOUR   ← Top 1–4 labels  MOTION LAYOUT REACT  MOOD  ← Top 5–8
-A ▮LIVE 100%   B ▯PREV        ♩128.0 LINK ●●○○  ROLL #23  TECHNO·cold   GPU 3.1ms
-[ big: scene name / clip name of the selected layer ]   [ big: shuffle info / mood ]
-ENERGY  COLOUR  SPEED  DENSITY  ← knob 1–4      CHAOS   GLOW   SPACE  REACT ← knob 5–8
- ▮▮▮▯    ▮▮▯▯   ▮▮▮▮    ▮▯▯▯                     ▮▯▯▯    ▮▮▯▯   ▮▮▮▯   ▮▮▮▮
-```
+Modifiers: `DUPLICATE` = copy (pad → pad, group → group), `SELECT` = pick
+without firing, `SOLO` = peek (hold: PREVIEW shows only the selected layer,
+and the output thumbnails show "next"), `MUTE` = mute the layer;
+`SHIFT + MUTE` = **PANIC** (safe scene).
 
-The labels sit over the physical knob centres (`kKnobX` = 10, 87, 163, 240,
-266, 343, 419, 496). Drawing uses the existing `pages.cpp` page types: Perform
-(knob slots), list (browser, menus), detail (thumbnail), audio (meters) and
-message.
+**Pad LEDs:**
 
-## 2. Lightpad Block: the hand
+| LED | Means |
+|---|---|
+| The clip's own main colour, dim | In the bank |
+| Green-tinted bright | In a PREVIEW layer |
+| **Red, pulsing on the beat** | On PROGRAM |
+| White | Your finger |
+| Dark | Empty |
 
-The block keeps one job at a time. **Its mode is chosen with a double-tap on
-its Mode button** (cycle) or from the MK2 (`SHIFT + PAD MODE`, then Top 5–8).
-A corner LED shows the mode colour.
+### 3.5 Other buttons
 
-| Mode | Colour | X / Y / pressure | Mode button | LEDs |
-|---|---|---|---|---|
-| **TOUCH** (default) | effect colour | **Touch FX** on the target: X = effect choice or param 1, Y = amount or param 2, pressure = depth; two fingers = third parameter | Hold (keep the effect after lifting) | Effect colour field, finger cursor, held cross, beat pulse on the border. The border is **red when acting on LIVE** and green on PREVIEW |
-| **MIX** | white | Horizontal swipe = **crossfader**; tap the top row = TAKE; tap the bottom row = CUT; the left column = master dimmer | Black-out toggle | A bar from deck A cyan to deck B amber, with the position, and red on the live side |
-| **SCENES** | scene colours | A 4 × 4 grid = the scene pads, with velocity from the strike | Bank + 1 | Scene colours, mirroring the MK2 when its pads are in another mode, so you get a second scene surface |
-| **MOOD** | gradient | **The mood map:** X = energy (calm → intense), Y = style (organic → synthetic). The next ROLL draws near the point | ROLL (shuffle now) | Mood-map colours, with a dot at the point |
+| Button | Function |
+|---|---|
+| `CONTROL` / `STEP` / `BROWSE` / `SAMPLING` | Views: PERFORM, CUES, LIBRARY, MUSIC |
+| `PAGE ◀ ▶` | Knob pages (`SHIFT` = jump to PLAY) |
+| `ALL` | The dice scope = the whole look (default: the selected layer) |
+| `AUTO WRITE` + knob | Link that knob to an audio signal |
+| `Transport ◀ / ▶` | Dice back / forward (the same as knob 2) |
+| `GRID` | On the beat (quantise) |
+| `REC` | Save the preview look to the next free LOOKS pad (`REC` + pad = that pad) |
+| `ERASE` | Undo (`SHIFT` = redo) |
+| `NOTE REPEAT` | Hold = beat stutter on PROGRAM; the wheel sets the rate while held |
+| `ENTER` | Next cue (GO) |
+| Groups | Select a layer (`SHIFT` = mute); the LED = the layer's content colour, brighter in the selected row |
 
-The Touch FX target is LIVE MAIN by default. MK2 `PAD MODE` page, knob 8 =
-target (LIVE, PREVIEW, selected layer).
+### 3.6 MK2 screens in PERFORM
 
-What is known about the block (from the hardware notes):
-- touches come about every 28 ms;
-- LED frames run at about 55 fps;
-- pressure sensitivity is set to 127;
-- y = 0 is at the top with the USB-C pointing away from you.
+- **Left screen (PREVIEW):**
+  - top line = the labels of Top 1–4;
+  - the middle = the look number / name, the selected layer and its clip;
+  - bottom line = knob 1–4 labels and values.
+- **Right screen (PROGRAM):**
+  - top line = the labels of Top 5–8;
+  - the middle = what is live, BPM, the TAKE % while the wheel turns;
+  - bottom line = knob 5–8.
+- In LIVE EDIT the top line of the right screen is inverted.
+- The labels sit over the physical knobs (`kKnobX`).
 
-## 3. Keyboard and mouse
+## 4. NuVJ as the main weapon (classic)
+
+The GUI is laid out like the NuVJ: **deck A | master column | deck B**, with
+the crossfader at the bottom centre. The decks are fixed A / B as on the
+panel, and the tallies follow the real crossfader.
+
+| NuVJ | Himmel |
+|---|---|
+| Deck pads 1–9 | Clips of the deck's bank (GUI: 3 × 3 thumbnails) |
+| `BANK` turn / push | Bank − / +; push = dice the deck |
+| `PMTR 1` / `PMTR 2` | The two main parameters of the deck's effect (GUI tiles) |
+| `LATCH` | Lock the deck's look (no dice) |
+| `AUTO` | Dice (long press = mutate) |
+| `SYNC` | On the beat |
+| Jog / `SCRATCH` | Scrub the clip; hold `SCRATCH` = grab |
+| A / B channel faders | Deck levels |
+| Crossfader, `FADER MODE`, `AUTO FADE`, `FADER START` | The crossfader, its curve, TAKE time, start on fader move |
+| `INSTA A` / `INSTA B` / `INSTA BLACK` | Flash deck A / B / black |
+| `FX LEVEL`, `MASTER FX` (encoder + button), `PMTR 1 / 2` (master) | Master FX: amount, choose, on / off, params |
+| `CONTRAST`, `BRIGHT` | Master contrast / brightness |
+| `BPM TAP` | Tap tempo |
+| LCD (8 characters) | Mood or look name, BPM |
+
+Not checked on the owner's unit yet (GUESS until tested).
+
+## 5. Side arms
+
+### Block (Lightpad)
+
+Switch modes with a double-tap on MODE, or `SHIFT + PAD MODE` on the MK2.
+
+| Mode | What it does |
+|---|---|
+| **TOUCH** (default) | Touch FX on PROGRAM: X = effect, Y = amount, pressure = depth, a second finger = the third parameter. MODE = hold. The LED border is red on PROGRAM. |
+| **MIX** | A sideways swipe = crossfader; the top row = TAKE, the bottom row = CUT. This gives the MK2 a real fader. |
+| **LOOKS** | 4 × 4 looks with strike velocity (a second pad surface while the MK2 pads stay on clips). |
+| **MOOD** | The mood map (X = calm → intense, Y = warm → cold) steers the dice. MODE = dice now. |
+
+### LUMI Keys
+
+MODE switches the layout; OCT ± shifts the range.
+
+| Layout | Keys |
+|---|---|
+| **FX KEYS** (default) | Left half = colour washes over PROGRAM (strike = punch, pressure = depth, glide = hue). Right half = FX hits. |
+| **LOOK KEYS** | Keys = looks from calm to peak |
+| **CLIP KEYS** | 24 clips of the selected layer's bank |
+
+### Ohm64
+
+- Faders 1–4 = PREVIEW layers A–D, faders 5–8 = PROGRAM layers E–H.
+- **The crossfader = the crossfader** (soft takeover with the wheel).
+- The 8 × 8 grid = 64 clips.
+- 16 knobs = the FX parameters of the selected layer.
+
+### KPE1 / Entrancer
+
+- The pad = Touch FX.
+- Programme keys 1–8 = 8 favourite effects.
+- HOLD; PAD MOTION = a gesture loop on the beat.
+- TAP / BPM.
+
+## 6. Keyboard and mouse (no hardware)
+
+The GUI is the MK2 layout, so the mouse plays it directly.
 
 | Key | Function |
 |---|---|
 | `SPACE` | TAKE |
 | `ENTER` | CUT |
-| `→` / `←` | ROLL / BACK |
-| `SHIFT + →` | MUTATE |
-| `R` | SAVE |
-| `Ctrl+Z` / `Ctrl+Y` | Undo / redo |
-| `1`–`4`, `Q`–`R`, `A`–`F`, `Z`–`V` | 16 pads (4 × 4) |
-| `F1` / `?` | Explain mode |
-| `F2` | Weapon band |
-| `Esc` | Home |
-| `Shift+Esc` | **PANIC** |
+| `←` / `→` | Dice back / forward |
+| `R` | Save |
+| `1`–`4`, `Q`–`R`, `A`–`F`, `Z`–`V` | Pads |
+| Mouse wheel over a tile | Turns that knob |
+| `F1` / `?` | Explain |
+| `Shift+Esc` | PANIC |
 
-## 4. NuVJ alone: the classic two-deck setup
+## 7. Profile roles (format addition)
 
-The NuVJ already matches the A/B + crossfader model. These are proposals,
-because the hardware is not yet checked on the owner's unit.
+The `himmel-weapon/1` profiles get:
+- `"role": "main" | "side" | "both"`;
+- a `roles` map from Himmel functions to control names, for example
+  `take`, `cut`, `wheel.take`, `dice.next`, `dice.back`, `save`,
+  `pads.grid`, `knobs.preview[4]`, `knobs.program[4]`,
+  `layers.preview[4]`, `layers.program[4]`, `crossfader`, `touch.xy`,
+  `keys`.
 
-| NuVJ | Himmel |
-|---|---|
-| Deck A / B pads 1–9 | The cells of the deck's current bank (9 per bank, as in the classic view) |
-| `BANK` | Bank − / + (turn) |
-| `PMTR 1` / `PMTR 2` | Knob 1 / 2 of the selected cell's effect |
-| `LATCH` | Lock the current look of that deck (no shuffle on it) |
-| `AUTO` | **ROLL** for that deck (`SHIFT`-less: a long press = MUTATE) |
-| `SYNC` | Quantise on / off |
-| Jog / `SCRATCH` | Scrub the clip / speed |
-| Crossfader + `FADER MODE` | **The crossfader** (curves) |
-| `AUTO FADE`, `INSTANT` / `SLOW` | TAKE / CUT |
-| `INSTA A` / `INSTA B` | Flash that deck to full |
-| `MASTER FX`, `FX LEVEL` | Master slot 1 + mix |
-| `INSTA BLACK` | Black-out |
-| `BPM TAP` | Tap tempo |
-| `CONTRAST`, `BRIGHT` | Master contrast / brightness |
-| LCD (8 characters) | Mood / scene name, BPM |
+The GUI legend chips and the generic weapon driver read it. The CONTROL track
+owns the full list.
 
-## 5. The other weapons (integrations)
+## 8. Migration from today's engine skeleton
 
-Each integration gets **roles** in its profile (§6), so it plays the same
-functions without new GUI code. Suggested defaults:
+Today the engine uses temporary knob pages:
+- 1 = test card, 2 = clip, 3 = camera, 4 = Touch FX;
+- `NAVIGATE` = span / mirror, `SAMPLING` = latency test;
+- the encoder = next clip, the pads = jump points.
 
-| Weapon | Default roles |
-|---|---|
-| LUMI Keys | Keys = scenes across the current bank (low → high = calm → peak); buttons = ROLL / BACK / TAKE |
-| Entrancer | Touch FX (the same as the Lightpad's TOUCH mode) |
-| Ohm64 | 8 × 8 grid = 4 scene banks; faders = layer opacities; crossfader = crossfader |
-| V-4 (sim) | T-bar = crossfader; effect buttons = FX pads |
-| KF4 | No data port: its output can be captured as a camera |
-
-## 6. Profile roles (format addition)
-
-The `himmel-weapon/1` profiles get an optional `roles` map from a Himmel
-function to the profile's control names. The GUI legend and the generic
-weapon driver both read it.
-
-```json
-"roles": {
-  "take": "Play", "cut": "Restart", "roll": "Transport >", "back": "Transport <",
-  "save": "Rec", "undo": "Erase", "panic": ["Shift", "Mute"],
-  "crossfader": null, "pads.scenes": ["Pad 1", "...", "Pad 16"],
-  "knobs.page": ["Knob 1", "...", "Knob 8"], "layers": ["Group A", "...", "Group H"]
-}
-```
-
-Missing roles get an on-screen control. The full list of role names is owned
-by the controller track (`docs/agents/README.md`) and documented with the
-generic weapon driver.
-
-## 7. Migration from today's engine skeleton
-
-The engine skeleton uses temporary knob pages (1 test card, 2 clip, 3 camera,
-4 Touch FX), `NAVIGATE` = span / mirror, `SAMPLING` = latency test, the
-encoder for next clip and the pads for jump points. These are stand-ins. When
-the deck / layer model lands (roadmap phase 1), they move to the mapping
-above:
-- the clip, camera and Touch FX pages become the LAYER and FX pages;
-- span / mirror moves to the output pages;
-- the latency test moves to the system menu (`SHIFT` + encoder).
+These move to the mapping above when the deck / layer model lands (roadmap
+phase 1). The latency test moves to the system menu.

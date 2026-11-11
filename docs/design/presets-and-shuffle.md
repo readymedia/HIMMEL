@@ -47,8 +47,8 @@ Ice 07". Names are optional and can be edited later.
 
 | Action | Button | What happens |
 |---|---|---|
-| **ROLL** | `Transport >` | A new random look in the current **scope**, inside the current **mood**, respecting the **locks**. It lands on PREVIEW unless the scope is a LIVE item. |
-| **BACK** / **FORWARD** | `Transport <` / `Transport >` | Walk the history. `>` at the end of the history = a new ROLL, like the preset arrows on a synth plugin. |
+| **ROLL** | `Transport >` or **knob 2 (DICE) right** | A new random look in the current **scope**, inside the current **mood**, respecting the **locks**. It lands on PREVIEW unless the scope is a LIVE item. |
+| **BACK** / **FORWARD** | `Transport <` / `Transport >`, or knob 2 left / right | Walk the history. `>` at the end of the history = a new ROLL, like the preset arrows on a synth plugin. |
 | **MUTATE** | `SHIFT + Transport >` | Keep the structure and nudge the values by the Variation amount (default ±20 %). |
 | **SAVE** | `REC` | Store the result as a scene on the next free pad (§1). |
 
@@ -61,7 +61,7 @@ Ice 07". Names are optional and can be edited later.
 | **FX SLOT** | An FX page | The effect in the slot and its parameters |
 | **KNOB** | Touch a knob while pressing ROLL | Just that parameter, within its good range |
 
-**The 8 locks** (Top 1–8 in Perform, lit = free, dark = locked):
+**The 8 locks** (MK2: Top 1–4 = CLIP, FX, COLOUR, MOTION; `SHIFT` + Top 1–4 = LAYOUT, SOURCE, REACT, MOOD. Lit = free, dark = held. Top 5–8 are live holds, see `hardware-mapping.md` §3.2):
 
 | Lock | What it protects |
 |---|---|

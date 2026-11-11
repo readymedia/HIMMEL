@@ -51,8 +51,10 @@ inside the app (UI, help, logs, code comments) is in **English**.
 
 ## Main concepts
 (v2 summary; details in `docs/design/`.) Two decks A/B (4 layers each) +
-crossfader → MAIN; PREVIEW (green) vs LIVE (red) everywhere; shuffle with
-locks + history on `TRANSPORT < >`; `PLAY` = TAKE; scenes saved with `REC`;
+crossfader → MAIN; PREVIEW (green) vs LIVE (red) everywhere; the GUI mimics
+the main weapon (MK2 or NuVJ), side arms (Block, LUMI, Ohm64) only add control;
+MK2: left screen/knobs 1–4/groups A–D = PREVIEW, right/5–8/E–H = PROGRAM, wheel
+= TAKE (proposed D48–D53); dice on knob 2 / `TRANSPORT < >`; scenes saved with `REC`;
 moods on a 4×4 energy × style map; clips analysed and tagged on import.
 - **Show:** outputs, mapping (keystone, mesh warp, edge blend), cameras, banks,
   audio and sync sources.
@@ -187,11 +189,11 @@ The details are in the mockup (`docs/vj-mockup.html`).
   kept only for reference.
 - `docs/vj-mockup.html`: an interactive mockup of the MK2 and the 3-screen wall.
 - `docs/gui-mockups/`: v1 GUI sketches (kept for history; the light and
-  night themes are dropped, D28). **Current: `docs/gui-mockups/v2/`** (dark).
+  night themes are dropped, D28). **Current: `docs/gui-mockups/v3/`** (mimic the main weapon); v2 partly superseded.
   These are design-canvas files: read them for content and layout only.
 - Full design: **`docs/design/`** (English, v2, 2026-11-11), carried over
   from the Norwegian Claude Doc "Himmel" (the archive) and the owner's voice
-  notes. GUI v2 drawings: `docs/gui-mockups/v2/`.
+  notes. GUI drawings: `docs/gui-mockups/v3/` (current), `v2/`.
 
 ## Next steps
 **The plan lives in [`docs/roadmap.md`](docs/roadmap.md)** (updated

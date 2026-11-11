@@ -1,23 +1,34 @@
-# GUI specification (v2, dark)
+# GUI specification (v3: the GUI mimics the main weapon)
 
-Status: proposal for the owner, 2026-11-11. It replaces the v1 sketches in
-`docs/gui-mockups/` (Perform in light and night, the setup wizard and the
-library). The drawings for this spec are the v2 artboards on the design canvas
-and their copies in `docs/gui-mockups/v2/`. The hardware side of every screen
-is in [`hardware-mapping.md`](hardware-mapping.md); the two are one design and
-change together.
+Status: proposal for the owner, 2026-11-11.
+- **v3** replaces v2 for Perform, the weapon select and the adaptive layout,
+  after the owner's feedback: *mimic the controller, do not mirror it; the
+  pads are clip thumbnails; prepare vs program must be crystal clear; one
+  main weapon plus side arms.*
+- The drawings are the **v3** artboards on the design canvas (page
+  "v3 · Instrument") and their copies in `docs/gui-mockups/v3/`. v2 is kept
+  in `docs/gui-mockups/v2/` for the parts v3 does not redraw (wizard steps 1
+  and 3, library, shuffle close-up, table).
+- The hardware side is [`hardware-mapping.md`](hardware-mapping.md); the two
+  are one design and change together.
 
 ## 1. Principles
 
-1. **Hardware first.** The screen is laid out like the controller. Every area
-   of the GUI has a twin on the weapon, with the same name, place and colour.
-   Every clickable thing shows its hardware chip (for example `▶ PLAY`,
-   `SHIFT+MUTE`). In a show you should rarely need the mouse.
-2. **LIVE and PREVIEW at a glance.** A red tally means LIVE (on the outputs)
-   and a green tally means PREVIEW (not seen by the audience), as in a TV
-   gallery. The same two colours are used on the monitors, the deck headers,
-   the output thumbnails, the MK2 group buttons and the edge of the Lightpad.
-   The tally shows the percentage when a crossfade is half way.
+1. **Mimic, don't mirror.** The screen is laid out like the main weapon on
+   the desk in front of you: the pads where the pads are, the screens where
+   the screens are, the transport where the transport is. You look at the
+   GUI, put your hand on the same place on the controller, and know what will
+   happen.
+   - We never draw knobs. We draw **what turning will do** (tiles).
+   - We never draw pads as pads. We draw **what they hold** (clip
+     thumbnails).
+   - Every control carries a small hardware chip (`PLAY`, `SHIFT+MUTE`).
+2. **PREVIEW on the left, PROGRAM on the right.** Green = prepare (the
+   audience cannot see it), red = live (on the outputs), as in a TV gallery.
+   - On the MK2, the left screen + knobs 1–4 + group row A–D are PREVIEW;
+     the right screen + knobs 5–8 + group row E–H are PROGRAM.
+   - Working directly on PROGRAM shows a red **LIVE EDIT** bar, so you always
+     know.
 3. **Dark only.** The background is near-black (`#0B0D10`), the panels are
    slightly lighter, and colour is reserved for state (live, preview, mood,
    layers) and for the content itself. A GUI brightness setting dims
@@ -95,24 +106,24 @@ display missing, a controller gone), it opens the step that needs you.
   - Make loops seamless (crossfade the ends).
   - Analyse people / pose (slower, used by tracking effects).
 
-### Step 2: Choose your weapon
+### Step 2: Choose your weapon (main + side arms)
 
-- A game-style select screen. Each weapon is a card with the drawing from its
-  profile, a stats line (for example "16 pads · 8 knobs · 2 screens") and its
-  status:
-  - **CONNECTED**, glowing;
-  - **SIMULATE**, dim;
-  - **NOT FOUND**.
+- A game-style select screen in two rows:
+  - **MAIN WEAPON** (pick exactly one: **MK2** or **NuVJ**). The main weapon
+    decides the GUI layout, the pages and the screens.
+  - **SIDE ARMS** (add any: **Block, LUMI, Ohm64, KPE1**, any MIDI device by
+    learning). Side arms never move the layout; they add control (touch,
+    keys, faders, a real crossfader).
+- Each card shows:
+  - the drawing from the profile;
+  - a stats line ("2 screens · 8 knobs · wheel · 16 pressure pads");
+  - its status: **CONNECTED** (glowing), **SIMULATE**, **NOT FOUND**;
+  - one line on the layout it gives.
 - **Touch your weapon to choose it:** pressing any control on a connected
-  device selects its card. This is the first moment of fun, and it doubles as a
-  hardware test.
-- **Loadouts** combine weapons: **MK2 + Lightpad** is the default, the
-  **NuVJ** alone gives the classic two-deck setup, and **Keyboard + mouse**
-  needs no hardware.
-- Each card has a **Demo** button that plays a 20-second tour on the drawing:
-  the lit controls, with a caption for what each one does.
-- Choosing a weapon loads its map, its pages, its LED colours and its legend
-  for the GUI.
+  device selects or adds it. This doubles as a hardware test.
+- The **loadout line** at the bottom names the result, for example
+  "MK2 + Block + LUMI". It is saved with the show.
+- No hardware at all: **Keyboard + mouse** plays the MK2 layout on screen.
 
 ### Step 3: Set outputs
 
@@ -143,166 +154,143 @@ display missing, a controller gone), it opens the step that needs you.
 
 This opens the Perform view.
 
-## 4. Perform: the main view
+## 4. Perform with the MK2 as main weapon
 
-The view is laid out for one 1920 × 1080 operator monitor and also works at
-1440 × 900. It has five horizontal bands.
+The layout follows the MK2 from top to bottom and left to right. It is drawn
+for a 1920 × 1080 operator screen and works at 1440 × 900. See the
+interactive artboard "Perform · MAIN = MK2".
 
 ```
-┌ TOP BAR ── HIMMEL · weapons · BPM ●●●● · mood · assist · status lights · GPU ms · clock · [PANIC] ┐
-├ MONITORS ─ [ DECK A ]      [   MAIN / LIVE   ]      [ DECK B ] ─────────────────────────────────────┤
-│            tally+layers     crossfader + TAKE/CUT    tally+layers                                    │
-├ PLAY ───── [ PADS 4×4 ]  [ MK2 SCREEN MIRROR + KNOBS ]  [ SHUFFLE: locks · history · mood ]       ┤
-├ OUTPUTS ── [OUT1 ●LIVE MAIN] [OUT2 ●LIVE MAIN] [OUT3 ●LIVE MAIN] [OUT4 OWN]  · show next ·         ┤
-└ WEAPON ─── live drawing of the controller(s), controls light up as pressed (toggle, F2) ──────────┘
+┌ status strip: HIMMEL · MAIN MK2 + side arms · BPM ●○○○ · mood · status · GPU ms · PANIC ┐
+│ LEFT RAIL        TOP 1–4: what the dice may change   TOP 5–8: FREEZE STROBE BLACK ASSIST  │ OUTPUTS │
+│ PERFORM  CUES   ┌──── PREVIEW (left screen, green) ─┐┌──── PROGRAM (right screen, red) ───┐│ 1 ● MAIN│
+│ LIBRARY  MUSIC  │                                    ││                                    ││ 2 ● MAIN│
+│ ◀ PAGE  PAGE ▶  └────────────────────────────────────┘└────────────────────────────────────┘│ 3 ● MAIN│
+│ WHOLE   LINK    [SCROLL][DICE][FX AMT][SPEED]          [INTENSITY][COLOUR][SPACE][MASTER FX]│ 4 ● OWN │
+├ MASTER: DIM/MOOD/TAP + the TAKE WHEEL ┬ PADS SHOW ┬ 4×4 CLIP GRID (thumbnails) ┬ SIDE ARMS ┤
+│ GROUPS: preview row A–D / program E–H │ LOOKS     │                            │ Block card│
+│ TRANSPORT: CUT ◀ ▶ ON-BEAT / TAKE SAVE│ CLIPS ●   │                            │ LUMI card │
+│ UNDO SHIFT                            │ FX · OUT  │                            │           │
+└───────────────────────────────────────┴───────────┴────────────────────────────┴───────────┘
 ```
 
-### 4.1 Top bar
+### 4.1 Status strip
 
-- **HIMMEL**, then the weapon chips (MK2 ●, Lightpad ●). Green = connected,
-  grey = simulated, red = lost.
-- **Tempo:** BPM, four beat squares, the clock source (LINK, PRO DJ, MIDI,
-  AUDIO, TAP) and a confidence dot.
-- **Mood chip**, for example "TECHNO · cold". Click it, or use `SHIFT+PATTERN`,
-  to open the mood map.
-- **Assist level:** OFF, ASSIST or AUTOPILOT.
-- **Status lights** (SYNC, AUDIO, CAMS, OUTPUTS, DISK, IMPORT): green, yellow
-  or red, always with an icon and a word, never colour alone. IMPORT shows the
-  background queue, for example "IMPORT 12 ▸".
-- **GPU ms:** frame time against the budget, as a bar. **Clock**.
-- **PANIC** (`SHIFT+MUTE`): a big red-outlined button that goes to the safe
-  scene.
+- **The loadout:** MAIN · MK2 (white chip), then the side arms (green chips
+  when connected).
+- **Tempo:** BPM, four beat squares, the clock source.
+- **The mood.**
+- **Status lights:** sync, audio, cams, import, always with a word, never
+  colour alone.
+- **GPU ms** against the budget.
+- **PANIC** (`SHIFT+MUTE`).
 
-### 4.2 The monitors and the crossfader
+### 4.2 Upper half: the two screens and the knob tiles
 
-Three monitors: **Deck A** on the left, **MAIN** in the middle (the biggest)
-and **Deck B** on the right.
+- **The left rail** mimics the left button column: PERFORM (`CONTROL`), CUES
+  (`STEP`), LIBRARY (`BROWSE`), MUSIC (`SAMPLING`), `◀ PAGE ▶`, WHOLE LOOK
+  (`ALL`), LINK AUDIO (`AUTO`). It also shows the current page
+  (PLAY · LAYER · FX · MIX · REACT).
+- **The top buttons row:**
+  - over PREVIEW: four **dice locks** (CLIP, FX, COLOUR, MOTION; lit = free
+    to change);
+  - over PROGRAM: four **live holds** (FREEZE, STROBE, BLACK, and ASSIST
+    on / off).
+- **The PREVIEW monitor** (left, green frame, "prepare here, the audience
+  can't see this") and **the PROGRAM monitor** (right, red frame, "on
+  air → OUT 1 · 2 · 3").
+- **8 knob tiles** under the monitors, each exactly above its physical knob:
+  - left four act on the preview: SCROLL clips, DICE, FX amount, SPEED;
+  - right four act on program: INTENSITY, COLOUR, SPACE, MASTER FX.
+- **Tiles never show knobs.** Each tile shows the outcome: the middle is now,
+  the faded edges are what you get by turning left or right, and a thin bar
+  is the value. Every tile type is on the "Knob tiles" artboard. The last
+  turned tile lights up white for 1 s (MK2 knobs are not touch-sensitive).
+- **The outputs column** on the right (the panel's empty corner on the MK2):
+  one tile per output, with a red tally, its source (MAIN / A / B / OWN /
+  TABLE), and `NAVIGATE` + pad to route.
 
-**The tallies follow the crossfader:**
-- the deck with weight 0 has a green **PREVIEW** tag;
-- a deck with weight > 0 has a red **LIVE nn %** tag and a red frame;
-- MAIN always has the red **LIVE** frame. It shows exactly what goes to the
-  MAIN outputs, before output effects.
+### 4.3 Lower half: master, groups, transport, pads, side arms
 
-Under MAIN is the **crossfader**: a wide bar with A and B at the ends, the
-current position, and a ghost marker where an automatic fade is heading. Next
-to it:
-- **TAKE** (`▶ PLAY`): an auto-crossfade over the fade time, quantised to the
-  next beat or bar when GRID is on;
-- **CUT** (`RESTART`): instant;
-- the fade time (`VOLUME` page, knob 2);
-- the curve (linear, smooth or hard).
+- **Master block** (lower-left, as on the MK2):
+  - DIM (`VOLUME`), MOOD (`SWING`) and TAP (`TEMPO`) next to **the TAKE
+    wheel**;
+  - the wheel is a ring that fills red as the wheel turns ("64 %");
+  - "Turn = crossfade PREVIEW → PROGRAM, one turn = done, then the screens
+    swap; push = auto TAKE".
+- **Group cards, 2 × 4, as on the MK2:**
+  - the top row = PREVIEW layers A–D (green labels);
+  - the bottom row = PROGRAM layers E–H (red labels);
+  - each card shows the layer's thumbnail;
+  - the selected card is outlined white. Selecting a bottom-row card starts
+    **LIVE EDIT** (the red bar).
+- **Transport, 2 × 4, as on the MK2:**
 
-**After a TAKE the decks swap roles** (the old LIVE deck becomes PREVIEW and
-keeps its content), so the loop is always: build or shuffle on PREVIEW → TAKE
-→ build or shuffle on the other deck. This is the DJ habit (cue on one deck,
-play the other) and the NuVJ habit (A/B with a crossfader).
+  | | | | |
+  |---|---|---|---|
+  | CUT (`RESTART`) | ◀ BACK | DICE ▶ | ON BEAT (`GRID`) |
+  | **TAKE** (`PLAY`) | SAVE (`REC`) | UNDO (`ERASE`) | SHIFT |
 
-**Under each deck monitor is its layer strip:** four rows (deck A = groups
-A–D, deck B = groups E–H). Each row shows:
-- a thumbnail and the source name;
-- an opacity bar and the blend mode;
-- four small FX chips (lit when the slot is on);
-- the mute / solo state and lock icons.
+- **"Pads show" tabs** (the MK2's pad-mode column): LOOKS (`SCENE`),
+  **CLIPS** (`PATTERN`, default), FX PADS (`PAD MODE`), OUTPUTS
+  (`NAVIGATE`), then COPY, PICK, PEEK and MUTE.
+- **The 4 × 4 grid** (right, where the pads are):
+  - in CLIPS: **thumbnails of the 16 clips** of the selected layer's bank,
+    with the header "→ loads into PREVIEW layer A" (green) or "→ loads into
+    PROGRAM layer F (live)" (red);
+  - the ring and badge on each thumbnail match the pad LED: green = in a
+    preview layer, red = on program, white = pressed (with the pressure in %,
+    "squeeze");
+  - in FX PADS: effect names on PROGRAM, with the held pad's depth;
+  - in LOOKS: saved looks.
+- **Side arms** dock as cards to the right of the pads (§8). Each card shows
+  its current mode and target.
 
-The selected layer has a white outline, and its group button on the MK2 is
-lit brightest. Clicking a row selects it, and dragging a clip from the
-library onto a row loads it.
+### 4.4 Why this works
 
-### 4.3 Play band: pads, knob strip and shuffle
+- **The answer to "where do I press?" is "where it is on the screen".**
+- **The answer to "what will happen?" is in the tile above the knob** (the
+  edges show it).
+- **The answer to "is this live?" is the colour of the half you are in:**
+  left / top row = green, right / bottom row = red.
+- **The crossfader the MK2 does not have becomes its biggest control,** the
+  wheel. It is turned like a T-bar and shown as a filling ring.
 
-**Pads (left):** a 4 × 4 grid that mirrors the MK2 pads in their current
-pad mode (§5). A header names the mode and the bank, for example
-"SCENES · Bank 2 · Song: Opening".
+### 4.5 Weapon view and audience view
 
-| Pad mode | What the pads show |
-|---|---|
-| Scenes | Each pad shows the scene's main colour and a thumbnail on hover. Rows are labelled on the left: PEAK, BUILD, GROOVE, CALM, from top to bottom. The active scene pulses on the beat. |
-| Clips (`PATTERN`) | The 16 clips of the selected layer's bank, in each clip's own main colour. |
-| FX pads (`PAD MODE`) | Momentary performance effects: hold for on, velocity = intensity. |
-| Cues (`STEP`) | The cues of the current song, with the next cue outlined. |
-| Outputs (`NAVIGATE`) | Pads 1–6 are outputs, with sources shown. |
+The "MK2 cheat sheet" artboard draws the MK2 from its profile with every
+control labelled with its Himmel function, coloured green / red / violet.
+- It can go full screen on a second monitor (the **audience view**), so
+  people at the booth see what each button does.
+- With **Explain** on (`SHIFT + BROWSE`), pressing a control shows its job
+  instead of doing it.
 
-**Knob strip (centre):** a pixel-exact mirror of both MK2 screens (512 × 64,
-scaled ×2). Under it are the 8 knob values as arcs, at the same x positions as
-the real knobs (`kKnobX`). Above it are the 8 Top-button labels, also at their
-real positions.
-- The **page tabs** (MACRO · LAYER · FX1 · FX2 · FX3 · FX4 · MIX · REACT)
-  follow `PAGE < >`.
-- Each knob arc shows two values: where the knob is, and the live value after
-  the music has pushed it (a thin "ghost" ring).
-- Each knob also shows the name of its audio link, if it has one.
+## 5. Shape: knob pages and the effect browser
 
-**Shuffle panel (right):** see [`presets-and-shuffle.md`](presets-and-shuffle.md)
-for the logic.
-- **Scope:** DECK, LAYER, FX SLOT or KNOB, following what is selected. `ALL`
-  sets DECK.
-- **8 lock toggles,** the same as the 8 Top buttons in Perform: CLIP, SOURCE,
-  FX, COLOUR, MOTION, LAYOUT, REACT and MOOD. Lit means it will change; dark
-  means it is locked.
-- **History strip:** small thumbnails of the last rolls, with the current one
-  outlined. `◀` and `▶` match the transport arrows. A star marks a roll that
-  was saved.
-- **ROLL** (`TRANSPORT >`) and **MUTATE** (`SHIFT + TRANSPORT >`), plus a
-  **Variation** dial (how far MUTATE moves).
-- **Mood mini-map:** a dot on the energy × style map. Drag it, or use the
-  Lightpad in MOOD mode.
-- **SAVE** (`REC`) goes to the next free pad in the scene bank, and that pad
-  blinks. `REC + pad` saves to that pad.
+`PAGE ◀ ▶` changes what the tiles mean. Knobs 1–4 always act on the selected
+PREVIEW layer, and knobs 5–8 always act on PROGRAM. The tiles are pictures:
+"scroll" tiles are film or word strips, and value tiles are pictures with a
+bar.
 
-### 4.4 Outputs band
+| Page | Knob 1 | Knob 2 | Knob 3 | Knob 4 | Knob 5 | Knob 6 | Knob 7 | Knob 8 |
+|---|---|---|---|---|---|---|---|---|
+| **PLAY** | Scroll clips | Dice | FX amount | Speed | Intensity | Colour | Space | Master FX |
+| **LAYER** | Opacity | Blend (scroll) | Zoom | Position | Prog. layer E | F | G | H opacity |
+| **FX** | Choose (scroll) | Param 1 | Param 2 | Audio link | Master FX choose | Param 1 | Param 2 | Mix |
+| **MIX** | Fade time | Curve | Preview dim | Transition (scroll) | Master dim | Out 1–3 | Out 4 | Safe limit |
+| **REACT** | Reacts to (scroll) | Amount | Attack | Release | REACT macro | Bass | Mid | High |
 
-- One thumbnail per output with its tally (LIVE red when anything is shown,
-  black when blacked out), its number and its source (MAIN, A, B, OWN or
-  TABLE).
-- Its output effects as chips, and its measured latency in ms, if it has
-  been measured.
-- **Show next** (a toggle, or hold `SOLO`) shows on each thumbnail what that
-  output *would* show after the next TAKE, with a green frame. This is how
-  you check a multi-output look before it goes out.
-- Click an output, or use `NAVIGATE` + pad, to change its source or black it
-  out.
+**The effect browser** (`BROWSE` on the FX page):
+- Top 1–8 are the categories (COLOUR, SPACE, DISTORT, LIGHT, STYLE, TIME,
+  KEY, FAVS).
+- The 4 × 4 grid shows **the selected layer with each effect applied**, as
+  live thumbnails, so you pick by looking. A dimmer colour means a heavier
+  effect.
+- Tap = try it on PREVIEW; tap again = keep it.
+- Add-ons are the ninth category (`SHIFT + FAVS`), with an "ADD-ON" badge.
 
-### 4.5 Weapon band (on-site simulator)
-
-- A live drawing of the chosen weapon(s), from their profiles. It is the same
-  renderer as the browser live view in `tools/mk2_live.html`.
-- Controls light up when pressed, knobs turn, and the screens and LEDs are
-  mirrored.
-- With **Explain** on, hovering or pressing any control shows what it does in
-  the current mode.
-- `F2` hides the band. **Audience view** sends the drawing full screen to a
-  second monitor, so people at the booth can see what each button does (owner
-  request).
-- With no hardware, the drawing *is* the controller: click, drag and scroll.
-
-## 5. Shape: layers and effects
-
-Shape needs no extra screen. Selecting a layer (a group button) or a slot
-(the FX pages) changes the knob strip page. To see all four slots of a layer
-side by side, there is an **effect chain row** under the layer strip: four
-slot cards, each showing the effect name, its 2 main values, mix and audio
-link. Click a card, or use `PAGE` to FXn.
-
-**The effect browser** (`BROWSE` on an FX page, or the master encoder push):
-- The 8 Top buttons are categories: COLOUR, SPACE, DISTORT, LIGHT, STYLE,
-  TIME, KEY and FAVS.
-- The pads show up to 16 effects in that category. A dimmer colour means a
-  heavier effect for the GPU.
-- Tap a pad: the effect shows on the PREVIEW monitor only, and the MK2 screen
-  explains it in two lines.
-- Tap the same pad again, or press the encoder, to put it in the slot.
-- `SHIFT + pad` lists the effect's own presets.
-- **Add-ons** are a ninth category, reached with `SHIFT + FAVS`. They carry an
-  "ADD-ON" badge.
-
-**The effect levels are always visible as a breadcrumb:**
-
-> CLIP › LAYER › DECK › MASTER › OUTPUT
-
-The current level is lit. `ALL` moves up a level. Pressing the selected group
-button again also moves up a level (to the deck and then to the master), as
-decided before.
+The breadcrumb CLIP › LAYER › DECK › MASTER › OUTPUT shows the effect level.
+`ALL` moves up a level.
 
 ## 6. Build views
 
@@ -346,29 +334,31 @@ effects and output latency.
   bar.
 - The status lights link to Troubleshooting pages.
 
-## 8. Weapon-adaptive layout
+## 8. Main weapon, side arms and the adaptive layout
 
-Each weapon profile declares its **capabilities** (pads with velocity / RGB,
-knob count and kind, faders, crossfader, jog wheels, screens, touch surface,
-keys) and **roles**: which of its controls play which Himmel function (see
-`hardware-mapping.md` §6). The GUI picks a layout variant from these.
+- **The main weapon decides the layout.** Each one has its own mimic layout,
+  built from its profile (the positions of its controls). A panel never
+  moves within a loadout; only its content changes.
 
-| Loadout | Layout |
-|---|---|
-| **MK2 + Lightpad** (default) | Full Perform as above. The knob strip is the MK2 screen mirror, and the Lightpad has a small panel (current mode, X/Y/pressure, LED mirror) in the Shuffle column. |
-| **MK2 only** | Same. The crossfader is on knob 1 of the MIX page and on TAKE / CUT. |
-| **Lightpad only** | A touch-centred variant: the mood map is big, the Touch FX panel is big, and scenes are on the block's SCENES mode. The knob strip is replaced by on-screen sliders. |
-| **NuVJ only** | **Classic two-deck variant:** two big deck panels with their 3 × 3 cell grids (9 cells × banks, as on the device). The hardware crossfader is drawn prominently, PMTR 1 / 2 are shown per deck, and there is a segment-LCD mirror. Shuffle is on the deck's AUTO button (§4 of the mapping). |
-| **Keyboard + mouse** | Full Perform with the keyboard map shown as chips (`SPACE` = TAKE, `←` `→` = history, `Q…V` = 16 pads, and so on). The weapon band is the clickable MK2 simulator. |
-| **Integrations** (LUMI, Ohm64, Entrancer, …) | The default Perform; the legend chips come from the weapon's roles. Controls without a role get a "learn" dot (click-then-press, as in the live view). |
+  | Main weapon | Layout |
+  |---|---|
+  | **MK2** | §4: PREVIEW / PROGRAM screens with tiles, the wheel = TAKE, groups as 2 × 4 preview / program layers, a 4 × 4 clip grid on the right. |
+  | **NuVJ** | **Deck A \| master column \| deck B**, as on the panel. Each deck has a monitor, BANK / PMTR tiles, LATCH / AUTO (dice) / SYNC, a 3 × 3 clip-thumbnail grid and a jog = scrub strip. The centre has the PROGRAM monitor, the LCD, the master FX tiles, the A / B level faders and **the real crossfader**. The decks are fixed A / B, and the tallies follow the crossfader. See the "Perform · MAIN = NuVJ" artboard. |
+  | **Keyboard + mouse** | The MK2 layout, clickable; the mouse wheel over a tile turns it; the keys are in `hardware-mapping.md` §6. |
 
-Rules for adaptive panels:
-- A panel never moves between loadouts, it only swaps content, so muscle
-  memory survives.
-- A function that the weapon cannot reach gets an on-screen control with a
-  keyboard chip.
-- The legend chips always name the weapon's own control, for example
-  `AUTO (deck A)` on the NuVJ and `▶ PLAY` on the MK2.
+- **Side arms dock as cards** to the right of the pads (MK2) or under the
+  master column (NuVJ). A card shows a mini mimic of the device, its current
+  mode, its target (red PROGRAM / green PREVIEW) and live values.
+  - **Block:** TOUCH / MIX / LOOKS / MOOD.
+  - **LUMI:** FX KEYS / LOOK KEYS / CLIP KEYS.
+  - **Ohm64:** layer faders, the real crossfader, a 64-clip grid.
+  - **KPE1:** Touch FX.
+
+  Details are in `hardware-mapping.md` §5 and on the "Side arms" artboard.
+- **Side arms only add.** They never remap the main weapon. Faders use soft
+  takeover. If one is unplugged, its card greys out.
+- **Legend chips** always name the weapon's own control (`AUTO` on the NuVJ,
+  `▶ PLAY` on the MK2).
 
 ## 9. The VJ table (secondary view)
 
@@ -417,17 +407,16 @@ the merge of the rack-design branch. What matters for the GUI:
 
 ## 11. Mockups
 
-The v2 artboards ("v2 · Dark" page on the design canvas; copies in
-`docs/gui-mockups/v2/`):
+**v3** (page "v3 · Instrument" on the canvas; copies in
+`docs/gui-mockups/v3/`):
+1. Perform · MAIN = MK2 (+ Block, LUMI). It is **interactive**: click group
+   A or F to switch between preparing and LIVE EDIT, and click the pad-mode
+   tabs.
+2. Knob tiles: what turning will do.
+3. Choose your weapon: main + side arms (interactive).
+4. Perform · MAIN = NuVJ.
+5. Side arms: Block, LUMI, Ohm64, KPE1.
+6. MK2 cheat sheet (audience view), drawn from the profile.
 
-1. Wizard 1: Add clips
-2. Wizard 2: Choose your weapon
-3. Wizard 3: Set outputs
-4. Perform (MK2 + Lightpad)
-5. Perform, NuVJ classic variant
-6. Library (tags, mood map, background import)
-7. Shuffle, scenes and cues (close-up)
-8. MK2 screen pages (1-bit, at real pixel size × 2)
-9. VJ table (secondary view)
-
-The v1 artboards (light and night themes) are kept for history only.
+**v2** (still valid for these): wizard 1 Add clips, wizard 3 Outputs,
+Library, Shuffle close-up, the MK2 screen pages, the VJ table.

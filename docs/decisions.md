@@ -16,7 +16,13 @@ Status values:
 
 | # | Decision | Status | Details |
 |---|---|---|---|
-| D27 | The main instrument is the MK2 + Lightpad Block together; the other weapons are integrations | DECIDED | `design/hardware-mapping.md` |
+| D48 | **The MK2 master encoder = the TAKE wheel** (an endless T-bar: one turn = PREVIEW fully into PROGRAM, then the roles swap; push = auto TAKE). It replaces "encoder = browse" (D11) in PERFORM; browsing moves to knob 1 and `BROWSE`. `SHIFT` + wheel = system menu, as before | PROPOSED | `design/hardware-mapping.md` §3.1 |
+| D49 | **Main weapon + side arms**: the main (MK2 or NuVJ) decides the GUI layout; side arms (Block, LUMI, Ohm64, KPE1, MIDI learn) only add control, with soft takeover. The Ohm64 is a side arm for now | DECIDED (owner); the details are PROPOSED | `design/hardware-mapping.md` §1 |
+| D50 | **The GUI mimics the main weapon** (no drawn knobs or pads; knob tiles show what turning will do; the pads are clip thumbnails) | DECIDED (owner); the layout is PROPOSED | `design/gui.md` §1, §4 |
+| D51 | **MK2: left screen + knobs 1–4 + groups A–D = PREVIEW; right screen + knobs 5–8 + groups E–H = PROGRAM** (roles that swap after a TAKE); choosing a program layer = LIVE EDIT with a red bar | PROPOSED | `design/hardware-mapping.md` §2 |
+| D52 | **MK2 pads default to CLIPS** (16 clip thumbnails of the selected layer's bank; pressure = squeeze the layer's FX; LED = state) | PROPOSED | `design/hardware-mapping.md` §3.4 |
+| D53 | MK2 Top 1–4 = dice locks, Top 5–8 = live holds (FREEZE, STROBE, BLACK, ASSIST) | PROPOSED | `design/hardware-mapping.md` §3.2 |
+| D27 | The main instrument is the MK2 + Lightpad Block together; the other weapons are integrations (refined by D49: main weapon + side arms) | DECIDED | `design/hardware-mapping.md` |
 | D28 | The GUI is dark only; the light theme is dropped; a brightness control replaces the "Night" theme | DECIDED | `design/gui.md` §2 |
 | D29 | Startup is a 4-step wizard: 1 Add clips, 2 Choose weapon, 3 Set outputs, 4 Play | DECIDED | `design/gui.md` §3 |
 | D30 | Two decks (A / B) with a crossfader into MAIN (the NuVJ idea). PREVIEW vs LIVE must always be clear on every output | DECIDED | `design/gui.md` §4.2 |
@@ -31,9 +37,9 @@ Status values:
 | D39 | Effects apply to USB inputs (cameras, capture) exactly as to clips | DECIDED | `design/engine.md` §2 |
 | D40 | The NuVJ can run a simple show alone (classic two-deck setup) | DECIDED | `design/hardware-mapping.md` §4 |
 | D41 | Development is done by agents, each owning a track, with handoff files and documentation all the way, so any human or agent can take over | DECIDED | `agents/README.md` |
-| D42 | Mapping changes from v1: `TRANSPORT < >` = shuffle history / roll, `PLAY` = TAKE, `RESTART` = CUT, `SAMPLING` = music page, groups A–D / E–H = deck A / B layers | PROPOSED | `design/hardware-mapping.md` |
+| D42 | (Partly REPLACED by D48–D53) Mapping changes from v1: `TRANSPORT < >` = shuffle history / roll, `PLAY` = TAKE, `RESTART` = CUT, `SAMPLING` = music page, groups A–D / E–H = deck A / B layers | PROPOSED | `design/hardware-mapping.md` |
 | D43 | GUI technology: a local web app through a `himmel_ui` bridge (instead of Dear ImGui), with previews over shared memory | PROPOSED | `design/gui.md` §10 |
-| D44 | Lightpad modes: TOUCH (default), MIX, SCENES, MOOD | PROPOSED | `design/hardware-mapping.md` §2 |
+| D44 | Block (side arm) modes: TOUCH (default), MIX, LOOKS, MOOD | PROPOSED | `design/hardware-mapping.md` §2 |
 | D45 | 16 moods on a 4 × 4 energy × style map (12 old themes + 4 new) | PROPOSED | `design/presets-and-shuffle.md` §4 |
 | D46 | 4 layers per deck to start (8 later if the budget allows) | PROPOSED | `design/engine.md` §2 |
 | D47 | Merge all open branches into `main`, and from now on merge each branch within 1–2 days | PROPOSED | `roadmap.md` phase 0 |
