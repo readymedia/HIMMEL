@@ -134,3 +134,8 @@ Checked by showing text on the device ("HIMMEL VJ 5", owner).
 
 The software also sets bytes `0x2E` and `0x36` to 1 on every update. Himmel
 does not need them.
+
+**The NuVJ also draws on its own** (seen 2026-11-11 with Himmel's driver): after
+init, moving a speed fader or a jog wheel lights the LAST wedge, and the
+crossfader moves both wedges. The next segment message (`02`) from the host
+paints over it.

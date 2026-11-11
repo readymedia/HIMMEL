@@ -75,6 +75,14 @@ private:
     bool firmware_buttons_ = false;
     // input state
     std::array<int8_t, 32> finger_pad_{};  // Lightpad: finger -> zone pad 1..16 (0 = none)
+    // Lightpad velocity: z rises over ~100 ms (pressure sensitivity 127), so a soft touch starts
+    // at z = 0. A hit waits for the next touch message (~28 ms, at most kVelocityWaitUs) unless
+    // the first z is already high; velocity = sqrt(highest z / 255) * 127. Checked on the owner's block.
+    static constexpr uint64_t kVelocityWaitUs = 35000;
+    static constexpr int kVelocityNowZ = 48;
+    std::array<uint64_t, 32> hit_due_{};    // 0 = no hit waiting
+    std::array<uint8_t, 32> hit_z_{};
+    void fire_hit(uint8_t finger, uint64_t t);
     std::array<std::array<uint16_t, 3>, 32> fingers_{};  // x, y, z+1 (0 = up), for the idle picture
     std::array<int8_t, 16> chan_key_{};    // LUMI: MIDI channel -> key + 1
     std::array<uint8_t, kLumiKeys> key_vel_{};

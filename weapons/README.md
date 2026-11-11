@@ -689,7 +689,7 @@ build\bin\Release\weapon_tests.exe                            codecs + shared bl
 |---|---|---|
 | Button, push (all weapons) | `ButtonDown` / `ButtonUp` | `id` = control |
 | Lightpad touch | `TouchStart` / `TouchMove` / `TouchEnd` (new) | `id` = finger, `value` = x 0..4095, `raw` = y 0..4095 (0 = top, USB-C away from you), `reserved` = z \| strike vz << 8 |
-| Lightpad touch as a pad | `PadHit` / `PadPressure` / `PadRelease` | The surface as 4 × 4 zones, `id` = 1..16 (Pad 1 bottom-left). Velocity from the first z (provisional: tune it on the block), pressure = z × 16. |
+| Lightpad touch as a pad | `PadHit` / `PadPressure` / `PadRelease` | The surface as 4 × 4 zones, `id` = 1..16 (Pad 1 bottom-left). Velocity: see below. Pressure = z × 16. |
 | LUMI key | `PadHit` / `PadPressure` / `PadRelease` | `id` = key 1..24, velocity from the MPE note on, pressure = channel pressure × 32, `reserved` = control |
 | NuVJ pad | `PadHit` / `PadRelease` | `id` = A pads 1..9, B pads 10..18 (the number on the plate), `reserved` = control |
 | NuVJ endless knob (PMTR, FX LEVEL, ...) | `KnobDelta` | `value` in MK2 knob units (1000 = the whole range; one tick = ±16), `raw` = Himmel's 0..127 value |
@@ -698,6 +698,15 @@ build\bin\Release\weapon_tests.exe                            codecs + shared bl
 | NuVJ faders, crossfader | `Fader` (new) | `value` 0..16383 (pitch bend; before init CC × 16383 / 127) |
 | NuVJ FADER MODE, FADER START | `Switch` (new) | `value` = position |
 | Device found / lost | `Connected` / `Disconnected` | |
+
+**Lightpad velocity** (measured on the owner's block, 2026-11-11). With
+pressure sensitivity 127, z rises over ~100 ms, so a soft touch starts at
+z = 0 and half of the hits came out at velocity 1. Now:
+- a first z of 48 or more (a firm strike) hits at once;
+- otherwise the hit waits for the next touch message (~28 ms later, at most
+  35 ms) and uses the highest z;
+- velocity = √(z / 255) × 127.
+On the block this gave velocities spread over 1..127.
 
 The LUMI's Octave buttons are plain buttons: Himmel does not change the
 octave, so key 1 is always the left key. Glide (pitch bend) and the LUMI's
@@ -772,4 +781,21 @@ Back to the weapons:
   - pixels, LEDs and the LCD come back;
   - a restarted simulator is found again;
   - let go restores config 13 (confirmed by the block) and ends API mode.
-- **On the owner's hardware: not yet.**
+- **On the owner's hardware (2026-11-11): Lightpad M and NuVJ.**
+  - Lightpad (`weapon_blocks.exe lightpad`, then under `himmel.exe`): serial,
+    battery, renderer upload, touch, two fingers, Mode (as our program
+    event), the idle picture and the engine's pad flashes on the block.
+    920 LED frames, 0 resends, ~11 ms send → ACK. Let go: config 13 back to
+    64, confirmed, factory display back.
+  - NuVJ (`weapon_nuvj.exe`, then under `himmel.exe`): every control kind
+    (pads, buttons, PMTR, BANK, jogs, speed faders, crossfader, FADER MODE),
+    LEDs and the LCD text and 16-segment row.
+  - Engine: input → present 7–12 ms for both.
+  - **Two hosts on one NuVJ.** WinMM let a second program (an old NuVJ Live
+    with "drive" on) open the same NuVJ, and the two fought over the LEDs
+    (blinking LATCH / AUTO / SYNC, BPM TAP on the old host's beat). Close
+    NuVJ Live, or switch it to simulated, before Himmel runs.
+  - **The NuVJ draws the LAST / DATA wedges itself** when a speed fader or a
+    jog moves (LAST), and both wedges for the crossfader. Himmel's segment
+    memory paints over that on its next change or 2-second refresh.
+  - The LUMI was not plugged in: checked with the simulator only.
