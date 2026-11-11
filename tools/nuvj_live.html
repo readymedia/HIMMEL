@@ -161,6 +161,11 @@
   <div class="row"><input type="text" id="hName" placeholder="Not in the picture? Say what and where" style="flex:1">
     <button id="hSave">Save</button></div>
   <div id="hFound" class="mono small"></div>
+  <div class="row"><b>Test the LCD:</b> line 1 <input type="text" id="tLine1" maxlength="8" value="HIMMEL" style="width:110px">
+    line 2 <input type="text" id="tLine2" maxlength="11" value="ABCDEFGHIJK" style="width:150px">
+    <button id="tShow">Show on the NuVJ (20 s)</button>
+    <button data-t="ABCDEFGHIJK">A-K</button><button data-t="LMNOPQRSTUV">L-V</button><button data-t="WXYZ0123456">W-6</button>
+    <button data-t="789+-*/%#?=">7-=</button></div>
   <details id="camBox" open>
     <summary><b>Camera mapper</b> - let a webcam watch the NuVJ screen and map every segment by itself</summary>
     <ol class="hsteps">
@@ -781,6 +786,8 @@ $("hSave").onclick = () => { const t = $("hName").value.trim(); if (t) { post({ 
 $("hName").onkeydown = e => { if (e.key === "Enter") $("hSave").click(); };
 $("hLcd").addEventListener("click", e => lcdClick(e, $("hLcd")));
 $("hForget").onclick = () => post({ seg_forget: true });
+$("tShow").onclick = () => post({ lcd_test: { alpha: $("tLine2").value, text: $("tLine1").value } });
+document.querySelectorAll("[data-t]").forEach(b => { if (b.closest("#hunt")) b.onclick = () => { $("tLine2").value = b.dataset.t; $("tShow").click(); }; });
 // ---------- camera mapper: a webcam watches the NuVJ's LCD and maps every segment bit by itself ----------
 // 1. Camera on (any webcam pointed at the NuVJ screen). 2. Click the 4 corners of the blue glass in the
 // picture: top-left, top-right, bottom-right, bottom-left. 3. Auto-map: for every byte, all segments off

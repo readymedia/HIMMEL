@@ -719,12 +719,17 @@ class NuvjHost:
         beat = ((now - self.t0) * st["bpm"] / 60.0) % 1.0
         show = getattr(self.live, "show", None)
         alpha = "HIMMEL VJ"
+        test = getattr(self, "test", None)
         if show:
             c = show.playing_cell(f)
             if c:
                 alpha = (c["effect"] + " " if c.get("effect") else "") + c["name"].rsplit("/", 1)[-1].rsplit(".", 1)[0]
             else:
                 alpha = "DECK %s  --" % f
+        if test and now < test[0]:              # the owner's test text for line 2 (and line 1)
+            alpha = test[1]
+            if test[2]:
+                text = test[2]
         lit = {"rule", "lbl_bpm", "lbl_preset", "lbl_data", "box_" + f.lower()}
         if st["toggles"]["Master FX"]:
             lit.add("box_c")
@@ -1344,6 +1349,10 @@ class NuvjLive:
                         man.remove([h["byte"], h["bit"]])
                     self.learn_msg = "forgot %s" % (", ".join(gone) or "nothing")
                     save_map(self.m)
+            elif "lcd_test" in d:      # show a test text on the LCD for 20 s (line 2 = the 16-segment row)
+                t = d["lcd_test"] or {}
+                self.host.seg_hunt = None
+                self.host.test = (time.time() + 20, str(t.get("alpha", ""))[:11], str(t.get("text", ""))[:8])
             elif "contrast" in d:      # LCD contrast 0..99, not stored in the controller
                 self.host.contrast = max(0, min(99, int(d["contrast"])))
             elif d.get("identity"):
