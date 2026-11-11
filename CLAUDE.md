@@ -177,6 +177,21 @@ The details are in the mockup (`docs/vj-mockup.html`).
       BLOCKS touch messages per key; they are not used yet.
     - Not done: a key map verified key by key, and games on the keys.
     - Weapon no. 4 = the Entrancer (the Touch FX session's branch).
+  - **Weapon no. 9 = Akai APC20, a secondary weapon (2026-11-11; owner's
+    unit, UPC 0 825213 00251 7).** Simulated only: it needs its **12 V DC 2 A
+    adapter** (not USB powered) and the owner has none yet.
+    - Profile `weapons/apc20.weapon.json` (97 controls, wire bytes inline as
+      `midi` / `led`, `role: secondary`, own page `tools/apc20_live.html`,
+      badge "HIMMEL · CLIPS"). USB `09e8:007b`; mode SysEx
+      `F0 47 <dev> 7B 60 00 04 41 …` = Ableton mode (host owns the LEDs).
+    - `tools/apc20_sim.py`: sim (UDP engine link 8782), read-only WinMM
+      probe, LED tests incl. walk, click-then-press learning into
+      `apc20_map.json`, and a Himmel stand-in for the secondary-weapon jobs
+      (clip/scene launch at the beat, fader pages with pickup, deck focus for
+      the MK2). `--selftest`. Live view: launch config `apc20-live`, port 8787.
+    - Jobs, event mapping, two-weapon rules and the owner's hardware steps:
+      `weapons/README.md`. Engine side = the generic weapon driver
+      (`Local\HimmelWeapon9`).
 - **Visual mapping is the way to work with the controller. Keep it and build on
   it** (the owner wants graphical tools, not terminal tables):
   - `tools/mk2_live.py` + `tools/mk2_live.html`: a browser live view of the MK2

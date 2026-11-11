@@ -2,6 +2,8 @@ __pycache__/
 *.pyc
 *.tmp
 maschine_mk2_map.bak.json
+apc20_map.bak.json
+apc20_map.json.tmp
 tools/_screens/
 
 # C++ build output

@@ -21,6 +21,13 @@
       "runtimeArgs": ["tools/mk2_live.py", "--port", "8776", "--sim"],
       "port": 8776,
       "url": "http://127.0.0.1:8776"
+    },
+    {
+      "name": "apc20-live",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["tools/mk2_live.py", "--port", "8787", "--weapon", "apc20"],
+      "port": 8787,
+      "url": "http://127.0.0.1:8787"
     }
   ]
 }
