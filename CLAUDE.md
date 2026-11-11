@@ -186,6 +186,11 @@ The details are in the mockup (`docs/vj-mockup.html`).
   - Ask the owner for an export if you need it.
 
 ## Next steps
+**The plan lives in [`docs/roadmap.md`](docs/roadmap.md)** (updated
+2026-11-11, covers every branch). Decided 2026-11-11: **the main instrument
+is the MK2 and the Lightpad Block together**; the other weapons are
+integrations. The list below is the history of what is done on `main`.
+
 1. ~~Run the MK2 mapper with the owner.~~ **Done 2026-11-09**: map verified and
    committed.
 2. ~~Write the `controller` module.~~ **Done 2026-11-10, checked on the MK2**
