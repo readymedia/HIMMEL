@@ -149,6 +149,8 @@
     <div class="row"><label>MIDI port <select id="portPick"><option value="">auto (name has NuVJ / Numark)</option></select></label>
       <button id="portGo">Open this port</button></div>
     <div id="hwInfo" class="mono"></div>
+    <div class="row"><button id="driveBtn">Let Himmel drive the LEDs and LCD</button>
+      <span class="help">Off = listen only: nothing is sent to the NuVJ.</span></div>
     <h3>1 · Touch every control</h3>
     <div class="help">The drawing follows the real NuVJ. A green dot = seen on the hardware. A dashed red outline = not in
       the map. <b>Wrong control moves?</b> Click the right one in the drawing, then move the real one (turn endless knobs
@@ -538,6 +540,8 @@ function render(s) {
   $("learnMsg").textContent = s.learn_msg || "";
   $("lcdModel").textContent = "LCD model now: " + JSON.stringify(s.lcd);
   $("idBtn").disabled = !s.hardware;
+  $("driveBtn").textContent = s.drive ? "■ Stop: listen only" : "Let Himmel drive the LEDs and LCD";
+  $("driveBtn").classList.toggle("hwon", !!s.drive); $("driveBtn").disabled = !s.hardware;
   const sh = s.seg_hunt;
   if (W && W.lcd && W.lcd.el) W.lcd.el.classList.toggle("hunting", !!sh);
   $("shInfo").textContent = sh ? `lighting byte ${sh.byte} bit ${sh.bit}${sh.auto ? " (auto)" : ""} - click what lit on the LCD drawing` : "";
@@ -592,6 +596,7 @@ $("shAuto").onchange = e => { if (S && S.seg_hunt) post({ seg_hunt: { auto: e.ta
 document.querySelectorAll("[data-sstep]").forEach(b => b.onclick = () => post({ seg_hunt: { step: +b.dataset.sstep, auto: false } }));
 $("lcdC").oninput = () => { $("lcdCV").textContent = $("lcdC").value; post({ contrast: +$("lcdC").value }); };
 $("idBtn").onclick = () => post({ identity: true });
+$("driveBtn").onclick = () => post({ drive: !(S && S.drive) });
 $("help").innerHTML = "<b>Simulator:</b> the drawing is the NuVJ. <b>Buttons and pads:</b> hold the mouse. " +
   "<b>Knobs:</b> drag up/down or scroll. <b>BANK and MASTER FX:</b> endless, drag or scroll one step at a time; " +
   "<b>right-click (or Alt+click) BANK to push it</b>. " +

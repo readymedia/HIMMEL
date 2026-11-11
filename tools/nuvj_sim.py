@@ -58,8 +58,8 @@ PORT_HINTS = ("nuvj", "numark")
 # ---------------------------------------------------------------------------
 SOURCE_TABLE = {
     "A Bank": ("cc", 14, "rel"), "B Bank": ("cc", 15, "rel"),
-    "A PMTR1": ("cc", 0, "abs"), "B PMTR1": ("cc", 1, "abs"),
-    "A PMTR2": ("cc", 2, "abs"), "B PMTR2": ("cc", 3, "abs"),
+    "A PMTR1": ("cc", 0, "relabs"), "B PMTR1": ("cc", 1, "relabs"),
+    "A PMTR2": ("cc", 2, "relabs"), "B PMTR2": ("cc", 3, "relabs"),
     "A Latch": ("note", 8), "B Latch": ("note", 9),
     "A Auto": ("note", 4), "B Auto": ("note", 5),
     "A Sync": ("note", 6), "B Sync": ("note", 7),
@@ -68,9 +68,9 @@ SOURCE_TABLE = {
     "A Bank Push": ("note", 2), "B Bank Push": ("note", 3),   # ID_DECKx_ENTER in mappings.xml
     "Insta A": ("note", 10), "Insta B": ("note", 11),
     "A Speed": ("pb", 0), "B Speed": ("pb", 1), "Crossfader": ("pb", 2),
-    "FX Level": ("cc", 8, "abs"), "Master PMTR1": ("cc", 4, "abs"), "Master PMTR2": ("cc", 5, "abs"),
+    "FX Level": ("cc", 8, "relabs"), "Master PMTR1": ("cc", 4, "relabs"), "Master PMTR2": ("cc", 5, "relabs"),
     "Master FX Select": ("cc", 9, "rel"),                 # "cc*" in mappings.xml: endless
-    "Contrast": ("cc", 6, "abs"), "Bright": ("cc", 7, "abs"),
+    "Contrast": ("cc", 6, "relabs"), "Bright": ("cc", 7, "relabs"),
     "Master FX": ("note", 30), "Insta Black": ("note", 31), "BPM Tap": ("note", 32),
     "Fader Mode": ("cc", 18, "switch", [1, 2, 0]),        # positions A, B, C
     "Auto Fade Speed": ("cc", 13, "abs"),
@@ -91,6 +91,8 @@ def entry_from_source(t):
             e["values"] = t[3]
         if t[2] == "rel":
             e["cw"] = "neg"        # the post: clockwise reads as "slower" in software expecting 1 = forward
+        if t[2] == "relabs":
+            e["cw"], e["step"] = "pos", 2   # the 12 top knobs are endless on the real unit (2026-11-11)
     elif t[0] == "note" and len(t) > 2:
         e["enc"] = t[2]
         e["values"] = t[3]
@@ -148,6 +150,10 @@ def encode(e, value=None, down=None, delta=None):
         return bytes([0x90 | ch, e["num"], 0x7F]) if down else bytes([0x80 | ch, e["num"], 0])
     if t == "cc":
         enc = e.get("enc", "abs")
+        if enc == "relabs":         # an endless knob: the simulator gives the ticks as delta
+            return encode(dict(e, enc="rel"), delta=delta) if delta else b""
+        if enc == "fader":
+            return bytes([0xB0 | ch, e["num"], max(0, min(127, value * 127 // 16383))])
         if enc == "rel":
             out = b""
             step = 1 if delta > 0 else -1
@@ -311,12 +317,18 @@ class Decoder:
 
     def set_map(self, m):
         self.m = m
+        self.acc = getattr(self, "acc", {})     # relabs knobs: name -> 0..127
         self.idx = {}
         for name, e in m["controls"].items():
             if e.get("type") == "pb":
                 self.idx[("pb", e["ch"], None)] = name
             elif e.get("type"):
                 self.idx[(e["type"], e["ch"], e["num"])] = name
+        # After the host's init (cmd 60) the NuVJ sends its faders as pitch bend on channels 1-3, as in
+        # the NuVJ software; before it (plain MIDI mode) as CC 10-12. Both reach the same control.
+        for name, t in SOURCE_TABLE.items():
+            if t[0] == "pb":
+                self.idx.setdefault(("pb", t[1], None), name)
 
     def decode(self, msg):
         """Returns (name or None, event dict). Event kinds: down, up, value, delta, fader, switch."""
@@ -336,11 +348,18 @@ class Decoder:
             name = self.idx.get(("cc", ch, msg[1]))
             e = self.m["controls"].get(name) if name else None
             enc = e.get("enc", "abs") if e else "abs"
-            if enc == "rel":
+            if enc in ("rel", "relabs"):
                 v = msg[2] - 128 if msg[2] >= 64 else msg[2]
                 if e.get("cw", "pos") == "neg":
                     v = -v
+                if enc == "relabs":     # an endless knob used as a 0..127 knob: Himmel keeps the value
+                    cur = self.acc.get(name, 64)
+                    cur = max(0, min(127, cur + v * e.get("step", 2)))
+                    self.acc[name] = cur
+                    return name, {"kind": "value", "value": cur, "delta": v}
                 return name, {"kind": "delta", "delta": v}
+            if enc == "fader":          # a fader sent as a 7-bit CC: scaled to the 14-bit fader range
+                return name, {"kind": "fader", "value": msg[2] * 16383 // 127, "raw": msg[2]}
             if enc == "switch":
                 vals = e["values"]
                 return name, {"kind": "switch", "pos": vals.index(msg[2]) if msg[2] in vals else -1, "raw": msg[2]}
@@ -887,10 +906,12 @@ class NuvjLive:
         self.held = set()
         self.last = []
         self.unmapped = []
+        self._unmapped = {}
         self.learn = None
         self.learn_msg = ""
         self.show_noise = False
         self.host = NuvjHost(self)
+        self.drive = False                     # send init / LEDs / LCD to the real NuVJ (off = listen only)
         self.show = vj_classic.ClassicShow()   # the classic two-deck view's model, played by the GUI and the NuVJ
         self.dev = None
         self.ranges = {}           # name -> [min, max] seen on hardware
@@ -937,8 +958,14 @@ class NuvjLive:
             name, ev = self.dec.decode(msg)
             if ev is None:
                 return
-            if name is None:
-                self.unmapped = ([describe(msg)] + [u for u in self.unmapped if u != describe(msg)])[:12]
+            if name is None:        # one line per unmapped note / CC / pitch, with how often and which values
+                hi = msg[0] & 0xF0
+                key = ("note %d" % msg[1] if hi in (0x80, 0x90) else "CC %d" % msg[1] if hi == 0xB0 else "pitch") +                       " ch%d" % ((msg[0] & 15) + 1)
+                val = msg[2] if hi != 0xE0 else msg[1] | msg[2] << 7
+                u = self._unmapped.setdefault(key, [0, val, val])
+                u[0] += 1
+                u[1], u[2] = min(u[1], val), max(u[2], val)
+                self.unmapped = ["%s ×%d (%d..%d)" % (k, *v) for k, v in self._unmapped.items()][-16:]
                 self.host.on_event(None, ev)
                 return
             k = ev["kind"]
@@ -955,7 +982,7 @@ class NuvjLive:
             elif k == "switch":
                 self.values[name] = ev["pos"]
             if hw:
-                raw = msg[2] if k in ("value", "delta", "switch") else (msg[1] | msg[2] << 7) if k == "fader" else None
+                raw = ev.get("raw", msg[2]) if k in ("value", "delta", "switch") else                     ev.get("raw", msg[1] | msg[2] << 7) if k == "fader" else None
                 if raw is not None:
                     lo, hi = self.ranges.get(name, [raw, raw])
                     self.ranges[name] = [min(lo, raw), max(hi, raw)]
@@ -982,13 +1009,16 @@ class NuvjLive:
                 return True
         elif hi == 0xB0 and c["kind"] in ("knob", "encoder", "wheel"):
             e = {"type": "cc", "ch": ch, "num": msg[1]}
-            if c["kind"] == "knob":
+            endless = c["kind"] != "knob" or msg[2] in (1, 2, 3, 125, 126, 127)
+            if not endless:
                 e["enc"] = "abs"
             else:   # endless: the owner turns it clockwise; the first value tells the direction
-                e["enc"] = "rel"
+                e["enc"] = "relabs" if c["kind"] == "knob" else "rel"
                 e["cw"] = "pos" if 0 < msg[2] < 64 else "neg"
         elif hi == 0xE0 and c["kind"] == "fader":
             e = {"type": "pb", "ch": ch, "num": None}
+        elif hi == 0xB0 and c["kind"] == "fader":
+            e = {"type": "cc", "ch": ch, "num": msg[1], "enc": "fader"}
         if e is None:
             self.learn_msg = "ignored %s while learning %s (wrong kind of message)" % (describe(msg), name)
             return True
@@ -1047,7 +1077,8 @@ class NuvjLive:
                         save_map(self.m)
                     self.show.tick()
                     self._sync_host()
-                    self.host.tick(self.dev, self.m, set(self.held))
+                    if self.dev.kind == "sim" or self.drive:   # the real NuVJ: listen only until the owner says so
+                        self.host.tick(self.dev, self.m, set(self.held))
             except Exception as ex:   # never let the LED loop die
                 self.learn_msg = "host error: %s" % ex
 
@@ -1094,6 +1125,7 @@ class NuvjLive:
                 "lcd_wire": {"text": dev.lcd_text, "number": number_from(dev.lcd_segs), "segs": dev.lcd_segs.hex(),
                              "contrast": dev.contrast, "inited": dev.inited},
                 "seg_hunt": self.host.seg_hunt,
+                "drive": self.drive,
                 "lcd_segments": dict(self.m.get("lcd_segments") or {}),
                 "host": {"mode": self.host.mode, "modes": list(NuvjHost.MODES), "bpm": st["bpm"],
                          "A": dict(st["A"]), "B": dict(st["B"]), "toggles": dict(st["toggles"]),
@@ -1152,7 +1184,10 @@ class NuvjLive:
         elif k == "knob":
             v = self.values.get(name, 0)
             nv = max(0, min(127, int(i["value"]) if "value" in i else v + int(i.get("delta", 0))))
-            if nv != v:
+            if nv != v and e.get("enc") == "relabs":     # endless knob: send ticks
+                n = int(round((nv - v) / e.get("step", 2))) or (1 if nv > v else -1)
+                self.dev.emit(encode(e, delta=n))
+            elif nv != v:
                 self.dev.emit(encode(e, value=nv))
         elif k in ("encoder", "wheel") and i.get("delta"):
             self.dev.emit(encode(e, delta=int(i["delta"])))
@@ -1165,6 +1200,11 @@ class NuvjLive:
         with self.lock:
             if "sim_input" in d:
                 self.sim_input(d["sim_input"])
+            elif "drive" in d:         # the real NuVJ: start / stop sending feedback
+                self.drive = bool(d["drive"])
+                self.host.sent.clear()
+                if not self.drive:
+                    self.host.let_go(self.dev)
             elif "show" in d:          # the classic two-deck view
                 self.show.command(d["show"] or {})
                 self._sync_host()
@@ -1208,6 +1248,7 @@ class NuvjLive:
             elif "show_noise" in d:
                 self.show_noise = bool(d["show_noise"])
             elif "hardware" in d:
+                self.drive = False
                 self._use(HwNuVJ(d.get("port")) if d["hardware"] else SimNuVJ(self))
                 self.ranges.clear()
             elif "learn" in d:
@@ -1258,6 +1299,10 @@ def selftest():
         if k in ("button", "pad", "push"):
             assert dec.decode(encode(e, down=True)) == (n, {"kind": "down", "vel": 127}), n
             assert dec.decode(encode(e, down=False))[1]["kind"] == "up", n
+        elif k == "knob" and e.get("enc") == "relabs":     # endless knob: ticks add up to a 0..127 value
+            msgs = split_midi(encode(e, delta=3))
+            assert [dec.decode(x)[1]["value"] for x in msgs] == [66, 68, 70], n
+            assert dec.decode(encode(e, delta=-1))[1]["value"] == 68, n
         elif k == "knob":
             assert dec.decode(encode(e, value=99)) == (n, {"kind": "value", "value": 99}), n
         elif k in ("encoder", "wheel"):

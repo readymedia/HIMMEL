@@ -1,0 +1,435 @@
+{
+ "format": "himmel-map/1",
+ "weapon": "nuvj",
+ "verified": "2026-11-11",
+ "source": "starting table from a public forum post (unverified); entries change when learned on hardware",
+ "controls": {
+  "A Bank": {
+   "type": "cc",
+   "ch": 0,
+   "num": 14,
+   "enc": "rel",
+   "cw": "neg",
+   "learned": false,
+   "seen": true
+  },
+  "B Bank": {
+   "type": "cc",
+   "ch": 0,
+   "num": 15,
+   "enc": "rel",
+   "cw": "neg",
+   "learned": false,
+   "seen": true
+  },
+  "A PMTR1": {
+   "type": "cc",
+   "ch": 0,
+   "num": 0,
+   "enc": "relabs",
+   "cw": "pos",
+   "step": 2,
+   "learned": false,
+   "seen": true
+  },
+  "B PMTR1": {
+   "type": "cc",
+   "ch": 0,
+   "num": 1,
+   "enc": "relabs",
+   "cw": "pos",
+   "step": 2,
+   "learned": false,
+   "seen": true
+  },
+  "A PMTR2": {
+   "type": "cc",
+   "ch": 0,
+   "num": 2,
+   "enc": "relabs",
+   "cw": "pos",
+   "step": 2,
+   "learned": false,
+   "seen": true
+  },
+  "B PMTR2": {
+   "type": "cc",
+   "ch": 0,
+   "num": 3,
+   "enc": "relabs",
+   "cw": "pos",
+   "step": 2,
+   "learned": false,
+   "seen": true
+  },
+  "A Latch": {
+   "type": "note",
+   "ch": 0,
+   "num": 8,
+   "learned": false,
+   "seen": true
+  },
+  "B Latch": {
+   "type": "note",
+   "ch": 0,
+   "num": 9,
+   "learned": false,
+   "seen": true
+  },
+  "A Auto": {
+   "type": "note",
+   "ch": 0,
+   "num": 4,
+   "learned": false,
+   "seen": true
+  },
+  "B Auto": {
+   "type": "note",
+   "ch": 0,
+   "num": 5,
+   "learned": false,
+   "seen": true
+  },
+  "A Sync": {
+   "type": "note",
+   "ch": 0,
+   "num": 6,
+   "learned": false,
+   "seen": true
+  },
+  "B Sync": {
+   "type": "note",
+   "ch": 0,
+   "num": 7,
+   "learned": false,
+   "seen": true
+  },
+  "A Jog": {
+   "type": "cc",
+   "ch": 0,
+   "num": 17,
+   "enc": "rel",
+   "cw": "neg",
+   "learned": false,
+   "seen": true
+  },
+  "B Jog": {
+   "type": "cc",
+   "ch": 0,
+   "num": 16,
+   "enc": "rel",
+   "cw": "neg",
+   "learned": false,
+   "seen": true
+  },
+  "A Scratch": {
+   "type": "note",
+   "ch": 0,
+   "num": 0,
+   "learned": false,
+   "seen": true
+  },
+  "B Scratch": {
+   "type": "note",
+   "ch": 0,
+   "num": 1,
+   "learned": false,
+   "seen": true
+  },
+  "A Bank Push": {
+   "type": "note",
+   "ch": 0,
+   "num": 2,
+   "learned": false,
+   "seen": true
+  },
+  "B Bank Push": {
+   "type": "note",
+   "ch": 0,
+   "num": 3,
+   "learned": false,
+   "seen": true
+  },
+  "Insta A": {
+   "type": "note",
+   "ch": 0,
+   "num": 10,
+   "learned": false,
+   "seen": true
+  },
+  "Insta B": {
+   "type": "note",
+   "ch": 0,
+   "num": 11,
+   "learned": false,
+   "seen": true
+  },
+  "A Speed": {
+   "type": "cc",
+   "ch": 0,
+   "num": 10,
+   "enc": "fader",
+   "learned": true,
+   "seen": true
+  },
+  "B Speed": {
+   "type": "cc",
+   "ch": 0,
+   "num": 11,
+   "enc": "fader",
+   "learned": true,
+   "seen": true
+  },
+  "Crossfader": {
+   "type": "cc",
+   "ch": 0,
+   "num": 12,
+   "enc": "fader",
+   "learned": true,
+   "seen": true
+  },
+  "FX Level": {
+   "type": "cc",
+   "ch": 0,
+   "num": 8,
+   "enc": "relabs",
+   "cw": "pos",
+   "step": 2,
+   "learned": false,
+   "seen": true
+  },
+  "Master PMTR1": {
+   "type": "cc",
+   "ch": 0,
+   "num": 4,
+   "enc": "relabs",
+   "cw": "pos",
+   "step": 2,
+   "learned": false,
+   "seen": true
+  },
+  "Master PMTR2": {
+   "type": "cc",
+   "ch": 0,
+   "num": 5,
+   "enc": "relabs",
+   "cw": "pos",
+   "step": 2,
+   "learned": false,
+   "seen": true
+  },
+  "Master FX Select": {
+   "type": "cc",
+   "ch": 0,
+   "num": 9,
+   "enc": "rel",
+   "cw": "neg",
+   "learned": false,
+   "seen": true
+  },
+  "Contrast": {
+   "type": "cc",
+   "ch": 0,
+   "num": 6,
+   "enc": "relabs",
+   "cw": "pos",
+   "step": 2,
+   "learned": false,
+   "seen": true
+  },
+  "Bright": {
+   "type": "cc",
+   "ch": 0,
+   "num": 7,
+   "enc": "relabs",
+   "cw": "pos",
+   "step": 2,
+   "learned": false,
+   "seen": true
+  },
+  "Master FX": {
+   "type": "note",
+   "ch": 0,
+   "num": 30,
+   "learned": false,
+   "seen": true
+  },
+  "Insta Black": {
+   "type": "note",
+   "ch": 0,
+   "num": 31,
+   "learned": false,
+   "seen": true
+  },
+  "BPM Tap": {
+   "type": "note",
+   "ch": 0,
+   "num": 32,
+   "learned": false,
+   "seen": true
+  },
+  "Fader Mode": {
+   "type": "cc",
+   "ch": 0,
+   "num": 18,
+   "enc": "switch",
+   "values": [
+    1,
+    2,
+    0
+   ],
+   "learned": false,
+   "seen": true
+  },
+  "Auto Fade Speed": {
+   "type": "cc",
+   "ch": 0,
+   "num": 13,
+   "enc": "abs",
+   "learned": false,
+   "seen": true
+  },
+  "Fader Start": {
+   "type": "note",
+   "ch": 0,
+   "num": 33,
+   "enc": "toggle",
+   "values": [
+    0,
+    65
+   ],
+   "learned": false,
+   "seen": true
+  },
+  "A Pad 1": {
+   "type": "note",
+   "ch": 0,
+   "num": 24,
+   "learned": false,
+   "seen": true
+  },
+  "B Pad 1": {
+   "type": "note",
+   "ch": 0,
+   "num": 25,
+   "learned": false,
+   "seen": true
+  },
+  "A Pad 2": {
+   "type": "note",
+   "ch": 0,
+   "num": 26,
+   "learned": false,
+   "seen": true
+  },
+  "B Pad 2": {
+   "type": "note",
+   "ch": 0,
+   "num": 27,
+   "learned": false,
+   "seen": true
+  },
+  "A Pad 3": {
+   "type": "note",
+   "ch": 0,
+   "num": 28,
+   "learned": false,
+   "seen": true
+  },
+  "B Pad 3": {
+   "type": "note",
+   "ch": 0,
+   "num": 29,
+   "learned": false,
+   "seen": true
+  },
+  "A Pad 4": {
+   "type": "note",
+   "ch": 0,
+   "num": 18,
+   "learned": false,
+   "seen": true
+  },
+  "B Pad 4": {
+   "type": "note",
+   "ch": 0,
+   "num": 19,
+   "learned": false,
+   "seen": true
+  },
+  "A Pad 5": {
+   "type": "note",
+   "ch": 0,
+   "num": 20,
+   "learned": false,
+   "seen": true
+  },
+  "B Pad 5": {
+   "type": "note",
+   "ch": 0,
+   "num": 21,
+   "learned": false,
+   "seen": true
+  },
+  "A Pad 6": {
+   "type": "note",
+   "ch": 0,
+   "num": 22,
+   "learned": false,
+   "seen": true
+  },
+  "B Pad 6": {
+   "type": "note",
+   "ch": 0,
+   "num": 23,
+   "learned": false,
+   "seen": true
+  },
+  "A Pad 7": {
+   "type": "note",
+   "ch": 0,
+   "num": 12,
+   "learned": false,
+   "seen": true
+  },
+  "B Pad 7": {
+   "type": "note",
+   "ch": 0,
+   "num": 13,
+   "learned": false,
+   "seen": true
+  },
+  "A Pad 8": {
+   "type": "note",
+   "ch": 0,
+   "num": 14,
+   "learned": false,
+   "seen": true
+  },
+  "B Pad 8": {
+   "type": "note",
+   "ch": 0,
+   "num": 15,
+   "learned": false,
+   "seen": true
+  },
+  "A Pad 9": {
+   "type": "note",
+   "ch": 0,
+   "num": 16,
+   "learned": false,
+   "seen": true
+  },
+  "B Pad 9": {
+   "type": "note",
+   "ch": 0,
+   "num": 17,
+   "learned": false,
+   "seen": true
+  }
+ },
+ "leds": {
+  "checked": "2026-11-11"
+ },
+ "lcd_segments": {}
+}
