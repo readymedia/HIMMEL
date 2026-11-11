@@ -16,6 +16,34 @@ the Maschine's pads, knobs and two little screens are the instrument.
 Goals, in this order: **show-safe** (runs all night; a part that fails never
 takes down the output), **low latency**, **easy to use**, **light on the GPU**.
 
+## What we are building
+
+- **The engine** (works today): a C++ / Direct3D 11 renderer that plays HAP
+  clips and cameras on 1–8 screens, kept alive all night by a supervisor.
+- **Weapons** (works today): the controllers you play it with. Each one has a
+  browser live view that draws the panel and doubles as a **simulator**, so
+  you can play Himmel with the mouse without owning the hardware.
+- **The operator GUI** (mockups, not built yet): Perform, Setup, Library,
+  Setlist, Effects and Help screens in dark, light and night themes.
+
+![Perform screen mockup, dark theme](docs/images/gui-perform-dark.png)
+*Planned operator GUI, Perform screen (a design mockup, not running code).*
+
+| Maschine MK2 | NuVJ | Lightpad |
+|:-:|:-:|:-:|
+| [![MK2 simulator](docs/images/weapon-mk2.png)](docs/images/weapon-mk2.png) | [![NuVJ simulator](docs/images/weapon-nuvj.png)](docs/images/weapon-nuvj.png) | [![Lightpad simulator](docs/images/weapon-lightpad.png)](docs/images/weapon-lightpad.png) |
+| Knob page on the screens, pads lit by pressure | Two-deck VJ mixer, LCD and LEDs driven by Himmel | 15 × 15 LED surface, multi-touch |
+
+*Weapon simulators in the browser live view (`tools/mk2_live.py`), real
+working tools. The panels are Himmel's own drawings, with no maker logos.*
+
+![VJ table mockup](docs/images/mockup-vj-table.png)
+*Design proposal: the boxes you own, patched with cables on a table
+(mockup only).*
+
+More pictures, all weapons and every GUI mockup:
+**[docs/gallery.md](docs/gallery.md)**.
+
 ## What works today
 
 | Part | State |
@@ -61,6 +89,7 @@ Close Native Instruments software first (it holds the MK2). Clips: every
 | [Third-party notices](THIRD_PARTY_NOTICES.md) | Every library, spec, tool and font, with its license |
 | [Contributing](CONTRIBUTING.md) | How to help |
 | [`CLAUDE.md`](CLAUDE.md) | The running hand-off: hardware facts, decisions with dates, next steps |
+| [Gallery](docs/gallery.md) | Screenshots: every weapon simulator and every GUI mockup |
 | [Design mockups](docs/vj-mockup.html) | Interactive mockup of the MK2 + 3-screen wall; GUI sketches in `docs/gui-mockups/` |
 
 ## Repository layout
