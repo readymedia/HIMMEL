@@ -17,6 +17,7 @@ Nothing yet: this file was created with the v2 plan.
 4. Off-air deck at thumbnail size; GPU meter per layer/effect.
 5. Phase 1c: the playhead state machine in the ClipPlayer worker (play modes, in/out, inner loop, cue points, beat loop + catch-up, FREE/BPM/TIMECODE), trigger styles, HIT layer, warm cue frames, parameter scopes + MOVE modulators (`docs/design/clips-and-playback.md` §2–5, §10).
 6. Phase 2: the live sampler (§6 there).
+- M6: displays by identity, off-screen render while lost, 50/60 Hz, clips at their own fps (`docs/design/operations.md` §1–3).
 
 ## GUESSES
 - None recorded yet.

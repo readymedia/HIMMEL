@@ -16,6 +16,16 @@ Status values:
 
 | # | Decision | Status | Details |
 |---|---|---|---|
+| D79 | **Displays come and go by identity** (EDID + connector); a lost output keeps rendering off-screen and returns to its slot | DECIDED (owner, 2026-11-11) | `design/operations.md` §1 |
+| D80 | **IDENTIFY outputs** (big numbers, drag into physical order) | DECIDED (owner, 2026-11-11) | `design/operations.md` §2 |
+| D81 | **Refresh 60 Hz or 50 Hz** per show; clips play at their own fps (nearest frame, optional frame blend) | DECIDED (owner, 2026-11-11) | `design/operations.md` §3 |
+| D82 | **Stills, image sequences, GIF, SVG** in the library | DECIDED (owner, 2026-11-11) | `design/operations.md` §4 |
+| D83 | **One Settings view** (per-PC `settings.json`; project-bound settings marked) | DECIDED (owner, 2026-11-11) | `design/operations.md` §5 |
+| D84 | **Installation mode** (start with Windows, schedule, PIN lock, hidden cursor, health ping) and **send logs**, in 0.2 | DECIDED (owner, 2026-11-11) | `design/operations.md` §6–7 |
+| D85 | **OSC in (basic set) in 0.1**; OSC out, full address space, MIDI learn and the phone remote in 0.2 | DECIDED (owner, 2026-11-11) | `design/timeline-and-remote.md` §6–7 |
+| D86 | **Timeline** per song (markers, scene / clip / automation / hit / OSC-out lanes, bars or timecode, wait markers, loop region, record a performance), 0.2; touch takes over, RETURN gives it back | DECIDED (owner, 2026-11-11) | `design/timeline-and-remote.md` §1–5 |
+| D87 | MK2 `STEP` = the timeline view (pads = markers, `PLAY` = play / stop there, wheel = locate while stopped) | DECIDED (owner, 2026-11-11) | `design/timeline-and-remote.md` §5 |
+| D88 | **Every effect is audio-reactive**: a reaction on any parameter with full settings, a default reaction per effect; **audio-reactive in 0.1 with mic, line in and loopback** | DECIDED (owner, 2026-11-11) | `design/music.md` §4–5 |
 | D77 | **Projects:** a project = a folder `<name>.himmel/` of JSON; New / Open / Open recent / Save / Save as / export as one `.himmelshow` file / pack with media; autosave journal + snapshots; relink missing clips | DECIDED (owner, 2026-11-11) | `design/projects.md` |
 | D78 | **Output resolution presets:** 720p, 1080p (default), 1440p and 4K (the two big ones recommended for big rigs); custom only under Advanced | DECIDED (owner, 2026-11-11) | `design/projects.md` §5 |
 | D68 | **Two flows, one surface:** PREP → TAKE and PLAY both always available; **focus = the side of the last group pressed**; pads, knobs 1–4 and pages act on the focus; **knobs 5–8 always PROGRAM**; "LIVE EDIT" renamed PLAY focus | DECIDED (owner, 2026-11-11) | `design/perform.md` §1 |

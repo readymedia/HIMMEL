@@ -134,9 +134,15 @@ display missing, a controller gone), it opens the step that needs you.
 - The **loadout line** at the bottom names the result, for example
   "MK2 + Block + LUMI". It is saved with the show.
 - No hardware at all: **Keyboard + mouse** plays the MK2 layout on screen.
+- **Sound in** (a card under the loadout): pick the input (microphone, line
+  in, or "sound on this PC"), see the live meter and the three bands, and a
+  green "hearing music" tick when onsets arrive. Auto gain is on. This is
+  what makes every effect move with the music (`music.md` §5).
 
 ### Step 3: Set outputs (screens or projectors)
 
+0. **IDENTIFY** (top right, always there): big numbers on every connected
+   display; drag them into the physical order (`operations.md` §2).
 1. **Where does the picture go?** Two big cards:
    - **Screens** (TVs, monitors, LED walls): the edges just meet, **no mapping
      is needed**, with optional bezel compensation (mm) so lines cross the
@@ -159,7 +165,8 @@ display missing, a controller gone), it opens the step that needs you.
    in Perform follows.
 5. **Extra outputs** (an LED strip, a TV at the bar), each with its own source
    (MAIN, A, B, OWN, TABLE).
-6. Checks: the same refresh rate on the canvas outputs, flip model, and
+6. **Refresh:** 60 Hz (default) or 50 Hz for the whole canvas
+   (`operations.md` §3). Checks: the same refresh rate on the canvas outputs, flip model, and
    measure latency.
 7. **Show type:** VJ or Overlay (§ engine), as before.
 
@@ -682,3 +689,22 @@ Spec: [`projects.md`](projects.md).
   New; the wheel picks, push confirms. Opening during a show loads into the
   PREVIEW side and asks for a TAKE, so the outputs never drop.
 - **Find missing clips** opens by itself when a project has missing files.
+
+## 19. Timeline, settings, remote (views)
+
+- **Build › Timeline** (`timeline-and-remote.md`, 0.2): the song's lanes
+  (MARK, SCENE, L1–L4, FX / MACRO curves, HIT, OSC OUT, reference AUDIO)
+  under a bar / timecode ruler; the playhead in red while it drives PROGRAM;
+  blocks dragged from the library and the scene list; curves drawn or
+  recorded; a loop region; wait markers. The bottom has the same PREVIEW /
+  PROGRAM monitors, small. Artboard: V4Timeline.
+- **Settings** (gear icon; `operations.md` §5): one page per group with test
+  buttons. The audio group has the live meter and the reaction graph.
+- **Reaction editor** (the "~" ear on every knob tile; `music.md` §4):
+  signal list with live meters, input → output graph, amount, range, mode,
+  attack / release, threshold, curve, quantise, hold. Artboard: V4Audio.
+- **Remote:** Settings › Remote shows the OSC port, allowed addresses, the
+  last 20 messages received (for debugging a lighting desk), and the phone
+  remote QR code (0.2).
+- **Output lost:** a red "OUT 2 lost" chip in the top bar, the output's
+  monitor strip hatched, until it comes back (`operations.md` §1).

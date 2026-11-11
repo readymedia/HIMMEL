@@ -68,6 +68,10 @@ SCRATCH / FX. **All design decisions D42–D76 were confirmed by the owner on
 2026-11-11** (`docs/decisions.md`); D65: no flash cap by default.
 Projects (save / open / recent / one-file export, autosave) and output
 resolution presets 720p / 1080p / 1440p / 4K: `docs/design/projects.md` (D77–D78).
+**Every effect is audio-reactive, in 0.1, with mic / line in / loopback**
+(`docs/design/music.md` §4–5, D88). Displays that drop out, IDENTIFY, 50/60 Hz,
+stills, Settings: `docs/design/operations.md`. OSC in (0.1) and the timeline
+(0.2): `docs/design/timeline-and-remote.md`.
 - **Show:** outputs, mapping (keystone, mesh warp, edge blend), cameras, banks,
   audio and sync sources.
 - **Bank:** clips and loops, with analysis (colors, motion, mood such as

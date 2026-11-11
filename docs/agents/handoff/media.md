@@ -16,6 +16,7 @@ Nothing yet: this file was created with the v2 plan.
 3. Background throttling tied to the engine status block.
 4. Hap Q Alpha.
 - Import analysis additions: best loop points, loop style, slices, natural beats, motion curve (`docs/design/library-and-analysis.md` §3).
+- M7: stills, image sequences, GIF, SVG; store fps (`docs/design/operations.md` §3–4).
 
 ## GUESSES
 - None recorded yet.

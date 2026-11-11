@@ -25,7 +25,7 @@ in one JSON file per effect, next to the shader.
 | `id`, `name`, `family` | `kaleido`, "Kaleido", `space` | Browser, shuffle family weights |
 | `params[]` | `{id, name, min, max, default, good:[lo,hi], speed:true/false, unit}` | Knobs 1–4, shuffle ranges |
 | `main` | the two main parameters (knobs 1–2; PMTR 1 / 2 on the NuVJ; X / Y on the Lightpad) | Every weapon |
-| `reaction` | `{signal:"kick", param:"zoom", amount:0.4}` | Default music reaction |
+| `reaction` | `{signal:"kick", param:"zoom", amount:0.4, attack:5, release:180, mode:"add"}` | The default music reaction. **Every effect must have one** (D88), and every parameter can get its own (`music.md` §4) |
 | `cost` | class `S` / `M` / `L` + the ms measured at Prepare | Budget, browser dimming |
 | `passes`, `state` | 1, `none` / `feedback` / `history` | Graph, off-air shrink |
 | `compat` | `{avoid:["dark-source"], not_with:["kaleido"]}` | Shuffle rules |

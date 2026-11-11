@@ -14,6 +14,7 @@ Nothing yet: this file was created with the v2 plan.
 1. `himmel_audio.exe`: WASAPI capture + loopback, bands, onsets, BPM/phase, the shared audio block → `docs/interfaces/audio-block.md`.
 2. Clock arbitration + tap.
 3. Link bridge (GPL, separate process), Pro DJ Link bridge.
+- **0.1 must ship audio-reactive (D88):** mic / line in / loopback, auto gain, signals, reactions on every parameter with full settings, MK2 reaction page (`docs/design/music.md` §4–5, `docs/build-v1.md` M8).
 
 ## GUESSES
 - None recorded yet.

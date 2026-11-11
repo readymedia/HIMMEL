@@ -18,3 +18,10 @@ content and layout only. Behaviour: `docs/design/perform.md`; GUI text:
 
 v3 (`../v3/`) still holds the clip editor (`V3ClipPads`), outputs, canvas,
 mapping, presets, side arms and the cheat sheet.
+- `V4Audio.dc.html`: Sound in (mic / line in / this PC, auto gain, gate, AV
+  offset, live signals) and the reaction editor (signal, mode ADD / FOLLOW /
+  TRIGGER, amount, range, attack, release, threshold, curve, quantise, hold,
+  input → output graph); default reactions; the MK2 reaction page. Interactive.
+- `V4Timeline.dc.html`: the timeline (0.2): markers (click to jump), scene,
+  layer, macro, hit, OSC-out and reference-audio lanes, bars / timecode /
+  seconds, play / record; OSC in monitor (basics in 0.1). Interactive.

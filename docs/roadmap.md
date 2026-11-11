@@ -27,6 +27,12 @@ if its driver checks out) and puts them in milestone order M0–M12 with a
 [`design/perform.md`](design/perform.md). The phases below stay the long
 plan.
 
+**0.2 (after 0.1 plays a real gig):** the timeline (`design/timeline-and-remote.md`),
+installation mode and send logs (`design/operations.md` §6–7), OSC out + MIDI
+learn + the phone remote, Ableton Link / Pro DJ Link bridges, audio beat
+tracking, ASIO, the live sampler, pen masks and mesh warp, pack with media,
+clip audio (optional).
+
 ## 1. What we have to build on
 
 | Exists | Where | Becomes |

@@ -50,6 +50,11 @@ watch / drop
   | Prepare Show | High priority |
 
 - **Clips that already are HAP** skip conversion but are still analysed.
+- **Stills, image sequences, GIFs and SVGs** are imported too: stills stay
+  images (PNG keeps alpha), sequences and animations become HAP / HAP Alpha
+  (`operations.md` §4).
+- **The clip's frame rate** is stored; the library flags clips that will
+  judder on the show's refresh (`operations.md` §3).
 - **Generators** get the same analysis on a 10-second render, so shuffle
   treats them like clips.
 - **Cameras and capture inputs** get live, cheap tags (brightness, motion,
