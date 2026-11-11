@@ -389,7 +389,7 @@ The details are in the mockup (`docs/vj-mockup.html`).
      reconnect, `--sim` (UDP Lightpad 8767, LUMI 8769, **NuVJ 8774**, APC20 8782: the Python
      NuVJ sim got an engine link + active sensing every 300 ms), `--ports`, `--slot`.
    - `weapon_monitor.exe [--slot N] [--echo] [--stop N]`; `weapon_tests.exe`
-     (165 checks incl. the APC20, bytes compared with the Python reference).
+     (163 checks incl. the APC20, bytes compared with the Python reference).
    - `himmel.exe` starts the four drivers (`--weapons LIST`, `--no-weapons`);
      `--sim` puts them in sim mode too. The renderer reads ring 0 of every slot and
      uses only the header roles (table in the README).
