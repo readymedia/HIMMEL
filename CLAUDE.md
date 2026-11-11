@@ -198,6 +198,9 @@ The details are in the mockup (`docs/vj-mockup.html`).
     engine renders it.
     **Jog Pong** (easter egg, `tools/nuvj_games.py`, played by the owner 2026-11-11): a three-lane
     pong on the NuVJ's LCD, played with the jogs; hold both SCRATCH buttons to start or stop.
+    **Start-up shows** (`INTROS` in `tools/nuvj_games.py`, 2026-11-11): Boot sweep, Starburst and
+    Made by play on the LEDs and LCD when Himmel takes the NuVJ (random by default, or picked
+    in the live view); the ✦ buttons play them any time, and any button skips.
 - **Visual mapping is the way to work with the controller. Keep it and build on
   it** (the owner wants graphical tools, not terminal tables):
   - `tools/mk2_live.py` + `tools/mk2_live.html`: a browser live view of the MK2

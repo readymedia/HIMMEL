@@ -615,6 +615,24 @@ that Himmel drives every part of the controller.
   live view.
 - **Without hardware.** `python tools/nuvj_games.py` runs a self-test.
 
+### Start-up shows (2026-11-11)
+
+Short light shows on the NuVJ's LEDs and LCD, like the MK2's start-up splash.
+They are in `tools/nuvj_games.py` (`INTROS`).
+
+- **Boot sweep** (4.2 s): a light column sweeps across deck A, the centre and
+  deck B; the 16-segment cells fill one by one and settle into "HIMMEL VJ 5";
+  the numbers count up and the words switch on.
+- **Starburst** (4.0 s): every 16-segment cell is a spinning star, the pads
+  run round each deck, then everything bursts on with "READY".
+- **Made by** (5.4 s): "MADE BY READYMEDIA.NO" scrolls along the 16-segment
+  row while the pads beat like a heart.
+- **When.** One plays when Himmel takes the NuVJ (sends init). The live view's
+  "on connect" picks random (the default), one show, or off. The ✦ buttons
+  play a show at any time.
+- **Skip.** Any button ends the show.
+- **Without hardware.** `python tools/nuvj_games.py` also checks the shows.
+
 ## Plan: how a generic weapon feeds Himmel (not wired yet)
 
 Today `mk2_controller.exe` owns `Local\HimmelMk2`:
