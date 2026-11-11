@@ -785,7 +785,8 @@ $("hForget").onclick = () => post({ seg_forget: true });
 // picture: top-left, top-right, bottom-right, bottom-left. 3. Auto-map: for every byte, all segments off
 // (baseline); then each bit alone. What got brighter is mapped onto the drawn LCD and saved (seg_set).
 const CAM = { stream: null, corners: [], Hc2l: null, Hl2c: null, running: false, grid: null, last: null, parts: null };
-const GW = 400, GH = 225;     // the camera picture is analysed at this size
+let GW = 400, GH = 225;       // the analysed crop (the glass, at the camera's own resolution, at most 960 wide)
+let CROP = { x: 0, y: 0, w: 1, h: 1 };
 function solve8(A, b) {        // Gaussian elimination for the 8x8 homography system
   const n = 8, M = A.map((r, i) => [...r, b[i]]);
   for (let c = 0; c < n; c++) {
@@ -816,7 +817,7 @@ async function camList() {
 async function camStart(keepCorners) {
   try {
     if (CAM.stream) { CAM.stopping = true; CAM.stream.getTracks().forEach(t => t.stop()); CAM.stopping = false; }
-    const id = $("camSel").value, size = { width: { ideal: 640 }, height: { ideal: 480 } };
+    const id = $("camSel").value, size = { width: { ideal: 1920 }, height: { ideal: 1080 } };
     CAM.stream = await navigator.mediaDevices.getUserMedia({ video: id ? Object.assign({ deviceId: { exact: id } }, size) : size });
     const tr = CAM.stream.getVideoTracks()[0];
     tr.onended = () => {               // the camera went away (another program took it, or the driver reset): start it again
@@ -850,15 +851,25 @@ function camCalibrated() {
   const [uw, uh] = W.lcd.units || [200, 112];
   const L = [[0, 0], [uw, 0], [uw, uh], [0, uh]];
   CAM.Hc2l = homography(CAM.corners, L); CAM.Hl2c = homography(L, CAM.corners);
+  // the crop: the glass's box in the video, plus a margin; analysed at full camera resolution
+  const v = $("camVid"), xs = CAM.corners.map(c => c[0]), ys = CAM.corners.map(c => c[1]);
+  const m = 0.04 * Math.max(...xs) - 0.04 * Math.min(...xs);
+  CROP.x = Math.max(0, Math.floor(Math.min(...xs) - m)); CROP.y = Math.max(0, Math.floor(Math.min(...ys) - m));
+  CROP.w = Math.min(v.videoWidth - CROP.x, Math.ceil(Math.max(...xs) + m) - CROP.x);
+  CROP.h = Math.min(v.videoHeight - CROP.y, Math.ceil(Math.max(...ys) + m) - CROP.y);
+  const k = Math.min(1, 960 / CROP.w); GW = Math.round(CROP.w * k); GH = Math.round(CROP.h * k);
+  grabCv.width = GW; grabCv.height = GH;
   // every analysed pixel inside the glass, with its place on the LCD drawing
-  const v = $("camVid"), sx = v.videoWidth / GW, sy = v.videoHeight / GH, idx = [], U = [], V = [];
+  const sx = CROP.w / GW, sy = CROP.h / GH, idx = [], U = [], V = [];
   for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
-    const [u, w] = hApply(CAM.Hc2l, (x + 0.5) * sx, (y + 0.5) * sy);
+    const [u, w] = hApply(CAM.Hc2l, CROP.x + (x + 0.5) * sx, CROP.y + (y + 0.5) * sy);
     if (u >= 0 && u <= uw && w >= 0 && w <= uh) { idx.push(y * GW + x); U.push(u); V.push(w); }
   }
   const pxPerUnit = Math.sqrt(idx.length / (uw * uh));
   CAM.grid = { idx, U, V, pxPerUnit };
-  $("camInfo").textContent = `Corners set (${idx.length} camera pixels on the glass, ${pxPerUnit.toFixed(1)} per LCD unit). The outlines should sit on the real segments. Then press Auto-map.`;
+  $("camInfo").textContent = `Corners set: ${idx.length} camera pixels on the glass, ${pxPerUnit.toFixed(1)} per LCD unit` +
+    (pxPerUnit < 2.5 ? " - too few: zoom in or move the camera closer (aim for 3 or more)" : " - good") +
+    ". The outlines should sit on the real segments. Then press Auto-map. Bits you learned by hand are kept.";
 }
 $("camOv").addEventListener("click", e => {
   if (!CAM.stream || CAM.running) return;
@@ -873,7 +884,7 @@ async function grab(n = 3) {    // average luminance of n frames (waits while th
   for (let t = 0; !camLive() && CAM.running; t++) await new Promise(r => setTimeout(r, 200));
   const out = new Float32Array(GW * GH);
   for (let k = 0; k < n; k++) {
-    grabG.drawImage($("camVid"), 0, 0, GW, GH);
+    grabG.drawImage($("camVid"), CROP.x, CROP.y, CROP.w, CROP.h, 0, 0, GW, GH);
     const d = grabG.getImageData(0, 0, GW, GH).data;
     for (let i = 0, j = 0; j < out.length; i += 4, j++) out[j] += (d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11) / n;
     await new Promise(r => setTimeout(r, 45));
@@ -967,7 +978,7 @@ setInterval(() => {             // a heartbeat line: frames are arriving, or not
   if (CAM.lastFrames !== undefined && q === CAM.lastFrames && !CAM.running) camNote("no new camera frames for 2 s - is another program using the camera?");
   if (CAM.lastFrames !== undefined && q > CAM.lastFrames && !CAM.running && !CAM.Hc2l && CAM.corners.length === 0) {
     // frames arrive: check that they are not all black (a camera held by another program often gives black frames)
-    grabG.drawImage(v, 0, 0, GW, GH);
+    grabG.drawImage(v, 0, 0, v.videoWidth, v.videoHeight, 0, 0, GW, GH);
     const d = grabG.getImageData(0, 0, GW, GH).data; let sum = 0;
     for (let i = 0; i < d.length; i += 16) sum += d[i] + d[i + 1] + d[i + 2];
     if (sum / (d.length / 16) < 6) camNote("the camera sends only black frames - another program (OBS?) probably holds it. " +

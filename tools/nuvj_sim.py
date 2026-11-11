@@ -1178,6 +1178,7 @@ class NuvjLive:
                 "drive": self.drive,
                 "lcd_segments": {k: seg_bits(v) for k, v in (self.m.get("lcd_segments") or {}).items()},
                 "lcd_bytes_lit": list(self.m.get("lcd_bytes_lit") or []),
+                "lcd_manual": list(self.m.get("lcd_manual") or []),
                 "host": {"mode": self.host.mode, "modes": list(NuvjHost.MODES), "bpm": st["bpm"],
                          "A": dict(st["A"]), "B": dict(st["B"]), "toggles": dict(st["toggles"]),
                          "xf": st["xf"]},
@@ -1304,12 +1305,15 @@ class NuvjLive:
                         else:
                             del segs[k2]
                     segs[key] = seg_bits(segs.get(key)) + [pair]   # a part may light from several bits
+                    man = self.m.setdefault("lcd_manual", [])
+                    if [h["byte"], h["bit"]] not in man:
+                        man.append([h["byte"], h["bit"]])          # learned by hand: the camera keeps off it
                     h["auto"] = False
                     self.learn_msg = "LCD part %s += byte %d bit %d (%d bit(s) now)" % (key, h["byte"], h["bit"], len(segs[key]))
                     save_map(self.m)
             elif "seg_set" in d:       # the camera mapper: bit (byte, bit) lights exactly these parts
                 c = d["seg_set"]
-                if self.dev.kind == "hw":
+                if self.dev.kind == "hw" and [int(c["byte"]), int(c["bit"])] not in self.m.get("lcd_manual", []):
                     segs = self.m.setdefault("lcd_segments", {})
                     pair = [int(c["byte"]), 1 << int(c["bit"])]
                     for k in list(segs):
@@ -1335,6 +1339,9 @@ class NuvjLive:
                                 segs[k] = bits
                             else:
                                 del segs[k]
+                    man = self.m.setdefault("lcd_manual", [])
+                    if [h["byte"], h["bit"]] in man:
+                        man.remove([h["byte"], h["bit"]])
                     self.learn_msg = "forgot %s" % (", ".join(gone) or "nothing")
                     save_map(self.m)
             elif "contrast" in d:      # LCD contrast 0..99, not stored in the controller
