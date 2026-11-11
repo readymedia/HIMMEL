@@ -68,6 +68,7 @@ std::string describe(const Event& e) {
         case EventType::PadRelease: std::snprintf(s, sizeof(s), "RELEASE pad %d", e.id); break;
         case EventType::Connected: std::snprintf(s, sizeof(s), "CONNECTED"); break;
         case EventType::Disconnected: std::snprintf(s, sizeof(s), "DISCONNECTED"); break;
+        default: std::snprintf(s, sizeof(s), "%s", std::string(event_name(e.type)).c_str()); break;  // not from an MK2
     }
     return s;
 }

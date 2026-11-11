@@ -450,18 +450,84 @@ class SimNuVJ(DeviceBase):
     """A pretend NuVJ: the drawn panel drives it, it sends the map's MIDI bytes."""
 
     kind = "sim"
+    ENGINE_ADDR = ("127.0.0.1", 8774)   # MK2 8766, Lightpad 8767, LUMI 8769, NuVJ 8774 (weapon_nuvj.exe --sim)
+    HOST_TIMEOUT = 3.0                  # the engine's driver refreshes the LEDs/LCD every 2 s and on change
 
     def __init__(self, live):
         super().__init__()
         self.live = live
         self.notes = ["Simulated NuVJ: the drawing is the controller. Its LEDs and LCD show the feedback SysEx the host sends."]
+        # Engine link: every MIDI message the device sends also goes as one datagram to ENGINE_ADDR;
+        # datagrams sent back are MIDI into the device (feedback SysEx). Active sensing (FE) every
+        # 300 ms tells the engine's driver the simulator is there. While the engine talks, the
+        # live view's own host stays quiet.
+        self.engine_time = 0.0
+        self.closed = False
+        self.udp = None
+        try:
+            import socket
+            u = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            u.bind(("127.0.0.1", 0))
+            u.settimeout(0.3)
+            if hasattr(socket, "SIO_UDP_CONNRESET"):
+                u.ioctl(socket.SIO_UDP_CONNRESET, False)
+            self.udp = u
+            threading.Thread(target=self._rx_loop, daemon=True).start()
+        except OSError as e:
+            self.notes.append("No link to the engine: %s" % e)
 
-    def receive(self, msg):
+    def engine_active(self):
+        return time.time() - self.engine_time < self.HOST_TIMEOUT
+
+    def _to_engine(self, msg):
+        if self.udp is not None:
+            try:
+                self.udp.sendto(bytes(msg), self.ENGINE_ADDR)
+            except OSError:
+                pass
+
+    def emit(self, data):
+        super().emit(data)
+        for msg in ([bytes(data)] if data[:1] == b"\xF0" else split_midi(data)):
+            self._to_engine(msg)
+
+    def _rx_loop(self):
+        import socket
+        next_hello = 0.0
+        while not self.closed:
+            now = time.time()
+            if now >= next_hello:
+                next_hello = now + 0.3
+                self._to_engine(b"\xFE")
+            try:
+                r, _ = self.udp.recvfrom(4096)
+            except socket.timeout:
+                continue
+            except ConnectionResetError:
+                continue  # Windows: queued "port unreachable" for datagrams nobody read; drain, no sleep
+            except OSError:
+                if self.closed:
+                    return
+                time.sleep(0.05)
+                continue
+            if r:
+                self.engine_time = time.time()
+                self.receive(r, source="engine")
+
+    def close(self):
+        self.closed = True
+        if self.udp is not None:
+            try:
+                self.udp.close()
+            except OSError:
+                pass
+
+    def receive(self, msg, source="local"):
         """MIDI from the host to the device."""
         msg = bytes(msg)
         with self.lock:
             self.counts["to_device"] += 1
-            self._log("host → device", msg, noisy=True)
+            self._log(("engine" if source == "engine" else "host") + " → device", msg, noisy=True)
             self.note_out(msg)
 
 
@@ -1156,7 +1222,10 @@ class NuvjLive:
                         save_map(self.m)
                     self.show.tick()
                     self._sync_host()
-                    if self.dev.kind == "sim" or self.drive:   # the real NuVJ: listen only until the owner says so
+                    engine = getattr(self.dev, "engine_active", lambda: False)()
+                    if engine:                                # Himmel's engine (weapon_nuvj.exe --sim) drives it
+                        self.host.sent.clear()
+                    elif self.dev.kind == "sim" or self.drive:   # the real NuVJ: listen only until the owner says so
                         self.host.tick(self.dev, self.m, set(self.held))
             except Exception as ex:   # never let the LED loop die
                 self.learn_msg = "host error: %s" % ex
@@ -1205,6 +1274,7 @@ class NuvjLive:
                              "contrast": dev.contrast, "inited": dev.inited},
                 "seg_hunt": self.host.seg_hunt,
                 "drive": self.drive,
+                "engine": getattr(dev, "engine_active", lambda: False)(),
                 "game": self.host.game.name if self.host.game else None,
                 "intro_mode": self.host.intro_mode,
                 "lcd_segments": {k: seg_bits(v) for k, v in (self.m.get("lcd_segments") or {}).items()},

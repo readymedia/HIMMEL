@@ -11,6 +11,10 @@
 // * Reads the MK2 through the controller's shared block (ring 0): knobs change
 //   the test card, pads flash their part of the canvas, Navigate toggles
 //   span/mirror. Works without the controller and picks it up when it appears.
+// * Reads the other weapons (Lightpad, LUMI Keys, NuVJ, ...) the same way through
+//   their drivers' shared blocks "Local\HimmelWeapon<N>" (ring 0): pads/keys flash,
+//   knobs and faders drive the knob slots, buttons page / browse / pause. Their
+//   LEDs, pixels and LCD show the engine's state.
 // * Publishes a heartbeat + frame stats in "Local\HimmelEngine" for the
 //   supervisor. Exits with code 3 if the GPU device is lost (the supervisor
 //   restarts it).
@@ -49,6 +53,8 @@
 #include "himmel/mk2/pages.h"
 #include "himmel/mk2/shared.h"
 #include "himmel/mk2/types.h"
+#include "himmel/weapon/nuvj.h"
+#include "himmel/weapon/shared.h"
 #include "shaders.h"
 
 using Microsoft::WRL::ComPtr;
@@ -423,11 +429,12 @@ void layout(Gpu& g, std::vector<Output>& outs, bool mirror, PatternCB& cb) {
     }
 }
 
-void update_overlay(Gpu& g, Output& o, int index, int count, bool mirror, float fps, bool mk2, const char* clip_line) {
+void update_overlay(Gpu& g, Output& o, int index, int count, bool mirror, float fps, bool mk2, int weapons,
+                    const char* clip_line) {
     mk2::Canvas<kOverlayW, kOverlayH> c;
-    char line[96];
-    std::snprintf(line, sizeof(line), "HIMMEL  OUT %d/%d  %dx%d  %s  %.1f FPS  MK2 %s", index + 1, count, o.w, o.h,
-                  mirror ? "MIRROR" : "SPAN", fps, mk2 ? "OK" : "OFF");
+    char line[112];
+    std::snprintf(line, sizeof(line), "HIMMEL  OUT %d/%d  %dx%d  %s  %.1f FPS  MK2 %s  WEAPONS %d", index + 1, count, o.w,
+                  o.h, mirror ? "MIRROR" : "SPAN", fps, mk2 ? "OK" : "OFF", weapons);
     c.text(2, 3, line);
     c.text(2, 14, clip_line);
     for (int y = 0; y < kOverlayH; ++y)
@@ -591,6 +598,237 @@ struct Mk2Link {
     }
 };
 
+
+// ---------------------------------------------------------------- other weapons
+// Every weapon driver (weapon_blocks.exe, weapon_nuvj.exe, ...) owns one block
+// "Local\HimmelWeapon<N>". Ring 0 is ours. What a control does here comes from the
+// driver's header (role, knob slot, pad numbers), so this code knows no weapon by name.
+namespace wpn = himmel::weapon;
+
+void hsv(float h, float s, float v, uint8_t out[3]) {
+    h = h - std::floor(h);
+    const float r = std::clamp(std::fabs(h * 6.0f - 3.0f) - 1.0f, 0.0f, 1.0f);
+    const float gg = std::clamp(2.0f - std::fabs(h * 6.0f - 2.0f), 0.0f, 1.0f);
+    const float b = std::clamp(2.0f - std::fabs(h * 6.0f - 4.0f), 0.0f, 1.0f);
+    out[0] = static_cast<uint8_t>(255 * v * (1 - s + s * r));
+    out[1] = static_cast<uint8_t>(255 * v * (1 - s + s * gg));
+    out[2] = static_cast<uint8_t>(255 * v * (1 - s + s * b));
+}
+
+struct WeaponLink {
+    struct Slot {
+        wpn::SharedMemory shm;
+        bool open = false;
+        bool was_alive = false;
+        std::array<float, wpn::kMaxPads> flash{};
+        std::array<uint8_t, wpn::kMaxControls> led_last{};
+        bool led_written = false;
+        uint8_t px[wpn::kMaxPixels][3] = {};
+        uint8_t px_last[wpn::kMaxPixels][3] = {};
+        wpn::Display disp_last{};
+        bool disp_written = false;
+    };
+    std::array<Slot, wpn::kMaxSlots> slots;
+    uint64_t next_try_us = 0, next_out_us = 0;
+    uint64_t earliest_event_us = 0;
+
+    void poll(uint64_t t) {
+        if (t < next_try_us) return;
+        next_try_us = t + 1000000;
+        for (int i = 0; i < wpn::kMaxSlots; ++i) {
+            Slot& s = slots[static_cast<size_t>(i)];
+            if (s.open || !s.shm.open(i + 1)) continue;
+            s.open = true;
+            s.shm.get()->rings[wpn::kEngineRing].attach();
+            s.led_written = s.disp_written = false;
+            const auto& h = s.shm.get()->header;
+            log("weapon slot %d: %s (%s)%s, listening on ring %d", i + 1, h.name, h.driver, h.simulated ? " simulated" : "",
+                wpn::kEngineRing);
+        }
+    }
+    static bool alive(const Slot& s, uint64_t t) {
+        return s.open && s.shm.get()->status.connected.load() &&
+               t - std::min(t, s.shm.get()->status.heartbeat_us.load()) < 500000;
+    }
+    int alive_count(uint64_t t) {
+        int n = 0;
+        for (size_t i = 0; i < slots.size(); ++i) {
+            Slot& s = slots[i];
+            const bool a = alive(s, t);
+            if (a != s.was_alive && s.open) {
+                s.was_alive = a;
+                log("weapon slot %zu: %s %s", i + 1, s.shm.get()->header.name, a ? "connected" : "offline");
+            }
+            n += a;
+        }
+        return n;
+    }
+
+    void drain(Params& p) {
+        earliest_event_us = 0;
+        for (Slot& s : slots) {
+            if (!s.open) continue;
+            auto* b = s.shm.get();
+            const wpn::Header& h = b->header;
+            auto& ring = b->rings[wpn::kEngineRing];
+            if (!ring.attached.load()) ring.attach();  // a restarted driver may have reset it
+            mk2::Event e;
+            while (ring.pop(e)) {
+                if (!earliest_event_us || e.t_us < earliest_event_us) earliest_event_us = e.t_us;
+                const uint8_t role = e.id < wpn::kMaxControls ? h.role[e.id] : wpn::kRoleNone;
+                const uint8_t slot = e.id < wpn::kMaxControls ? h.knob_slot[e.id] : wpn::kNone;
+                auto knob = [&](uint8_t k) -> float& {
+                    return k == 7 || p.page == 0 ? p.knob[k] : p.page == 1 ? p.clip[k] : p.cam[k];
+                };
+                switch (e.type) {
+                    case mk2::EventType::KnobDelta:
+                        if (role == wpn::kRoleKnob && slot < mk2::kKnobs) {
+                            float& v = knob(slot);
+                            v = std::clamp(v + e.value / 1000.0f, 0.0f, 1.0f);
+                            p.touched = slot, p.touched_us = e.t_us;
+                        }
+                        break;
+                    case mk2::EventType::Fader:
+                        if (role == wpn::kRoleKnob && slot < mk2::kKnobs) {
+                            knob(slot) = std::clamp(e.value / 16383.0f, 0.0f, 1.0f);
+                            p.touched = slot, p.touched_us = e.t_us;
+                        }
+                        break;
+                    case mk2::EventType::EncoderDelta:
+                        if (role == wpn::kRoleBrowse) p.clip_step += e.value > 0 ? 1 : -1;
+                        break;
+                    case mk2::EventType::PadHit:
+                        if (e.id >= 1 && e.id <= wpn::kMaxPads) {
+                            const float v = e.value / 127.0f;
+                            p.pad[(e.id - 1) % mk2::kPads] = v;
+                            s.flash[e.id - 1] = v;
+                            if (p.page == 1) p.clip_jump = ((e.id - 1) % mk2::kPads) / 16.0f;
+                        }
+                        break;
+                    case mk2::EventType::PadPressure:
+                        if (e.id >= 1 && e.id <= wpn::kMaxPads) {
+                            const float v = std::min(1.0f, e.value / 3300.0f);
+                            float& pv = p.pad[(e.id - 1) % mk2::kPads];
+                            pv = std::max(pv, v);
+                            s.flash[e.id - 1] = std::max(s.flash[e.id - 1], v);
+                        }
+                        break;
+                    case mk2::EventType::ButtonDown:
+                        switch (role) {
+                            case wpn::kRolePageNext: p.page = (p.page + 1) % 3, p.touched = -1; break;
+                            case wpn::kRolePagePrev: p.page = (p.page + 2) % 3, p.touched = -1; break;
+                            case wpn::kRoleBrowse:
+                            case wpn::kRoleBrowseNext: p.clip_step += 1; break;
+                            case wpn::kRoleBrowsePrev: p.clip_step -= 1; break;
+                            case wpn::kRolePlay: p.clip_paused = !p.clip_paused; break;
+                            case wpn::kRoleRestart: p.clip_jump = 0.0f; break;
+                            case wpn::kRoleMirror: p.mirror = !p.mirror, p.resized = true; break;
+                            default: break;
+                        }
+                        break;
+                    default: break;
+                }
+            }
+        }
+    }
+
+    // LEDs, pixels and the display, ~30 Hz, written only when they change.
+    void outputs(const Params& p, float dt, float fps, uint64_t t, const ClipView& cv) {
+        const float fade = std::exp(-dt / pad_fade_s(p.knob[6]));
+        for (Slot& s : slots)
+            for (float& f : s.flash) f = f * fade < 0.002f ? 0.0f : f * fade;
+        if (t < next_out_us) return;
+        next_out_us = t + 33000;
+        for (Slot& s : slots) {
+            if (!alive(s, t)) {
+                s.led_written = s.disp_written = false;
+                continue;
+            }
+            auto* b = s.shm.get();
+            const wpn::Header& h = b->header;
+            if (h.caps & wpn::kCapLedLevels) {
+                std::array<uint8_t, wpn::kMaxControls> led{};
+                for (int i = 0; i < wpn::kMaxControls && i < static_cast<int>(h.controls); ++i) {
+                    switch (h.role[i]) {
+                        case wpn::kRolePageNext: led[i] = p.page > 0 ? 127 : 20; break;
+                        case wpn::kRolePagePrev: led[i] = p.page == 0 ? 127 : 20; break;
+                        case wpn::kRolePlay: led[i] = p.clip_paused ? 20 : 127; break;
+                        case wpn::kRoleMirror: led[i] = p.mirror ? 127 : 20; break;
+                        default: break;
+                    }
+                }
+                for (int n = 0; n < wpn::kMaxPads; ++n)
+                    if (h.pad_control[n] != wpn::kNone)
+                        led[h.pad_control[n]] = static_cast<uint8_t>(std::clamp(s.flash[static_cast<size_t>(n)], 0.0f, 1.0f) * 127);
+                if (!s.led_written || led != s.led_last) {
+                    mk2::seq_write(b->outputs.led_seq, b->outputs.led, *reinterpret_cast<uint8_t(*)[wpn::kMaxControls]>(led.data()));
+                    s.led_last = led;
+                    s.led_written = true;
+                }
+            }
+            if ((h.caps & wpn::kCapPixels) && h.pixel_w * h.pixel_h <= wpn::kMaxPixels) {
+                const float hue = p.knob[0];
+                const float base = 0.10f + 0.15f * static_cast<float>(p.page);
+                if (h.pixel_h == 1) {  // a row of keys: key n = pad number n
+                    for (int k = 0; k < h.pixel_w; ++k) {
+                        const float f = s.flash[static_cast<size_t>(k)];
+                        hsv(hue + (k % 12) / 24.0f, 0.8f - 0.8f * f, std::max(base * (k % 12 == 0 ? 2.0f : 1.0f), f), s.px[k]);
+                    }
+                } else {  // a grid: pads 1..16 as 4 x 4 zones of 3 x 3 cells, Pad 1 bottom-left
+                    const int w = h.pixel_w, hh = h.pixel_h;
+                    for (int y = 0; y < hh; ++y)
+                        for (int x = 0; x < w; ++x) {
+                            const int col = x * 4 / w, row = 3 - y * 4 / hh;
+                            const bool gap = (x % 4 == 3) || (y % 4 == 3);
+                            const float f = gap ? 0.0f : s.flash[static_cast<size_t>(col + 4 * row)];
+                            hsv(hue + (col + 4 * row) / 32.0f, 0.85f - 0.85f * f, gap ? 0.0f : std::max(base, f),
+                                s.px[y * w + x]);
+                        }
+                }
+                if (std::memcmp(s.px, s.px_last, sizeof(s.px)) != 0) {
+                    mk2::seq_write(b->outputs.pixel_seq, b->outputs.pixel, s.px);
+                    std::memcpy(s.px_last, s.px, sizeof(s.px));
+                }
+            }
+            if (h.caps & wpn::kCapDisplay) {
+                wpn::Display d{};
+                static constexpr const char* kPage[3] = {"TESTCARD", "  CLIP", " CAMERA"};
+                std::snprintf(d.text, sizeof(d.text), "%s", kPage[p.page % 3]);
+                if (p.page == 1 && cv.count) std::snprintf(d.alpha, sizeof(d.alpha), "%.11s", cv.name);
+                else std::snprintf(d.alpha, sizeof(d.alpha), "HIMMEL VJ");
+                std::snprintf(d.number[0], sizeof(d.number[0]), "%d", std::clamp(static_cast<int>(fps + 0.5f), 0, 199));
+                std::snprintf(d.number[1], sizeof(d.number[1]), "%02d", p.page + 1);
+                const bool recent = p.touched >= 0 && t - std::min(t, p.touched_us) < 1500000;
+                const size_t tk = static_cast<size_t>(std::max(p.touched, 0));
+                const float tv = !recent ? 0.0f : tk == 7 || p.page == 0 ? p.knob[tk] : p.page == 1 ? p.clip[tk] : p.cam[tk];
+                d.bar[0] = static_cast<int8_t>(recent ? std::lround(tv * wpn::nuvj::kRampSteps) : -1);
+                d.bar[1] = static_cast<int8_t>(std::lround(p.knob[7] * wpn::nuvj::kRampSteps));
+                d.marks = wpn::nuvj::kMarkRule | wpn::nuvj::kMarkBpm | wpn::nuvj::kMarkPage | wpn::nuvj::kMarkData |
+                          (recent ? wpn::nuvj::kMarkLast : 0u) |
+                          (p.page == 0 ? wpn::nuvj::kMarkBoxA : p.page == 1 ? wpn::nuvj::kMarkBoxB : wpn::nuvj::kMarkBoxC) |
+                          (p.mirror ? wpn::nuvj::kMarkBoxD : 0u) | (p.clip_paused ? 0u : wpn::nuvj::kMarkFull);
+                if (!s.disp_written || std::memcmp(&d, &s.disp_last, sizeof(d)) != 0) {
+                    mk2::seq_write(b->outputs.display_seq, b->outputs.display, d);
+                    s.disp_last = d;
+                    s.disp_written = true;
+                }
+            }
+        }
+    }
+
+    void shutdown() {
+        for (Slot& s : slots) {
+            if (!s.open) continue;
+            auto* b = s.shm.get();
+            std::array<uint8_t, wpn::kMaxControls> off{};
+            uint8_t px[wpn::kMaxPixels][3] = {};
+            mk2::seq_write(b->outputs.led_seq, b->outputs.led, *reinterpret_cast<uint8_t(*)[wpn::kMaxControls]>(off.data()));
+            mk2::seq_write(b->outputs.pixel_seq, b->outputs.pixel, px);
+            b->rings[wpn::kEngineRing].detach();
+        }
+    }
+};
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -679,6 +917,8 @@ int main(int argc, char** argv) {
     constexpr int kLatRuns = 16;
 
     Mk2Link mk2link;
+    WeaponLink weaponlink;
+    int weapons_alive_last = -1;
     const uint64_t t0 = now_us();
     uint64_t last_frame = t0, stats_start = t0, frames = 0, stat_frames = 0, overlay_next = 0;
     double interval_sum = 0, interval_max = 0, lat_sum = 0;
@@ -717,6 +957,13 @@ int main(int argc, char** argv) {
         mk2link.poll(t);
         mk2link.drain(g_params);
         const bool mk2_alive = mk2link.alive(t);
+        weaponlink.poll(t);
+        weaponlink.drain(g_params);
+        const int weapons_alive = weaponlink.alive_count(t);
+        if (weapons_alive != weapons_alive_last) {
+            weapons_alive_last = weapons_alive;
+            overlay_next = 0;
+        }
         if (mk2_alive != mk2_was_alive) {
             set_msg(mk2_alive ? "MK2 connected" : "MK2 offline");
             mk2_was_alive = mk2_alive;
@@ -891,6 +1138,8 @@ int main(int argc, char** argv) {
             paused_led_last = g_params.clip_paused;
         }
 
+        weaponlink.outputs(g_params, static_cast<float>(dt), fps, t, cv);
+
         // 4. Render the canvas.
         const auto& k = g_params.knob;
         const double secs = (t - t0) / 1e6;
@@ -1004,7 +1253,7 @@ int main(int argc, char** argv) {
         HRESULT present_hr = S_OK;
         for (size_t i = 0; i < outs.size(); ++i) {
             auto& o = outs[i];
-            if (overlay_due) update_overlay(g, o, static_cast<int>(i), n, g_params.mirror, fps, mk2_alive, clip_line);
+            if (overlay_due) update_overlay(g, o, static_cast<int>(i), n, g_params.mirror, fps, mk2_alive, weapons_alive, clip_line);
             BlitCB bcb{};
             std::memcpy(bcb.src, o.src, sizeof(bcb.src));
             bcb.overlay[0] = 8, bcb.overlay[1] = 8;
@@ -1044,6 +1293,8 @@ int main(int argc, char** argv) {
 
         // 6. Stats + heartbeat.
         const uint64_t t_done = now_us();
+        if (weaponlink.earliest_event_us && (!mk2link.earliest_event_us || weaponlink.earliest_event_us < mk2link.earliest_event_us))
+            mk2link.earliest_event_us = weaponlink.earliest_event_us;
         if (mk2link.earliest_event_us && mk2link.earliest_event_us <= t_done) {
             lat_sum += static_cast<double>(t_done - mk2link.earliest_event_us);
             ++lat_n;
@@ -1090,6 +1341,7 @@ int main(int argc, char** argv) {
         mk2::seq_write(mk2link.shm.get()->outputs.led_seq, mk2link.shm.get()->outputs.leds, off);
         mk2link.shm.get()->rings[kEngineRing].detach();
     }
+    weaponlink.shutdown();
     set_msg("stopped");
     timeEndPeriod(1);
     return exit_code;

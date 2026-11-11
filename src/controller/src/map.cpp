@@ -107,6 +107,11 @@ std::string_view event_name(EventType t) {
         case EventType::PadRelease: return "PadRelease";
         case EventType::Connected: return "Connected";
         case EventType::Disconnected: return "Disconnected";
+        case EventType::TouchStart: return "TouchStart";
+        case EventType::TouchMove: return "TouchMove";
+        case EventType::TouchEnd: return "TouchEnd";
+        case EventType::Fader: return "Fader";
+        case EventType::Switch: return "Switch";
     }
     return "?";
 }

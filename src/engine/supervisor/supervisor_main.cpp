@@ -2,12 +2,16 @@
 // Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // himmel.exe - the supervisor (CLAUDE.md "Processes").
 //
-//   himmel [--no-controller] [--sim] [-- render arguments ...]
+//   himmel [--no-controller] [--weapons LIST | --no-weapons] [--sim] [-- render arguments ...]
 //   e.g. himmel -- --outputs 3 --fullscreen
-//   --sim: no MK2; the controller reads the simulated MK2 in tools/mk2_live.py.
+//   --sim: no hardware; the MK2 controller and the weapon drivers talk to the
+//          simulators in tools/mk2_live.py (MK2 8766, Lightpad 8767, LUMI 8769, NuVJ 8774).
+//   --weapons lightpad,lumi,nuvj: the weapon drivers to run (default: all three);
+//          a driver whose device is not plugged in just waits for it.
 //
-// Starts mk2_controller.exe and himmel_render.exe from its own folder and keeps
-// them alive for a whole night:
+// Starts mk2_controller.exe, the weapon drivers (weapon_blocks.exe lightpad / lumi,
+// weapon_nuvj.exe) and himmel_render.exe from its own folder and keeps them alive
+// for a whole night:
 //   * a child that exits is restarted (0.25 s, doubling up to 10 s if it keeps
 //     dying quickly; back to 0.25 s after it has run for a minute);
 //   * a child whose heartbeat in shared memory is older than 2 s is treated as
@@ -31,11 +35,14 @@
 #include <cstdio>
 #include <filesystem>
 #include <string>
+#include <memory>
 #include <thread>
+#include <vector>
 
 #include "himmel/engine/engine_shared.h"
 #include "himmel/mk2/shared.h"
 #include "himmel/mk2/types.h"
+#include "himmel/weapon/shared.h"
 
 namespace fs = std::filesystem;
 using himmel::mk2::now_us;
@@ -68,7 +75,7 @@ void log(const char* fmt, ...) {
 }
 
 struct Child {
-    const char* name;
+    std::string name;
     std::wstring exe;
     std::wstring args;
     PROCESS_INFORMATION pi{};
@@ -88,7 +95,7 @@ bool start(Child& c, HANDLE job) {
     si.cb = sizeof(si);
     if (!CreateProcessW(c.exe.c_str(), cmd.data(), nullptr, nullptr, FALSE, CREATE_SUSPENDED, nullptr,
                         fs::path(c.exe).parent_path().c_str(), &si, &c.pi)) {
-        log("%s: could not start (error %lu)", c.name, GetLastError());
+        log("%s: could not start (error %lu)", c.name.c_str(), GetLastError());
         return false;
     }
     AssignProcessToJobObject(job, c.pi.hProcess);
@@ -96,7 +103,7 @@ bool start(Child& c, HANDLE job) {
     ResumeThread(c.pi.hThread);
     c.running = true;
     c.started_us = now_us();
-    log("%s: started (pid %lu)", c.name, c.pi.dwProcessId);
+    log("%s: started (pid %lu)", c.name.c_str(), c.pi.dwProcessId);
     return true;
 }
 
@@ -114,7 +121,7 @@ void reap(Child& c, const char* why) {
     c.backoff_us = ran > 60000000 ? 250000 : std::min<uint64_t>(c.backoff_us * 2, 10000000);
     c.next_start_us = t + c.backoff_us;
     ++c.restarts;
-    log("%s: %s (exit code %lu, ran %.1f s) - restart in %.2f s", c.name, why, code, ran / 1e6, c.backoff_us / 1e6);
+    log("%s: %s (exit code %lu, ran %.1f s) - restart in %.2f s", c.name.c_str(), why, code, ran / 1e6, c.backoff_us / 1e6);
 }
 
 void stop_child(Child& c, DWORD wait_ms) {
@@ -126,7 +133,7 @@ void stop_child(Child& c, DWORD wait_ms) {
     CloseHandle(c.pi.hThread);
     CloseHandle(c.pi.hProcess);
     c.running = false;
-    log("%s: stopped", c.name);
+    log("%s: stopped", c.name.c_str());
 }
 
 std::wstring widen(const std::string& s) { return fs::path(s).wstring(); }
@@ -150,9 +157,12 @@ int main(int argc, char** argv) {
 
     bool with_controller = true;
     std::wstring render_args, ctl_args;
+    std::string weapons = "lightpad,lumi,nuvj";
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "--no-controller") with_controller = false;
+        else if (a == "--no-weapons") weapons.clear();
+        else if (a == "--weapons" && i + 1 < argc) weapons = argv[++i];
         else if (a == "--sim") ctl_args = L"--sim";
         else if (a == "--") {
             for (++i; i < argc; ++i) render_args += widen(argv[i]) + L" ";
@@ -182,9 +192,46 @@ int main(int argc, char** argv) {
         return m->get()->heartbeat_us.load();
     };
 
-    log("supervisor up in %s%s", dir.string().c_str(),
-        !with_controller ? " (no controller)" : ctl_args.empty() ? "" : " (simulated MK2)");
-    Child* children[2] = {&ctl, &ren};
+    // Weapon drivers: one process per weapon, each with its shared block Local\HimmelWeapon<N>.
+    struct WeaponDef {
+        const char* id;
+        const wchar_t* exe;
+        const wchar_t* args;
+        int slot;
+    };
+    const WeaponDef defs[] = {{"lightpad", L"weapon_blocks.exe", L"lightpad", 2},
+                              {"lumi", L"weapon_blocks.exe", L"lumi", 3},
+                              {"nuvj", L"weapon_nuvj.exe", L"", 5}};
+    std::vector<std::unique_ptr<Child>> weapon_children;
+    std::vector<std::unique_ptr<himmel::weapon::SharedMemory>> weapon_shm;
+    for (const auto& d : defs) {
+        if (("," + weapons + ",").find(std::string(",") + d.id + ",") == std::string::npos) continue;
+        auto c = std::make_unique<Child>();
+        c->name = d.id;
+        c->exe = (dir / d.exe).wstring();
+        c->args = std::wstring(d.args) + (ctl_args.empty() ? L"" : L" --sim");
+        weapon_shm.push_back(std::make_unique<himmel::weapon::SharedMemory>());
+        struct Ctx {
+            himmel::weapon::SharedMemory* shm;
+            int slot;
+        };
+        static std::vector<std::unique_ptr<Ctx>> ctxs;  // lives as long as the supervisor
+        ctxs.push_back(std::make_unique<Ctx>(Ctx{weapon_shm.back().get(), d.slot}));
+        c->ctx = ctxs.back().get();
+        c->heartbeat = [](void* p) -> uint64_t {
+            auto* x = static_cast<Ctx*>(p);
+            if (!x->shm->get() && !x->shm->open(x->slot)) return 0;
+            return x->shm->get()->status.heartbeat_us.load();
+        };
+        weapon_children.push_back(std::move(c));
+    }
+
+    log("supervisor up in %s%s, weapons: %s", dir.string().c_str(),
+        !with_controller ? " (no controller)" : ctl_args.empty() ? "" : " (simulated hardware)",
+        weapons.empty() ? "none" : weapons.c_str());
+    std::vector<Child*> children = {&ctl};
+    for (auto& w : weapon_children) children.push_back(w.get());
+    children.push_back(&ren);
     constexpr uint64_t kHungUs = 2000000, kGraceUs = 8000000;  // grace: start-up (GPU, shaders, USB)
     uint64_t next_report = now_us() + 60000000;
 
@@ -208,7 +255,7 @@ int main(int argc, char** argv) {
             // Signed: the child may write a heartbeat newer than t between our reads.
             const int64_t silent = static_cast<int64_t>(t) - static_cast<int64_t>(since);
             if (silent > static_cast<int64_t>(hb > c->started_us ? kHungUs : kGraceUs)) {
-                log("%s: no heartbeat for %.1f s - killing it", c->name, silent / 1e6);
+                log("%s: no heartbeat for %.1f s - killing it", c->name.c_str(), silent / 1e6);
                 TerminateProcess(c->pi.hProcess, 99);
                 WaitForSingleObject(c->pi.hProcess, 2000);
                 reap(*c, "hung");
@@ -228,7 +275,12 @@ int main(int argc, char** argv) {
     log("stopping");
     if (auto* s = eshm.get()) s->stop_request.store(1);
     stop_child(ren, 3000);
-    stop_child(ctl, 3000);  // got the console Ctrl+C too; otherwise terminated
+    // The drivers put their devices back (config, LEDs) first. They got the console Ctrl+C
+    // too; the stop request also reaches them when the window was closed instead.
+    for (auto& shm : weapon_shm)
+        if (shm->get()) shm->get()->status.stop_request.store(1);
+    for (auto& w : weapon_children) stop_child(*w, 3000);
+    stop_child(ctl, 3000);  // otherwise terminated
     log("bye");
     if (g_logfile) std::fclose(g_logfile);
     CloseHandle(job);

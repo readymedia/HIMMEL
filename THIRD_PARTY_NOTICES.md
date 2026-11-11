@@ -27,7 +27,7 @@ from them is included in this repository.
 |---|---|
 | Direct3D 11, DXGI, D3DCompiler (`d3dcompiler_47.dll`) | Rendering, flip-model swap chains, shader compilation at start-up |
 | Media Foundation (`mfplat`, `mf`, `mfreadwrite`, `mfuuid`) | Webcam capture |
-| Win32 (file I/O, shared memory, job objects, `winmm` timer resolution) | Processes, IPC, supervisor |
+| Win32 (file I/O, shared memory, job objects, `winmm` timer resolution and MIDI for the weapon drivers) | Processes, IPC, supervisor |
 | Windows Runtime C++ Template Library (WRL): `Microsoft::WRL::ComPtr` | COM pointers |
 
 Build tools: Microsoft Visual Studio 2022 Build Tools (MSVC) and CMake (the

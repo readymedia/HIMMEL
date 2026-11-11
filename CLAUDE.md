@@ -134,7 +134,7 @@ The details are in the mockup (`docs/vj-mockup.html`).
         which the factory program keeps sending in API mode;
       - factory layout 4x4 pads, notes 36..51 from the bottom-left.
     - **Himmel drives the Lightpad LEDs (checked 2026-11-10).**
-      `tools/lightpad_littlefoot.py` hand-assembles a 93-byte LittleFoot
+      `tools/lightpad_littlefoot.py` hand-assembles a 117-byte LittleFoot (121 for the LUMI)
       renderer (15x15 RGB565 heap -> fillPixel). It has its own MiniVM that
       the simulator runs.
       - LocalHost: wipe the program memory, upload, stream frames through
@@ -159,8 +159,7 @@ The details are in the mockup (`docs/vj-mockup.html`).
         - The packet counter must wrap 1023 -> 0.
         - With our renderer the firmware sends no button messages, so the
           renderer forwards them with sendMessageToHost (program event 0x28).
-    - Next: the generic weapon driver/shared block (plan in
-      `weapons/README.md`).
+    - C++ driver: `weapon_blocks.exe lightpad` (see "Generic weapon driver" below).
   - **Weapon no. 3 = ROLI LUMI Keys (owner's choice 2026-11-10; owner's
     unit: firmware 1.3.8, serial LKB…).** It is checked on the device: keys
     with velocity, buttons, and Himmel's own key LEDs.
@@ -350,9 +349,34 @@ The details are in the mockup (`docs/vj-mockup.html`).
      supervisor so a renderer restart shows black, not the desktop.
    - Dev PC note: the owner's dev laptop is a GTX 1070 with one screen, so
      outputs are tested as windows there; the show PC is the RTX 5090.
-5. Then: the ffmpeg/HAP import pipeline, audio analysis, the cue system, Smart
+5. **Generic weapon driver (2026-11-11; checked with the simulators, NOT yet on
+   the owner's Lightpad, LUMI and NuVJ).** The Lightpad, LUMI and NuVJ feed the
+   engine like the MK2. Details: `weapons/README.md`, "How a generic weapon feeds
+   Himmel".
+   - Shared block `Local\HimmelWeapon<N>` (`himmel/weapon/shared.h`), N = slot,
+     default = the weapon's number (2, 3, 5; up to 16). Same rings/seqlocks as the
+     MK2 block plus a header (weapon id, profile, caps, per-control role + knob
+     slot, pad -> control). Outputs: `led[128]` levels, `pixel[256]` RGB, `display`
+     (NuVJ LCD model). `status.stop_request` = let go and exit.
+   - `Event` stays 16 bytes; new types appended after Disconnected: TouchStart,
+     TouchMove, TouchEnd, Fader, Switch. Ids = profile control index; pads use pad
+     numbers 1..n with the control in `reserved`.
+   - Drivers (WinMM, no new dependency): `weapon_blocks.exe lightpad|lumi`
+     (handshake, renderer upload, HeapSync frames, pings on their own 400 ms timer,
+     config 13 restored and confirmed on let go, endAPIMode), `weapon_nuvj.exe`
+     (init, LEDs/text/segments on change + every 2 s, never `7B`). Both: heartbeat,
+     reconnect, `--sim` (UDP Lightpad 8767, LUMI 8769, **NuVJ 8774**: the Python
+     NuVJ sim got an engine link + active sensing every 300 ms), `--ports`, `--slot`.
+   - `weapon_monitor.exe [--slot N] [--echo] [--stop N]`; `weapon_tests.exe`
+     (122 checks, bytes compared with the Python reference).
+   - `himmel.exe` starts the three drivers (`--weapons LIST`, `--no-weapons`);
+     `--sim` puts them in sim mode too. The renderer reads ring 0 of every slot and
+     uses only the header roles (table in the README).
+   - Next: check on the owner's hardware (Lightpad velocity from the first z is
+     provisional), NuVJ start-up shows in C++, real mapping pages.
+6. Then: the ffmpeg/HAP import pipeline, audio analysis, the cue system, Smart
    Random and the GUI.
-6. **TODO (owner, 2026-11-10): the effect set, after the graphics engine is
+7. **TODO (owner, 2026-11-10): the effect set, after the graphics engine is
    ready.** Start from `docs/nuvj-effects.md`, "What Himmel takes from this":
    - cheap single-pass effects (Kaleido, Mirror, RGB split, Tunnel, RotoZoom,
      BPM strobe, Hue);
