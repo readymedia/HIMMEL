@@ -204,6 +204,149 @@ class JogPong:
 
 GAMES = {"pong": JogPong}
 
+# ---------------------------------------------------------------------------
+# Start-up shows: short light shows on the NuVJ's LEDs and LCD, played when
+# Himmel takes the controller (or from the live view). Any button skips.
+# ---------------------------------------------------------------------------
+SEG16_ALL = ["a1", "a2", "b", "c", "d1", "d2", "e", "f", "g1", "g2", "h", "i", "j", "k", "l", "m"]
+RAYS = ["i", "j", "g2", "m", "l", "k", "g1", "h"]          # the spokes of a 16-segment cell, clockwise from the top
+RING = [7, 8, 9, 6, 3, 2, 1, 4]                             # the pads around the centre pad, clockwise
+DECK_COLS = [[7, 4, 1], [8, 5, 2], [9, 6, 3]]               # pad columns, left to right
+SIDE_LEDS = {"A": ["A Latch", "A Auto", "A Sync", "A Scratch", "Insta A"],
+             "B": ["B Latch", "B Auto", "B Sync", "B Scratch", "Insta B"]}
+CENTRE_LEDS = ["Master FX", "Insta Black", "BPM Tap"]
+ALL_LEDS = PADS + SIDE_LEDS["A"] + SIDE_LEDS["B"] + CENTRE_LEDS
+WORDS = ["lbl_edit", "lbl_global", "lbl_program", "lbl_change", "lbl_preset", "lbl_page", "lbl_midich", "lbl_prog",
+         "lbl_bankma", "lbl_banklb", "lbl_ctrl", "lbl_aft", "lbl_note", "lbl_bpm", "lbl_full", "lbl_16levels",
+         "lbl_last", "lbl_data", "rule"]
+
+
+def seg16_keys(cell, ch):
+    from nuvj_sim import SEG16
+    return {"alpha.%d.%s" % (cell, s) for s in SEG16.get(ch.upper(), "").split()}
+
+
+class Intro:
+    """Base: a show that runs for `length` seconds, then ends (done = True)."""
+    name, length = "Intro", 4.0
+
+    def __init__(self):
+        self.t0 = time.time()
+        self.done = False
+
+    def t(self):
+        return time.time() - self.t0
+
+    def tick(self):
+        if self.t() > self.length:
+            self.done = True
+
+    def on_event(self, name, ev):
+        if ev.get("kind") == "down":
+            self.done = True                                    # any button skips the show
+
+    def frame(self, t):
+        return {}, set()
+
+    def lcd(self):
+        model, _ = self.frame(self.t())
+        return model
+
+    def leds(self, held):
+        _, leds = self.frame(self.t())
+        return set(leds) | set(held)
+
+
+class BootSweep(Intro):
+    """Light sweeps A -> centre -> B, the 16-segment cells light up one by one and settle into
+    HIMMEL VJ, the numbers count up, HIMMEL is typed on the dot row, the wedges fill."""
+    name, length = "Boot sweep", 4.2
+
+    def frame(self, t):
+        lit, leds = {"rule"}, set()
+        # LEDs: a bright column sweeping across deck A, the centre, deck B, twice, then all on and out
+        cols = [("A", c) for c in DECK_COLS] + [("C", None)] + [("B", c) for c in DECK_COLS]
+        if t < 2.4:
+            i = int(t / 0.12) % len(cols)
+            side, col = cols[i]
+            leds |= {"%s Pad %d" % (side, n) for n in col} if col else set(CENTRE_LEDS)
+            if side in "AB":
+                leds |= set(SIDE_LEDS[side][:3]) if i % 3 == 1 else set()
+        elif t < 3.3:
+            leds |= set(ALL_LEDS) if int(t * 8) % 2 == 0 else set()
+        elif t < 3.9:
+            leds |= set(ALL_LEDS)
+        # LCD: cells fill left to right with every segment, then become the letters
+        word = "HIMMEL VJ 5"
+        for cell in range(CELLS):
+            on_at = 0.15 + cell * 0.12
+            if t >= on_at + 0.9:
+                lit |= seg16_keys(cell, word[cell])
+            elif t >= on_at:
+                lit |= {"alpha.%d.%s" % (cell, s) for s in SEG16_ALL}
+        text = "HIMMEL"[:max(0, int((t - 0.3) / 0.16))] if t > 0.3 else ""
+        bpm = min(120, int(t * 60)) if t > 0.5 else None
+        preset = min(5, int(t * 2)) if t > 1.0 else None
+        n = min(7, int(t * 3))
+        lit |= {w for i, w in enumerate(WORDS) if t > 0.6 + i * 0.08}
+        lit |= {"box_" + "abcd"[int(t * 6) % 4]} if t < 3.0 else {"box_a", "box_b", "box_c", "box_d"}
+        if t > 3.0 and int(t * 4) % 2:
+            lit.add("enter")
+        model = {"text": text, "alpha": "", "bpm": "" if bpm is None else "%3d" % bpm,
+                 "preset": "" if preset is None else "%02d" % preset, "last": n, "data": n, "lit": sorted(lit)}
+        return model, leds
+
+
+class Starburst(Intro):
+    """Every 16-segment cell is a spinning star (phase shifted along the row), the pads run round
+    each deck, the A-D boxes chase, the wedges breathe."""
+    name, length = "Starburst", 4.0
+
+    def frame(self, t):
+        lit, leds = {"rule"}, set()
+        speed = 10 + 14 * min(1.0, t / 2.0)                    # spins up
+        for cell in range(CELLS):
+            k = int(t * speed + cell * 1.5)
+            lit |= {"alpha.%d.%s" % (cell, RAYS[(k + j) % 8]) for j in (0, 4)}     # two opposite spokes
+            if t > 2.8:
+                lit |= {"alpha.%d.%s" % (cell, r) for r in RAYS}                  # burst: every spoke
+        step = int(t * 14)
+        for side, d in (("A", 1), ("B", -1)):
+            n = RING[(step * d) % 8]
+            leds |= {"%s Pad %d" % (side, n), "%s Pad %d" % (side, RING[(step * d + 4) % 8])}
+            if t > 2.8:
+                leds |= {"%s Pad %d" % (side, p) for p in range(1, 10)}
+        leds |= {CENTRE_LEDS[step % 3]}
+        lit.add("box_" + "abdc"[step % 4])
+        breathe = int(3.5 + 3.5 * __import__("math").sin(t * 6))
+        model = {"text": "  READY " if t > 2.8 else " " * int(t * 3) + "*", "alpha": "",
+                 "bpm": "", "preset": "", "last": breathe, "data": 7 - breathe, "lit": sorted(lit | {"lbl_last", "lbl_data"})}
+        return model, leds
+
+
+class MadeBy(Intro):
+    """MADE BY READYMEDIA.NO scrolls along the 16-segment row; the LEDs beat like a heart."""
+    name, length = "Made by", 5.4
+    TEXT = " " * 11 + "MADE BY READYMEDIA.NO" + " " * 4
+
+    def frame(self, t):
+        lit, leds = {"rule", "lbl_bpm"}, set()
+        off = min(len(self.TEXT) - 11, int(t / 0.14))
+        window = self.TEXT[off:off + 11]
+        for cell, ch in enumerate(window):
+            lit |= seg16_keys(cell, ch)
+        beat = (t * 1.6) % 1.0                                 # a double beat, about 96 BPM
+        thump = beat < 0.08 or 0.18 < beat < 0.26
+        if thump:
+            leds |= {"A Pad 5", "B Pad 5", "BPM Tap"} | ({"%s Pad %d" % (s, n) for s in "AB" for n in RING} if beat < 0.08 else set())
+        model = {"text": "HIMMEL" if t < 4.5 else " HIMMEL ", "alpha": "", "bpm": " 96" if thump else "",
+                 "preset": "", "last": 7 if thump else 0, "data": 7 if thump else 0, "lit": sorted(lit)}
+        return model, leds
+
+
+INTROS = {"boot": BootSweep, "starburst": Starburst, "madeby": MadeBy}
+
+
 
 def selftest():
     g = JogPong()
@@ -224,5 +367,20 @@ def selftest():
     print("jog pong selftest ok: score %d-%d, rally %d, state %s" % (g.score["A"], g.score["B"], g.rally, g.state))
 
 
+def intro_selftest():
+    import sys
+    sys.path.insert(0, __import__("os").path.dirname(__file__))
+    for key, cls in INTROS.items():
+        show = cls()
+        for k in range(0, int(cls.length * 20) + 5):
+            show.t0 = time.time() - k / 20.0
+            m = show.lcd()
+            assert set(m) >= {"text", "lit"} and isinstance(show.leds(set()), set), key
+            show.tick()
+        assert show.done, key
+    print("intro selftest ok:", ", ".join(c.name for c in INTROS.values()))
+
+
 if __name__ == "__main__":
     selftest()
+    intro_selftest()

@@ -37,6 +37,7 @@ Ports: python tools/nuvj_sim.py --ports
 
 import ctypes
 import json
+import random
 import os
 import shutil
 import sys
@@ -698,7 +699,8 @@ class NuvjHost:
         self.t0 = time.time()
         self.flash = None          # (until, text, bar 0..1 or None): a value shown for a moment
         self.seg_hunt = None       # segment hunt: {"byte", "bit", "auto", "t"} lights one LCD segment bit
-        self.game = None           # a game on the NuVJ (nuvj_games), or None
+        self.game = None           # a game or start-up show on the NuVJ (nuvj_games), or None
+        self.intro_mode = "random"  # start-up show when Himmel takes the NuVJ: random / boot / starburst / madeby / off
         self.contrast = None       # a contrast value (0..99) to send once (not stored in the controller)
 
     # ---- the LCD: Himmel's page for the NuVJ's segment display ----
@@ -918,9 +920,15 @@ class NuvjHost:
         now = time.time()
         if self.game is not None:
             self.game.tick()
+            if getattr(self.game, "done", False):
+                self.game = None
         if not dev.inited:
             dev.receive(feedback(CMD_INIT, INIT_DATA))
             self.sent.clear()
+            if self.game is None and self.intro_mode != "off":    # a light show when Himmel takes the NuVJ
+                key = random.choice(list(nuvj_games.INTROS)) if self.intro_mode == "random" else self.intro_mode
+                if key in nuvj_games.INTROS:
+                    self.game = nuvj_games.INTROS[key]()
         if force or now - self.sent_t > 2.0:
             self.sent.clear()
             self.sent_t = now
@@ -1198,6 +1206,7 @@ class NuvjLive:
                 "seg_hunt": self.host.seg_hunt,
                 "drive": self.drive,
                 "game": self.host.game.name if self.host.game else None,
+                "intro_mode": self.host.intro_mode,
                 "lcd_segments": {k: seg_bits(v) for k, v in (self.m.get("lcd_segments") or {}).items()},
                 "lcd_bytes_lit": list(self.m.get("lcd_bytes_lit") or []),
                 "lcd_manual": list(self.m.get("lcd_manual") or []),
@@ -1274,10 +1283,13 @@ class NuvjLive:
         with self.lock:
             if "sim_input" in d:
                 self.sim_input(d["sim_input"])
-            elif "game" in d:          # start / stop a game on the NuVJ
+            elif "game" in d:          # start / stop a game or a start-up show on the NuVJ
                 g = d["game"]
                 self.host.seg_hunt = None
-                self.host.game = nuvj_games.GAMES[g]() if g in nuvj_games.GAMES else None
+                cls = nuvj_games.GAMES.get(g) or nuvj_games.INTROS.get(g)
+                self.host.game = cls() if cls else None
+            elif d.get("intro_mode") in ("random", "off") or d.get("intro_mode") in nuvj_games.INTROS:
+                self.host.intro_mode = d["intro_mode"]
             elif "drive" in d:         # the real NuVJ: start / stop sending feedback
                 self.drive = bool(d["drive"])
                 self.host.sent.clear()
@@ -1454,6 +1466,9 @@ def selftest():
                 assert dec.decode(encode(e, value=p))[1]["pos"] == p, (n, p)
     # the live object: simulated presses come back as held controls and light LEDs in "follow" mode
     live = NuvjLive(prof)
+    live.command({"intro_mode": "off"})
+    time.sleep(0.1)
+    live.command({"game": None})            # no start-up show in the test
     live.command({"led_mode": "follow"})
     live.command({"sim_input": {"name": "A Pad 5", "down": True}})
     live.command({"sim_input": {"name": "Crossfader", "value": 16383}})

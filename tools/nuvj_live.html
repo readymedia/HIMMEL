@@ -200,6 +200,11 @@
       deck, BPM Tap blinking on the beat. <b>Follow</b>: a LED lights while you hold its button. LEDs and LCD are sent
       as the NuVJ's own feedback SysEx (<code>F0 00 01 3F 7F 20 …</code>, read from the NuVJ 1.0 software); the drawing
       shows what the device was sent.</div>
+    <div class="row"><b>Start-up shows:</b>
+      <button data-intro="boot">✦ Boot sweep</button><button data-intro="starburst">✦ Starburst</button>
+      <button data-intro="madeby">✦ Made by</button>
+      <label>on connect <select id="introMode"><option value="random">random</option><option value="boot">Boot sweep</option>
+        <option value="starburst">Starburst</option><option value="madeby">Made by</option><option value="off">off</option></select></label></div>
     <div class="row"><button id="gameBtn" title="A three-lane pong on the NuVJ's own LCD, played with the jog wheels">★ Jog Pong</button>
       <span class="help">Easter egg: turn the jogs to move your paddle, push BANK (or SCRATCH) to serve, first to 5.
         An idle side is played by Himmel. On the NuVJ: hold both SCRATCH buttons to start or stop.</span></div>
@@ -492,7 +497,7 @@ function drawLcd(m, note) {
   g.fillStyle = grad; g.fillRect(0, 0, g.canvas.width, g.canvas.height);
   g.save(); g.scale(k, k);
   const on = b => b ? LCD_ON : LCD_GHOST;
-  const force = new Set(m.keys || []);   // parts forced on: in the hunt, what this bit is saved as
+  const force = new Set([...(m.keys || []), ...(m.lit || [])]);   // parts forced on: the hunt's saved bit, and single segments a show or game lights
   const lit = new Set([...(m.lit || []), ...force]);
   LCD_FORCE = force;
   const hits = s.hits = [];            // clickable parts (LCD units) for the segment hunt
@@ -697,7 +702,8 @@ function render(s) {
   }
   $("learnMsg").textContent = s.learn_msg || "";
   $("lcdModel").textContent = "LCD model now: " + JSON.stringify(s.lcd);
-  $("gameBtn").textContent = s.game ? "■ Stop " + s.game : "★ Jog Pong";
+  $("gameBtn").textContent = s.game === "Jog Pong" ? "■ Stop Jog Pong" : "★ Jog Pong";
+  if (document.activeElement !== $("introMode") && s.intro_mode) $("introMode").value = s.intro_mode;
   $("gameBtn").classList.toggle("on", !!s.game);
   $("idBtn").disabled = !s.hardware;
   $("driveBtn").textContent = s.drive ? "■ Stop: listen only" : "Let Himmel drive the LEDs and LCD";
@@ -782,6 +788,8 @@ document.querySelectorAll("[data-sstep]").forEach(b => b.onclick = () => post({ 
 $("lcdC").oninput = () => { $("lcdCV").textContent = $("lcdC").value; post({ contrast: +$("lcdC").value }); };
 $("idBtn").onclick = () => post({ identity: true });
 $("gameBtn").onclick = () => post({ game: S && S.game ? null : "pong" });
+document.querySelectorAll("[data-intro]").forEach(b => b.onclick = () => post({ game: b.dataset.intro }));
+$("introMode").onchange = e => post({ intro_mode: e.target.value });
 $("hOpen").onclick = () => post({ seg_hunt: { byte: 0, bit: 0, auto: false, whole: $("hWhole").checked } });
 $("hClose").onclick = () => post({ seg_hunt: null });
 $("hNext").onclick = () => post({ seg_hunt: { step: S && S.seg_hunt && S.seg_hunt.whole ? 7 : 1, auto: false } });
