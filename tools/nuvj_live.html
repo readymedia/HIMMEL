@@ -813,17 +813,34 @@ async function camList() {
     if (cur) sel.value = cur;
   } catch (e) { $("camInfo").textContent = "no camera list: " + e; }
 }
-async function camStart() {
+async function camStart(keepCorners) {
   try {
-    if (CAM.stream) CAM.stream.getTracks().forEach(t => t.stop());
-    const id = $("camSel").value;
-    CAM.stream = await navigator.mediaDevices.getUserMedia({ video: id ? { deviceId: { exact: id }, width: 1280, height: 720 } : { width: 1280, height: 720 } });
+    if (CAM.stream) { CAM.stopping = true; CAM.stream.getTracks().forEach(t => t.stop()); CAM.stopping = false; }
+    const id = $("camSel").value, size = { width: { ideal: 640 }, height: { ideal: 480 } };
+    CAM.stream = await navigator.mediaDevices.getUserMedia({ video: id ? Object.assign({ deviceId: { exact: id } }, size) : size });
+    const tr = CAM.stream.getVideoTracks()[0];
+    tr.onended = () => {               // the camera went away (another program took it, or the driver reset): start it again
+      if (CAM.stopping) return;
+      CAM.drops = (CAM.drops || 0) + 1;
+      camNote(`camera stopped (${CAM.drops}x) - starting it again…`);
+      setTimeout(() => camStart(true), 800);
+    };
+    tr.onmute = () => camNote("camera paused by the system (muted) - waiting…");
+    tr.onunmute = () => camNote("camera back");
     $("camVid").srcObject = CAM.stream;
+    await $("camVid").play().catch(() => {});
     document.body.classList.add("camon");
     await camList();
-    $("camInfo").textContent = "Camera on. Now click the 4 corners of the blue glass: top-left, top-right, bottom-right, bottom-left.";
-    CAM.corners = []; CAM.Hc2l = null;
-  } catch (e) { $("camInfo").textContent = "camera failed: " + e + " (allow the camera for this page, or open it in Chrome)"; }
+    if (!keepCorners || !CAM.Hc2l) {
+      CAM.corners = []; CAM.Hc2l = null;
+      camNote("Camera on (" + (tr.label || "camera") + "). Now click the 4 corners of the blue glass: top-left, top-right, bottom-right, bottom-left.");
+    } else { camCalibrated(); camNote("camera started again; the corners are kept"); }
+  } catch (e) { camNote("camera failed: " + e + " (allow the camera for this page; close other programs that use it, e.g. Teams or OBS)"); }
+}
+function camNote(t) { $("camInfo").textContent = t; }
+function camLive() {             // is a picture coming in?
+  const v = $("camVid"), tr = CAM.stream && CAM.stream.getVideoTracks()[0];
+  return !!(tr && tr.readyState === "live" && !tr.muted && v.videoWidth && v.readyState >= 2);
 }
 function vidPoint(e) {          // a click on the overlay -> a point in the video's own pixels
   const v = $("camVid"), r = $("camOv").getBoundingClientRect();
@@ -852,7 +869,8 @@ $("camOv").addEventListener("click", e => {
 });
 const grabCv = document.createElement("canvas"); grabCv.width = GW; grabCv.height = GH;
 const grabG = grabCv.getContext("2d", { willReadFrequently: true });
-async function grab(n = 3) {    // average luminance of n frames
+async function grab(n = 3) {    // average luminance of n frames (waits while the camera is away)
+  for (let t = 0; !camLive() && CAM.running; t++) await new Promise(r => setTimeout(r, 200));
   const out = new Float32Array(GW * GH);
   for (let k = 0; k < n; k++) {
     grabG.drawImage($("camVid"), 0, 0, GW, GH);
@@ -941,7 +959,13 @@ function camOverlay() {         // the camera picture: the drawn LCD's parts pro
   if (CAM.last) { g.fillStyle = "rgba(255, 60, 60, 0.8)"; for (const [u, w] of CAM.last.lit.slice(0, 3000)) { const [x, y] = hApply(CAM.Hl2c, u, w); g.fillRect(x - 1, y - 1, 2, 2); } }
 }
 setInterval(camOverlay, 120);
-$("camStart").onclick = camStart;
+$("camStart").onclick = () => camStart(false);
+setInterval(() => {             // a heartbeat line: frames are arriving, or not
+  if (!CAM.stream) return;
+  const v = $("camVid"), q = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality().totalVideoFrames : 0;
+  if (CAM.lastFrames !== undefined && q === CAM.lastFrames && !CAM.running) camNote("no new camera frames for 2 s - is another program using the camera?");
+  CAM.lastFrames = q;
+}, 2000);
 $("camRun").onclick = () => { if (!CAM.running) autoMap(); };
 $("camStop").onclick = () => { CAM.running = false; };
 $("camCal").onclick = () => { CAM.corners = []; CAM.Hc2l = CAM.Hl2c = null; $("camInfo").textContent = "Click the 4 corners of the blue glass: top-left, top-right, bottom-right, bottom-left."; };
