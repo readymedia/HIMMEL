@@ -169,7 +169,7 @@
         bottom-left. Green outlines should then sit on the real segments.</li>
       <li>Press <b>Auto-map</b> and leave it (about 4-5 minutes). The NuVJ's text row stays blank meanwhile.</li>
     </ol>
-    <div class="row"><select id="camSel" style="max-width:220px"></select><button id="camStart">Camera on</button>
+    <div class="row"><select id="camSel" style="max-width:220px"></select><button id="camList" title="Look for cameras again (e.g. after starting OBS Virtual Camera)">↻</button><button id="camStart">Camera on</button>
       <button id="camCal">Set corners again</button><button id="camRun" class="big">Auto-map</button><button id="camStop">Stop</button></div>
     <div class="row small"><label>bytes <input id="camFrom" type="number" value="0" min="0" max="63" style="width:50px"></label>
       <label>to <input id="camTo" type="number" value="63" min="0" max="63" style="width:50px"></label>
@@ -960,10 +960,19 @@ function camOverlay() {         // the camera picture: the drawn LCD's parts pro
 }
 setInterval(camOverlay, 120);
 $("camStart").onclick = () => camStart(false);
+$("camList").onclick = () => camList();
 setInterval(() => {             // a heartbeat line: frames are arriving, or not
   if (!CAM.stream) return;
   const v = $("camVid"), q = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality().totalVideoFrames : 0;
   if (CAM.lastFrames !== undefined && q === CAM.lastFrames && !CAM.running) camNote("no new camera frames for 2 s - is another program using the camera?");
+  if (CAM.lastFrames !== undefined && q > CAM.lastFrames && !CAM.running && !CAM.Hc2l && CAM.corners.length === 0) {
+    // frames arrive: check that they are not all black (a camera held by another program often gives black frames)
+    grabG.drawImage(v, 0, 0, GW, GH);
+    const d = grabG.getImageData(0, 0, GW, GH).data; let sum = 0;
+    for (let i = 0; i < d.length; i += 16) sum += d[i] + d[i + 1] + d[i + 2];
+    if (sum / (d.length / 16) < 6) camNote("the camera sends only black frames - another program (OBS?) probably holds it. " +
+      "In OBS press 'Start Virtual Camera', press ↻ here and pick 'OBS Virtual Camera'.");
+  }
   CAM.lastFrames = q;
 }, 2000);
 $("camRun").onclick = () => { if (!CAM.running) autoMap(); };
