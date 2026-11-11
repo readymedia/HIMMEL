@@ -3,7 +3,7 @@
 > **Start here:** `AGENTS.md` → this file → `docs/roadmap.md` (the plan) →
 > **`docs/build-v1.md` (what to build now: 0.1 "Playback")** →
 > `docs/agents/README.md` (how agents work: tracks, handoffs, `GUESS:` rule) →
-> `docs/design/` (v2 product design, 2026-11-11) → `docs/decisions.md`.
+> `docs/design/` (product design v4, approved 2026-11-11) → `docs/decisions.md`.
 > This file keeps hardware facts and verified decisions; the plan and the
 > design live in those files.
 
@@ -85,15 +85,21 @@ stills, Settings: `docs/design/operations.md`. OSC in (0.1) and the timeline
   the theme, BPM and clip analysis.
 - **Output modes:** span, mirror, triptych, chase.
 
-## MK2 control layout (planned)
-- **16 pads:** clips / scenes, velocity → intensity.
-- **8 group buttons:** decks / layers. **8 knobs:** the parameters on the
-  current page.
-- **The two 1-bit screens (256×64 each)** show page names, values and VU meters.
-- **Shift + Pattern:** theme picker. **Shift + Scene:** save a scene.
-- **Note Repeat:** beat-synced stutter.
-
-The details are in the mockup (`docs/vj-mockup.html`).
+## MK2 control layout (decided 2026-11-11)
+The full mapping is `docs/design/hardware-mapping.md` §3 and
+`docs/design/perform.md`; in short:
+- **Wheel (master encoder) = TAKE** (an endless T-bar); `SHIFT` + wheel =
+  system menu. (This replaces "encoder = browse" from 2026-11-09.)
+- **Groups A–D = PREVIEW layers, E–H = PROGRAM layers**; the last one pressed
+  sets the focus. **Knobs 1–4** act on the focus, **knobs 5–8** are always the
+  live scene's macros.
+- **16 pads:** CLIPS (`PATTERN`, kit with layer targets), SLICE (`PATTERN`
+  twice), SCENES (`SCENE`), FX PADS (`PAD MODE`), OUTPUTS (`NAVIGATE`);
+  velocity + pressure drive each clip's / effect's PRESS target.
+- `SHIFT` + `PATTERN` = kit / bank, `SHIFT` + `SCENE` = moods, `REC` = save
+  (a new variation in PLAY focus), `ERASE` = undo / reset, `ENTER` = next
+  scene, `STEP` = timeline, `NOTE REPEAT` = beat stutter.
+- **The two 1-bit screens** follow the split: left = PREVIEW, right = PROGRAM.
 
 ## Status right now
 - **`maschine_mk2_map.json` is verified on the owner's MK2 (2026-11-09).** All
@@ -153,9 +159,8 @@ The details are in the mockup (`docs/vj-mockup.html`).
     (missile defence: each knob aims the turret under it, Shift + knob = range)
     and the animated "Made by ReadyMedia.no" splash (played at start-up).
     On the device: **Shift + turn the master encoder opens the mode menu, turn
-    to choose, push to start.** Without Shift the master encoder is the
-    browse/select wheel (owner's decision 2026-11-09); the 8 knobs belong to the
-    current mode. Code: `tools/mk2_fun.py`,
+    to choose, push to start.** (In Perform, the encoder without Shift is the
+    TAKE wheel, D48.) The 8 knobs belong to the current mode. Code: `tools/mk2_fun.py`,
     one 512 × 64 image across both screens at ~30 fps. How they work and a
     step-by-step recipe for new modes: `docs/mk2-screen-fun.md`. Check modes
     without hardware with `python tools/mk2_fun_check.py --png`.
@@ -185,8 +190,9 @@ The details are in the mockup (`docs/vj-mockup.html`).
 - **Measured 2026-11-09** (MK2 Live → Measure card): pads stream every 1.33 ms,
   knob reports ~10 ms apart, one knob turn ≈ 1008 units, USB high speed. Velocity =
   max pressure in the first 4 ms after onset (the peak does not work). Master
-  encoder: 30 detents per turn. Reconnect after a cable pull works. Decided: the master encoder is the
-  browse/select wheel in Himmel; Shift + encoder = system menu.
+  encoder: 30 detents per turn. Reconnect after a cable pull works. The master
+  encoder is the TAKE wheel in Perform (D48, replaces the 2026-11-09 browse
+  decision); Shift + encoder = system menu.
 - `tools/maschine_mk2_test.py`: the first terminal mapper (step-by-step learn,
   `--verify`, `--list`). `mk2_live.py` imports its `Transport` and `Mapper`.
   - Known protocol facts:
@@ -205,11 +211,11 @@ The details are in the mockup (`docs/vj-mockup.html`).
   kept only for reference.
 - `docs/vj-mockup.html`: an interactive mockup of the MK2 and the 3-screen wall.
 - `docs/gui-mockups/`: v1 GUI sketches (kept for history; the light and
-  night themes are dropped, D28). **Current: `docs/gui-mockups/v3/`** (mimic the main weapon); v2 partly superseded.
+  night themes are dropped, D28). **Current: `docs/gui-mockups/v4/`** (Playback 0.1: perform MK2 / NuVJ, scene + kit editor, sound + reactions, timeline), with `v3/` for the clip editor, outputs, canvas, mapping, presets and side arms; v2 partly superseded.
   These are design-canvas files: read them for content and layout only.
-- Full design: **`docs/design/`** (English, v2, 2026-11-11), carried over
+- Full design: **`docs/design/`** (English, v4, 2026-11-11, approved by the owner), carried over
   from the Norwegian Claude Doc "Himmel" (the archive) and the owner's voice
-  notes. GUI drawings: `docs/gui-mockups/v3/` (current), `v2/`.
+  notes. GUI drawings: `docs/gui-mockups/v4/` (current), `v3/`, `v2/`.
 
 ## Next steps
 **The plan lives in [`docs/roadmap.md`](docs/roadmap.md)** (updated
