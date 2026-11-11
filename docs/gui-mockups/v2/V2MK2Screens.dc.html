@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Himmel v2 – MK2 screen pages</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@400;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0D10}
+.scr{font-family:'JetBrains Mono',monospace;font-size:12px;line-height:15px;color:#E6F2FF;background:#0A2A55;border-radius:4px;padding:6px 8px;box-sizing:border-box;height:128px;display:grid;grid-template-columns:1fr 1fr;gap:18px;white-space:pre}
+.inv{background:#E6F2FF;color:#0A2A55}
+.lbl{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#9AA4B2;font-weight:600}
+.chip{font-family:'JetBrains Mono',monospace;font-size:11px;color:#C9D1DB;border:1px solid #3A434F;border-radius:4px;padding:1px 5px;white-space:nowrap;background:#0F1318}
+</style>
+</helmet>
+<div style="min-height:900px;width:100%;box-sizing:border-box;background:#0B0D10;color:#E8ECF1;font-family:Inter,system-ui,sans-serif;display:flex;flex-direction:column;gap:12px;padding:20px 28px">
+<div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap"><h1 style="margin:0;font-size:28px;font-weight:800">MK2 screens: one page per job</h1><span style="color:#9AA4B2;font-size:14px">512×64 across both screens, drawn ×2. Top line = labels for Top 1–8 (above). Bottom line = knob 1–8 (below), at the physical knob x.</span></div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(560px,1fr));gap:14px">
+<div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;gap:8px;align-items:center"><b>PERFORM · MACRO</b><span class="chip">CONTROL</span><span style="font-size:12px;color:#9AA4B2">Top = shuffle locks</span></div>
+<div class="scr"><div>CLIP SOURCE  FX   <span class="inv">COLOUR</span>
+A▯PREV  B▮LIVE 100%
+<b style="font-size:17px">TECHNO Ice 07</b>
+ENERGY COLOUR SPEED DENSITY
+▮▮▮▯   ▮▮▯▯   ▮▮▮▮  ▮▯▯▯</div><div>MOTION LAYOUT <span class="inv">REACT</span>  MOOD
+♩128.0 LINK ●●○○   GPU 1.9
+<b style="font-size:17px">ROLL #23  ◀22  NEW▶</b>
+CHAOS  GLOW   SPACE  REACT
+▮▯▯▯   ▮▮▯▯   ▮▮▮▯   ▮▮▮▮A</div></div></div>
+
+<div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;gap:8px;align-items:center"><b>LAYER A1</b><span class="chip">GROUP A</span><span class="chip">PAGE &gt;</span></div>
+<div class="scr"><div>CLIP  GEN   CAM   TABLE
+<span class="inv">A1</span> city_night_04  ADD
+[▓▓▓▓▒▒░░ thumbnail ░░]
+OPACITY BLEND  SPEED  ZOOM
+  90%   ADD   1.00x  1.20</div><div>FX1 KALEIDO  FX2 GLOW
+FX3 —        FX4 —
+energy 4 · cold · 8 bars
+POS X  POS Y  ROTATE COLOUR
+ 0.00  -0.10    0°   ORIG</div></div></div>
+
+<div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;gap:8px;align-items:center"><b>FX1 · KALEIDO</b><span class="chip">PAGE &gt;</span><span style="font-size:12px;color:#9AA4B2">1–4 params · 5 mix · 6 audio · 7 sync · 8 var</span></div>
+<div class="scr"><div><span class="inv">COLOUR</span> SPACE DISTORT LIGHT
+LAYER A1 › <span class="inv">FX1</span>  ON
+<b style="font-size:17px">KALEIDO</b>  cost 0.06ms
+SEGMENTS TURN  CENTRE X  Y
+   6     0.25   0.50  0.50</div><div>STYLE  TIME  KEY    FAVS
+mid → TURN  40%
+mirror wedges, spin on beat
+MIX    AUDIO  SYNC   VAR
+100%    40%   1 BAR    2</div></div></div>
+
+<div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;gap:8px;align-items:center"><b>BROWSE · library</b><span class="chip">BROWSE</span><span style="font-size:12px;color:#9AA4B2">encoder scrolls · push loads to PREVIEW</span></div>
+<div class="scr"><div><span class="inv">CHILL</span> GROOVE TECHNO CRAZY
+23 clips · water
+<span class="inv"> ocean_slow_01      E1</span>
+  waterfall_mist     E2
+HUE    ENERGY  MOTION  BARS</div><div>COLOUR MOTION NEW    FAV
+[▓▓▒▒░░ ocean_slow_01 ]
+8 bars · seamless · HAP Q
+→ PREVIEW A1   SHIFT+PAD=SIMILAR
+  cyan   1-2   calm    any</div></div></div>
+
+<div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;gap:8px;align-items:center"><b>MIX</b><span class="chip">VOLUME</span><span style="font-size:12px;color:#9AA4B2">the crossfader when you have no fader</span></div>
+<div class="scr"><div>A▯PREV               B▮LIVE
+A |────────────────●| B
+TAKE 2 bars · smooth · GRID
+XFADE  TIME   CURVE  MASTER
+ B100  2 BAR  SMOOTH  100%</div><div>OUT1 OUT2 OUT3 MAIN  OUT4 OWN
+blackout: none
+safe mode: STROBE ≤ 3/s
+DECK A DECK B OUTPUT PREVIEW
+ 100%   100%   100%    75%</div></div></div>
+
+<div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;gap:8px;align-items:center"><b>MUSIC</b><span class="chip">SAMPLING</span></div>
+<div class="scr"><div>LINE  LOOP  MIC   CLOCK
+IN ▮▮▮▮▮▮▮▯  LINE 1 (ASIO)
+B ▮▮▮▮▯ M ▮▮▯ H ▮▮▮▯
+K● S○ H●   ♩128.0 LINK 98%
+GAIN   BASS   MID    HIGH</div><div>▁▂▄▆█▇▅▃▂▁▂▃▅▇█▆▄▂▁▁▂▃
+energy ▮▮▮▮▯  build ▯▯▯▯▯
+section: GROOVE  bar 3/4
+ONSET  AVOFF  CLOCK  TAP
+ 0.6   +42ms  AUTO   ---</div></div></div>
+
+<div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;gap:8px;align-items:center"><b>TOUCH FX + Lightpad mirror</b><span class="chip">PAD MODE</span></div>
+<div class="scr"><div>TOUCH  MIX   SCENES MOOD
+TOUCH FX → <span class="inv">LIVE MAIN</span>  HOLD
+<b style="font-size:17px">KALEIDO</b>  ♩128
+EFFECT AMOUNT  X      Y
+ 07/20   78%  0.62  0.41</div><div>·····························
+··········+··················
+········++#++···   LOOP 2 BARS ▶
+··········+··················
+HOLD   LOOP   BEAT   TARGET</div></div></div>
+
+<div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;gap:8px;align-items:center"><b>MESSAGE · panic / safe</b><span class="chip">SHIFT+MUTE</span></div>
+<div class="scr" style="background:#3A0A0A"><div>
+
+
+<b style="font-size:22px">  SAFE SCENE</b>
+</div><div>
+built-in generators only
+no files, no cameras
+press any scene pad to leave
+</div></div></div>
+</div>
+
+<div style="background:#14181D;border:1px solid #2A313A;border-radius:12px;padding:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;font-size:13px">
+<div><span class="lbl">Transport</span><div><span class="chip">PLAY</span> TAKE · <span class="chip">RESTART</span> CUT · <span class="chip">&lt; &gt;</span> history / ROLL · <span class="chip">REC</span> save · <span class="chip">ERASE</span> undo · <span class="chip">GRID</span> quantise</div></div>
+<div><span class="lbl">Groups</span><div><span class="chip">A–D</span> deck A layers (cyan) · <span class="chip">E–H</span> deck B (amber) · full = LIVE deck, 30 % = PREVIEW deck</div></div>
+<div><span class="lbl">Pad modes</span><div><span class="chip">SCENE</span> scenes · <span class="chip">PATTERN</span> clips · <span class="chip">PAD MODE</span> FX pads · <span class="chip">STEP</span> cues · <span class="chip">NAVIGATE</span> outputs</div></div>
+<div><span class="lbl">Pages</span><div><span class="chip">PAGE &lt; &gt;</span> MACRO · LAYER · FX1–4 · MIX · REACT · <span class="chip">VOLUME</span> MIX · <span class="chip">SWING</span> mood · <span class="chip">SAMPLING</span> music</div></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

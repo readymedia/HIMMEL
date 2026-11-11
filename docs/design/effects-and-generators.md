@@ -1,0 +1,149 @@
+# Effects and generators reference
+
+Status: the working list, 2026-11-11. It merges the "Effects and generators"
+tab from the voice call, the 42-effect catalogue from design spec v1, the
+Touch FX set that is already built, and the NuVJ / V-4 / Entrancer catalogues
+(`docs/nuvj-effects.md`, `docs/v4-effects.md`, `docs/touch-fx-entrancer.md`
+on their branches).
+
+- **Effects** change a picture that already exists: a clip, a camera, a USB
+  capture input, a layer, a deck, the master or an output.
+- **Generators** make a picture by themselves, live.
+- **Every effect works on every source,** USB inputs included.
+
+**Naming rule:** common words (strobe, blur, mirror, kaleido) are fine. Any
+name that belongs to one product gets a Himmel name of its own. The "Seen in"
+column is credit only. Every effect is written fresh for Himmel.
+
+## 1. What every effect declares (metadata)
+
+The shuffle, the macros, the GUI and the help system all read this. It lives
+in one JSON file per effect, next to the shader.
+
+| Field | Example | Used by |
+|---|---|---|
+| `id`, `name`, `family` | `kaleido`, "Kaleido", `space` | Browser, shuffle family weights |
+| `params[]` | `{id, name, min, max, default, good:[lo,hi], speed:true/false, unit}` | Knobs 1–4, shuffle ranges |
+| `main` | the two main parameters (knobs 1–2; PMTR 1 / 2 on the NuVJ; X / Y on the Lightpad) | Every weapon |
+| `reaction` | `{signal:"kick", param:"zoom", amount:0.4}` | Default music reaction |
+| `cost` | class `S` / `M` / `L` + the ms measured at Prepare | Budget, browser dimming |
+| `passes`, `state` | 1, `none` / `feedback` / `history` | Graph, off-air shrink |
+| `compat` | `{avoid:["dark-source"], not_with:["kaleido"]}` | Shuffle rules |
+| `presets[]` | named or unnamed parameter sets | `SHIFT + pad`, good ranges |
+| `tier`, `shelf` | 1 / 2 / 3, `builtin` / `addon` | Roadmap, safety |
+| `help` | two lines | The MK2 screen and the Help menu |
+
+The knob layout on every FX page: **1–4 parameters (1–2 = the main ones),
+5 MIX, 6 AUDIO, 7 SYNC, 8 VARIATION.**
+
+## 2. Effects
+
+Tier 1 = the first set (phase 4), tier 2 = soon after, tier 3 = later. The
+cost classes are S < 0.15 ms, M < 0.6 ms and L above that, at 1080p on a
+GTX 1070. A ✓ marks the effects already built as Touch FX.
+
+| Effect | Family | Knob 1 / Knob 2 | Default reaction | Cost | Tier | Seen in |
+|---|---|---|---|---|---|---|
+| Hue / saturation ✓(Hue Turn) | Colour | Hue turn / saturation | mid → hue | S | 1 | All |
+| Brightness / contrast | Colour | Brightness / contrast | — | S | 1 | All |
+| Colorize / duotone ✓ | Colour | Dark colour / light colour | — | S | 1 | V-4, Entrancer |
+| Invert / negative | Colour | Amount / channel | snare → flash | S | 1 | V-4, NuVJ |
+| Posterize | Colour | Levels / smoothing | energy → levels | S | 1 | V-4, NuVJ |
+| Threshold | Colour | Level / softness | — | S | 1 | NuVJ |
+| Palette map (to the mood palette) | Colour | Strength / shift | beat → shift | S | 1 | — |
+| Colour pass (keep one hue) | Colour | Kept hue / width | — | S | 2 | V-4 |
+| Film look (LUTs) | Colour | Look / strength | — | S | 2 | — |
+| Mirror | Space | Axis / position | — | S | 1 | V-4, NuVJ |
+| Kaleido ✓ | Space | Segments / turn | mid → turn | S | 1 | NuVJ, Entrancer |
+| Tile / multi ✓(Grid) | Space | Tiles / mirror | beat → tiles | S–M | 1 | V-4, NuVJ, Entrancer |
+| Transform / rotozoom | Space | Zoom / rotation speed | — | S | 1 | NuVJ |
+| Zoom pulse | Space | Amount / centre | kick | S | 1 | — |
+| Slide / scroll ✓ | Space | Shift X / shift Y | — | S | 1 | NuVJ, Entrancer |
+| Tunnel | Space | Depth / speed | kick → speed | S | 2 | NuVJ |
+| Lens (fisheye / sphere) | Space | Strength / radius | — | S | 2 | — |
+| Wave / ripple ✓(Waves) | Distort | Frequency / height | bass → height | S | 1 | NuVJ |
+| Bulge / pinch ✓ | Distort | Strength / centre | — | S | 1 | Entrancer |
+| Shake | Distort | Amount / speed | kick | S | 1 | V-4, NuVJ |
+| Displace | Distort | Amount / scale | bass | S | 2 | — |
+| Blur | Blur | Size / direction | — | M | 1 | — |
+| Glow / bloom | Light | Amount / threshold | energy | M | 1 | — |
+| Strobe ✓ | Light | Beat division / colour | kick | S | 1 | All |
+| Flash | Light | Strength / fade | drop | S | 1 | — |
+| Light rays | Light | Amount / length | bass | M | 2 | — |
+| Spot / vignette | Light | Size / pulse | kick → pulse | S | 2 | — |
+| Glint (star sparkles) | Light | Amount / rays | hi-hat | M | 3 | — |
+| Edge detect / neon edges | Stylize | Strength / colour | mid | S | 1 | NuVJ |
+| Pixelate / mosaic | Stylize | Size / shape | kick → size | S | 1 | — |
+| Silhouette | Stylize | Threshold / colour | — | S | 2 | — |
+| Halftone dots | Stylize | Size / angle | — | S | 2 | — |
+| CRT / scanlines | Stylize | Lines / curve | — | S | 2 | — |
+| Text mosaic (ASCII-style) | Stylize | Size / charset | — | M | 3 | — |
+| RGB split | Glitch | Distance / angle | kick → distance | S | 1 | NuVJ |
+| Glitch blocks | Glitch | Amount / block size | snare | S | 2 | — |
+| Tape noise (VHS-style) | Glitch | Noise / tracking | — | S | 2 | — |
+| Digital grain | Glitch | Amount / size | hi-hat | S | 2 | — |
+| Pixel sort | Glitch | Threshold / length | energy | L | 3 | — |
+| Smear (datamosh-style) | Glitch | Amount / hold | drop → reset | M | 3 | — |
+| Freeze / still | Time | Hold / release | — | S | 1 | V-4 |
+| Freeze on beat | Time | Length / probability | kick | S | 2 | — |
+| Stutter | Time | Length / repeats | hi-hat → trigger | S | 2 | Entrancer |
+| Echo | Time | Count / spacing in beats | beat | M | 2 | — |
+| Slitscan | Time | Direction / time span | bass → span | M | 3 | — |
+| Echo grid | Time | Delay / tiles | — | M | 3 | Entrancer |
+| Trails / motion blur ✓ | Feedback | Decay / drift | — | S | 1 | NuVJ, Entrancer |
+| Spiral feedback | Feedback | Zoom / twist | — | S | 2 | NuVJ |
+| Bass punch | Audio | Amount / band | bass | S | 2 | NuVJ |
+| Audio wobble | Audio | Amount / band | mid | S | 2 | NuVJ |
+| Luma key | Key | Level / softness | — | S | 1 | NuVJ, V-4 |
+| Chroma key | Key | Colour / tolerance | — | S | 1 | NuVJ, V-4 |
+| Mask (shape / clip) | Key | Shape / feather | beat → size | S | 2 | — |
+| Crop / edge fade | Utility | Edges / softness | — | S | 1 | All |
+| Motion trigger | Camera | Sensitivity / what it fires | — | S | 2 | — |
+| Person cut-out (tracking) | Camera | Threshold / background | — | M | 3 | — |
+| Camera echo | Camera | Length / fade | kick | S | 2 | — |
+| Camera mosaic (3 cams) | Camera | Layout / switch on beat | beat | S | 2 | — |
+| Hands → particles (tracking) | Tracking | Amount / colour | onset | M | 3 | — |
+| Body glow (tracking) | Tracking | Width / glow | energy | M | 3 | — |
+
+Mixing between layers is not an effect but part of the layer:
+- blend modes (normal, add, screen, multiply, difference, lighten, luma key,
+  chroma key);
+- crossfade curves and wipe shapes (from the V-4 catalogue).
+
+## 3. Generators
+
+| Generator | Family | Knob 1 / Knob 2 | Default reaction | Tier | Seen in |
+|---|---|---|---|---|---|
+| Solid colour / gradient | Basic | Colour / angle | beat → shift | 1 | All |
+| Test card | Basic | Pattern / grid | — | 1 | Himmel (exists) |
+| Noise / fBm clouds | Texture | Scale / speed | bass → speed | 1 | — |
+| Plasma | Texture | Scale / speed | mid | 1 | — |
+| Lines and stripes | Pattern | Count / speed | kick | 1 | — |
+| Rings / circles | Pattern | Count / pulse | kick → pulse | 1 | — |
+| Shapes (polygons) | Pattern | Sides / spin | beat | 1 | NuVJ |
+| Checker / grid | Pattern | Size / scroll | — | 1 | — |
+| Starfield | Motion | Density / speed | energy → speed | 1 | Classic |
+| Particles | Motion | Amount / gravity | onset → burst | 2 | NuVJ |
+| Voronoi cells | Texture | Cells / speed | — | 2 | — |
+| Audio spectrum / bars | Audio | Bands / height | spectrum | 1 | NuVJ |
+| Waveform / oscilloscope | Audio | Zoom / thickness | waveform | 2 | — |
+| Beat pulse / flash | Audio | Beat division / colour | beat | 1 | NuVJ |
+| Text / scrolling text | Text | Size / speed | — | 2 | — |
+| Tunnel / wormhole | 3D look | Speed / twist | kick → speed | 2 | Classic |
+| Fractal zoom | Math | Zoom / colour | — | 3 | Classic |
+| Raymarched shapes | 3D look | Shape / morph | bass → morph | 3 | — |
+| Reaction-diffusion | Texture | Feed / speed | bass | 3 | — |
+| ISF shader (user, add-on) | Any | Defined by the shader | — | 2 | ISF standard |
+
+Sources that are neither effects nor generators: clips (HAP), USB cameras,
+capture cards, Spout / NDI inputs and the VJ table output. Effects work on all
+of them the same way.
+
+## 4. FX pads (momentary, on LIVE)
+
+The default set for `PAD MODE` (velocity = intensity, aftertouch = amount),
+replaced per mood:
+
+> Strobe · Flash · Stutter · Freeze · Invert · RGB split · Zoom pulse ·
+> Kaleido · Mirror · Shake · Tunnel · Blur · Glitch blocks · Echo ·
+> Black-out · White-out

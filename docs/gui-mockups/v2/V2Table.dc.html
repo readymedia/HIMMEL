@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Himmel v2 – VJ table</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0D10}
+.chip{font-family:'JetBrains Mono',monospace;font-size:11px;color:#C9D1DB;border:1px solid #3A434F;border-radius:4px;padding:1px 5px;white-space:nowrap;background:#0F1318}
+.lbl{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#9AA4B2;font-weight:600}
+.box{position:absolute;border-radius:8px;box-shadow:0 8px 20px rgba(0,0,0,.6);font-size:11px;font-weight:700;letter-spacing:.06em}
+.port{position:absolute;width:10px;height:10px;border-radius:50%;border:2px solid #E8ECF1;background:#111}
+</style>
+</helmet>
+<div style="min-height:900px;width:100%;box-sizing:border-box;background:#0B0D10;color:#E8ECF1;font-family:Inter,system-ui,sans-serif;display:flex;flex-direction:column;gap:10px;padding:12px 16px">
+<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+<div style="font-weight:800;letter-spacing:.2em">HIMMEL</div>
+<nav style="display:flex;gap:4px;font-size:13px;font-weight:700;letter-spacing:.06em" aria-label="Views"><span style="padding:6px 12px;color:#9AA4B2">PERFORM</span><span style="padding:6px 12px;color:#9AA4B2">LIBRARY</span><span style="padding:6px 12px;color:#9AA4B2">SHOW</span><span style="padding:6px 12px;color:#9AA4B2">OUTPUTS</span><span style="padding:6px 12px;border-radius:6px;background:#E8ECF1;color:#0B0D10">TABLE</span></nav>
+<span style="font-size:13px;color:#9AA4B2">A playful second way to build a look. Same engine. Switching views never cuts the output.</span>
+<div style="flex:1"></div>
+<span style="font-size:13px">Table output →</span><span style="padding:5px 10px;border-radius:6px;border:1px solid #2EC5FF;color:#2EC5FF;font-weight:700;font-size:12px">Layer A3</span><span style="padding:5px 10px;border-radius:6px;border:1px solid #3A434F;color:#9AA4B2;font-size:12px">OUT 4</span><span style="padding:5px 10px;border-radius:6px;border:1px solid #3A434F;color:#9AA4B2;font-size:12px">Use table as MAIN</span>
+</div>
+
+<div style="background:#101317;border:1px solid #2A313A;border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:6px">
+<span class="lbl">Room view · what the projectors throw · LIVE = real outputs</span>
+<div style="height:150px;border-radius:8px;background:linear-gradient(180deg,#15171C,#0C0D10);position:relative;overflow:hidden">
+<div style="position:absolute;left:8%;right:8%;top:16px;height:100px;display:flex;gap:4px">
+<div style="flex:1;background:radial-gradient(ellipse at 70% 60%,#FF9F1C,#120700 70%);border:2px solid #FF3B30"></div>
+<div style="flex:1;background:radial-gradient(ellipse at 50% 60%,#FFB347,#120700 70%);border:2px solid #FF3B30"></div>
+<div style="flex:1;background:radial-gradient(ellipse at 30% 60%,#FF9F1C,#120700 70%);border:2px solid #FF3B30"></div>
+</div>
+<span style="position:absolute;left:8%;bottom:8px;font-size:11px;color:#FF6B61;font-weight:700">● LIVE · projectors 1–3 = OUT 1–3 (MAIN)</span>
+</div>
+</div>
+
+<div style="flex:1;min-height:520px;border-radius:12px;background:radial-gradient(ellipse at 50% 40%,#2A2018,#14100C 70%);border:1px solid #3A2E22;position:relative;overflow:hidden">
+<div class="box" style="left:3%;top:40px;width:150px;height:80px;background:#1E242C;border:1px solid #3A434F;padding:8px;box-sizing:border-box">VIDEO PLAYER<div style="margin-top:6px;height:34px;border-radius:3px;background:linear-gradient(135deg,#0B3A55,#2EC5FF)"></div><span class="port" style="right:-7px;top:34px"></span></div>
+<div class="box" style="left:3%;top:150px;width:150px;height:80px;background:#1E242C;border:1px solid #3A434F;padding:8px;box-sizing:border-box">CAMERA 2<div style="margin-top:6px;height:34px;border-radius:3px;background:#2A2F37"></div><span class="port" style="right:-7px;top:34px"></span></div>
+<div class="box" style="left:3%;top:260px;width:150px;height:70px;background:#1E242C;border:1px solid #3A434F;padding:8px;box-sizing:border-box">GENERATOR · PLASMA<span class="port" style="right:-7px;top:28px"></span></div>
+<div class="box" style="left:22%;top:60px;width:110px;height:120px;background:#3A1A1A;border:1px solid #7A2420;padding:8px;box-sizing:border-box;text-align:center">PEDAL<br>MIRROR<div style="margin:10px auto 0;width:40px;height:40px;border-radius:50%;background:#555;border:3px solid #999"></div><span class="port" style="left:-7px;top:50px"></span><span class="port" style="right:-7px;top:50px"></span></div>
+<div class="box" style="left:22%;top:220px;width:110px;height:110px;background:#1A2A3A;border:1px solid #1F4A6E;padding:8px;box-sizing:border-box;text-align:center">PEDAL<br>NEGATIVE<span class="port" style="left:-7px;top:45px"></span><span class="port" style="right:-7px;top:45px"></span></div>
+<div class="box" style="left:38%;top:70px;width:300px;height:220px;background:#C9CDD2;color:#222;border:1px solid #888;padding:10px;box-sizing:border-box">HIMMEL · V4<div style="display:flex;gap:6px;margin-top:10px"><span style="width:44px;height:30px;background:#333;border-radius:3px"></span><span style="width:44px;height:30px;background:#333;border-radius:3px"></span><span style="width:44px;height:30px;background:#333;border-radius:3px"></span><span style="width:44px;height:30px;background:#333;border-radius:3px"></span></div><div style="display:flex;gap:16px;margin-top:16px;align-items:center"><div style="width:22px;height:90px;background:#222;border-radius:4px;position:relative"><span style="position:absolute;left:-10px;top:30px;width:42px;height:14px;background:#eee;border:1px solid #555"></span></div><div style="display:grid;grid-template-columns:repeat(4,26px);gap:6px"><span style="height:20px;background:#c33;border-radius:3px"></span><span style="height:20px;background:#666;border-radius:3px"></span><span style="height:20px;background:#666;border-radius:3px"></span><span style="height:20px;background:#666;border-radius:3px"></span><span style="height:20px;background:#666;border-radius:3px"></span><span style="height:20px;background:#666;border-radius:3px"></span><span style="height:20px;background:#3a3;border-radius:3px"></span><span style="height:20px;background:#666;border-radius:3px"></span></div></div><span class="port" style="left:-7px;top:40px"></span><span class="port" style="left:-7px;top:80px"></span><span class="port" style="left:-7px;top:120px"></span><span class="port" style="left:-7px;top:160px"></span><span class="port" style="right:-7px;top:60px;border-color:#FF3B30"></span><span class="port" style="right:-7px;top:140px;border-color:#30D158"></span></div>
+<div class="box" style="left:68%;top:50px;width:140px;height:70px;background:#1E242C;border:1px solid #3A434F;padding:8px;box-sizing:border-box">SPAN BOX 1→3<span class="port" style="left:-7px;top:28px"></span></div>
+<div class="box" style="left:84%;top:30px;width:120px;height:46px;background:#222;border:2px solid #FF3B30;padding:6px;box-sizing:border-box;color:#FF9A93">PROJ 1 · LIVE</div>
+<div class="box" style="left:84%;top:90px;width:120px;height:46px;background:#222;border:2px solid #FF3B30;padding:6px;box-sizing:border-box;color:#FF9A93">PROJ 2 · LIVE</div>
+<div class="box" style="left:84%;top:150px;width:120px;height:46px;background:#222;border:2px solid #FF3B30;padding:6px;box-sizing:border-box;color:#FF9A93">PROJ 3 · LIVE</div>
+<div class="box" style="left:68%;top:230px;width:150px;height:110px;background:#111;border:1px solid #3A434F;padding:8px;box-sizing:border-box;color:#9AA4B2">MONITOR · preview<div style="margin-top:6px;height:60px;border:2px solid #30D158;background:conic-gradient(#0B3A55,#2EC5FF,#0B3A55)"></div></div>
+<div class="box" style="left:40%;top:340px;width:220px;height:110px;background:#E9ECEF;color:#222;border:1px solid #888;padding:8px;box-sizing:border-box">HIMMEL · MK2 <span style="font-weight:500;color:#555">remote cable → V4</span><div style="display:grid;grid-template-columns:repeat(8,1fr);gap:3px;margin-top:8px"><span style="height:16px;background:#FF3B6B"></span><span style="height:16px;background:#B78CFF"></span><span style="height:16px;background:#2EC5FF"></span><span style="height:16px;background:#FF9F1C"></span><span style="height:16px;background:#7A4FC0"></span><span style="height:16px;background:#1E8FB8"></span><span style="height:16px;background:#B86A10"></span><span style="height:16px;background:#ccc"></span></div></div>
+<div class="box" style="left:20%;top:380px;width:110px;height:80px;background:#1A1A24;border:1px solid #3A3A50;padding:8px;box-sizing:border-box;color:#D2B8FF">CLOCK<br><span style="font-family:'JetBrains Mono';font-size:18px">128.0</span> TAP</div>
+<svg aria-hidden="true" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none" viewBox="0 0 1000 560" preserveAspectRatio="none"><path d="M180 80 C 210 80,200 120,220 120" stroke="#E8C14A" stroke-width="4" fill="none"/><path d="M180 190 C 260 190,330 150,380 150" stroke="#2EC5FF" stroke-width="4" fill="none"/><path d="M330 120 C 360 120,350 110,380 110" stroke="#E8C14A" stroke-width="4" fill="none"/><path d="M180 295 C 210 295,200 275,220 275" stroke="#B78CFF" stroke-width="4" fill="none"/><path d="M330 275 C 360 275,350 230,380 230" stroke="#B78CFF" stroke-width="4" fill="none"/><path d="M685 130 C 700 130,670 85,680 85" stroke="#FF3B30" stroke-width="4" fill="none"/><path d="M685 210 C 700 210,670 290,680 290" stroke="#30D158" stroke-width="4" fill="none"/><path d="M820 85 C 830 85,830 55,840 55" stroke="#FF3B30" stroke-width="3" fill="none"/><path d="M820 85 C 830 85,830 115,840 115" stroke="#FF3B30" stroke-width="3" fill="none"/><path d="M820 85 C 830 85,830 175,840 175" stroke="#FF3B30" stroke-width="3" fill="none"/><path d="M500 340 C 500 320,520 310,520 290" stroke="#9AA4B2" stroke-width="3" stroke-dasharray="6 5" fill="none"/></svg>
+</div>
+<div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:#9AA4B2"><span>Shelf: players · cameras · generators · pedals · mixers (V4, KF4 sim) · clocks · LFO · span box · monitors · projectors</span><div style="flex:1"></div><span>Boxes nobody sees cost nothing · a broken box passes its input through</span></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

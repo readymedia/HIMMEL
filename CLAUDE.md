@@ -1,5 +1,11 @@
 # Himmel – project handoff for Claude Code
 
+> **Start here:** `AGENTS.md` → this file → `docs/roadmap.md` (the plan) →
+> `docs/agents/README.md` (how agents work: tracks, handoffs, `GUESS:` rule) →
+> `docs/design/` (v2 product design, 2026-11-11) → `docs/decisions.md`.
+> This file keeps hardware facts and verified decisions; the plan and the
+> design live in those files.
+
 Himmel is a local Windows VJ and interactive-installation system played from a
 **Native Instruments Maschine MK2 (white)**. It drives 1–6 screens or projectors
 from one PC. The owner speaks Norwegian, so talk to him in Norwegian. Everything
@@ -39,11 +45,15 @@ inside the app (UI, help, logs, code comments) is in **English**.
 | Controller | hidapi; libusb/WinUSB (Zadig) as fallback |
 | Data | SQLite (library, clip analysis incl. colors and mood) and JSON (shows, presets, themes, cues) |
 | ML (optional) | ONNX Runtime + DirectML (segmentation and keying for cameras) |
-| GUI | Dear ImGui with dark, light and night themes |
+| GUI | Separate process, **dark only** (D28). Proposed: local web app via a `himmel_ui` bridge; Dear ImGui as fallback (D43, pending) |
 
 **TouchDesigner is not allowed.** Do not suggest it.
 
 ## Main concepts
+(v2 summary; details in `docs/design/`.) Two decks A/B (4 layers each) +
+crossfader → MAIN; PREVIEW (green) vs LIVE (red) everywhere; shuffle with
+locks + history on `TRANSPORT < >`; `PLAY` = TAKE; scenes saved with `REC`;
+moods on a 4×4 energy × style map; clips analysed and tagged on import.
 - **Show:** outputs, mapping (keystone, mesh warp, edge blend), cameras, banks,
   audio and sync sources.
 - **Bank:** clips and loops, with analysis (colors, motion, mood such as
@@ -176,14 +186,12 @@ The details are in the mockup (`docs/vj-mockup.html`).
 - `tools/maschine_test.py`: an old MK1 test. **Not relevant** (wrong model);
   kept only for reference.
 - `docs/vj-mockup.html`: an interactive mockup of the MK2 and the 3-screen wall.
-- `docs/gui-mockups/`: GUI sketches (Perform in dark, light and night; Setup
-  Outputs; Setup Mapping; Library; Setlist; Effect Browser; Help).
-  - These are design-canvas files. Read them for content and layout only; they
-    are not production code.
-- Full design document (Norwegian): the Claude Doc "Himmel".
-  - Its tabs: foundation/stack, effects/themes/library, inspiration
-    (Resolume, VDMX, Modul8).
-  - Ask the owner for an export if you need it.
+- `docs/gui-mockups/`: v1 GUI sketches (kept for history; the light and
+  night themes are dropped, D28). **Current: `docs/gui-mockups/v2/`** (dark).
+  These are design-canvas files: read them for content and layout only.
+- Full design: **`docs/design/`** (English, v2, 2026-11-11), carried over
+  from the Norwegian Claude Doc "Himmel" (the archive) and the owner's voice
+  notes. GUI v2 drawings: `docs/gui-mockups/v2/`.
 
 ## Next steps
 **The plan lives in [`docs/roadmap.md`](docs/roadmap.md)** (updated

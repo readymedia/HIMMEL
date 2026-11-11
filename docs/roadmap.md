@@ -1,238 +1,258 @@
-# Himmel roadmap
+# Himmel roadmap (v2)
 
-Updated 2026-11-11. This file is the plan; `CLAUDE.md` keeps the facts and
-decisions. When a step is done, strike it through here and note the details
-in `CLAUDE.md`.
+Updated 2026-11-11. This page is **the plan**. The *why* is in
+[`design/`](design/vision.md), the decisions are in
+[`decisions.md`](decisions.md), and the hardware facts are in
+[`../CLAUDE.md`](../CLAUDE.md). Who builds what, and how, is in
+[`agents/README.md`](agents/README.md). Strike items through when they are
+done, and note the details in the track's handoff.
 
-## Decisions this plan builds on
+**The goal for mid-January 2027:** the owner plays a real gig with the MK2 +
+Lightpad:
+- 2 decks × 4 layers of HAP clips and cameras, with a crossfader;
+- shuffle with locks, history and one-press save;
+- scenes and cues;
+- effects that react to the music;
+- 3 outputs.
 
-- **Goals, in order:** show-safe, low latency, easy to use, light on the GPU.
-- **Main instrument = the MK2 and the Lightpad Block together** (owner,
-  2026-11-11).
-  - The other controllers are **integrations**: LUMI, Entrancer, NuVJ, KF4,
-    V-4 and Ohm64. They plug into the same weapon layer and get a simulator
-    and a map. They do not steer the design, and they come after the main
-    instrument.
-- **Weapons:** a controller = profile + map + driver + simulator
-  (`weapons/README.md`). Anything we don't own can be simulated.
-- **Visual tools first**, not terminal tables: live view, click-then-press
-  learning, mirrored screens and LEDs.
-- **Browser first** for the table view; Dear ImGui comes later (owner,
-  2026-11-10).
-- **Effect set after the engine's effect chain exists** (owner, 2026-11-10).
-- **Open source (MIT).** Credit everything. Copyleft parts (Ableton Link,
-  beat-link) go in separate bridge processes.
+All of this at the lowest latency we can measure, from a 4-step wizard start,
+and without one dropped frame in an 8-hour soak.
 
-## Where we are (main + branches, 2026-11-11)
+## 1. What we have to build on
 
-| Area | State | Where |
+| Exists | Where | Becomes |
 |---|---|---|
-| MK2 | Map verified; C++ controller with shared memory, LEDs, screens, reconnect; screen pages; games; simulator that plays the engine | `main` |
-| Engine | Supervisor with restarts; D3D11 with 1–8 outputs (span/mirror); HAP player (own MOV reader); camera layer; latency test (not run yet) | `main` |
-| Lightpad (no. 2) | Simulator, WinMM driver in Python, our own LittleFoot LED renderer on the real block (~55 fps), pressure set to 127, games | branch `weapon-2-sim` (also in the branches below) |
-| Touch FX | Gesture logic + one shader pass, 9 effects (Hue Turn, Duotone, Grid, Kaleido, Bulge, Slide, Waves, Strobe, Trails), 0.05–0.5 ms; played from MK2 page 4 and the mouse | branch `entrancer-touch-fx` |
-| LUMI Keys (no. 3) | Simulator; keys, buttons and LEDs checked on the device; key map not verified | `weapon-2-sim` |
-| Entrancer (no. 4) | Simulator that plays Touch FX in the engine, Lightpad as its pad; real unit over MIDI | `entrancer-touch-fx` |
-| NuVJ (no. 5) | Simulator, protocol read from the old software, effect catalogue, **classic two-deck view** | `weapon-5-nuvj` |
-| KF4 (no. 6) | Simulator only (the unit has no data port) | `weapon-6-kf4` |
-| V-4 (no. 7) | Simulator drawn like the real one, full effect catalogue | `weapon-roland-v4` |
-| Ohm64 (no. 8) | Simulator, probe, map readback; hardware test planned for 2026-11-11 | `weapon-ohm64` |
-| VJ table | Design proposal + mockup: patch the boxes on a table, the room is the output | `rack-design` |
+| Verified MK2 map, C++ controller (events ~750 Hz, LEDs, screens, reconnect), `--sim` over UDP | `main`: `src/controller`, `maschine_mk2_map.json` | The MK2 driver, unchanged; the Perform mapping is added in the input layer |
+| MK2 screen pages (pure drawing, knob-aligned) | `main`: `pages.cpp` | Every MK2 page in `design/hardware-mapping.md` §1.5 |
+| Supervisor (restarts < 1 s, heartbeats, logs) | `main`: `src/engine/supervisor` | The supervisor of every process; curtains to add |
+| D3D11 renderer, 1–8 outputs, span/mirror, waitable flip-model, input → present 8–12 ms | `main`: `src/engine/render` | The output stage of the render graph |
+| Own MOV reader + HAP decoder, ClipPlayer (4 frames ahead, BC upload) | `main`: `src/media`, `clip_player.cpp` | The clip source for every layer |
+| CameraCapture (Media Foundation, NV12, triple buffer, retry) + latency test | `main` | The camera / capture source; the latency test moves to the system menu |
+| Touch FX: 9 one-pass effects + the gesture logic, tests, timing tool | branch `entrancer-touch-fx` | The first effects in the slot system; Lightpad TOUCH mode |
+| MIDI input (WinMM), Entrancer link | branch `entrancer-touch-fx` | `weapon_midi.exe` |
+| Lightpad: sim, WinMM driver, our own LED renderer (~55 fps), games | branch `weapon-2-sim` (in rack-design too) | Prototype for `weapon_blocks.exe` (C++) |
+| LUMI, NuVJ (+ classic view model), KF4, V-4, Ohm64: profiles + sims | branches `weapon-*` | Integrations (phase 13) |
+| Browser live view that draws any weapon from its profile, with learn / sim | `main` + branches: `tools/mk2_live.*` | The weapon renderer of the GUI (weapon select, weapon band, audience view) |
+| VJ table design + mockup | branch `rack-design` | Phase 10 |
+| Effect catalogues (NuVJ, V-4, Entrancer) | branches | `design/effects-and-generators.md` |
 
-Merge check (2026-11-11):
-- `rack-design` and `entrancer-touch-fx` merge into `main` without conflicts.
-- The NuVJ, KF4, V-4 and Ohm64 branches conflict only in docs and config
-  (`CLAUDE.md`, `weapons/README.md`, `THIRD_PARTY_NOTICES.md`,
-  `.claude/launch.json`), not in code.
+## 2. Tracks (they run in parallel)
 
----
+| Track | Short | Owns | First job |
+|---|---|---|---|
+| LEAD | L | Plan, merges, interfaces, decisions | Phase 0 |
+| ENGINE | E | Render graph, decks, outputs | Phase 1 |
+| FX | F | Effects, generators, ISF, safety gate | Phase 4 |
+| MEDIA | M | Ingest, analysis, library | Phase 3 |
+| SHOW | S | Presets, shuffle, moods, cues | Phase 5 |
+| CONTROL | C | Weapons, mapping, Lightpad driver | Phases 0–2 |
+| AUDIO | A | Analysis, clocks, bridges | Phase 7 |
+| GUI | G | Web GUI and bridge | Phase 6 (once D43 is decided) |
+| QA | Q | Latency, soak, release checks | All along |
 
-## Phase 0: gather everything in `main` (small, do first)
+## 3. Timeline (weeks are estimates; ISO weeks 2026–27)
 
-1. Merge in this order:
-   1. `rack-design`, which brings in `weapon-2-sim` (Lightpad and LUMI);
+| Week | L | E | F | M | S | C | A | G | Q |
+|---|---|---|---|---|---|---|---|---|---|
+| 46 (now) | **P0 merge**, interfaces | P1 design | — | — | — | P0 merge help | — | mockups v2 ✓ | latency test |
+| 47 | P1 command protocol | **P1 decks / layers / slots** | metadata | **P3 ingest** | model + formats | P1 mapping layer | — | wait for D43 | soak rig |
+| 48 | merges | P1 graph + previews, **P2 I/O** | **P4 tier 1** | P3 analysis | **P5 scenes / save** | P2 weapon block | **P7 audio** | **P6 bridge + wizard** | soak 2 h |
+| 49 | merges | P2 outputs, curtains | P4 tier 1 | P3 DB + browse | P5 shuffle v1 | **P8 Lightpad C++** | P7 clocks | P6 Perform v1 | soak 8 h |
+| 50 | | budget guard | P4 tier 2, ISF | starter library | P5 moods ×16 | P8 modes | Link / ProDJ bridges | P6 library + shuffle UI | latency rigs |
+| 51 | release 0.1 | polish | safety gate | background throttling | **P9 cues / songs** | roles / NuVJ | reactions | P6 show view | release check |
+| 52–1 | holidays / buffer | | | | P9 Assist / Autopilot | | | P6 audience view | |
+| 2–3 | **gig test** | fixes | tier 2 | tracking v1 | P9 Prepare Show | | | polish | 8 h soak, gig |
+| 3–6 | | **P10 table core** | add-ons | | | P13 integrations | | **P10 table view** | |
+| later | | P11 mapping, P12 overlay / SDI | tier 3 | | | P13 | | | |
+
+## 4. Phases, step by step
+
+### Phase 0: gather everything (L + C, week 46, 1–2 days)
+
+1. Merge into `main`, in this order:
+   1. `rack-design` (brings in Lightpad + LUMI);
    2. `entrancer-touch-fx`;
    3. `weapon-5-nuvj`;
    4. `weapon-6-kf4`;
    5. `weapon-roland-v4`;
-   6. `weapon-ohm64`.
+   6. `weapon-ohm64`;
+   7. `roadmap` (this plan).
 
-   Resolve the doc conflicts by keeping all sections, and give every live
-   view its own port in `launch.json`. After each merge, build and run
-   `mk2_tests`, `media_tests`, `touch_fx_tests`, `entrancer_tests` and the
-   Python `--selftest`s.
-2. **One numbering list** of the weapons in `weapons/README.md`, matching
-   `CLAUDE.md`:
-   1 MK2, 2 Lightpad, 3 LUMI, 4 Entrancer, 5 NuVJ, 6 KF4, 7 V-4, 8 Ohm64.
-   Mark each one as *main* (1–2) or *integration* (3–8).
-3. **Slim down `CLAUDE.md`:** move the per-weapon details to
-   `weapons/README.md` and keep a short status table plus a pointer to this
-   roadmap.
-4. Put the full design spec (the "Himmel" doc, exported as Markdown) in
-   `docs/design/`, so every session works from the same text.
-5. Delete the merged branches.
+   The only conflicts are in docs and config (checked 2026-11-11). Keep all
+   sections, and give each live view its own port in `.claude/launch.json`.
+2. Build, then run `mk2_tests`, `media_tests`, `touch_fx_tests`,
+   `entrancer_tests` and every Python `--selftest`.
+3. One weapon list (1 MK2, 2 Lightpad = **main**; 3–8 = **integrations**).
+   Slim `CLAUDE.md`: move the per-weapon detail to `weapons/README.md`.
+4. Delete the merged branches. **From now on: merge within 1–2 days**
+   (`agents/README.md` §3).
 
-## Phase 1: the main instrument, MK2 + Lightpad as one rig
+### Phase 1: engine core, decks and layers (E, weeks 46–48)
 
-Goal: the owner plays the engine with both controllers at once, the real
-devices or their simulators, and a pulled cable never stops the output.
+1. **The deck model:** Deck A / B × 4 layers. A layer is a source + transform
+   + blend + opacity + 4 FX slots + reactions + clip FX.
+2. **The crossfader** A ↔ B into MAIN, with curves, TAKE (timed,
+   quantisable) and CUT, and the decks swapping roles after a TAKE.
+3. **Effect slots at every level** (clip, layer, deck, master, output).
+   Touch FX moves into a slot.
+4. **The render graph** is built in a worker and swapped at frame boundaries;
+   the texture pool is sized at start-up; value changes go through a
+   lock-free block. Unit tests run without a GPU.
+5. **Off-air deck at thumbnail size;** layers that nobody sees are skipped.
+6. **The command ring + state block + preview block** (with L:
+   `interfaces/command-protocol.md`, `preview-block.md`).
+7. **The MK2 Perform mapping** (with C): groups → layers, Play / Restart =
+   TAKE / CUT, pages MACRO, LAYER, FX1–4, MIX; this replaces the skeleton's
+   temporary pages.
+8. **GPU meter** per layer and effect, on the MK2 screen and in the status
+   block.
+9. **Done when:** 2 decks × 4 HAP layers + 8 effects play from the MK2, TAKE
+   and CUT work, and a 2-hour soak has no missed frame.
 
-1. **Generic weapon layer in C++** (the plan in `weapons/README.md`):
-   - shared block `Local\HimmelWeapon<N>` with the same layout as
-     `HimmelMk2`, plus a header with the weapon id;
-   - new events `TouchStart` / `TouchMove` / `TouchEnd`;
-   - the surface can be split into zones that send `PadHit` /
-     `PadPressure`;
-   - MIDI CC to `KnobDelta`.
-2. **`weapon_blocks.exe`**, the Lightpad driver in C++. It uses WinMM, so no
-   new dependency.
-   - API mode, LittleFoot upload, LED frames through HeapSync, pings on
-     their own timer.
-   - It restores the pressure setting when it exits.
-   - `--sim` over UDP 8767.
-   - The supervisor starts it next to `mk2_controller.exe`; heartbeat and
-     restart work the same way.
-3. **Split the roles between the two** (proposal for the owner; see the open
-   decisions):
-   - **MK2 = the brain.** Browse and select, scenes and cues on the pads,
-     knob pages, the screens, Shift menus, transport.
-   - **Lightpad = the hand.** Touch FX (X = effect, Y = amount,
-     pressure = depth, more fingers = more parameters), Hold on the Mode
-     button, motion loop. Alternatively a 4×4 scene surface with velocity.
-   - **Together:** the MK2 Touch FX page with a 15×15 mirror of the Lightpad
-     LEDs (sketch: `docs/touch-fx-entrancer.md` §8). Knobs 1–4 choose the
-     effect and amount; knobs 5–8 set Hold, Loop, Beat and Target.
-4. **The LEDs show state on the Lightpad:** cursor, held cross, loop path and
-   beat pulse, in the colour of the chosen effect.
-5. **Touch FX step 2:** beat-locked motion loop, a second finger as the
-   third parameter, scrub on clips, then Stutter / Echo Grid (history ring).
-6. **Combined live view:** both weapons on one page, simulated or real, with
-   learning and mirrors.
-7. Check on the hardware: latency from touch to picture, a cable pulled from
-   each one, an 8-hour soak with both connected.
+### Phase 2: inputs and outputs (E + C, weeks 48–49)
 
-## Phase 2: a show-safe engine core
+1. USB cameras and USB capture cards as layer sources (3 cameras, a fallback
+   picture when one is unplugged); effects work on them exactly as on clips.
+2. Spout in / out; NDI later.
+3. **The source per output:** MAIN / A / B / OWN / TABLE; per-output FX;
+   black-out per output.
+4. **Curtain windows** in the supervisor; the safe scene is always loaded.
+5. The latency test is run and logged (Q); the driver latency is reported per
+   output.
+6. **The generic weapon block** `Local\HimmelWeapon<N>` (C), with touch
+   events and roles.
 
-1. Black "curtain" windows held by the supervisor, so a renderer restart
-   shows black instead of the desktop.
-2. Run the latency test with an external webcam and log the figures in
-   `CLAUDE.md`.
-3. **Effect chain / render graph = VJ table milestone M1**
-   (`docs/vj-table-design.md` §10).
-   - `src/table/` with the patch worker, value block, and unit tests without
-     a GPU.
-   - `--table file.json` with hot reload.
-   - Measurements and failure tests: a bad shader, a missing clip, a camera
-     pulled out, a loop in the file, the renderer killed.
-   - Today's fixed layers (test card, clip, camera, Touch FX) become the first
-     ready-made table.
-4. Decks / layers: either as groups on the table, or as a fixed deck model
-   if the owner chooses that (open decision 1).
+### Phase 3: ingest pipeline and library (M, weeks 47–50)
 
-## Phase 3: content (clips and effects)
+1. `himmel_ingest.exe`: probe → ffmpeg HAP (keep resolution, ×4, chunks) →
+   sidecar → SQLite. Resumable stages.
+2. Analysis v1:
+   - palette;
+   - brightness / contrast / saturation;
+   - warm / cool;
+   - motion;
+   - cuts;
+   - loop quality;
+   - flicker;
+   - bars;
+   - energy;
+   - mood scores (rules in `library-rules.json`).
+3. Background mode: idle priority and I/O throttling, paused near the frame
+   budget (it reads the engine status block).
+4. Thumbnails + hover loops; MK2 `BROWSE` with filters; load to a PREVIEW
+   layer.
+5. Optional type tags + similarity (ONNX, a CLIP-style model). Ask before
+   adding the dependency (PROPOSED).
+6. The starter library (~50 free clips + generator looks).
+7. **Done when:** a dropped folder of 100 mixed clips becomes ready, tagged
+   and browsable, while a show plays without one late frame.
 
-1. **Import pipeline:**
-   - ffmpeg.exe in a worker turns clips into HAP (keeping the resolution,
-     rounded to a multiple of 4);
-   - analysis: colours, motion, energy, loop quality, flicker warning;
-   - SQLite library;
-   - thumbnails and preview loops;
-   - Hap Q Alpha.
-2. **Effect set**, one cheap pass each, with two named main parameters and
-   speed parameters:
-   - start: Hue, Mirror, Kaleido, Tiling, RGB split, BPM strobe, Tunnel,
-     RotoZoom, Ripple, Edge, Posterize, Threshold, Scroller;
-   - feedback: Motion Blur, Larsen / Twirl, Frame Delay;
-   - audio: Bass Zoom, EarthQuake;
-   - V-4 pedals: negative, colorize, monocolor, posterize, colorpass,
-     mirror, multi, strobe, still, shake;
-   - mixer: copy modes, luma / chroma key, crossfade curves, mask wipes.
+### Phase 4: the first effect and generator set (F, weeks 48–51)
 
-   Sources: `docs/nuvj-effects.md`, `docs/v4-effects.md`,
-   `docs/touch-fx-entrancer.md` and the 42-effect catalogue in the design
-   spec.
-3. **Generators:** gradient, noise / fBm, plasma, lines and rings, shapes,
-   particles, spectrum, text, starfield, Voronoi.
-4. **ISF loader** (glslang + SPIRV-Cross) for user effects as "ISF pedals".
+1. The effect metadata format (`interfaces/effect-metadata.md`).
+2. Tier 1 effects (~30) and tier 1 generators (~12) from
+   `design/effects-and-generators.md`, each with a PNG + timing check.
+3. FX pads set; default reactions.
+4. The ISF loader (glslang + SPIRV-Cross) on the **add-on shelf**, behind the
+   safety gate: compile, cost, flicker check, preview loop.
+5. Tier 2 after that.
 
-## Phase 4: music
+### Phase 5: presets, shuffle, scenes (S, weeks 47–50)
 
-1. Audio analysis via WASAPI (input + loopback): level, bands, onset, BPM,
-   beat phase, drop detector. It replaces the fixed 120 BPM in Touch FX.
-2. A clock item on the table: tap, MIDI clock, and an AV offset.
-3. Bridges: Ableton Link (GPL bridge process), Pro DJ Link (beat-link
-   bridge), LTC/MTC.
-4. Audio signals on knobs (Auto Write + knob), shown as meters on the MK2
-   and in the GUI.
+1. Show file formats (`interfaces/show-files.md`).
+2. Scenes / banks: save (`REC`), recall to PREVIEW / LIVE, morph, copy.
+3. The **shuffle sampler v1:**
+   - scopes (DECK / LAYER / FX SLOT / KNOB);
+   - 8 locks;
+   - a seeded history of 64;
+   - ROLL / BACK / MUTATE;
+   - constraint rules (library fit, effect compatibility, GPU budget,
+     brightness).
+4. 16 mood files on the 4 × 4 map; 8 macros per mood.
+5. "Fill bank from mood".
+6. **Done when:** a beginner can make a good 16-scene bank in under
+   2 minutes with `>` and `REC`.
 
-## Phase 5: show structure
+### Phase 6: GUI v1 (G, weeks 48–52; needs D43)
 
-1. **Themes** (12 to start), **scenes** (16 per cue on the energy grid) and
-   **macros** (8 knobs: Energy, Colour, Speed, Density, Chaos, Glow, Space,
-   Reaction).
-2. **Setlist → song → cues:** triggered by hand, on a bar, on timecode, on a
-   drop, or from the DJ's track.
-3. **Presets** at the effect, deck/item and session levels; morphing; undo.
-4. **Smart Random / next preset**, following the rules in the design spec
-   (fits the clip, the theme, the music and the GPU budget; never the same as
-   the last 10).
-5. **Assist / Autopilot** and the panic button (Shift + Mute = a safe scene).
-6. **Prepare Show:** convert, read every clip, compile shaders, budget, warm
-   up.
+1. The `himmel_ui` bridge (web app server + command / state relay + preview
+   frames).
+2. The wizard (4 steps) and the weapon select ("touch your weapon to choose
+   it", loadouts, demo).
+3. **Perform:**
+   - the top bar;
+   - three monitors with tallies;
+   - the crossfader with TAKE / CUT;
+   - the layer strips;
+   - the pads;
+   - the MK2 screen mirror + knob strip;
+   - the shuffle panel;
+   - the outputs band with "show next";
+   - the weapon band.
+4. Library view, Show view, Outputs view.
+5. The audience view (the weapon drawing on a second screen, with Explain).
+6. The weapon-adaptive layouts (MK2 + Lightpad, MK2, Lightpad, NuVJ,
+   keyboard).
 
-## Phase 6: operator GUI
+### Phase 7: music (A, weeks 48–52)
 
-1. **Table view in the browser** (M2): lay out and patch items, monitors,
-   and play from both weapons.
-2. Dear ImGui GUI: Setup / Prepare / Perform; dark, light and night themes;
-   a controller picture with click-then-press learning.
-3. Setup wizard in 7 steps, Help menu built from the same descriptions as
-   the code, and Explain Mode on the MK2.
-4. **NuVJ classic two-deck view** as an alternative Perform view (the
-   owner's nostalgia wish), using the same model as everything else.
+1. `himmel_audio.exe`: WASAPI in + loopback, ASIO;
+   - bands, onsets (kick / snare / hat), BPM / phase / bar / phrase;
+   - energy, build / drop.
+2. Clock arbitration with glide; tap; MIDI clock; LTC / MTC.
+3. Link bridge (GPL) and Pro DJ Link bridge (beat-link), each in its own
+   process.
+4. Reactions on every parameter; the REACT macro; the AV offset test.
 
-## Phase 7: projection and outputs
+### Phase 8: Lightpad as the hand (C, weeks 49–50)
 
-1. **Room view** on the table: projectors that are LIVE → output N, and the
-   wall with screens.
-2. Keystone, mesh warp, edge blending and masks, set from the MK2 or the
-   mouse; the Setup Mapping mockup.
-3. Up to 6 outputs (splitter or a second GPU), triptych and chase modes.
-4. Spout 2 and NDI in and out.
-5. Show mode in Windows (power, USB suspend, notifications, updates) and
-   autostart.
+1. `weapon_blocks.exe` (C++, WinMM):
+   - API mode;
+   - LittleFoot upload;
+   - HeapSync LED frames;
+   - restoring the pressure setting on exit;
+   - `--sim`;
+   - supervised.
+2. Modes TOUCH / MIX / SCENES / MOOD with LED feedback (red border on LIVE).
+3. The MK2 Touch FX page with the 15 × 15 LED mirror.
 
-## Phase 8: integrations (other weapons)
+### Phase 9: show structure and the first gig (S + Q, weeks 51–3)
 
-Each one gets the generic weapon layer from phase 1, a verified map where
-we own the unit, and a box or controller on the table.
+1. Setlist → songs → cues; triggers (manual, bars, timecode, drop, DJ track).
+2. Assist / Autopilot; panic; safe mode (strobe limits).
+3. Prepare Show (checklist + report + pack).
+4. An 8-hour soak and the **first real gig with the owner.**
 
-| Weapon | Next step |
+### Phase 10: VJ table (E + G, weeks 3–6)
+
+1. `src/table/` on the same graph core; `himmel-table/1`; hot reload.
+2. The table view in the browser: boxes, cables, monitors, room view; the
+   TABLE source routable into a layer, an output or MAIN; switching views
+   without a gap.
+
+### Phase 11: projection mapping
+
+Keystone, mesh warp, edge blend and masks per output; room view; up to
+6 outputs (splitter / 2nd GPU).
+
+### Phase 12: Overlay mode and pro I/O
+
+DeckLink / AJA with GPU-direct; fill + key out, genlocked; NDI with alpha;
+live analysis of the program feed; soft tracking.
+
+### Phase 13: integrations
+
+| Weapon | Work |
 |---|---|
-| LUMI Keys (3) | Verify the key map key by key; keys as a scene or colour keyboard; BLOCKS touch per key |
-| Entrancer (4) | The real unit over MIDI in the C++ layer; Touch FX shared with the Lightpad |
-| NuVJ (5) | Test on the owner's unit: LEDs, LCD segments, map |
-| KF4 (6) | No data port: capture its output as a camera, or use it as an analog mixer after Himmel |
-| V-4 (7) | Simulator only (the owner has none); the V-4 box on the table is the worked example in M1/M3 |
-| Ohm64 (8) | Hardware test with the owner, then the map |
-| Generic MIDI | One profile + learning for any MIDI controller |
+| NuVJ | Standalone classic two-deck mode on the engine (hardware test first) |
+| LUMI | Key map |
+| Entrancer | Touch FX shared with the Lightpad |
+| Ohm64 | Hardware test 2026-11-11, then the map |
+| V-4 | The table box |
+| KF4 | Capture as a camera |
+| Generic MIDI | Learn |
 
-## Always
+## 5. Open questions (see `decisions.md`)
 
-- Easter eggs and games on the screens and on the Lightpad, as long as they
-  never get in the way of a show.
-- Keep `README.md`, `docs/getting-started.md`, `THIRD_PARTY_NOTICES.md` and
-  the licences up to date in the same commit as each change.
-- Measure instead of guessing; test on the hardware early.
-
-## Open decisions for the owner
-
-1. **Is the table the main way to build a show?** In that case decks and
-   layers become groups on the table. This changes the main concepts in
-   `CLAUDE.md`. (Table design §11.1.)
-2. **The roles of MK2 and Lightpad** as proposed in phase 1.3. Should the
-   Lightpad be Touch FX by default, or the scene surface?
-3. Names and format for the table (`himmel-table/1`, "item", "pedal"). They
-   become public, so changes later mean migrations.
-4. GPU budget: a warning at 4 ms per frame at 1080p on the GTX 1070.
-5. Should the merge in phase 0 happen now, in the order given?
+D42 mapping changes · D43 GUI technology · D44 Lightpad modes · D45 the 16
+moods · D46 layers per deck · D47 merge now.

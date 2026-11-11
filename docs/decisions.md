@@ -1,0 +1,65 @@
+# Decision log
+
+Owner decisions and the big technical choices, newest first. **Only the owner
+makes owner decisions.** An agent that needs one writes it here as
+**PROPOSED**, with the options, and asks. Then it either waits or works on
+something else. Each entry has a date, a status and a link to where the
+details live.
+
+Status values:
+- **DECIDED**: the owner decided;
+- **PROPOSED**: waiting for the owner;
+- **TECH**: a technical choice by an agent, which can be reversed;
+- **REPLACED**: superseded by a later entry.
+
+## 2026-11-11
+
+| # | Decision | Status | Details |
+|---|---|---|---|
+| D27 | The main instrument is the MK2 + Lightpad Block together; the other weapons are integrations | DECIDED | `design/hardware-mapping.md` |
+| D28 | The GUI is dark only; the light theme is dropped; a brightness control replaces the "Night" theme | DECIDED | `design/gui.md` §2 |
+| D29 | Startup is a 4-step wizard: 1 Add clips, 2 Choose weapon, 3 Set outputs, 4 Play | DECIDED | `design/gui.md` §3 |
+| D30 | Two decks (A / B) with a crossfader into MAIN (the NuVJ idea). PREVIEW vs LIVE must always be clear on every output | DECIDED | `design/gui.md` §4.2 |
+| D31 | Shuffle on the whole deck, a layer, an effect or a knob; save in one press to scenes / cues; trigger back and forth | DECIDED | `design/presets-and-shuffle.md` |
+| D32 | Every imported clip is analysed and tagged (speed, theme / mood, colours, …). Import may run during a show, in the background | DECIDED | `design/library-and-analysis.md` |
+| D33 | Optimise files before the show; playback only reads ready HAP | DECIDED | `design/library-and-analysis.md` §1 |
+| D34 | The VJ table is a secondary view on the same engine, going to the same outputs. Its output can be routed into MAIN, and you can switch between the views | DECIDED | `design/gui.md` §9 |
+| D35 | The GUI adapts to the chosen weapon ("Choose your weapon" at start-up) | DECIDED | `design/gui.md` §8 |
+| D36 | Overlay mode (fill + key over a live mixer, for lip sync) is a separate show type | DECIDED | `design/engine.md` §8 |
+| D37 | Built-in effects vs add-ons on separate shelves; describe-a-generator workflow with a safety gate; no Notch patches | DECIDED | `design/engine.md` §7 |
+| D38 | Naming rule: product-specific effect names get Himmel names (for example Spiral feedback, Halftone dots, Bass punch) | DECIDED | `design/effects-and-generators.md` |
+| D39 | Effects apply to USB inputs (cameras, capture) exactly as to clips | DECIDED | `design/engine.md` §2 |
+| D40 | The NuVJ can run a simple show alone (classic two-deck setup) | DECIDED | `design/hardware-mapping.md` §4 |
+| D41 | Development is done by agents, each owning a track, with handoff files and documentation all the way, so any human or agent can take over | DECIDED | `agents/README.md` |
+| D42 | Mapping changes from v1: `TRANSPORT < >` = shuffle history / roll, `PLAY` = TAKE, `RESTART` = CUT, `SAMPLING` = music page, groups A–D / E–H = deck A / B layers | PROPOSED | `design/hardware-mapping.md` |
+| D43 | GUI technology: a local web app through a `himmel_ui` bridge (instead of Dear ImGui), with previews over shared memory | PROPOSED | `design/gui.md` §10 |
+| D44 | Lightpad modes: TOUCH (default), MIX, SCENES, MOOD | PROPOSED | `design/hardware-mapping.md` §2 |
+| D45 | 16 moods on a 4 × 4 energy × style map (12 old themes + 4 new) | PROPOSED | `design/presets-and-shuffle.md` §4 |
+| D46 | 4 layers per deck to start (8 later if the budget allows) | PROPOSED | `design/engine.md` §2 |
+| D47 | Merge all open branches into `main`, and from now on merge each branch within 1–2 days | PROPOSED | `roadmap.md` phase 0 |
+
+## 2026-11-10
+
+| # | Decision | Status | Details |
+|---|---|---|---|
+| D20 | Controllers are "weapons" (profile + map + driver + simulator); ones you do not own can be simulated | DECIDED | `weapons/README.md` |
+| D21 | Weapon no. 2 = Lightpad Block M; no. 3 = LUMI Keys; no. 4 = Entrancer; no. 5 = NuVJ; no. 6 = KF4; no. 7 = V-4 (sim only); no. 8 = Ohm64 | DECIDED | `weapons/README.md` |
+| D22 | Lightpad pressure sensitivity 127 (the block's setting is restored on exit) | DECIDED | `weapons/README.md` |
+| D23 | VJ table instead of a rack; the boxes look like themselves; browser first | DECIDED | `docs/vj-table-design.md` |
+| D24 | The effect set comes after the graphics engine's effect chain exists | DECIDED | `CLAUDE.md` (NuVJ branch) |
+| D25 | NuVJ classic two-deck view in Himmel's own look (nostalgia) | DECIDED | NuVJ branch |
+| D26 | Touch FX (the Entrancer gesture) on the Lightpad; do not clone the product | DECIDED | `docs/touch-fx-entrancer.md` |
+| D14 | Open source, MIT; credit everything; copyleft parts in bridge processes | DECIDED | `CLAUDE.md` |
+| D15 | HAP playback with our own MOV reader + Snappy; FFmpeg not linked (ffmpeg.exe as an external tool only) | DECIDED | `CLAUDE.md` |
+| D16 | Supervisor + separate processes, shared-memory rings and blocks | TECH | `docs/architecture.md` |
+
+## 2026-11-09
+
+| # | Decision | Status | Details |
+|---|---|---|---|
+| D10 | The MK2 map, verified on the owner's unit, is the source of truth; fix single entries with the live view | DECIDED | `maschine_mk2_map.json` |
+| D11 | The master encoder = browse / select wheel; `SHIFT` + encoder = system menu | DECIDED | `CLAUDE.md` |
+| D12 | Visual mapping tools (browser live view), not terminal tables | DECIDED | `CLAUDE.md` |
+| D13 | Velocity = max pressure in the first 4 ms after onset | TECH | `docs/mk2-controller-spec.md` |
+| D1 | Stack: C++20, D3D11 flip model, waitable swap chain, max frame latency 1; no TouchDesigner | DECIDED | `CLAUDE.md` |
+| D2 | Light theme (v1 mockups) | REPLACED by D28 | — |

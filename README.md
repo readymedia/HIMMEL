@@ -51,6 +51,7 @@ Close Native Instruments software first (it holds the MK2). Clips: every
 
 | | |
 |---|---|
+| **[Docs map](docs/README.md)** | Everything below plus the v2 plan ([roadmap](docs/roadmap.md)), design ([docs/design/](docs/design/vision.md)), decisions and the agent workflow ([AGENTS.md](AGENTS.md)) |
 | [Getting started](docs/getting-started.md) | Install, build, map your MK2, run, clips, camera, troubleshooting |
 | [Architecture](docs/architecture.md) | Processes, shared memory, threads, frame-loop rules, measurements |
 | [MK2 controller spec](docs/mk2-controller-spec.md) | The MK2 USB protocol byte by byte, events, timings, velocity |
