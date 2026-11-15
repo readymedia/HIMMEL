@@ -57,6 +57,13 @@
       ],
       "port": 8770,
       "url": "http://127.0.0.1:8770"
+    },
+    {
+      "name": "kf4-live",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["tools/mk2_live.py", "--port", "8779", "--weapon", "kf4"],
+      "port": 8779,
+      "url": "http://127.0.0.1:8779"
     }
   ]
 }

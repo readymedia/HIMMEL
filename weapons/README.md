@@ -24,6 +24,7 @@ A weapon has up to four parts:
 | 2 | **Lightpad** (ROLI Lightpad Block / Block M) | USB-MIDI: multi-touch surface (x, y, pressure per finger), 15 × 15 RGB LEDs, one Mode button | [`lightpad.weapon.json`](lightpad.weapon.json) | [`tools/lightpad_sim.py`](../tools/lightpad_sim.py) | Simulated, and played on the owner's Lightpad M (2026-11-10): touch, multi-touch, Mode button, orientation, factory note map, **and Himmel's own LED program** (~55 frames/s). C++ driver `weapon_blocks.exe lightpad` (checked with the simulator) |
 | 5 | **NuVJ** (Numark NuVJ, 2008) | USB-MIDI: 2 × 9 pads, 2 jog wheels, 2 speed faders, crossfader, 12 knobs, 2 push BANK encoders, 31 LEDs, front switches, blue segment LCD (feedback by SysEx) | [`nuvj.weapon.json`](nuvj.weapon.json) | [`tools/nuvj_sim.py`](../tools/nuvj_sim.py) | **Checked on the owner's unit (2026-11-11)**: map of all 53 controls verified, 31 LEDs, LCD text and the whole segment map (camera mapper); protocol in [`docs/nuvj-protocol.md`](../docs/nuvj-protocol.md). C++ driver `weapon_nuvj.exe` (checked with the simulator) |
 | 9 | **APC20** (Akai APC20), a **secondary weapon** | USB-MIDI: 8 × 5 clip grid (green / red / amber, blinking), 5 scene, 8 clip stop, Shift, 9 transport / track select, 3 × 8 track buttons, Cue Level encoder, 8 faders + master | [`apc20.weapon.json`](apc20.weapon.json) | [`tools/apc20_sim.py`](../tools/apc20_sim.py) | Simulated from public protocol facts; probe, LED test and map learning ready. Not yet checked on the owner's unit (it needs its 12 V adapter) |
+| 6 | **KF4** (Korg KF4 krossfour, 2005) | SD video mixer: 4 inputs onto A/B, crossfader with 4 curves, BK/WH/chroma/luma key, HOLD, monitor select. **No data port** | [`kf4.weapon.json`](kf4.weapon.json) | [`tools/kf4_sim.py`](../tools/kf4_sim.py) + [`tools/kf4_live.html`](../tools/kf4_live.html) | Simulated with picture outputs; the real unit cannot be a control surface directly. Details and options: [`kf4.md`](kf4.md) |
 
 ## The live view: one tool for every weapon
 
@@ -90,6 +91,10 @@ the device.
   outline (`r` = corner radius), `dna` is a connector dot at `x, y`, and `port`
   is a socket or switch the protocol cannot see, with a small label.
 - `protocol` (optional, free text): a transport and message summary for people.
+- `page` (optional): the weapon has its own page in `tools/` (e.g.
+  `kf4_live.html`); `/?weapon=<id>` serves it instead of the generic panel.
+- `kind: "fader"` (a linear fader, absolute 0..`range`) and `kind: "switch"`
+  (`positions`: a list of labels) were added for the KF4.
 - `map` is `null` until a map has been learned on real hardware.
 
 ## Adding a weapon (the same process as for the MK2)

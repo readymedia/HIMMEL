@@ -664,7 +664,12 @@ def _make_nuvj(profile):
     return nuvj_sim.NuvjLive(profile)
 
 
-GENERIC = {"lightpad": _make_lightpad, "lumi": _make_lumi, "nuvj": _make_nuvj, "apc20": _make_apc20}
+def _make_kf4(profile):
+    import kf4_sim
+    return kf4_sim.KF4Live(profile)
+
+
+GENERIC = {"lightpad": _make_lightpad, "lumi": _make_lumi, "nuvj": _make_nuvj, "apc20": _make_apc20, "kf4": _make_kf4}
 
 
 def weapon_page(wid, view=None):
