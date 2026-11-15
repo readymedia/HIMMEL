@@ -154,8 +154,10 @@ The Perform page is a local web app (`gui/`), served by `himmel_ui.exe` on
 right) with their pictures and four layers each, MAIN, the TAKE ring, the
 crossfader and the clip list.
 
-1. Start the engine (`himmel.exe --sim`, see above). Until the supervisor
-   starts the bridge itself, run `build\bin\Release\himmel_ui.exe` too.
+1. Start the engine: `build\bin\Release\himmel.exe --sim` (launch config
+   `himmel-sim`). The supervisor starts `himmel_ui.exe` itself (`--no-ui` to
+   skip it). For the simulated MK2 run `python tools/mk2_live.py --sim` and
+   open <http://127.0.0.1:8765>; run only **one** MK2 simulator at a time.
    No engine yet? `build\bin\Release\fake_engine.exe` stands in for it
    (fake clips, moving test pictures; it refuses to start while a real
    engine runs).
