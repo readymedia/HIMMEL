@@ -144,6 +144,35 @@ The simulator sends the same USB reports as the hardware over UDP on
 127.0.0.1:8766; the controller does the rest exactly as with the real device
 ([weapons/README.md](../weapons/README.md)).
 
+### Play the slice from the web GUI
+
+The Perform page is a local web app (`gui/`), served by `himmel_ui.exe` on
+<http://127.0.0.1:8790>. It shows PREVIEW (green, left) and PROGRAM (red,
+right) with their pictures and four layers each, MAIN, the TAKE ring, the
+crossfader and the clip list.
+
+1. Start the engine (`himmel.exe --sim`, see above). Until the supervisor
+   starts the bridge itself, run `build\bin\Release\himmel_ui.exe` too.
+   No engine yet? `build\bin\Release\fake_engine.exe` stands in for it
+   (fake clips, moving test pictures; it refuses to start while a real
+   engine runs).
+2. Open <http://127.0.0.1:8790>.
+3. Play:
+   - **Load a clip:** click it in the list, then click a layer (Shift keeps
+     it armed); or drag it onto a layer; or double-click it to load it into
+     the focused layer.
+   - **Focus:** click a layer's letter (A–D = PREVIEW, E–H = PROGRAM), like
+     pressing a group button on the MK2. The panel at the bottom shows the
+     focused layer's effects: pick an effect per slot, then its mix and
+     parameters (double-click a slider = default). DECK FX and MASTER FX
+     are the tabs next to it.
+   - **TAKE** (space or the ring) travels PREVIEW to PROGRAM; **CUT**
+     (Enter) swaps at once; the crossfader moves by hand; **BLACK** is top
+     right.
+4. Killing or restarting `himmel_ui` (or closing the page) never changes the
+   outputs; the page reconnects by itself and says when the engine is
+   missing, restarting or of another version.
+
 ### Playing it from the MK2
 
 | Control | Page 1: TEST CARD | Page 2: CLIP | Page 3: CAMERA | Page 4: TOUCH FX |
