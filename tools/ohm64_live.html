@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ohm64 Live</title>
+<!-- Weapon no. 8 (Ohm64, first version). Served by tools/mk2_live.py for ?weapon=ohm64; talks to tools/ohm64_sim.py
+     through /weapon?id=ohm64, /wevents?id=ohm64 and /wcmd?id=ohm64. The drawing comes from weapons/ohm64.weapon.json. -->
+<style>
+  :root {
+    --bg: #101113; --label: #9a9ca3; --text: #d8d9dc;
+    --seen: #3ddc84; --learn: #ff9d2e; --missing: #e5484d; --led: #3d7bff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.4 "Segoe UI", system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 20px; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; }
+  .pill { padding: 3px 10px; border-radius: 99px; background: #26272b; font-size: 12px; }
+  .pill.ok { background: #143d27; color: #7ff0b0; } .pill.bad { background: #4a1719; color: #ffb3b5; }
+  .pill.sim { background: #2b2350; color: #c8b8ff; }
+  button, select, input { background: #2c2e33; color: var(--text); border: 1px solid #3a3c42; border-radius: 6px;
+           padding: 5px 10px; font: inherit; }
+  button { cursor: pointer; } button:hover { background: #383a40; } button:disabled { opacity: .45; cursor: default; }
+  button.on { background: #3b5bdb; border-color: #4c6ef5; color: #fff; }
+  button.hwon { background: #4b3a99; border-color: #6b55d6; color: #fff; }
+  .progress { width: 180px; height: 8px; background: #26272b; border-radius: 4px; overflow: hidden; }
+  .progress > div { height: 100%; background: var(--seen); width: 0; transition: width .2s; }
+  #wrap { padding: 0 20px; }
+  #stage { position: relative; transform-origin: 0 0; }
+  #panel { position: absolute; left: 0; top: 0; }
+  /* the device: brushed aluminium top between two wooden end caps */
+  .wood { position: absolute; background: linear-gradient(90deg, #5a2f17, #8a4d27 40%, #6b3a1d); box-shadow: 0 10px 30px #000a; }
+  .body { position: absolute; background: linear-gradient(165deg, #d9dbdf, #b9bcc2 45%, #c9ccd1);
+          box-shadow: inset 0 2px 0 #fff8, inset 0 -3px 0 #0003, 0 14px 40px #000a; }
+  .body::after { content: ""; position: absolute; inset: 0; opacity: .25;
+                 background: repeating-linear-gradient(90deg, #fff0 0 2px, #ffffff40 2px 3px, #fff0 3px 5px); }
+  .port { position: absolute; background: #111; border-radius: 2px; }
+  .port span { position: absolute; top: -11px; left: 50%; transform: translateX(-50%); font-size: 7px; color: #55585f; white-space: nowrap; }
+  .badge { position: absolute; transform: translate(-50%, -50%); font: 900 19px/1 "Segoe UI", sans-serif; letter-spacing: 3px;
+           color: #7f838b; white-space: nowrap; text-shadow: 0 1px 0 #fff8; transition: color .1s, text-shadow .1s; }
+  .c { position: absolute; user-select: none; touch-action: none; }
+  body.sim .c { cursor: grab; } body.hw .c { cursor: pointer; }
+  .lbl { position: absolute; font-size: 7.5px; font-weight: 700; color: #5b5e65; text-align: center; white-space: pre;
+         transform: translateX(-50%); pointer-events: none; }
+  /* rubber buttons, cream; they glow blue from below when their LED is on */
+  .b { border-radius: 7px; background: linear-gradient(#ecebdf, #d6d4c4); color: #6d6b5f; font-size: 8px; font-weight: 800;
+       display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 2px #8e9097, 0 2px 3px #0006, inset 0 -2px 0 #0002;
+       transition: background .04s, box-shadow .04s; }
+  .b.pill { border-radius: 5px; }
+  .b.held { transform: translateY(1px); box-shadow: 0 0 0 2px #fff, inset 0 -1px 0 #0002; }
+  .b.lit { background: radial-gradient(circle at 50% 55%, #f4f8ff, #9fc0ff 70%); color: #173a8a;
+           box-shadow: 0 0 0 2px #6d9bff, 0 0 14px 3px #3d7bffcc; }
+  /* knobs with a lit ring (backlight) */
+  .ring { position: absolute; border-radius: 50%; pointer-events: none; transition: box-shadow .1s, border-color .1s;
+          border: 3px solid #8f939a; border-bottom-color: transparent; }
+  .knob { border-radius: 50%; background: radial-gradient(circle at 40% 35%, #44464c, #121315 70%); border: 2px solid #050506;
+          box-shadow: 0 2px 4px #0008; }
+  .knob .ind { position: absolute; left: 50%; top: 5%; width: 3px; height: 44%; margin-left: -1.5px; background: #f2f2f2;
+               transform-origin: 50% 103%; border-radius: 1px; }
+  .knob.flash { box-shadow: 0 0 0 2px #fff, 0 2px 4px #0008; }
+  .val { position: absolute; font-size: 8px; color: #4c4f56; transform: translateX(-50%); white-space: nowrap; pointer-events: none; }
+  .track { position: absolute; background: #08090a; border-radius: 3px; transition: box-shadow .1s; }
+  .cap { position: absolute; background: linear-gradient(#3a3c42, #0d0d0f); border-radius: 3px; box-shadow: 0 2px 4px #000a; }
+  .cap::after { content: ""; position: absolute; background: #e8e8e8; }
+  .cap.v::after { left: 2px; right: 2px; top: 50%; height: 2px; margin-top: -1px; }
+  .cap.wood { background: linear-gradient(90deg, #6b3a1d, #b06a3b 50%, #6b3a1d); }
+  .cap.wood::after { display: none; }
+  .c.seen::after { content: ""; position: absolute; right: -3px; top: -3px; width: 7px; height: 7px; border-radius: 50%;
+                   background: var(--seen); box-shadow: 0 0 0 2px #c9ccd1; }
+  .c.learn { outline: 2px solid var(--learn); outline-offset: 3px; animation: pulse .7s infinite alternate; }
+  @keyframes pulse { from { outline-color: var(--learn); } to { outline-color: transparent; } }
+  body.hw .c.missing { outline: 1.5px dashed var(--missing); outline-offset: 2px; }
+  body.hunting .b { cursor: crosshair; }
+  .b.huntown { outline: 2px dotted #ff9d2e; outline-offset: 3px; }
+  #below { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 12px 20px 30px; max-width: 1200px; }
+  .card { background: #17181b; border: 1px solid #26272b; border-radius: 8px; padding: 10px 12px; }
+  .card h2 { font-size: 12px; margin: 0 0 6px; color: var(--label); font-weight: 600; }
+  .card h3 { font-size: 12px; margin: 12px 0 4px; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 5px 0; }
+  .help { color: var(--label); font-size: 12px; }
+  .mono { font: 12px/1.5 Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
+  table { border-collapse: collapse; width: 100%; font: 11px/1.45 Consolas, monospace; }
+  td, th { padding: 1px 8px 1px 0; text-align: left; vertical-align: top; white-space: nowrap; }
+  th { color: var(--label); font-weight: 600; }
+  td.hex { color: #7f838c; }
+  tr.up td.dir { color: #7ff0b0; } tr.down td.dir { color: #c8b8ff; } tr.probe td.dir { color: #ffcf7a; } tr.refused td.dir { color: #ff8a8d; }
+  .chips span { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 7px; border-radius: 99px; background: #26272b; font-size: 11px; cursor: pointer; }
+  .chips span:hover { background: #3a3c42; }
+  .full { grid-column: 1 / -1; }
+  @media (max-width: 860px) { #below { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body class="sim">
+<header>
+  <select id="weaponPick" title="Weapon: the controller to show"></select>
+  <h1>Ohm64 Live</h1>
+  <span id="conn" class="pill">connecting…</span>
+  <button id="hwBtn" title="Open the real Ohm64 over USB-MIDI (listen only)">Use the real Ohm64</button>
+  <span id="mapCount" class="pill">map</span>
+  <div class="progress" title="controls seen on the real Ohm64"><div id="bar"></div></div>
+</header>
+<div id="wrap"><div id="stage"><div id="panel"></div></div></div>
+<div id="below">
+  <div class="card">
+    <h2>Play it</h2>
+    <div class="help" id="help"></div>
+  </div>
+  <div class="card">
+    <h2>Host (the live view standing in for Himmel) · LEDs</h2>
+    <div class="row" id="ledModes"></div>
+    <div class="help">
+      <b>Himmel</b>: the 8 grid columns are 8 layers (one playing clip lit per column), the mute LEDs show live layers,
+      XL / XR show the crossfader side, BPM blinks on the beat (tap it). <b>Follow</b>: a LED lights while you hold its
+      button. <b>Text</b>: a scroller on the grid. All 75 LEDs go out as one Ohm64 SysEx
+      (<code>F0 00 01 61 02 04 …</code>, from the user guide); the drawing shows what the device shows.</div>
+    <div class="row"><label>Backlight <input type="range" id="bl" min="0" max="127" value="127"></label>
+      <label>Logo <input type="range" id="logo" min="0" max="1023" value="1023"></label></div>
+    <div id="hostInfo" class="mono"></div>
+  </div>
+  <div class="card full" id="hwCard">
+    <h2>Real Ohm64: probe, map and LEDs</h2>
+    <div class="help">Plug the Ohm64 in with USB and close the Livid Editor (Windows lets one program use a MIDI port).
+      Press <b>Use the real Ohm64</b>. Himmel then <b>only listens</b>. It never saves settings, never resets and never
+      remaps the device: the hardware link has an allow-list (LED SysEx, requests, notes, dimmer CCs, Local Control).</div>
+    <div class="row"><label>MIDI port <select id="portPick"><option value="">auto (name has Ohm64, not "External")</option></select></label>
+      <button id="portGo">Open this port</button></div>
+    <div id="hwInfo" class="mono"></div>
+    <h3>1 · Read the map from the Ohm64 (asks only, changes nothing)</h3>
+    <div class="help">The Ohm64 can tell what every button and analog input sends (requests <code>07.0B</code> and
+      <code>07.0A</code>), its MIDI channel and its settings. The answer becomes the starting map; on the simulator it
+      shows the simulator's own guess.</div>
+    <div class="row"><button id="readBtn">Read the map from the device</button><span id="rbInfo" class="mono"></span></div>
+    <h3>2 · Touch every control</h3>
+    <div class="help">The drawing follows the real Ohm64. A green dot = seen on the hardware. A dashed red outline = not in
+      the map. <b>Wrong control moves?</b> Click the right one in the drawing, then move the real one. The map is saved to
+      <code>ohm64_map.json</code> (backup <code>.bak.json</code>). Esc cancels.</div>
+    <div id="learnMsg" class="mono" style="color:#ffcf7a"></div>
+    <div class="row"><b>Not seen yet:</b></div><div id="missing" class="chips"></div>
+    <div class="row"><b>MIDI not in the map:</b> <span id="unmapped" class="mono">-</span></div>
+    <div class="row"><button id="verifyBtn">All seen: mark the map verified ✓</button><button id="resetSeen">Reset seen</button></div>
+    <h3>3 · LEDs</h3>
+    <div class="help"><b>Let Himmel drive the LEDs</b> first asks what the device shows and whether Local Control is on,
+      then turns Local Control off (not stored) so only Himmel lights them. <b>Give them back</b> restores both.
+      Then try <b>All on</b>, <b>Chase</b> and <b>Follow</b>. <b>LED hunt</b> lights one LED code at a time
+      (column 1-6, row 1-14): <b>click the button that lit</b> and its code is saved (from the guide's tables we know
+      where they should be; the mute order differs between two of its tables). Nothing lit? Step on.</div>
+    <div class="row"><button id="driveBtn">Let Himmel drive the LEDs</button>
+      <button id="huntGo">LED hunt</button><button data-hstep="-1">◀</button><button data-hstep="1">▶</button>
+      <label><input type="checkbox" id="huntAuto"> Auto step</label><span id="huntInfo" class="mono"></span></div>
+    <div class="row"><button id="ledsOk">Every LED is right ✓</button><span id="ledResult" class="mono"></span></div>
+  </div>
+  <div class="card">
+    <h2>Himmel events (what the engine would get)</h2>
+    <table id="events"></table>
+  </div>
+  <div class="card">
+    <h2>Wire map (what each control sends)</h2>
+    <div class="help" id="mapSource"></div>
+    <div style="max-height: 320px; overflow: auto"><table id="wire"></table></div>
+  </div>
+  <div class="card full">
+    <h2>MIDI monitor</h2>
+    <div class="row"><label><input type="checkbox" id="noise"> Show LED frames and ACKs</label></div>
+    <table id="log"></table>
+  </div>
+</div>
+<script>
+const WID = "ohm64";
+const $ = id => document.getElementById(id);
+const esc = t => String(t).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+const post = o => fetch("/wcmd?id=" + WID, { method: "POST", body: JSON.stringify(o) }).catch(() => {});
+const simIn = o => post({ sim_input: o });
+const panel = $("panel");
+let W = null, S = null;
+const els = {}, rings = [], tracks = [];
+function add(html, cls, style, parent = panel) {
+  const d = document.createElement("div"); d.className = cls; Object.assign(d.style, style); d.innerHTML = html;
+  parent.appendChild(d); return d;
+}
+const px = v => v + "px";
+
+// ---------- drawing, from weapons/ohm64.weapon.json ----------
+function build(w) {
+  W = w;
+  panel.style.width = px(w.panel.w); panel.style.height = px(w.panel.h);
+  const box = d => ({ left: px(d.x), top: px(d.y), width: px(d.w), height: px(d.h), borderRadius: px(d.r || 0) });
+  for (const d of w.deco || []) {
+    if (d.kind === "wood") add("", "wood", box(d));
+    else if (d.kind === "body") add("", "body", box(d));
+    else if (d.kind === "port") add(`<span>${esc(d.label)}</span>`, "port", { left: px(d.x), top: px(d.y), width: px(d.w), height: px(d.h) });
+    else if (d.kind === "glow") W.badge = add(esc(w.badge || w.name), "badge", { left: px(d.x), top: px(d.y) });
+  }
+  for (const c of w.controls) {
+    let d;
+    if (c.kind === "button") {
+      d = add(esc(c.label || ""), "c b" + (c.style === "pill" ? " pill" : ""), { left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h) });
+    } else if (c.kind === "knob") {
+      const R = c.r + 7;
+      rings.push(add("", "ring", { left: px(c.x - R), top: px(c.y - R), width: px(2 * R), height: px(2 * R) }));
+      d = add('<div class="ind"></div>', "c knob", { left: px(c.x - c.r), top: px(c.y - c.r), width: px(2 * c.r), height: px(2 * c.r) });
+      c.v = add("", "val", { left: px(c.x), top: px(c.y + R + 1) });
+    } else if (c.kind === "fader") {
+      const v = c.orient === "v", L = c.len;
+      d = add("", "c", v ? { left: px(c.x - 18), top: px(c.y), width: px(36), height: px(L) } : { left: px(c.x), top: px(c.y - 16), width: px(L), height: px(32) });
+      tracks.push(add("", "track", v ? { left: px(16), top: 0, width: px(4), height: px(L) } : { top: px(14), left: 0, height: px(4), width: px(L) }, d));
+      c.cap = add("", "cap " + (v ? "v" : "wood"), v ? { left: px(3), width: px(30), height: px(22) } : { top: px(-2), height: px(36), width: px(18) }, d);
+      c.v = add("", "val", v ? { left: px(c.x), top: px(c.y + L + 4) } : { left: px(c.x + L / 2), top: px(c.y + 20) });
+    } else continue;
+    d.title = c.name + (c.note ? " · " + c.note : "");
+    c.el = d; els[c.name] = c;
+    wire(c);
+  }
+  fit();
+}
+
+// ---------- input: simulator = the drawing is the controller; hardware = click to learn (or hunt) ----------
+const hw = () => S && S.hardware;
+function wire(c) {
+  const el = c.el;
+  el.addEventListener("click", () => {
+    if (S && S.hunt && c.kind === "button") { post({ hunt_assign: c.name }); return; }
+    if (hw()) post({ learn: c.name });
+  });
+  el.addEventListener("pointerdown", e => {
+    if (hw() || (S && S.hunt)) return;
+    e.preventDefault();
+    try { el.setPointerCapture(e.pointerId); } catch (_) { /* synthetic pointer */ }
+    c.drag = { y: e.clientY };
+    if (c.kind === "button") simIn({ name: c.name, down: true });
+    else if (c.kind === "fader") faderTo(c, e);
+  });
+  el.addEventListener("pointermove", e => {
+    if (hw() || !c.drag || !el.hasPointerCapture(e.pointerId)) return;
+    if (c.kind === "fader") faderTo(c, e);
+    else if (c.kind === "knob") {
+      const n = Math.trunc((c.drag.y - e.clientY) / 2);
+      if (n) { c.drag.y -= n * 2; simIn({ name: c.name, delta: n }); }
+    }
+  });
+  const up = () => {
+    if (hw() || !c.drag) return;
+    c.drag = null;
+    if (c.kind === "button") simIn({ name: c.name, down: false });
+  };
+  el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
+  el.addEventListener("wheel", e => {
+    if (hw() || c.kind === "button") return;
+    e.preventDefault();
+    const s = e.deltaY < 0 ? 1 : -1;
+    if (c.name === "Crossfader") simIn({ name: c.name, pos: Math.max(0, Math.min(127, xfPos(S.values[c.name] || 0) + s * 4)) });
+    else simIn({ name: c.name, delta: s * 4 });
+  }, { passive: false });
+}
+function xfPos(v) { return S && S.xf_flip ? v : 127 - v; }       // factory: the value grows towards the left
+function faderTo(c, e) {
+  const r = c.el.getBoundingClientRect();
+  const k = c.orient === "v" ? 1 - (e.clientY - r.top) / r.height : (e.clientX - r.left) / r.width;
+  const v = Math.round(Math.max(0, Math.min(1, k)) * 127);
+  const now = performance.now();
+  if (now - (c.lastSend || 0) > 12 || v === 0 || v === 127) {
+    c.lastSend = now;
+    simIn(c.orient === "h" ? { name: c.name, pos: v } : { name: c.name, value: v });
+  }
+}
+window.addEventListener("blur", () => { if (!hw()) simIn({ release_all: true }); });
+window.addEventListener("pagehide", () => navigator.sendBeacon("/wcmd?id=" + WID, JSON.stringify({ sim_input: { release_all: true } })));
+document.addEventListener("keydown", e => { if (e.key === "Escape") post({ learn: "" }); });
+
+function fit() {
+  if (!W) return;
+  const pw = W.panel.w + 2, ph = W.panel.h + 2;
+  const s = Math.max(0.45, Math.min((window.innerWidth - 40) / pw, (window.innerHeight - 70) / ph, 1.4));
+  const st = $("stage");
+  st.style.transform = `scale(${s})`; st.style.width = px(pw); st.style.height = px(ph);
+  $("wrap").style.height = px(ph * s + 8);
+}
+window.addEventListener("resize", fit);
+
+// ---------- render a snapshot ----------
+let lastVal = {}, flash = {}, lastLogKey = "", lastWireKey = "", lastMissKey = "";
+function render(s) {
+  S = s;
+  document.body.classList.toggle("sim", !s.hardware);
+  document.body.classList.toggle("hw", !!s.hardware);
+  document.body.classList.toggle("hunting", !!s.hunt);
+  const conn = $("conn");
+  conn.textContent = s.hardware ? (s.connected ? "Ohm64 hardware · " + (s.ports[0] || "") : "Ohm64 not found") : "Ohm64 simulated";
+  conn.className = "pill " + (s.hardware ? (s.connected ? "ok" : "bad") : "sim");
+  const hb = $("hwBtn"); hb.textContent = s.hardware ? "■ Back to the simulator" : "Use the real Ohm64"; hb.classList.toggle("hwon", !!s.hardware);
+  const mp = s.map, seen = new Set(mp.seen), mapped = new Set(mp.mapped), held = new Set(s.held), leds = s.leds || {};
+  $("mapCount").textContent = `${seen.size} / ${mp.total} seen on hardware` + (mp.verified ? ` ✓ verified ${mp.verified}` : "");
+  $("bar").style.width = (100 * seen.size / mp.total) + "%";
+  // backlight: knob rings and fader slots glow blue; the badge sits where the device has its lit logo
+  const bl = s.backlight == null ? 127 : s.backlight, a = bl / 127;
+  for (const r of rings) { r.style.borderColor = a ? `rgba(70,120,255,${0.35 + 0.65 * a})` : ""; r.style.borderBottomColor = "transparent";
+    r.style.boxShadow = a ? `0 0 ${4 + 10 * a}px rgba(61,123,255,${0.8 * a})` : ""; }
+  for (const t of tracks) t.style.boxShadow = a ? `0 0 ${3 + 8 * a}px rgba(61,123,255,${0.9 * a}), inset 0 0 3px rgba(61,123,255,${a})` : "";
+  if (W && W.badge) { const g = (s.logo == null ? 1023 : s.logo) / 1023;
+    W.badge.style.color = g ? `rgba(60,110,255,${0.4 + 0.6 * g})` : ""; W.badge.style.textShadow = g ? `0 0 ${4 + 10 * g}px rgba(61,123,255,${g})` : ""; }
+  const now = performance.now();
+  for (const c of Object.values(els)) {
+    const cl = c.el.classList, v = s.values[c.name];
+    cl.toggle("seen", seen.has(c.name));
+    cl.toggle("missing", !mapped.has(c.name));
+    cl.toggle("learn", s.learn === c.name);
+    if (v !== undefined && lastVal[c.name] !== undefined && v !== lastVal[c.name]) flash[c.name] = now;
+    lastVal[c.name] = v;
+    if (c.kind === "button") {
+      cl.toggle("held", held.has(c.name));
+      cl.toggle("lit", !!leds[c.name]);
+      cl.toggle("huntown", !!(s.hunt && s.hunt.owner === c.name));
+    } else if (c.kind === "knob") {
+      c.el.firstChild.style.transform = `rotate(${-150 + 300 * (v || 0) / 127}deg)`;
+      c.v.textContent = v ?? ""; cl.toggle("flash", now - (flash[c.name] || 0) < 250);
+    } else if (c.kind === "fader") {
+      if (c.orient === "v") { c.cap.style.top = px((1 - (v || 0) / 127) * (c.len - 22)); c.v.textContent = v ?? ""; }
+      else { const p = xfPos(v || 0); c.cap.style.left = px(p / 127 * (c.len - 18)); c.v.textContent = `${v ?? ""} ${s.xf_flip ? "(grows →)" : "(grows ←)"}`; }
+    }
+  }
+  // host card
+  const h = s.host, lm = $("ledModes");
+  if (lm.dataset.k !== h.modes.join()) {
+    lm.dataset.k = h.modes.join();
+    const names = { himmel: "Himmel", follow: "Follow", all: "All on", chase: "Chase", text: "Text", off: "LEDs off" };
+    lm.innerHTML = h.modes.filter(m => m !== "hunt").map(m => `<button data-m="${m}">${names[m] || m}</button>`).join("");
+    lm.querySelectorAll("button").forEach(b => b.onclick = () => post({ led_mode: b.dataset.m }));
+  }
+  lm.querySelectorAll("button").forEach(b => { b.classList.toggle("on", b.dataset.m === h.mode); b.disabled = !h.drive; });
+  $("bl").disabled = $("logo").disabled = !h.drive;
+  const clips = h.clips.map((r, i) => `L${i + 1}:${r == null ? "-" : r + 1}${h.live[i] ? "" : "(muted)"}`).join(" ");
+  $("hostInfo").textContent = (h.drive ? "" : "LISTENING ONLY: Himmel sends nothing to the device.\n") +
+    `layers ${clips}\ncrossfader side ${h.side || "middle"}    tempo ${h.bpm} BPM (tap BPM)    knob page F${h.page}` +
+    (s.local != null ? `\nLocal Control ${s.local ? "on" : "off"}` : "");
+  // hardware card
+  const st = s.stats || {};
+  $("hwInfo").textContent = (s.notes || []).join("\n") + (s.hardware ? `\nmessages from the Ohm64: ${st.msgs ?? 0} (${st.rate ?? 0}/s)` +
+    (Object.keys(s.ranges || {}).length ? "\nranges seen: " + Object.entries(s.ranges).map(([n, r]) => `${n} ${r[0]}..${r[1]}`).join(", ") : "") : "");
+  if (s.port_list) {
+    const pp = $("portPick"), key = JSON.stringify(s.port_list.in);
+    if (pp.dataset.k !== key) {
+      pp.dataset.k = key;
+      pp.innerHTML = '<option value="">auto (name has Ohm64, not "External")</option>' + s.port_list.in.map(([i, n]) => `<option value="${i}">in ${i}: ${esc(n)}</option>`).join("");
+    }
+  }
+  const rb = s.readback || {};
+  $("rbInfo").textContent = rb.at ? `answer ${rb.at}: buttons ${rb.buttons ? "✓" : "-"}, analog ${rb.analog ? "✓" : "-"}, channel ${rb.channel != null ? rb.channel + 1 : "-"}` +
+    `${rb.local != null ? ", local " + (rb.local ? "on" : "off") : ""}${rb.omni != null ? ", omni " + (rb.omni ? "on" : "off") : ""}` +
+    `${rb.merge != null ? ", merge " + (rb.merge ? "on" : "off") : ""}${rb.flip != null ? ", crossfader flip " + (rb.flip ? "on" : "off") : ""}` : "";
+  $("learnMsg").textContent = s.learn_msg || "";
+  const miss = Object.keys(els).filter(n => !seen.has(n)), mk = miss.join("|");
+  if (mk !== lastMissKey) {
+    lastMissKey = mk;
+    $("missing").innerHTML = miss.length ? miss.map(n => `<span>${esc(n)}</span>`).join("") : "All controls seen ✓";
+    $("missing").querySelectorAll("span").forEach(sp => sp.onclick = () => post({ learn: sp.textContent }));
+  }
+  $("unmapped").textContent = (s.unmapped || []).join("  |  ") || "-";
+  $("verifyBtn").disabled = miss.length > 0;
+  const db = $("driveBtn");
+  db.textContent = h.drive ? (s.hardware ? "Give the LEDs back to the Ohm64" : "Himmel drives the LEDs (simulator)") : "Let Himmel drive the LEDs";
+  db.disabled = !s.hardware; db.classList.toggle("on", h.drive && s.hardware);
+  $("huntGo").textContent = s.hunt ? "Stop the hunt" : "LED hunt"; $("huntGo").disabled = !h.drive;
+  $("huntInfo").textContent = s.hunt ? `lighting code ${s.hunt.pos + 1} of ${s.hunt.of}: column ${s.hunt.c}, row ${s.hunt.r}` +
+    ` (guide: ${s.hunt.owner || "none"}) - click what lit` : "";
+  if (s.hunt && !$("huntAuto").matches(":focus")) $("huntAuto").checked = s.hunt.auto;
+  const ml = mp.leds || {};
+  $("ledResult").textContent = (ml.checked ? `checked on the Ohm64 ${ml.checked}` : "") + (ml.hunted && ml.hunted.length ? `  ·  hunted: ${ml.hunted.length} of 75` : "");
+  // events
+  $("events").innerHTML = "<tr><th>time</th><th>control</th><th>event</th></tr>" + (s.events || []).slice().reverse().map(([t, n, ev]) =>
+    `<tr><td>${esc(t)}</td><td>${esc(n)}</td><td>${esc(evText(ev))}</td></tr>`).join("");
+  $("mapSource").textContent = "source: " + mp.source + (mp.device_read ? ` (read ${mp.device_read})` : "");
+  const wk = JSON.stringify(mp.wire) + mp.learned.join();
+  if (wk !== lastWireKey) {
+    lastWireKey = wk;
+    const learned = new Set(mp.learned);
+    $("wire").innerHTML = "<tr><th>control</th><th>MIDI</th><th></th></tr>" + Object.entries(mp.wire).map(([n, w]) =>
+      `<tr><td>${esc(n)}</td><td>${esc(w)}</td><td>${learned.has(n) ? "learned" : ""}</td></tr>`).join("");
+  }
+  const log = s.log || [], lk = log.map(r => r[0] + r[2]).join("|");
+  if (lk !== lastLogKey) {
+    lastLogKey = lk;
+    $("log").innerHTML = log.slice().reverse().map(([t, dir, hex, text]) =>
+      `<tr class="${dir.startsWith("device") ? "up" : dir === "probe" ? "probe" : dir === "refused" ? "refused" : "down"}"><td>${esc(t)}</td><td class="dir">${esc(dir)}</td>` +
+      `<td>${esc(text)}</td><td class="hex">${esc(hex)}</td></tr>`).join("") || "<tr><td>-</td></tr>";
+  }
+}
+function evText(ev) {
+  if (!ev) return "";
+  const { himmel, ...rest } = ev;
+  return himmel + " " + Object.entries(rest).map(([k, v]) => `${k}=${v}`).join(" ");
+}
+
+$("hwBtn").onclick = () => post({ hardware: !hw() });
+$("portGo").onclick = () => post({ hardware: true, port: $("portPick").value === "" ? null : +$("portPick").value });
+$("readBtn").onclick = () => post({ read_map: true });
+$("verifyBtn").onclick = () => post({ verify: true });
+$("resetSeen").onclick = () => { if (confirm("Clear all 'seen' marks?")) post({ reset_seen: true }); };
+$("noise").onchange = e => post({ show_noise: e.target.checked });
+$("ledsOk").onclick = () => post({ leds_ok: true });
+$("driveBtn").onclick = () => post({ drive: !(S && S.host.drive) });
+$("huntGo").onclick = () => post({ led_mode: S && S.hunt ? "himmel" : "hunt" });
+$("huntAuto").onchange = e => post({ hunt: { auto: e.target.checked } });
+document.querySelectorAll("[data-hstep]").forEach(b => b.onclick = () => post({ hunt: { step: +b.dataset.hstep, auto: false } }));
+$("bl").oninput = () => post({ backlight: +$("bl").value });
+$("logo").oninput = () => post({ logo: +$("logo").value });
+$("help").innerHTML = "<b>Simulator:</b> the drawing is the Ohm64. <b>Buttons:</b> hold the mouse. " +
+  "<b>Knobs:</b> drag up/down or scroll. <b>Faders and crossfader:</b> drag the cap or scroll. " +
+  "Every move sends the Ohm64's own MIDI bytes (see the monitor); the simulated Ohm64 lights its LEDs from what the host sends.<br>" +
+  "<b>Real Ohm64:</b> clicks on the drawing learn instead of play.";
+
+fetch("/weapons").then(r => r.json()).then(list => {
+  const pick = $("weaponPick");
+  for (const w of list.weapons) { const o = document.createElement("option"); o.value = w.id; o.textContent = "⚔ " + w.name + (w.playable ? "" : " (drawing only)"); pick.appendChild(o); }
+  pick.value = WID;
+  pick.onchange = () => { location.search = "?weapon=" + encodeURIComponent(pick.value); };
+});
+fetch("/weapon?id=" + WID).then(r => r.json()).then(w => {
+  build(w);
+  post({ sim_input: { release_all: true } });
+  const es = new EventSource("/wevents?id=" + WID);
+  es.onmessage = e => render(JSON.parse(e.data));
+  es.onerror = () => { $("conn").textContent = "server not running"; $("conn").className = "pill bad"; };
+});
+</script>
+</body>
+</html>

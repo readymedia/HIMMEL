@@ -75,6 +75,7 @@ checked everything on real hardware.
 | KORG KF4 krossfour Owner's Manual ([ManualsLib](https://www.manualslib.com/manual/829982/Korg-Kf4.html)) and krossfour EasyStart guide ([Internet Archive](https://archive.org/download/manualsonline-id-f4def0b0-55f0-42bd-a340-82af8ad3074f/f4def0b0-55f0-42bd-a340-82af8ad3074f.pdf)), © KORG Inc.; announcement facts from [Sonicstate, 2005-01-19](https://www.sonicstate.com/news/2005/01/19/namm-vj-video-value-from-korg/) | © KORG Inc. / the publishers (read only, nothing copied) | Weapon no. 6, the KF4 video mixer: panel controls and their behaviour (input keys and the blink state, HOLD, monitor select, the four fader curves, BK / WH / chroma / luma key, FINE, NTSC/PAL read at power-on), connectors (no data port) and specifications, for `weapons/kf4.weapon.json`, `tools/kf4_sim.py` and `tools/kf4_live.html`. All sources are listed in `weapons/kf4.md`. |
 | *V-4 Owner's Manual* (EDIROL / Roland Corporation), "MIDI Implementation" pp. 89-96, panel descriptions pp. 13-16, effects pp. 23-39 and the menu list pp. 75-82. Official download on [Roland's V-4 support page](https://proav.roland.com/es/products/v-4/); we read the copy on [manualsdir.com](https://www.manualsdir.com/manuals/87855/edirol-v-4.html?page=89) | © Roland Corporation, all rights reserved (manual; we use the protocol facts only) | Weapon no. 7, the V-4 video mixer: the panel layout and factory effect names, Bank Select + Program Change for inputs A/B and memory, the factory controllers (video fader CC#11, transition time CC#7), Note Mode note numbers, the assignable CC set, SysEx DT1 format, model ID `00 5B`, the MIDI setup addresses and the Roland checksum (the manual's worked example is in our self-test), MIDI clock for BPM SYNC, and the MIDI Thru rule. The effect, transition and menu catalogue in `docs/v4-effects.md` (names, counts, ranges) comes from the menu list. `tools/v4_sim.py` and `weapons/v4.weapon.json` were written from these facts; no text or code was copied. |
 | ["Edirol V4 MIDI controll"](https://forum.vvvv.org/t/edirol-v4-midi-controll/815), a thread on the vvvv forum | forum posts (no code used) | Users confirming that the T-bar and input selectors work over MIDI, and an example of a user CC setup. Background only. |
+| The *Ohm64 User Guide* by Livid Instruments (Viditar Inc.), the PDF that shipped with the first Ohm64 (a copy is hosted by a retailer: [imagescdn.juno.co.uk/manual/363051-01U.pdf](https://imagescdn.juno.co.uk/manual/363051-01U.pdf); page mirrors on manualslib.com) | © Livid Instruments; no license stated, so only facts are used and no text is copied | The Ohm64 protocol for weapon no. 8: the SysEx header `F0 00 01 61 02`, the command list (04 LEDs, 07.xx requests and their replies, ACK/NAK), the LED column/row codes, the button and analog index tables, Local Control, Omni, the backlight and logo dimmer CCs (27, 31) and the front-panel key combinations. Our `tools/ohm64_sim.py` was written from these facts. The factory note / CC numbers are not in the guide; Himmel reads them from the device. |
 
 ## 5. External tools (used, never linked)
 
@@ -129,7 +130,10 @@ drawing says "HIMMEL · KF4" without the maker's logo.
 Roland, EDIROL and V-LINK
 are trademarks of Roland Corporation; Himmel is **not affiliated with or
 endorsed by** Roland, and its V-4 drawing says "HIMMEL · V4" without the
-maker's logo. It talks to a V-4 you own over standard MIDI. Windows,
+maker's logo. It talks to a V-4 you own over standard MIDI.
+Livid, Livid Instruments and Ohm64 are
+trademarks of their owners; Himmel is **not affiliated with or endorsed by** them, and its
+Ohm64 drawing says "HIMMEL · 64" without the maker's logo. Windows,
 Direct3D and Media Foundation are trademarks of Microsoft. HAP is a format by
 VIDVOX. All other names belong to their owners.
 

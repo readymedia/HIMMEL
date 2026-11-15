@@ -26,6 +26,7 @@ A weapon has up to four parts:
 | 9 | **APC20** (Akai APC20), a **secondary weapon** | USB-MIDI: 8 × 5 clip grid (green / red / amber, blinking), 5 scene, 8 clip stop, Shift, 9 transport / track select, 3 × 8 track buttons, Cue Level encoder, 8 faders + master | [`apc20.weapon.json`](apc20.weapon.json) | [`tools/apc20_sim.py`](../tools/apc20_sim.py) | Simulated from public protocol facts; probe, LED test and map learning ready. Not yet checked on the owner's unit (it needs its 12 V adapter) |
 | 6 | **KF4** (Korg KF4 krossfour, 2005) | SD video mixer: 4 inputs onto A/B, crossfader with 4 curves, BK/WH/chroma/luma key, HOLD, monitor select. **No data port** | [`kf4.weapon.json`](kf4.weapon.json) | [`tools/kf4_sim.py`](../tools/kf4_sim.py) + [`tools/kf4_live.html`](../tools/kf4_live.html) | Simulated with picture outputs; the real unit cannot be a control surface directly. Details and options: [`kf4.md`](kf4.md) |
 | 7 | **V-4 Mixer** (Roland / EDIROL V-4, 4-channel SD video mixer) | MIDI (5-pin DIN, via any USB-MIDI interface): T-bar, input A/B 1-4, 4 effects + CONTROL dial per channel, MIX / WIPE / EFX, transformers, output fade, BPM, memory | [`v4.weapon.json`](v4.weapon.json) | [`tools/v4_sim.py`](../tools/v4_sim.py) | Simulated only (the owner has no V-4, 2026-11-10). Protocol from the owner's manual |
+| 8 | **Ohm64** (Livid Instruments Ohm64, first version) | USB-MIDI: 8 × 8 button grid, 16 knobs, 8 faders, crossfader, 8 mutes, XL / XR, F1-F6, BPM; 75 single-colour (blue) LEDs, backlight and logo dimmers | [`ohm64.weapon.json`](ohm64.weapon.json) | [`tools/ohm64_sim.py`](../tools/ohm64_sim.py) | Simulated from the user guide, with map readback, probe, learning and LED hunt ready; not yet checked on the owner's unit |
 
 ## The live view: one tool for every weapon
 
@@ -414,6 +415,68 @@ it, it stays awake. To undo: *Uninstall device* and replug.
 | Video fader | 11 (factory) | B effect 1-4 | 80-83 |
 | Transition select | 20 | Output fade | 23 |
 | Transformer A / B | 21 / 22 | BPM sync | 24 |
+## Weapon no. 8: the Ohm64 (first version)
+
+The owner's Livid Ohm64 from 2009: the first version, with blue LEDs only
+(not the later OhmRGB). Drawn from the owner's photos. Its own page,
+`tools/ohm64_live.html` (profile `"page"`), runs on `tools/ohm64_sim.py`.
+
+```
+python tools/mk2_live.py --port 8783 --weapon ohm64     (launch config ohm64-live)
+python tools/ohm64_sim.py --selftest
+```
+
+**The protocol** (from the Ohm64 user guide, see `THIRD_PARTY_NOTICES.md`):
+- Plain USB-MIDI. Buttons send notes (or CCs), the 25 analog inputs send 7-bit
+  CCs (or 14-bit CCs or pitch bend), all on the basic channel. Everything is
+  remappable in the device, and **the device reports its own map**: SysEx
+  `F0 00 01 61 02 07 0B F7` (buttons, 88 slots) and `… 07 0A F7` (analog,
+  25 inputs). So Himmel reads the map instead of guessing it; the guide does
+  not list the factory numbers.
+- LEDs: `F0 00 01 61 02 04 <6 × LL HH> F7` sets all 75 at once. 6 LED
+  columns × 14 rows (row 11 does not exist), **a 1 bit = off**. The LED
+  codes do not follow the button layout; `LED_CODE` has the guide's table.
+  The guide's two tables disagree on the order of the mute LEDs; the LED hunt
+  settles it.
+- LEDs also follow incoming notes / CCs through the device's LED input map,
+  but only while Local Control is off (CC 122). CC 27 = backlight dimmer,
+  CC 31 (+ 63) = logo dimmer. All Notes Off clears the LEDs.
+- F1-F6 have no LED of their own; their light is the backlight.
+- Factory crossfader: the value **grows towards the left** (F1+XR flips it).
+
+**Safety on the real device.** `HwOhm` has an allow-list: LED SysEx (04),
+requests (07.xx), notes, CCs 0-120, Local Control and All Notes Off. It never
+sends save (02), factory reset (06), remapping (09-0F) or omni / mono / poly.
+Opening the device only listens. **Let Himmel drive the LEDs** first asks for
+the LED state and Local Control, then turns Local Control off (not stored);
+**Give them back** restores both.
+
+**Steps on the owner's unit (not done yet):**
+1. Use the real Ohm64 (listen only). Check the port name; "Ohm64 External" is
+   the DIN jack and is skipped.
+2. Read the map from the device. Then touch every control (click-then-press
+   fixes single entries) and mark the map verified (`ohm64_map.json`).
+3. Let Himmel drive the LEDs: All on, Chase, Follow, then the LED hunt (click
+   the button that lit) to confirm every LED code. Unknown: whether the bit
+   order in `04` is row 1 = bit 0, and which F button is F1.
+
+**In Himmel's event model:**
+
+| Control | Event | What it could do |
+|---|---|---|
+| Grid (8 × 8) | `ButtonDown` / `ButtonUp`, no velocity | 8 columns = 8 layers, rows = clips: a clip launcher. LED = the playing clip. |
+| Faders 1-8 | absolute CC → layer opacity (or `KnobDelta`) | the opacity of the layer above / in that column |
+| Mute 1-8 | `ButtonDown` | layer on/off; LED = the layer is live |
+| Crossfader | absolute CC, normalised so 0 = A (left) | A/B mix |
+| XL / XR | `ButtonDown` / `ButtonUp` | bump: cut to A or B while held; LED = the crossfader side |
+| Knobs 1-16 | absolute CC → `KnobDelta` | effect parameters of the current page |
+| F1-F6 | `ButtonDown` | knob page / bank select (no LEDs) |
+| BPM | `ButtonDown` | tap tempo; LED blinks on the beat |
+
+The live view's **Himmel** LED mode shows exactly this. **Text** scrolls
+"HIMMEL" across the grid.
+
+## Plan: how a generic weapon feeds Himmel (not wired yet)
 
 The owner's **Numark NuVJ** (2008, made for ArKaos' NuVJ software) is a
 two-deck VJ controller. It is a class-compliant USB-MIDI device, powered by USB

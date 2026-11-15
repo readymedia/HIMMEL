@@ -71,6 +71,13 @@
       "runtimeArgs": ["tools/mk2_live.py", "--port", "8781", "--weapon", "v4"],
       "port": 8781,
       "url": "http://127.0.0.1:8781"
+    },
+    {
+      "name": "ohm64-live",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["tools/mk2_live.py", "--port", "8783", "--weapon", "ohm64"],
+      "port": 8783,
+      "url": "http://127.0.0.1:8783"
     }
   ]
 }
