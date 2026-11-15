@@ -33,7 +33,7 @@ learn + the phone remote, Ableton Link / Pro DJ Link bridges, audio beat
 tracking, ASIO, the live sampler, pen masks and mesh warp, pack with media,
 clip audio (optional).
 
-## 0a. The playable slice (D90, now: after M0, before the rest of M1)
+## 0a. The playable slice (D90) — **merged 2026-11-15** (S1 b2003f6, S2 681900d, S3 1ea2217)
 
 **Goal:** the owner can play Himmel early and tell us what to change. One
 thin path through every layer, built by 3 track agents in parallel (D91)

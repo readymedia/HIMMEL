@@ -24,14 +24,23 @@ Three agents run the slice: S1 ENGINE, S2 CONTROL, S3 GUI.
   maschine_test, nuvj, nuvj_games, ohm64, v4; `mk2_fun_check`.
 
 ## In progress
-- Slice tasks S1–S3 are proposed as session cards (ENGINE task_e54b9e81, CONTROL task_3f8775da, GUI task_8131885e; the app only lets the owner start them). Briefs = `roadmap.md` §0a + the cards. Merge each when
-  its report says done and the LEAD has built + run every test on `main` + the
-  branch. Order: S1 first (the others depend on it running), then S2, then S3.
+- The slice is merged into main (2026-11-15): S1 ENGINE b2003f6, S2 CONTROL
+  681900d, S3 GUI 1ea2217. Build green; 9 test programs pass (deck 143,
+  entrancer 238, media 39, mk2 4286, perform 120, protocol 1111, touch_fx 77,
+  ui_bridge 122, weapon 163). Checked together: `himmel.exe --sim` starts
+  `himmel_ui`; `himmel_cmd` loads clips / FX; the web page on 8790 shows
+  previews and TAKE flips PROGRAM; the MK2 sim shows the engine's Perform
+  screens. NOT checked: MK2 sim *input* to the engine. `mk2_controller --sim`
+  flapped "MK2 lost / connected" many times a second while a leftover
+  `mk2_live.py --sim` from S1's soak (started 19:48) was running; the LEAD was
+  not allowed to kill it. Re-check with exactly one simulator; if it still
+  flaps, it is a CONTROL bug (likely WSAECONNRESET treated as device loss).
+- Open owner choices: D94–D100 (PROPOSED).
+- Soak: 6 late frames in 30 min windowed on the laptop (an idle run had 7 in
+  10 min); a fullscreen soak on a quiet machine is still owed (S1 handoff).
 
 ## Next up (ordered)
-1. Merge S1 / S2 / S3; build; run all tests; start `himmel.exe --sim` + MK2 sim
-   + the GUI; check it in the browser; then tell the owner (Norwegian) how to
-   start it and what to try.
+1. Owner plays the slice; collect feedback; settle D94–D100.
 2. After owner feedback: M1 (rest), M2 transport, M3 projects/scenes,
    M5 effects — max 3 agents at a time.
 3. A CI build (GitHub Actions on windows-latest) is not set up; M0 asked for
