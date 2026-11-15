@@ -82,7 +82,15 @@ clip audio (optional).
 
 ## 4. Phases, step by step
 
-### Phase 0: gather everything (L + C, week 46, 1–2 days)
+### ~~Phase 0: gather everything~~ (L + C) **done 2026-11-15 (M0)**
+
+Done by the LEAD: rack-design, entrancer-touch-fx, weapon-6-kf4,
+weapon-roland-v4 and weapon-ohm64 merged (weapon-2-sim, weapon-5-nuvj,
+weapon-9-apc20, the generic driver, readme-screenshots and roadmap were
+already in); build + 5 C++ test programs + 12 Python self-tests green; one
+weapon list in `weapons/README.md`; `CLAUDE.md` slimmed; merged branches
+deleted. Not done in M0: a CI build (no CI service set up yet; the LEAD
+builds locally before every merge). Original plan:
 
 1. Merge into `main`, in this order:
    1. `rack-design` (brings in Lightpad + LUMI);

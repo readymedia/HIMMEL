@@ -12,6 +12,16 @@ Status values:
 - **TECH**: a technical choice by an agent, which can be reversed;
 - **REPLACED**: superseded by a later entry.
 
+## 2026-11-15
+
+| # | Decision | Status | Details |
+|---|---|---|---|
+| D89 | **The LEAD merges and pushes on its own.** Finished branches go into `main` and are pushed when the build, the unit tests and the simulators / `--selftest`s are green. The LEAD stops and asks the owner (in Norwegian) only for owner choices (a PROPOSED row first) and for steps that need the owner's hardware (MK2, Lightpad, NuVJ, cameras, screens) | DECIDED (owner, 2026-11-15) | `agents/handoff/lead.md` |
+| D90 | **A playable slice early.** Right after M0, build a thin end-to-end slice the owner can play: two decks with HAP clips, the TAKE wheel / crossfader, a few cheap effects, MK2 control, and a simple local web GUI through a minimal `himmel_ui` bridge (D43) to click and watch decks, layers, clips, effects and take. It runs without hardware too (`himmel.exe --sim` + the browser simulators). M1–M13 then grow around it. **This replaces the build-v1 rule "do not start a milestone's GUI before its engine side works from the MK2".** The robustness rules in `build-v1.md` §4 stay; the frame loop stays sacred | DECIDED (owner, 2026-11-15) | `build-v1.md` §3a, `roadmap.md` |
+| D91 | **2–3 track agents at a time**, never more than 3, each spawned as its own session with the template in `agents/README.md` §5. Each task fits one context, lives on `claude/<track>-<topic>` and is merged by the LEAD within 1–2 days | DECIDED (owner, 2026-11-15) | `agents/README.md` §5 |
+| D92 | **Development machine: the owner's dev laptop** (GTX 1070, one screen, outputs as windows) until M12; the RTX 5090 show PC comes at M12 | DECIDED (owner, 2026-11-15) | `build-v1.md` M12 |
+| D93 | One weapon list: 1 MK2 + 2 Lightpad = main; 3–8 integrations; 9 APC20 secondary; NuVJ becomes the second main weapon if M10 checks out. Per-weapon detail moved from `CLAUDE.md` to `weapons/README.md` | TECH (LEAD, M0, from D27 / D49) | `weapons/README.md` |
+
 ## 2026-11-11
 
 | # | Decision | Status | Details |

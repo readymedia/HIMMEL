@@ -142,157 +142,23 @@ The full mapping is `docs/design/hardware-mapping.md` §3 and
     Windows gotcha: every datagram sent while nobody listens comes back as a
     queued WSAECONNRESET; the Python receiver must drain them without sleeping
     (Python cannot switch SIO_UDP_CONNRESET off).
-  - **Weapon no. 2 = ROLI Lightpad Block (owner's choice 2026-11-10; he owns
-    one: a Lightpad **Block M**, firmware 1.1.0, USB `2af4:0900`, WinMM ports
-    "ROLI Lightpad BLOCK" in 0 / out 1).** Simulated, plus a read-only hardware
-    probe checked on his block. Details, protocol and findings: `weapons/README.md`.
-    - Profile `weapons/lightpad.weapon.json` adds the kinds `surface` (multi-touch
-      + 15x15 LED grid) and `deco`.
-    - `tools/lightpad_sim.py`: the BLOCKS SysEx codec (from ROLI's ISC
-      reference code), the simulated block (API mode + MPE fallback) and a
-      `LocalHost` that does the handshake, pings and LED frames.
-      `--selftest` checks the round trips.
-    - Live view: the weapon picker or `?weapon=lightpad`. Run
-      `mk2_live.py --port 8775 --weapon lightpad` next to a running MK2 Live
-      (`--weapon` other than mk2 leaves the MK2 hardware alone). Checked in
-      the browser 2026-11-10: multi-touch, LED feedback, test pattern, MPE
-      fallback, MK2 + Simulate unchanged.
-    - Engine sim link for it: UDP 127.0.0.1:8767 (not used by the C++ side yet).
-    - `tools/lightpad_hw.py`: WinMM link (ctypes), the same interface as
-      the sim. Live view: **Use the real block**. Checked
-      2026-11-10:
-      - touches 0x13/0x11/0x15, fingers from 1, x/y about 146..3953;
-      - y = 0 at the top with USB-C pointing away from you;
-      - Mode = button 0;
-      - API `vz` strike is useless: velocity comes from the MPE note-on,
-        which the factory program keeps sending in API mode;
-      - factory layout 4x4 pads, notes 36..51 from the bottom-left.
-    - **Himmel drives the Lightpad LEDs (checked 2026-11-10).**
-      `tools/lightpad_littlefoot.py` hand-assembles a 117-byte LittleFoot (121 for the LUMI)
-      renderer (15x15 RGB565 heap -> fillPixel). It has its own MiniVM that
-      the simulator runs.
-      - LocalHost: wipe the program memory, upload, stream frames through
-        `HeapSync` (ACKs are cumulative).
-      - ~55-58 full frames/s, ~12 ms send->ACK.
-      - endAPIMode brings the factory display back. RAM only; never
-        saveProgramAsDefault.
-      - With our program there is no MPE. Touch moves come every ~28 ms.
-      - **Pressure sensitivity (config 13): higher = longer span from light to full
-        pressure (more z range).** The
-        owner chose 127 (`HIMMEL_CONFIG`; block default 64).
-        - Config values persist on the block. LocalHost.let_go() stops the
-          host loop, restores the block's value and waits for confirmation.
-        - A leftover 127 from a killed run is treated as ours and restored
-          to 64.
-    - **Games (easter eggs): `tools/lightpad_games.py`**, played by the owner on
-      the block. They are Rally (paddle duel, 2 players or vs Himmel), Brick
-      Burst and Star Swarm.
-      - Hold Mode ~1 s for the next game; a short press = launch / fire /
-        restart. The live view has buttons.
-      - Gotchas found:
-        - The packet counter must wrap 1023 -> 0.
-        - With our renderer the firmware sends no button messages, so the
-          renderer forwards them with sendMessageToHost (program event 0x28).
-    - C++ driver: `weapon_blocks.exe lightpad` (see "Generic weapon driver" below).
-  - **Weapon no. 3 = ROLI LUMI Keys (owner's choice 2026-11-10; owner's
-    unit: firmware 1.3.8, serial LKB…).** It is checked on the device: keys
-    with velocity, buttons, and Himmel's own key LEDs.
-    - Profile `weapons/lumi.weapon.json` (kind `key`, badge
-      "HIMMEL · KEYS").
-    - `tools/lumi_sim.py`: SimLumi / LumiHost / LumiLive, subclasses of the
-      Lightpad code. Self-test included. UDP link 8769.
-    - **Windows gotcha:** the LUMI's MIDI interface failed with code 10 under
-      `usbaudio`. The owner switched it in Device Manager to
-      **USBMidi2-ACX**. The port is then named "USBMidi2-ACX", so make_hw
-      matches both names. Steps are in `weapons/README.md`.
-    - Every LUMI button arrives twice (firmware message + our program
-      event); LumiHost ignores the program copies. The LUMI also sends
-      BLOCKS touch messages per key; they are not used yet.
-    - Not done: a key map verified key by key, and games on the keys.
-    - Weapon no. 4 = the Entrancer (the Touch FX session's branch).
-  - **Weapon no. 5 = the owner's Numark NuVJ (2008, USB-MIDI), started 2026-11-10.**
-    Profile `weapons/nuvj.weapon.json`, `tools/nuvj_sim.py`, own page
-    `tools/nuvj_live.html` (`mk2_live.py --port 8777 --weapon nuvj`, launch config
-    `nuvj-live`). **Protocol in `docs/nuvj-protocol.md`**, read from the owner's NuVJ
-    1.0 software (static analysis, never run): feedback SysEx `F0 00 01 3F 7F 20 cmd 00 len
-    data F7`. It covers init `60`, LCD text `01` (8 chars), segments `02` (64 bytes), LEDs `03`
-    (8 bytes, 31 bits) and contrast `7A`. Never send `7B` (stored). Simulator checked in
-    the browser. **Checked on the owner's unit 2026-11-11** (USB `15e4:0020`, WinMM
-    "NuVJ Controller" in 0 / out 1):
-    - `nuvj_map.json` verified (53 controls). The top knobs are endless; faders send
-      CC 10-12 before init and pitch bend ch 1-3 after it.
-    - All 31 LEDs work.
-    - LCD text works, and the whole segment map is learned with the camera mapper
-      (webcam in Chrome, LCD hunt panel). The layout is in `docs/nuvj-protocol.md`.
-    **Classic two-deck view** (owner's wish 2026-11-10, nostalgia): `?weapon=nuvj&view=classic`,
-    `tools/vj_classic.html` + model `tools/vj_classic.py`. It is the NuVJ software's workflow
-    in Himmel's own look: no logos or art, and nothing so close that it could cause trouble.
-    The GUI and the controller play the same model. 2D placeholder previews stand in until the
-    engine renders it.
-    **Jog Pong** (easter egg, `tools/nuvj_games.py`, played by the owner 2026-11-11): a three-lane
-    pong on the NuVJ's LCD, played with the jogs; hold both SCRATCH buttons to start or stop.
-    **Start-up shows** (`INTROS` in `tools/nuvj_games.py`, 2026-11-11): Boot sweep, Starburst and
-    Made by play on the LEDs and LCD when Himmel takes the NuVJ (random by default, or picked
-    in the live view); the ✦ buttons play them any time, and any button skips.
-  - **Weapon no. 9 = Akai APC20, a secondary weapon (2026-11-11; owner's
-    unit, UPC 0 825213 00251 7).** Simulated only: it needs its **12 V DC 2 A
-    adapter** (not USB powered) and the owner has none yet.
-    - Profile `weapons/apc20.weapon.json` (97 controls, wire bytes inline as
-      `midi` / `led`, `role: secondary`, own page `tools/apc20_live.html`,
-      badge "HIMMEL · CLIPS"). USB `09e8:007b`; mode SysEx
-      `F0 47 <dev> 7B 60 00 04 41 …` = Ableton mode (host owns the LEDs).
-    - `tools/apc20_sim.py`: sim (UDP engine link 8782), read-only WinMM
-      probe, LED tests incl. walk, click-then-press learning into
-      `apc20_map.json`, and a Himmel stand-in for the secondary-weapon jobs
-      (clip/scene launch at the beat, fader pages with pickup, deck focus for
-      the MK2). `--selftest`. Live view: launch config `apc20-live`, port 8787.
-    - Jobs, event mapping, two-weapon rules and the owner's hardware steps:
-      `weapons/README.md`.
-    - **Driver done 2026-11-11, checked with the simulator** (not hardware):
-      `weapon_apc20.exe [--sim]` (`himmel/weapon/apc20.h`), slot 9
-      (`Local\HimmelWeapon9`), sim link UDP 8782. Identity → Ableton mode → LEDs
-      from the engine's levels (grid 8..63 amber, 64+ green; exact APC codes =
-      120 + code). Grid = pads 1..40, faders = `Fader`, Cue Level =
-      `EncoderDelta`. Reads `apc20_map.json` when it exists. `himmel.exe` starts it.
-  - **Weapon no. 6 = Korg KF4 krossfour video mixer (2005; the owner owns
-    one).** Details: `weapons/kf4.md`.
-    - **It has no data port** (no MIDI/USB/RS-232/remote): the real unit
-      cannot be read or controlled. Options for the owner: capture its
-      output as a Himmel camera, use it as an analog mixer after Himmel,
-      optical readback, or a microcontroller mod (not recommended).
-    - Simulated fully: `tools/kf4_sim.py` (state machine, curves, keys,
-      `--selftest`) + its own page `tools/kf4_live.html` with simulated
-      inputs, MAIN OUT and MONITOR OUT (profile field `page`, same hook as the NuVJ).
-      Launch config `kf4-live` (port 8779). Checked in the browser
-      2026-11-10.
-    - Events go as JSON datagrams to UDP 127.0.0.1:8771 (not read by the
-      engine yet). Panel positions and a few behaviours are guesses until
-      checked on the owner's unit.
-  - **Weapon no. 7 = the V-4 video mixer (Roland / EDIROL V-4, SD, 4 channels;
-    owner's choice 2026-11-10). The owner has none, so it is simulated only.**
-    - Profile `weapons/v4.weapon.json` (badge "HIMMEL · V4"). The owner wants it
-      to look as much like the real V-4 as possible.
-      - It is drawn from his photos by `tools/v4_profile.py`.
-      - The T-bar plate turns 90°: vertical or horizontal mounting.
-      - New profile words: kind `fader` (with `plate`, `orientations`), button
-        looks, knob `steps` / `endless` / `style`, and deco `rect` / `text` /
-        `jack` / `ladder` / `display` / `monitor`.
-      - `"live": "mixer"` makes the page show mixer cards instead of BLOCKS cards.
-    - `tools/v4_sim.py`: SimV4 / V4Host / V4Live, self-test included. UDP
-      engine link 8773. Launch config `v4-live` (port 8781). Checked in the browser
-      2026-11-10.
-    - MIDI only (5-pin DIN, needs a USB-MIDI interface).
-      - Inputs = Bank 00/01 + Program 0-3; memory = Bank 50H + Program 0-7.
-      - T-bar = CC#11 at the factory; everything else needs a MIDI setup
-        sent as Roland SysEx DT1 (model 00 5B).
-      - Details and open questions: `weapons/README.md`.
-  - **Weapon no. 8 = Livid Ohm64, first version (owner's choice 2026-11-10;
-    he owns one, blue LEDs only).** Profile `weapons/ohm64.weapon.json` (drawn
-    from his photos, badge "HIMMEL · 64"), own page `tools/ohm64_live.html`,
-    `tools/ohm64_sim.py` (sim, WinMM link with an allow-list, map readback via
-    SysEx 07.0B/07.0A, learning, LED hunt). Launch config `ohm64-live` (8783).
-    Simulated and self-tested only: the owner tests the hardware on 2026-11-11.
-    Details: `weapons/README.md`.
+  - **The weapon list** (one list, 2026-11-15; details, protocols, gotchas and
+    ports per weapon: `weapons/README.md`, "The weapons so far" and the
+    sections per weapon; the old per-weapon notes from this file are kept
+    verbatim there under "Notes per weapon (moved from CLAUDE.md)"):
+    - **Main instrument: 1 MK2 + 2 Lightpad Block** (owner's Block M, checked on
+      the unit: touch, LEDs through our own LittleFoot renderer, pressure config
+      13 = 127 and restored on exit). C++ driver `weapon_blocks.exe lightpad`.
+    - Integrations: 3 LUMI Keys (checked on the unit; Windows needs the
+      USBMidi2-ACX driver), 4 Entrancer (Touch FX over MIDI, sim only),
+      5 NuVJ (checked on the unit 2026-11-11, `weapon_nuvj.exe`; becomes the second
+      main weapon if M10 checks out), 6 KF4 (no data port), 7 V-4 (sim only,
+      owner has none), 8 Ohm64 (sim only so far), 9 APC20 = secondary weapon
+      (sim only, needs a 12 V 2 A adapter, `weapon_apc20.exe`).
+    - Gotchas that bite every session: never `saveProgramAsDefault` on a
+      BLOCKS device; never send NuVJ SysEx `7B` (stored); WinMM lets two
+      programs open the same MIDI device, so close a live view before Himmel
+      runs; Windows returns queued WSAECONNRESET for UDP sent to nobody.
 - **Visual mapping is the way to work with the controller. Keep it and build on
   it** (the owner wants graphical tools, not terminal tables):
   - `tools/mk2_live.py` + `tools/mk2_live.html`: a browser live view of the MK2
@@ -446,18 +312,7 @@ integrations. The list below is the history of what is done on `main`.
      pressure = amount), mouse drag on an output (keys 1-9, H = hold).
      `touch_fx_check.exe` renders them to PNG and times them. Next: Lightpad
      as the touch source + its LED feedback.
-   - **Weapon no. 4: Entrancer, simulated (2026-11-10, checked in the browser +
-     engine window):** `python tools/entrancer_live.py` (http://127.0.0.1:8770,
-     launch config `entrancer-live`) draws the unit from
-     `weapons/entrancer.weapon.json` and plays it with the mouse or the real
-     Lightpad as its pad. It sends the real unit's MIDI (CC 12/13/92, program
-     change) + Himmel-only CCs 102-108 over UDP 127.0.0.1:8768 to
-     `himmel_render` (`EntrancerLink` + `entrancer::Mapper`, tests
-     `entrancer_tests.exe`). HOLD, PAD MOTION, MUTE/FREEZE, TAP, memories work.
-     The real unit: `--entrancer-midi NAME [--entrancer-channel N]`
-     (`--midi-list` shows ports), WinMM input `src/engine/src/midi_in.cpp`,
-     reconnects by itself. Built and unit-tested, NOT yet tried on the unit
-     (it needs a USB-MIDI interface). Checklist: `docs/entrancer-weapon.md`.
+   - **Weapon no. 4: Entrancer** (sim + MIDI input in `himmel_render`): see `weapons/README.md`.
    - Latency test: **Sampling** on the MK2. The canvas flips black/white every
      0.7 s, the camera (pointed at an output) reports when it sees it; 16 runs,
      median/min/max on the MK2 screen and in the log ("LOOP" = Present() ->

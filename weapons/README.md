@@ -17,16 +17,38 @@ A weapon has up to four parts:
 
 ## The weapons so far
 
-| No. | Weapon | Kind | Profile | Simulator | Status |
-|---|---|---|---|---|---|
-| 1 | **MK2** (Maschine MK2) | USB HID: 16 pads, 8 knobs, encoder, 48 buttons, two 1-bit screens | [`mk2.weapon.json`](mk2.weapon.json) | [`tools/mk2_sim.py`](../tools/mk2_sim.py) | Map verified on hardware, C++ driver done |
-| 3 | **LUMI Keys** (ROLI LUMI Keys) | USB-MIDI, BLOCKS family: 24 keys with strike velocity, pressure and glide, one RGB LED per key, Mode / Octave − / Octave + | [`lumi.weapon.json`](lumi.weapon.json) | [`tools/lumi_sim.py`](../tools/lumi_sim.py) | Simulated, and checked on the owner's LUMI (firmware 1.3.8, 2026-11-10): keys, velocity, buttons, **Himmel's own key LEDs**. C++ driver `weapon_blocks.exe lumi` (checked with the simulator) |
-| 2 | **Lightpad** (ROLI Lightpad Block / Block M) | USB-MIDI: multi-touch surface (x, y, pressure per finger), 15 × 15 RGB LEDs, one Mode button | [`lightpad.weapon.json`](lightpad.weapon.json) | [`tools/lightpad_sim.py`](../tools/lightpad_sim.py) | Simulated, and played on the owner's Lightpad M (2026-11-10): touch, multi-touch, Mode button, orientation, factory note map, **and Himmel's own LED program** (~55 frames/s). C++ driver `weapon_blocks.exe lightpad` (checked with the simulator) |
-| 5 | **NuVJ** (Numark NuVJ, 2008) | USB-MIDI: 2 × 9 pads, 2 jog wheels, 2 speed faders, crossfader, 12 knobs, 2 push BANK encoders, 31 LEDs, front switches, blue segment LCD (feedback by SysEx) | [`nuvj.weapon.json`](nuvj.weapon.json) | [`tools/nuvj_sim.py`](../tools/nuvj_sim.py) | **Checked on the owner's unit (2026-11-11)**: map of all 53 controls verified, 31 LEDs, LCD text and the whole segment map (camera mapper); protocol in [`docs/nuvj-protocol.md`](../docs/nuvj-protocol.md). C++ driver `weapon_nuvj.exe` (checked with the simulator) |
-| 9 | **APC20** (Akai APC20), a **secondary weapon** | USB-MIDI: 8 × 5 clip grid (green / red / amber, blinking), 5 scene, 8 clip stop, Shift, 9 transport / track select, 3 × 8 track buttons, Cue Level encoder, 8 faders + master | [`apc20.weapon.json`](apc20.weapon.json) | [`tools/apc20_sim.py`](../tools/apc20_sim.py) | Simulated from public protocol facts; probe, LED test and map learning ready. Not yet checked on the owner's unit (it needs its 12 V adapter) |
-| 6 | **KF4** (Korg KF4 krossfour, 2005) | SD video mixer: 4 inputs onto A/B, crossfader with 4 curves, BK/WH/chroma/luma key, HOLD, monitor select. **No data port** | [`kf4.weapon.json`](kf4.weapon.json) | [`tools/kf4_sim.py`](../tools/kf4_sim.py) + [`tools/kf4_live.html`](../tools/kf4_live.html) | Simulated with picture outputs; the real unit cannot be a control surface directly. Details and options: [`kf4.md`](kf4.md) |
-| 7 | **V-4 Mixer** (Roland / EDIROL V-4, 4-channel SD video mixer) | MIDI (5-pin DIN, via any USB-MIDI interface): T-bar, input A/B 1-4, 4 effects + CONTROL dial per channel, MIX / WIPE / EFX, transformers, output fade, BPM, memory | [`v4.weapon.json`](v4.weapon.json) | [`tools/v4_sim.py`](../tools/v4_sim.py) | Simulated only (the owner has no V-4, 2026-11-10). Protocol from the owner's manual |
-| 8 | **Ohm64** (Livid Instruments Ohm64, first version) | USB-MIDI: 8 × 8 button grid, 16 knobs, 8 faders, crossfader, 8 mutes, XL / XR, F1-F6, BPM; 75 single-colour (blue) LEDs, backlight and logo dimmers | [`ohm64.weapon.json`](ohm64.weapon.json) | [`tools/ohm64_sim.py`](../tools/ohm64_sim.py) | Simulated from the user guide, with map readback, probe, learning and LED hunt ready; not yet checked on the owner's unit |
+One list, decided 2026-11-11 (D27, D49): **1 MK2 + 2 Lightpad Block are the main
+instrument** that 0.1 is built for. Every other weapon is an **integration**
+(it can feed the engine, but nothing in 0.1 waits for it); the NuVJ becomes the
+second main weapon if milestone M10 checks out on the owner's unit, and the
+APC20 is a secondary weapon (side arm). Number = the generic block slot
+(`Local\HimmelWeapon<N>`), except the MK2, which has its own block.
+
+| No. | Weapon | Role | Kind | Profile | Simulator | Status |
+|---|---|---|---|---|---|---|
+| 1 | **MK2** (Maschine MK2) | **Main** | USB HID: 16 pads, 8 knobs, encoder, 48 buttons, two 1-bit screens | [`mk2.weapon.json`](mk2.weapon.json) | [`tools/mk2_sim.py`](../tools/mk2_sim.py) | Map verified on hardware, C++ driver done |
+| 2 | **Lightpad** (ROLI Lightpad Block / Block M) | **Main** | USB-MIDI: multi-touch surface (x, y, pressure per finger), 15 × 15 RGB LEDs, one Mode button | [`lightpad.weapon.json`](lightpad.weapon.json) | [`tools/lightpad_sim.py`](../tools/lightpad_sim.py) | Simulated, and played on the owner's Lightpad M (2026-11-10): touch, multi-touch, Mode button, orientation, factory note map, **and Himmel's own LED program** (~55 frames/s). C++ driver `weapon_blocks.exe lightpad` (checked with the simulator) |
+| 3 | **LUMI Keys** (ROLI LUMI Keys) | Integration | USB-MIDI, BLOCKS family: 24 keys with strike velocity, pressure and glide, one RGB LED per key, Mode / Octave − / Octave + | [`lumi.weapon.json`](lumi.weapon.json) | [`tools/lumi_sim.py`](../tools/lumi_sim.py) | Simulated, and checked on the owner's LUMI (firmware 1.3.8, 2026-11-10): keys, velocity, buttons, **Himmel's own key LEDs**. C++ driver `weapon_blocks.exe lumi` (checked with the simulator) |
+| 4 | **Entrancer** (Korg Entrancer, KAOSS-style touch pad + camera mixer) | Integration | MIDI (5-pin DIN, via a USB-MIDI interface): X/Y touch pad, HOLD, PAD MOTION, MUTE / FREEZE, TAP, memories | [`entrancer.weapon.json`](entrancer.weapon.json) | [`tools/entrancer_sim.py`](../tools/entrancer_sim.py) + `tools/entrancer_live.py` | Simulated and playing Touch FX in `himmel_render` (UDP 8768); the real unit over MIDI is wired (`--entrancer-midi`) but not checked on a unit. Checklist: [`docs/entrancer-weapon.md`](../docs/entrancer-weapon.md) |
+| 5 | **NuVJ** (Numark NuVJ, 2008) | Integration; second main weapon if M10 checks out | USB-MIDI: 2 × 9 pads, 2 jog wheels, 2 speed faders, crossfader, 12 knobs, 2 push BANK encoders, 31 LEDs, front switches, blue segment LCD (feedback by SysEx) | [`nuvj.weapon.json`](nuvj.weapon.json) | [`tools/nuvj_sim.py`](../tools/nuvj_sim.py) | **Checked on the owner's unit (2026-11-11)**: map of all 53 controls verified, 31 LEDs, LCD text and the whole segment map (camera mapper); protocol in [`docs/nuvj-protocol.md`](../docs/nuvj-protocol.md). C++ driver `weapon_nuvj.exe` (checked with the simulator) |
+| 6 | **KF4** (Korg KF4 krossfour, 2005) | Integration | SD video mixer: 4 inputs onto A/B, crossfader with 4 curves, BK/WH/chroma/luma key, HOLD, monitor select. **No data port** | [`kf4.weapon.json`](kf4.weapon.json) | [`tools/kf4_sim.py`](../tools/kf4_sim.py) + [`tools/kf4_live.html`](../tools/kf4_live.html) | Simulated with picture outputs; the real unit cannot be a control surface directly. Details and options: [`kf4.md`](kf4.md) |
+| 7 | **V-4 Mixer** (Roland / EDIROL V-4, 4-channel SD video mixer) | Integration | MIDI (5-pin DIN, via any USB-MIDI interface): T-bar, input A/B 1-4, 4 effects + CONTROL dial per channel, MIX / WIPE / EFX, transformers, output fade, BPM, memory | [`v4.weapon.json`](v4.weapon.json) | [`tools/v4_sim.py`](../tools/v4_sim.py) | Simulated only (the owner has no V-4, 2026-11-10). Protocol from the owner's manual |
+| 8 | **Ohm64** (Livid Instruments Ohm64, first version) | Integration | USB-MIDI: 8 × 8 button grid, 16 knobs, 8 faders, crossfader, 8 mutes, XL / XR, F1-F6, BPM; 75 single-colour (blue) LEDs, backlight and logo dimmers | [`ohm64.weapon.json`](ohm64.weapon.json) | [`tools/ohm64_sim.py`](../tools/ohm64_sim.py) | Simulated from the user guide, with map readback, probe, learning and LED hunt ready; not yet checked on the owner's unit |
+| 9 | **APC20** (Akai APC20), a **secondary weapon** | Secondary (side arm) | USB-MIDI: 8 × 5 clip grid (green / red / amber, blinking), 5 scene, 8 clip stop, Shift, 9 transport / track select, 3 × 8 track buttons, Cue Level encoder, 8 faders + master | [`apc20.weapon.json`](apc20.weapon.json) | [`tools/apc20_sim.py`](../tools/apc20_sim.py) | Simulated from public protocol facts; probe, LED test and map learning ready. Not yet checked on the owner's unit (it needs its 12 V adapter) |
+
+Ports (keep them unique; also in `.claude/launch.json`):
+
+| Weapon | Live view (HTTP) | Sim ↔ engine link (UDP 127.0.0.1) |
+|---|---|---|
+| 1 MK2 | 8765 (`mk2-live`), 8776 (`mk2-live-sim-test`) | 8766 |
+| 2 Lightpad | 8775 (`weapon-live`) | 8767 |
+| 3 LUMI | 8775 (`weapon-live`, `--weapon lumi`) | 8769 |
+| 4 Entrancer | 8770 (`entrancer-live`) | 8768 |
+| 5 NuVJ | 8777 (`nuvj-live`) | 8774 |
+| 6 KF4 | 8779 (`kf4-live`) | 8771 (not read by the engine yet) |
+| 7 V-4 | 8781 (`v4-live`) | 8773 |
+| 8 Ohm64 | 8783 (`ohm64-live`) | none yet |
+| 9 APC20 | 8787 (`apc20-live`) | 8782 |
 
 ## The live view: one tool for every weapon
 
@@ -93,6 +115,40 @@ the device.
   outline (`r` = corner radius), `dna` is a connector dot at `x, y`, and `port`
   is a socket or switch the protocol cannot see, with a small label.
 - `protocol` (optional, free text): a transport and message summary for people.
+- Video mixers (weapon no. 7) add:
+  - `kind: "fader"`: an absolute fader or T-bar, 0..1 from `ends[0]` to
+    `ends[1]`; `range` = raw units on the wire.
+    - With `plate: true` it is drawn as the V-4's round T-bar plate: slot,
+      printed A/B scales, black T grip.
+    - `orientation` is the default mounting, and `orientations` lists the ways it
+      can be mounted (`vertical`: A near you, B away; `horizontal`: A left, B
+      right). The page has a **Turn the T-bar 90°** button and remembers the
+      choice per browser. The MIDI is the same either way.
+  - On a `button`, these change the look only:
+    - `shape: "round"`: a round LED button;
+    - `style: "cap"`: a light key cap with an LED tick;
+    - `style: "dark"`: a dark square button.
+    - `led_color` is the colour of its LED.
+  - On a `knob`:
+    - `steps`: a selector that clicks between positions, value 0..steps-1;
+    - `endless`: no end stops;
+    - `center`: a centre detent;
+    - `style: "black"`: a black knob;
+    - `dial`: the number of printed dots around it;
+    - `show_value: false`: no value under it.
+  - `deco` kinds:
+    - `rect` (fill / stroke), `text` (printed lettering: `size`, `color`,
+      `weight`, `align`), `jack` (an RCA socket);
+    - `ladder`: LED bars; `source: "beat"` runs down once per beat while BPM
+      SYNC is on;
+    - `display`: an LED readout (`color`, `size`), text from the simulator;
+    - `monitor`: a video monitor the page draws from the simulator's state;
+      `source` = `program` or `preview`.
+  - `brand: {x, y, size, color}` moves the badge, e.g. to where the maker's logo
+    is printed.
+  - `body` takes an optional `fill` (the V-4 is silver).
+  - `"live": "mixer"` makes the page show the mixer cards (Himmel driving the
+    mixer, the MIDI setup table) instead of the BLOCKS cards.
 - `page` (optional): the weapon has its own page in `tools/` (e.g.
   `kf4_live.html`); `/?weapon=<id>` serves it instead of the generic panel.
 - `kind: "fader"` (a linear fader, absolute 0..`range`) and `kind: "switch"`
@@ -409,12 +465,120 @@ it, it stays awake. To undo: *Uninstall device* and replug.
   13 blue, 24 white), off.
 - **Engine link:** UDP 127.0.0.1:8769 (8768 is the Entrancer engine).
 
-## Weapon no. 5: the NuVJ
+## Weapon no. 7: the V-4 video mixer
+
+The owner asked for it on 2026-11-10 (link: Roland's V-4 page) and chose
+number 7. It is the original **V-4** (sold as EDIROL V-4, later Roland V-4):
+four SD inputs (composite / S-Video, NTSC or PAL), a T-bar, two frame
+synchronisers. Discontinued. Not the HD V-4EX. **The owner has no V-4**, so it
+is simulated only; the hardware steps below wait for a device.
+
+```
+python tools/mk2_live.py --port 8781 --weapon v4     then open http://127.0.0.1:8781 (launch config v4-live)
+python tools/v4_sim.py                              self-test
+```
+
+### What it could do for Himmel
+
+- **Himmel drives an external mixer.** The V-4 has no computer link other than
+  MIDI, but over MIDI Himmel can pick inputs A/B, move the T-bar, run an auto
+  take with its own timing, fade the output to black or white, switch effects,
+  and lock BPM SYNC to Himmel's tempo with MIDI clock. Useful when cameras or a
+  second PC go through a V-4 and Himmel's output is one of its inputs.
+- **The V-4 as a controller (a weapon).** Its T-bar, input selectors, effect
+  buttons and CONTROL dials can play Himmel. Out of the box only the inputs,
+  memory and the T-bar send MIDI. Himmel's MIDI setup (one SysEx message per
+  function) makes every function send its own CC.
+
+### How it talks (owner's manual, pp. 89-96)
+
+- **Connection:** MIDI IN / OUT, 5-pin DIN. No USB, no RS-232. Channel 1 both
+  ways at the factory. With MIDI Thru on, the V-4's own messages are **not**
+  sent.
+- **Inputs:** Bank Select MSB `00` (A) or `01` (B), LSB `00`, then Program
+  Change 0-3 = input 1-4. Sent when you turn an INPUT SELECT, received the same
+  way.
+- **Memory 1-8:** Bank `50H` / `00H` + Program Change 0-7.
+- **Factory controllers:**
+  - Video fader (T-bar): **CC#11**, 0 = A ... 127 = B.
+  - Transition time: CC#7, 0-127 = 0.0-4.0 s.
+  - Everything else is unassigned: effects A/B 1-4 (0 = off, 1-127 = on +
+    parameter), transition select (0-2), transformer A/B (< 64 off), output fade
+    (0 black, 64 centre, 127 white), BPM sync (< 64 off).
+- **MIDI setup over SysEx:** `F0 41 <dev> 00 5B 12 <addr ×3> <data> <sum> F7`
+  (DT1, model ID `00 5B`, device ID `10H` in the manual's example).
+  - Addresses: `01 10 00` ... `01 10 0C` = transition time, video fader,
+    transition select, transformer A, transformer B, output fade, BPM sync;
+    `02 10 00` ... `02 10 0E` = A effect 1-4, B effect 1-4.
+  - The value is one byte sent as two nibbles (high, low): a CC number (1-5,
+    7-31, 64-95), `D0` = channel pressure, `E0` = pitch bend, `EF` = off.
+  - Checksum: 128 − (sum of address + data bytes mod 128).
+  - At least 20 ms between DT1 messages.
+- **Note Mode** (off at the factory): note `24H 26H 28H 29H` = A 1-4,
+  `2BH 2DH 2FH 30H` = B 1-4.
+- **MIDI clock:** Timing Clock `F8` drives BPM SYNC; Start / Continue mark the
+  beat.
+- **Not documented, so the simulator guesses** (check on a real V-4):
+  - The on-screen menu: MENU / ▲ / ▼ / ENTER are drawn and work, but the real
+    menu pages are not in what we read. The simulator's menu holds only the MIDI
+    settings the manual names (TX / RX channel, Note Mode, MIDI Thru,
+    transition time).
+  - Does a CONTROL dial send the effect's CC while turning?
+  - What exactly does a second press on a lit effect button do?
+  - The two-nibble ("#") encoding of the setup values. The manual's own example
+    for it is garbled in the copy we read.
+
+### All its effects
+
+[`docs/v4-effects.md`](../docs/v4-effects.md) lists every effect pattern (96),
+transition (248), transformer setting and menu item from the manual, with
+ideas for rebuilding them in Himmel.
+
+### Himmel's MIDI setup
+
 | Function | CC | Function | CC |
+|---|---|---|---|
 | Transition time | 7 (factory) | A effect 1-4 | 16-19 |
 | Video fader | 11 (factory) | B effect 1-4 | 80-83 |
 | Transition select | 20 | Output fade | 23 |
 | Transformer A / B | 21 / 22 | BPM sync | 24 |
+
+### The simulator (checked in the browser, 2026-11-10)
+
+- **The drawing** is laid out from the owner's photos (2026-11-10), with
+  Himmel's words where the maker's logo and model print are.
+  - `tools/v4_profile.py` writes the drawing part of `weapons/v4.weapon.json`.
+  - INPUT SELECT is two rows of four key caps with an LED tick. MEMORY is a
+    1-8 knob.
+- **Panel:** buttons are held with the mouse. Knobs: drag or scroll. T-bar: drag
+  the grip or scroll; wheel up = towards B.
+- **The T-bar can be turned 90°**, like the real plate: **Turn the T-bar 90°**
+  switches between up/down (A near you) and left/right (A left). Checked in
+  the browser both ways.
+- **Effects:** a press turns an effect on and makes it blink; the CONTROL dial
+  then sets its parameter. A press on the blinking one turns it off.
+- **The two monitors** show a made-up picture of what the mixer outputs:
+  four test sources, the transition (mix / wipe / slide), the effects, keys,
+  P in P, transformers, BPM sync cuts and output fade. It is a sketch, not the
+  V-4's real effects.
+- **Host card (Himmel driving the mixer):** input buttons, a T-bar slider,
+  Auto take, output fade, MIDI clock, "Send Himmel's MIDI setup" (15 DT1
+  messages), Note Mode and MIDI Thru tests.
+- **MIDI monitor:** every message both ways, with the bytes. MIDI clock is
+  hidden unless ticked.
+- **Engine link:** every MIDI message the V-4 sends also goes to UDP
+  127.0.0.1:8773. A datagram sent back is MIDI into the V-4.
+
+### When a V-4 turns up
+
+1. Connect it with a USB-MIDI interface (V-4 MIDI OUT → interface IN, and back).
+   If the interface fails to start on Windows, see the USBMidi2-ACX steps above.
+2. Read-only probe first: open the interface's WinMM port (as
+   `tools/lightpad_hw.py` does, ctypes, no new dependency). Then turn every
+   control and compare with the simulator's monitor.
+3. Then send: inputs, T-bar, and Himmel's MIDI setup.
+4. Check the guesses above, and only then write a map.
+
 ## Weapon no. 8: the Ohm64 (first version)
 
 The owner's Livid Ohm64 from 2009: the first version, with blue LEDs only
@@ -476,7 +640,7 @@ the LED state and Local Control, then turns Local Control off (not stored);
 The live view's **Himmel** LED mode shows exactly this. **Text** scrolls
 "HIMMEL" across the grid.
 
-## Plan: how a generic weapon feeds Himmel (not wired yet)
+## Weapon no. 5: the NuVJ
 
 The owner's **Numark NuVJ** (2008, made for ArKaos' NuVJ software) is a
 two-deck VJ controller. It is a class-compliant USB-MIDI device, powered by USB
@@ -1054,3 +1218,173 @@ Back to the weapons:
     jog moves (LAST), and both wedges for the crossfader. Himmel's segment
     memory paints over that on its next change or 2-second refresh.
   - The LUMI was not plugged in: checked with the simulator only.
+
+## Notes per weapon (moved from CLAUDE.md, 2026-11-15)
+
+Kept verbatim when `CLAUDE.md` was slimmed (M0). Some of it repeats the
+sections above; where they disagree, the newer section above wins.
+
+- **Weapon no. 2 = ROLI Lightpad Block (owner's choice 2026-11-10; he owns
+  one: a Lightpad **Block M**, firmware 1.1.0, USB `2af4:0900`, WinMM ports
+  "ROLI Lightpad BLOCK" in 0 / out 1).** Simulated, plus a read-only hardware
+  probe checked on his block. Details, protocol and findings: `weapons/README.md`.
+  - Profile `weapons/lightpad.weapon.json` adds the kinds `surface` (multi-touch
+    + 15x15 LED grid) and `deco`.
+  - `tools/lightpad_sim.py`: the BLOCKS SysEx codec (from ROLI's ISC
+    reference code), the simulated block (API mode + MPE fallback) and a
+    `LocalHost` that does the handshake, pings and LED frames.
+    `--selftest` checks the round trips.
+  - Live view: the weapon picker or `?weapon=lightpad`. Run
+    `mk2_live.py --port 8775 --weapon lightpad` next to a running MK2 Live
+    (`--weapon` other than mk2 leaves the MK2 hardware alone). Checked in
+    the browser 2026-11-10: multi-touch, LED feedback, test pattern, MPE
+    fallback, MK2 + Simulate unchanged.
+  - Engine sim link for it: UDP 127.0.0.1:8767 (not used by the C++ side yet).
+  - `tools/lightpad_hw.py`: WinMM link (ctypes), the same interface as
+    the sim. Live view: **Use the real block**. Checked
+    2026-11-10:
+    - touches 0x13/0x11/0x15, fingers from 1, x/y about 146..3953;
+    - y = 0 at the top with USB-C pointing away from you;
+    - Mode = button 0;
+    - API `vz` strike is useless: velocity comes from the MPE note-on,
+      which the factory program keeps sending in API mode;
+    - factory layout 4x4 pads, notes 36..51 from the bottom-left.
+  - **Himmel drives the Lightpad LEDs (checked 2026-11-10).**
+    `tools/lightpad_littlefoot.py` hand-assembles a 117-byte LittleFoot (121 for the LUMI)
+    renderer (15x15 RGB565 heap -> fillPixel). It has its own MiniVM that
+    the simulator runs.
+    - LocalHost: wipe the program memory, upload, stream frames through
+      `HeapSync` (ACKs are cumulative).
+    - ~55-58 full frames/s, ~12 ms send->ACK.
+    - endAPIMode brings the factory display back. RAM only; never
+      saveProgramAsDefault.
+    - With our program there is no MPE. Touch moves come every ~28 ms.
+    - **Pressure sensitivity (config 13): higher = longer span from light to full
+      pressure (more z range).** The
+      owner chose 127 (`HIMMEL_CONFIG`; block default 64).
+      - Config values persist on the block. LocalHost.let_go() stops the
+        host loop, restores the block's value and waits for confirmation.
+      - A leftover 127 from a killed run is treated as ours and restored
+        to 64.
+  - **Games (easter eggs): `tools/lightpad_games.py`**, played by the owner on
+    the block. They are Rally (paddle duel, 2 players or vs Himmel), Brick
+    Burst and Star Swarm.
+    - Hold Mode ~1 s for the next game; a short press = launch / fire /
+      restart. The live view has buttons.
+    - Gotchas found:
+      - The packet counter must wrap 1023 -> 0.
+      - With our renderer the firmware sends no button messages, so the
+        renderer forwards them with sendMessageToHost (program event 0x28).
+  - C++ driver: `weapon_blocks.exe lightpad` (see "Generic weapon driver" below).
+- **Weapon no. 3 = ROLI LUMI Keys (owner's choice 2026-11-10; owner's
+  unit: firmware 1.3.8, serial LKB…).** It is checked on the device: keys
+  with velocity, buttons, and Himmel's own key LEDs.
+  - Profile `weapons/lumi.weapon.json` (kind `key`, badge
+    "HIMMEL · KEYS").
+  - `tools/lumi_sim.py`: SimLumi / LumiHost / LumiLive, subclasses of the
+    Lightpad code. Self-test included. UDP link 8769.
+  - **Windows gotcha:** the LUMI's MIDI interface failed with code 10 under
+    `usbaudio`. The owner switched it in Device Manager to
+    **USBMidi2-ACX**. The port is then named "USBMidi2-ACX", so make_hw
+    matches both names. Steps are in `weapons/README.md`.
+  - Every LUMI button arrives twice (firmware message + our program
+    event); LumiHost ignores the program copies. The LUMI also sends
+    BLOCKS touch messages per key; they are not used yet.
+  - Not done: a key map verified key by key, and games on the keys.
+  - Weapon no. 4 = the Entrancer (the Touch FX session's branch).
+- **Weapon no. 5 = the owner's Numark NuVJ (2008, USB-MIDI), started 2026-11-10.**
+  Profile `weapons/nuvj.weapon.json`, `tools/nuvj_sim.py`, own page
+  `tools/nuvj_live.html` (`mk2_live.py --port 8777 --weapon nuvj`, launch config
+  `nuvj-live`). **Protocol in `docs/nuvj-protocol.md`**, read from the owner's NuVJ
+  1.0 software (static analysis, never run): feedback SysEx `F0 00 01 3F 7F 20 cmd 00 len
+  data F7`. It covers init `60`, LCD text `01` (8 chars), segments `02` (64 bytes), LEDs `03`
+  (8 bytes, 31 bits) and contrast `7A`. Never send `7B` (stored). Simulator checked in
+  the browser. **Checked on the owner's unit 2026-11-11** (USB `15e4:0020`, WinMM
+  "NuVJ Controller" in 0 / out 1):
+  - `nuvj_map.json` verified (53 controls). The top knobs are endless; faders send
+    CC 10-12 before init and pitch bend ch 1-3 after it.
+  - All 31 LEDs work.
+  - LCD text works, and the whole segment map is learned with the camera mapper
+    (webcam in Chrome, LCD hunt panel). The layout is in `docs/nuvj-protocol.md`.
+  **Classic two-deck view** (owner's wish 2026-11-10, nostalgia): `?weapon=nuvj&view=classic`,
+  `tools/vj_classic.html` + model `tools/vj_classic.py`. It is the NuVJ software's workflow
+  in Himmel's own look: no logos or art, and nothing so close that it could cause trouble.
+  The GUI and the controller play the same model. 2D placeholder previews stand in until the
+  engine renders it.
+  **Jog Pong** (easter egg, `tools/nuvj_games.py`, played by the owner 2026-11-11): a three-lane
+  pong on the NuVJ's LCD, played with the jogs; hold both SCRATCH buttons to start or stop.
+  **Start-up shows** (`INTROS` in `tools/nuvj_games.py`, 2026-11-11): Boot sweep, Starburst and
+  Made by play on the LEDs and LCD when Himmel takes the NuVJ (random by default, or picked
+  in the live view); the ✦ buttons play them any time, and any button skips.
+- **Weapon no. 9 = Akai APC20, a secondary weapon (2026-11-11; owner's
+  unit, UPC 0 825213 00251 7).** Simulated only: it needs its **12 V DC 2 A
+  adapter** (not USB powered) and the owner has none yet.
+  - Profile `weapons/apc20.weapon.json` (97 controls, wire bytes inline as
+    `midi` / `led`, `role: secondary`, own page `tools/apc20_live.html`,
+    badge "HIMMEL · CLIPS"). USB `09e8:007b`; mode SysEx
+    `F0 47 <dev> 7B 60 00 04 41 …` = Ableton mode (host owns the LEDs).
+  - `tools/apc20_sim.py`: sim (UDP engine link 8782), read-only WinMM
+    probe, LED tests incl. walk, click-then-press learning into
+    `apc20_map.json`, and a Himmel stand-in for the secondary-weapon jobs
+    (clip/scene launch at the beat, fader pages with pickup, deck focus for
+    the MK2). `--selftest`. Live view: launch config `apc20-live`, port 8787.
+  - Jobs, event mapping, two-weapon rules and the owner's hardware steps:
+    `weapons/README.md`.
+  - **Driver done 2026-11-11, checked with the simulator** (not hardware):
+    `weapon_apc20.exe [--sim]` (`himmel/weapon/apc20.h`), slot 9
+    (`Local\HimmelWeapon9`), sim link UDP 8782. Identity → Ableton mode → LEDs
+    from the engine's levels (grid 8..63 amber, 64+ green; exact APC codes =
+    120 + code). Grid = pads 1..40, faders = `Fader`, Cue Level =
+    `EncoderDelta`. Reads `apc20_map.json` when it exists. `himmel.exe` starts it.
+- **Weapon no. 6 = Korg KF4 krossfour video mixer (2005; the owner owns
+  one).** Details: `weapons/kf4.md`.
+  - **It has no data port** (no MIDI/USB/RS-232/remote): the real unit
+    cannot be read or controlled. Options for the owner: capture its
+    output as a Himmel camera, use it as an analog mixer after Himmel,
+    optical readback, or a microcontroller mod (not recommended).
+  - Simulated fully: `tools/kf4_sim.py` (state machine, curves, keys,
+    `--selftest`) + its own page `tools/kf4_live.html` with simulated
+    inputs, MAIN OUT and MONITOR OUT (profile field `page`, same hook as the NuVJ).
+    Launch config `kf4-live` (port 8779). Checked in the browser
+    2026-11-10.
+  - Events go as JSON datagrams to UDP 127.0.0.1:8771 (not read by the
+    engine yet). Panel positions and a few behaviours are guesses until
+    checked on the owner's unit.
+- **Weapon no. 7 = the V-4 video mixer (Roland / EDIROL V-4, SD, 4 channels;
+  owner's choice 2026-11-10). The owner has none, so it is simulated only.**
+  - Profile `weapons/v4.weapon.json` (badge "HIMMEL · V4"). The owner wants it
+    to look as much like the real V-4 as possible.
+    - It is drawn from his photos by `tools/v4_profile.py`.
+    - The T-bar plate turns 90°: vertical or horizontal mounting.
+    - New profile words: kind `fader` (with `plate`, `orientations`), button
+      looks, knob `steps` / `endless` / `style`, and deco `rect` / `text` /
+      `jack` / `ladder` / `display` / `monitor`.
+    - `"live": "mixer"` makes the page show mixer cards instead of BLOCKS cards.
+  - `tools/v4_sim.py`: SimV4 / V4Host / V4Live, self-test included. UDP
+    engine link 8773. Launch config `v4-live` (port 8781). Checked in the browser
+    2026-11-10.
+  - MIDI only (5-pin DIN, needs a USB-MIDI interface).
+    - Inputs = Bank 00/01 + Program 0-3; memory = Bank 50H + Program 0-7.
+    - T-bar = CC#11 at the factory; everything else needs a MIDI setup
+      sent as Roland SysEx DT1 (model 00 5B).
+    - Details and open questions: `weapons/README.md`.
+- **Weapon no. 8 = Livid Ohm64, first version (owner's choice 2026-11-10;
+  he owns one, blue LEDs only).** Profile `weapons/ohm64.weapon.json` (drawn
+  from his photos, badge "HIMMEL · 64"), own page `tools/ohm64_live.html`,
+  `tools/ohm64_sim.py` (sim, WinMM link with an allow-list, map readback via
+  SysEx 07.0B/07.0A, learning, LED hunt). Launch config `ohm64-live` (8783).
+  Simulated and self-tested only: the owner tests the hardware on 2026-11-11.
+  Details: `weapons/README.md`.
+
+- **Weapon no. 4: Entrancer, simulated (2026-11-10, checked in the browser +
+  engine window):** `python tools/entrancer_live.py` (http://127.0.0.1:8770,
+  launch config `entrancer-live`) draws the unit from
+  `weapons/entrancer.weapon.json` and plays it with the mouse or the real
+  Lightpad as its pad. It sends the real unit's MIDI (CC 12/13/92, program
+  change) + Himmel-only CCs 102-108 over UDP 127.0.0.1:8768 to
+  `himmel_render` (`EntrancerLink` + `entrancer::Mapper`, tests
+  `entrancer_tests.exe`). HOLD, PAD MOTION, MUTE/FREEZE, TAP, memories work.
+  The real unit: `--entrancer-midi NAME [--entrancer-channel N]`
+  (`--midi-list` shows ports), WinMM input `src/engine/src/midi_in.cpp`,
+  reconnects by itself. Built and unit-tested, NOT yet tried on the unit
+  (it needs a USB-MIDI interface). Checklist: `docs/entrancer-weapon.md`.

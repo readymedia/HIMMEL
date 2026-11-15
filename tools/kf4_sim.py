@@ -16,7 +16,7 @@ engine bridge can let the simulated KF4 play Himmel as a 4-input mixer.
 Nothing listens there yet; sending is harmless.
 
 Run:   python tools/kf4_sim.py --selftest
-Live:  python tools/mk2_live.py --port 8777 --weapon kf4     (then open the page)
+Live:  python tools/mk2_live.py --port 8779 --weapon kf4     (then open the page)
 """
 import json
 import os

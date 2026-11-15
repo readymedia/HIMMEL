@@ -63,8 +63,19 @@ on the owner's unit (milestone M10); otherwise it is the first thing in 0.2.
 ## 3. Milestones (in order; each ends merged to `main`)
 
 Each milestone has an owner track (`agents/README.md`), the spec, and its
-**done when**. Do not start a milestone's GUI before its engine side works
-from the MK2.
+**done when**. ~~Do not start a milestone's GUI before its engine side works
+from the MK2.~~ Replaced by D90 (owner, 2026-11-15): see §3a.
+
+### 3a. The playable slice (D90, between M0 and M1)
+
+Right after M0 a thin end-to-end slice is built so the owner can play and
+adjust early: two decks with HAP clips, the TAKE wheel / crossfader, a few
+cheap effects, MK2 control, and a simple local web GUI through a minimal
+`himmel_ui` bridge to click and watch (decks, layers, clips, effects, take).
+It runs without hardware (`himmel.exe --sim` + the browser simulators). The
+slice is the first cut of M1 (engine), M4 (MK2) and M11 (GUI); those
+milestones then grow it to their full "done when". §4 applies to the slice
+too. Plan and tasks: `roadmap.md` "The playable slice".
 
 | # | Track | Build | Spec | Done when |
 |---|---|---|---|---|
