@@ -114,6 +114,90 @@ float4 ps_camera(VSOut i) : SV_Target {
     return float4(saturate(rgb), cam_info.w);
 }
 
+// ---------------------------------------------------------------- Touch FX
+// One full-screen pass over a copy of the canvas (docs/touch-fx-entrancer.md).
+// Effect ids follow himmel::engine::touchfx::Effect. x, y, mix are 0..1.
+cbuffer TouchFx : register(b4) {
+    float fx_x; float fx_y; float fx_mix; float fx_time;
+    float fx_effect; float fx_beat; float fx_w; float fx_h;   // fx_beat = beats since start (fake 120 BPM for now)
+};
+Texture2D fx_src : register(t4);   // the canvas before the effect
+Texture2D fx_prev : register(t5);  // last output (Trails)
+
+static const float kPi = 3.14159265;
+
+float fx_luma(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
+float3 fx_sample(float2 uv) { return fx_src.Sample(lin, uv).rgb; }
+
+// Rotates the hue by a turns (YIQ rotation: cheap, no branches).
+float3 fx_hue(float3 c, float a) {
+    const float3x3 toYiq = float3x3(0.299, 0.587, 0.114, 0.596, -0.274, -0.322, 0.211, -0.523, 0.312);
+    const float3x3 toRgb = float3x3(1.0, 0.956, 0.621, 1.0, -0.272, -0.647, 1.0, -1.106, 1.703);
+    float3 yiq = mul(toYiq, c);
+    float s, co;
+    sincos(a * 2 * kPi, s, co);
+    yiq.yz = float2(yiq.y * co - yiq.z * s, yiq.y * s + yiq.z * co);
+    return mul(toRgb, yiq);
+}
+
+float4 ps_touchfx(VSOut i) : SV_Target {
+    float2 uv = i.uv;
+    float aspect = fx_w / fx_h;
+    float3 src = fx_sample(uv);
+    float3 col = src;
+    float mix_ = fx_mix;
+    int e = (int)(fx_effect + 0.5);
+
+    if (e == 0) {            // HUE TURN: X = hue rotation (one full turn), Y = saturation 0..2x
+        float3 c = fx_hue(src, fx_x);
+        col = lerp(fx_luma(c).xxx, c, fx_y * 2);
+    } else if (e == 1) {     // DUOTONE: X = dark colour, Y = light colour
+        float l = smoothstep(0.05, 0.95, fx_luma(src));
+        col = lerp(hsv(fx_x, 0.85, 0.18), hsv(fx_y, 0.55, 1.0), l);
+    } else if (e == 2) {     // GRID: X = 1..16 tiles across, Y < 0.5 repeat, > 0.5 mirror every other tile
+        float n = 1 + floor(fx_x * 15.999);
+        float2 t = uv * n;                      // n x n copies of the whole picture: shape kept
+        float2 f = frac(t);
+        float2 odd = fmod(floor(t), 2);
+        float m = saturate((fx_y - 0.5) * 4);   // 0 = repeat, 1 = mirror
+        f = lerp(f, lerp(f, 1 - f, odd), m);
+        col = fx_sample(f);
+    } else if (e == 3) {     // KALEIDO: X = 2..16 segments, Y = turn
+        float2 p = (uv - 0.5) * float2(aspect, 1);
+        float n = 2 + floor(fx_x * 14.999);
+        float seg = 2 * kPi / n;
+        float a = atan2(p.y, p.x) + fx_y * 2 * kPi;
+        a = abs(fmod(a + 64 * kPi, seg) - seg * 0.5);    // fold into one mirrored wedge
+        float r = length(p);
+        float2 q = float2(cos(a), sin(a)) * r;
+        col = fx_sample(q / float2(aspect, 1) + 0.5);
+    } else if (e == 4) {     // BULGE: X, Y = centre, mix = strength (no crossfade)
+        float2 c = float2(fx_x, 1 - fx_y);
+        float2 d = (uv - c) * float2(aspect, 1);
+        float r = length(d) / 0.35;
+        float k = r < 1 ? lerp(1.0, pow(r, 0.5), fx_mix) : 1.0;
+        col = fx_sample(c + d * k / float2(aspect, 1));
+        mix_ = 1;
+    } else if (e == 5) {     // SLIDE: X, Y = shift (centre = none), wraps around
+        col = fx_sample(frac(uv - float2(fx_x - 0.5, 0.5 - fx_y)));
+    } else if (e == 6) {     // WAVES: X = frequency, Y = height, rolling sideways
+        float f = lerp(1, 40, fx_x * fx_x);
+        float h = fx_y * 0.08;
+        float2 o = float2(sin((uv.y * f + fx_time * 0.8) * 2 * kPi), sin((uv.x * aspect * f * 0.5 + fx_time * 0.6) * 2 * kPi) * 0.5) * h;
+        col = fx_sample(uv + o);
+    } else if (e == 7) {     // STROBE: X = rate (4 / 2 / 1 / 1/2 / 1/4 beats), Y = flash black .. white
+        float div = exp2(2 - floor(fx_x * 4.999));
+        float ph = frac(fx_beat / div);
+        col = ph < 0.5 ? src : fx_y.xxx;
+    } else {                 // TRAILS: X = decay, Y = drift (zoom out .. in per frame)
+        float decay = lerp(0.70, 0.985, fx_x);
+        float z = 1 - (fx_y - 0.5) * 0.04;
+        float3 prev = fx_prev.Sample(lin, (uv - 0.5) * z + 0.5).rgb * decay;
+        col = max(src, prev);
+    }
+    return float4(lerp(src, saturate(col), mix_), 1);
+}
+
 float4 ps_blit(VSOut i) : SV_Target {
     float3 col = canvas_tex.Sample(lin, src.xy + i.uv * src.zw).rgb;
     float2 opx = i.pos.xy - overlay.xy;
