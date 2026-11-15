@@ -1,0 +1,1664 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ReadyMedia.no and Himmel contributors
+// himmel_render_legacy.exe - the pre-slice render process, PARKED (2026-11-15, S1).
+// It keeps the test card, camera + latency test, Touch FX knob page, Entrancer and
+// the generic-weapon knob pages working while himmel_render.exe becomes the deck
+// engine. Start it by hand (or himmel.exe --legacy). See docs/agents/handoff/engine.md.
+//
+//   himmel_render [--outputs N] [--fullscreen] [--size 640x360] [--mode span|mirror]
+//
+// * Direct3D 11, one DXGI flip-model swap chain per output, waitable object,
+//   maximum frame latency 1.
+// * Renders one canvas (a test card for now) and shows it on 1..8 outputs:
+//   span = the canvas is split across the outputs, mirror = each shows all.
+// * Reads the MK2 through the controller's shared block (ring 0): knobs change
+//   the test card, pads flash their part of the canvas, Navigate toggles
+//   span/mirror. Works without the controller and picks it up when it appears.
+// * Reads the other weapons (Lightpad, LUMI Keys, NuVJ, ...) the same way through
+//   their drivers' shared blocks "Local\HimmelWeapon<N>" (ring 0): pads/keys flash,
+//   knobs and faders drive the knob slots, buttons page / browse / pause. Their
+//   LEDs, pixels and LCD show the engine's state.
+// * Touch FX (docs/touch-fx-entrancer.md): one effect pass over the whole
+//   canvas, played by one finger. Knob page 4 on the MK2 (pads = X/Y surface,
+//   pressure = amount), or the mouse on any output window (drag = finger,
+//   1-9 = effect, H = hold), or an Entrancer-style unit over MIDI: the simulator
+//   (tools/entrancer_live.py) on UDP 127.0.0.1:8768 (--entrancer-port N,
+//   --no-entrancer), or the real unit through a USB-MIDI interface
+//   (--entrancer-midi NAME [--entrancer-channel N]; --midi-list shows the
+//   ports). See docs/entrancer-weapon.md.
+// * Publishes a heartbeat + frame stats in "Local\HimmelEngine" for the
+//   supervisor. Exits with code 3 if the GPU device is lost (the supervisor
+//   restarts it).
+//
+// Frame loop rules: no allocation, no locks, no disk I/O. Everything that
+// allocates (windows, swap chains, textures) happens at start-up or on resize.
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <d3d11.h>
+#include <d3dcompiler.h>
+#include <dxgi1_5.h>
+#include <timeapi.h>
+#include <wrl/client.h>
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdarg>
+#include <cstdio>
+#include <cstring>
+#include <filesystem>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include "himmel/engine/camera_capture.h"
+#include "himmel/engine/clip_player.h"
+#include "himmel/engine/engine_shared.h"
+#include "himmel/engine/entrancer.h"
+#include "himmel/engine/entrancer_link.h"
+#include "himmel/engine/midi_in.h"
+#include "himmel/engine/touch_fx.h"
+#include "himmel/mk2/output.h"
+#include "himmel/mk2/pages.h"
+#include "himmel/mk2/shared.h"
+#include "himmel/mk2/types.h"
+#include "himmel/weapon/nuvj.h"
+#include "himmel/weapon/shared.h"
+#include "shaders.h"
+
+using Microsoft::WRL::ComPtr;
+namespace mk2 = himmel::mk2;
+namespace tfx = himmel::engine::touchfx;
+using himmel::mk2::now_us;
+
+namespace {
+
+constexpr int kMaxOutputs = 8;
+constexpr int kOverlayW = 512, kOverlayH = 24, kOverlayScale = 2;
+constexpr int kEngineRing = 0;  // ring 0 of the MK2 block belongs to the engine
+
+void log(const char* fmt, ...) {
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    std::printf("%02d:%02d:%02d  render  ", st.wHour, st.wMinute, st.wSecond);
+    va_list ap;
+    va_start(ap, fmt);
+    std::vprintf(fmt, ap);
+    va_end(ap);
+    std::printf("\n");
+    std::fflush(stdout);
+}
+
+// ---------------------------------------------------------------- config
+struct Config {
+    int outputs = 0;  // 0 = one per monitor (windowed: 3)
+    bool fullscreen = false;
+    int win_w = 640, win_h = 360;
+    bool mirror = false;
+    std::vector<std::string> clips;  // --clip (repeatable); default: every .mov under media/
+    bool camera = true;              // --no-camera
+    std::string camera_name;         // --camera NAME (part of the name)
+    int camera_index = -1;           // --camera-index N
+    int entrancer_port = himmel::engine::kEntrancerPort;  // --entrancer-port N, 0 = off (--no-entrancer)
+    std::string entrancer_midi;      // --entrancer-midi NAME: part of the MIDI input port's name
+    int entrancer_channel = 0;       // --entrancer-channel 1..16, 0 = all
+    bool midi_list = false;          // --midi-list: print the MIDI input ports and exit
+};
+
+// Default playlist: all .mov files under the nearest "media" folder above the exe.
+std::vector<std::string> find_clips() {
+    std::vector<std::string> out;
+    wchar_t self[MAX_PATH];
+    GetModuleFileNameW(nullptr, self, MAX_PATH);
+    std::error_code ec;
+    for (auto dir = std::filesystem::path(self).parent_path(); !dir.empty(); dir = dir.parent_path()) {
+        const auto media = dir / "media";
+        if (std::filesystem::is_directory(media, ec)) {
+            for (auto it = std::filesystem::recursive_directory_iterator(media, ec);
+                 it != std::filesystem::recursive_directory_iterator(); it.increment(ec)) {
+                auto ext = it->path().extension().string();
+                for (auto& ch : ext) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+                if (ext == ".mov") {
+                    const auto u = it->path().u8string();
+                    out.emplace_back(u.begin(), u.end());
+                }
+            }
+            break;
+        }
+        if (dir == dir.parent_path()) break;
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+Config parse_args(int argc, char** argv) {
+    Config c;
+    for (int i = 1; i < argc; ++i) {
+        const std::string a = argv[i];
+        auto next = [&]() -> std::string { return i + 1 < argc ? argv[++i] : ""; };
+        if (a == "--outputs") c.outputs = std::clamp(std::atoi(next().c_str()), 1, kMaxOutputs);
+        else if (a == "--fullscreen") c.fullscreen = true;
+        else if (a == "--windowed") c.fullscreen = false;
+        else if (a == "--mode") c.mirror = next() == "mirror";
+        else if (a == "--clip") c.clips.push_back(next());
+        else if (a == "--no-camera") c.camera = false;
+        else if (a == "--camera") c.camera_name = next();
+        else if (a == "--camera-index") c.camera_index = std::atoi(next().c_str());
+        else if (a == "--entrancer-port") c.entrancer_port = std::clamp(std::atoi(next().c_str()), 0, 65535);
+        else if (a == "--no-entrancer") c.entrancer_port = 0;
+        else if (a == "--entrancer-midi") c.entrancer_midi = next();
+        else if (a == "--entrancer-channel") c.entrancer_channel = std::clamp(std::atoi(next().c_str()), 0, 16);
+        else if (a == "--midi-list") c.midi_list = true;
+        else if (a == "--size") {
+            const std::string s = next();
+            int w = 0, h = 0;
+            if (sscanf_s(s.c_str(), "%dx%d", &w, &h) == 2 && w >= 64 && h >= 64) c.win_w = w, c.win_h = h;
+        }
+    }
+    return c;
+}
+
+std::vector<RECT> monitors() {
+    std::vector<RECT> m;
+    EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR, HDC, LPRECT r, LPARAM p) -> BOOL {
+        reinterpret_cast<std::vector<RECT>*>(p)->push_back(*r);
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&m));
+    std::sort(m.begin(), m.end(), [](const RECT& a, const RECT& b) { return a.left < b.left; });  // left to right
+    return m;
+}
+
+// ---------------------------------------------------------------- shared state
+struct Params {
+    std::array<float, mk2::kKnobs> knob = {0.60f, 0.70f, 0.40f, 0.50f, 0.50f, 0.30f, 0.50f, 1.00f};
+    // hue, saturation, speed, zoom, grid, bar width, pad decay, master
+    std::array<float, mk2::kPads> pad{};
+    int touched = -1;           // last turned knob (inverted on the MK2 screen)
+    uint64_t touched_us = 0;
+    // Knob page 2: the clip layer. Knob 8 (master) is shared by both pages.
+    int page = 0;  // 0 = test card, 1 = clip, 2 = camera, 3 = touch fx
+    std::array<float, mk2::kKnobs> clip = {1.00f, 0.75f, 0.50f, 0.50f, 0.50f, 0.0f, 0.0f, 0.0f};
+    // opacity, speed (0.75 = 1x), zoom (0.5 = fill), pos x, pos y
+    // Knob page 3: the camera layer.
+    std::array<float, mk2::kKnobs> cam = {0.70f, 0.50f, 0.50f, 0.50f, 1.00f, 0.50f, 0.50f, 0.0f};
+    // opacity, zoom (0.5 = fill), pos x, pos y, mirror (> 0.5 = on), brightness, contrast
+    // Knob page 4: Touch FX. effect (browse), depth, X, Y, hold (> 0.5 = on).
+    std::array<float, mk2::kKnobs> fx = {0.0f, 1.00f, 0.5f, 0.5f, 0.0f, 0.0f, 0.0f, 0.0f};
+    int fx_knob_acc = 0;           // effect knob: raw units towards the next step
+    uint16_t fx_pads_down = 0;     // MK2 pads held on the Touch FX page (bit n-1)
+    int fx_pad = 0;                // the pad that is the finger (1..16), 0 = none
+    bool latency_toggle = false;  // Sampling: start / stop the latency test
+    bool clip_paused = false;
+    float clip_jump = -1.0f;   // 0..1: jump there on the next frame
+    int clip_step = 0;         // encoder: next / previous clip
+    bool mirror = false;
+    bool quit = false;
+    bool resized = false;
+};
+Params g_params;
+bool g_fullscreen = false;
+tfx::TouchFx g_touch;
+constexpr int kPages = 4;
+
+// ---------------------------------------------------------------- GPU
+struct PatternCB {
+    float time, canvas_w, canvas_h, hue;
+    float sat, speed, zoom, grid;
+    float bar, master, bar_pos, beat;
+    float pads[16];
+    float seams[8];
+};
+struct ClipCB {
+    float xform[4];  // canvas uv -> clip uv: scale.xy, offset.zw
+    float info[4];   // tex scale x, y, mode (0 rgb, 1 rgba, 2 ycocg, 3 alpha), opacity
+};
+struct BlitCB {
+    float src[4];
+    float overlay[4];
+    float out_master, pad_[3];
+};
+struct TouchFxCB {
+    float x, y, mix, time;
+    float effect, beat, w, h;
+};
+
+struct Output {
+    HWND hwnd = nullptr;
+    int w = 0, h = 0;
+    ComPtr<IDXGISwapChain2> swap;
+    HANDLE waitable = nullptr;
+    ComPtr<ID3D11RenderTargetView> rtv;
+    ComPtr<ID3D11Texture2D> overlay;
+    ComPtr<ID3D11ShaderResourceView> overlay_srv;
+    std::array<uint8_t, kOverlayW * kOverlayH> overlay_px{};
+    float src[4] = {0, 0, 1, 1};
+};
+std::vector<Output>* g_outs = nullptr;  // for mouse -> canvas mapping in wndproc
+
+struct Gpu {
+    ComPtr<ID3D11Device> dev;
+    ComPtr<ID3D11DeviceContext> ctx;
+    ComPtr<IDXGIFactory2> factory;
+    ComPtr<ID3D11VertexShader> vs;
+    ComPtr<ID3D11PixelShader> ps_pattern, ps_blit, ps_clip, ps_camera, ps_touchfx;
+    ComPtr<ID3D11BlendState> blend_alpha;
+    ComPtr<ID3D11Buffer> cb_pattern, cb_blit, cb_clip, cb_camera, cb_touchfx;
+    ComPtr<ID3D11SamplerState> lin, pnt;
+    ComPtr<ID3D11Texture2D> canvas;
+    ComPtr<ID3D11RenderTargetView> canvas_rtv;
+    ComPtr<ID3D11ShaderResourceView> canvas_srv;
+    // Touch FX: a copy of the canvas to read from, and the last output (Trails).
+    ComPtr<ID3D11Texture2D> fx_src, fx_prev;
+    ComPtr<ID3D11ShaderResourceView> fx_src_srv, fx_prev_srv;
+    ComPtr<ID3D11Texture2D> frozen;  // Entrancer MUTE/FREEZE: the picture kept while frozen
+    int canvas_w = 0, canvas_h = 0;
+    char adapter[128] = "";
+};
+
+bool compile(const char* entry, const char* target, ComPtr<ID3DBlob>& out) {
+    ComPtr<ID3DBlob> err;
+    const HRESULT hr = D3DCompile(himmel::engine::kShaderSource, sizeof(himmel::engine::kShaderSource) - 1, "himmel",
+                                  nullptr, nullptr, entry, target, D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &out, &err);
+    if (FAILED(hr)) {
+        log("shader %s failed: %s", entry, err ? static_cast<const char*>(err->GetBufferPointer()) : "?");
+        return false;
+    }
+    return true;
+}
+
+bool init_gpu(Gpu& g) {
+    UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+#ifndef NDEBUG
+    flags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif
+    const D3D_FEATURE_LEVEL levels[] = {D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0};
+    HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags, levels, 2, D3D11_SDK_VERSION,
+                                   &g.dev, nullptr, &g.ctx);
+    if (FAILED(hr)) {
+        log("D3D11CreateDevice failed 0x%08lx", hr);
+        return false;
+    }
+    ComPtr<IDXGIDevice> dxgi_dev;
+    ComPtr<IDXGIAdapter> adapter;
+    g.dev.As(&dxgi_dev);
+    dxgi_dev->GetAdapter(&adapter);
+    adapter->GetParent(IID_PPV_ARGS(&g.factory));
+    DXGI_ADAPTER_DESC ad{};
+    adapter->GetDesc(&ad);
+    WideCharToMultiByte(CP_UTF8, 0, ad.Description, -1, g.adapter, sizeof(g.adapter), nullptr, nullptr);
+
+    ComPtr<ID3DBlob> b;
+    if (!compile("vs_full", "vs_5_0", b)) return false;
+    g.dev->CreateVertexShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g.vs);
+    if (!compile("ps_pattern", "ps_5_0", b)) return false;
+    g.dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g.ps_pattern);
+    if (!compile("ps_blit", "ps_5_0", b)) return false;
+    g.dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g.ps_blit);
+    if (!compile("ps_camera", "ps_5_0", b)) return false;
+    g.dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g.ps_camera);
+    if (!compile("ps_clip", "ps_5_0", b)) return false;
+    g.dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g.ps_clip);
+    if (!compile("ps_touchfx", "ps_5_0", b)) return false;
+    g.dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g.ps_touchfx);
+    D3D11_BLEND_DESC bl{};
+    auto& rt = bl.RenderTarget[0];
+    rt.BlendEnable = TRUE;
+    rt.SrcBlend = D3D11_BLEND_SRC_ALPHA;
+    rt.DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+    rt.BlendOp = D3D11_BLEND_OP_ADD;
+    rt.SrcBlendAlpha = D3D11_BLEND_ONE;
+    rt.DestBlendAlpha = D3D11_BLEND_ZERO;
+    rt.BlendOpAlpha = D3D11_BLEND_OP_ADD;
+    rt.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+    g.dev->CreateBlendState(&bl, &g.blend_alpha);
+
+    D3D11_BUFFER_DESC bd{};
+    bd.Usage = D3D11_USAGE_DYNAMIC;
+    bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    bd.ByteWidth = (sizeof(PatternCB) + 15) & ~15u;
+    g.dev->CreateBuffer(&bd, nullptr, &g.cb_pattern);
+    bd.ByteWidth = (sizeof(BlitCB) + 15) & ~15u;
+    g.dev->CreateBuffer(&bd, nullptr, &g.cb_blit);
+    bd.ByteWidth = (sizeof(ClipCB) + 15) & ~15u;
+    g.dev->CreateBuffer(&bd, nullptr, &g.cb_clip);
+    g.dev->CreateBuffer(&bd, nullptr, &g.cb_camera);  // same layout as ClipCB
+    bd.ByteWidth = (sizeof(TouchFxCB) + 15) & ~15u;
+    g.dev->CreateBuffer(&bd, nullptr, &g.cb_touchfx);
+
+    D3D11_SAMPLER_DESC sd{};
+    sd.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    sd.AddressU = sd.AddressV = sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+    sd.MaxLOD = D3D11_FLOAT32_MAX;
+    g.dev->CreateSamplerState(&sd, &g.lin);
+    sd.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
+    g.dev->CreateSamplerState(&sd, &g.pnt);
+    return true;
+}
+
+void make_canvas(Gpu& g, int w, int h) {
+    if (w == g.canvas_w && h == g.canvas_h && g.canvas) return;
+    g.canvas.Reset();
+    g.canvas_rtv.Reset();
+    g.canvas_srv.Reset();
+    g.fx_src.Reset(), g.fx_prev.Reset(), g.fx_src_srv.Reset(), g.fx_prev_srv.Reset(), g.frozen.Reset();
+    D3D11_TEXTURE2D_DESC td{};
+    td.Width = static_cast<UINT>(w);
+    td.Height = static_cast<UINT>(h);
+    td.MipLevels = td.ArraySize = 1;
+    td.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    td.SampleDesc.Count = 1;
+    td.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+    g.dev->CreateTexture2D(&td, nullptr, &g.canvas);
+    g.dev->CreateRenderTargetView(g.canvas.Get(), nullptr, &g.canvas_rtv);
+    g.dev->CreateShaderResourceView(g.canvas.Get(), nullptr, &g.canvas_srv);
+    td.BindFlags = D3D11_BIND_SHADER_RESOURCE;  // copy targets only
+    g.dev->CreateTexture2D(&td, nullptr, &g.fx_src);
+    g.dev->CreateTexture2D(&td, nullptr, &g.fx_prev);
+    g.dev->CreateTexture2D(&td, nullptr, &g.frozen);
+    g.dev->CreateShaderResourceView(g.fx_src.Get(), nullptr, &g.fx_src_srv);
+    g.dev->CreateShaderResourceView(g.fx_prev.Get(), nullptr, &g.fx_prev_srv);
+    g.canvas_w = w;
+    g.canvas_h = h;
+    log("canvas %dx%d", w, h);
+}
+
+// ---------------------------------------------------------------- windows
+// Mouse on an output window = a finger on the Touch FX surface (the whole
+// canvas): x left -> right, y bottom -> top. Full pressure.
+bool mouse_touch(HWND hwnd, LPARAM lp, bool down) {
+    if (!g_outs) return false;
+    for (const auto& o : *g_outs) {
+        if (o.hwnd != hwnd) continue;
+        const float px = static_cast<float>(static_cast<short>(LOWORD(lp))) / std::max(1, o.w);
+        const float py = static_cast<float>(static_cast<short>(HIWORD(lp))) / std::max(1, o.h);
+        const float u = o.src[0] + std::clamp(px, 0.0f, 1.0f) * o.src[2];
+        const float v = o.src[1] + std::clamp(py, 0.0f, 1.0f) * o.src[3];
+        if (down) g_touch.touch_down(tfx::Source::Mouse, u, 1.0f - v, 1.0f);
+        else g_touch.touch_move(tfx::Source::Mouse, u, 1.0f - v, 1.0f);
+        return true;
+    }
+    return false;
+}
+
+LRESULT CALLBACK wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    switch (msg) {
+        case WM_LBUTTONDOWN:
+            SetCapture(hwnd);
+            mouse_touch(hwnd, lp, true);
+            return 0;
+        case WM_MOUSEMOVE:
+            if (wp & MK_LBUTTON) mouse_touch(hwnd, lp, false);
+            return 0;
+        case WM_LBUTTONUP:
+        case WM_CAPTURECHANGED:
+            if (GetCapture() == hwnd) ReleaseCapture();
+            g_touch.touch_up(tfx::Source::Mouse);
+            return 0;
+        case WM_SIZE: g_params.resized = true; return 0;
+        case WM_CLOSE:
+            if (!g_fullscreen) g_params.quit = true;  // a show output never closes by click
+            return 0;
+        case WM_KEYDOWN:
+            if (wp == VK_ESCAPE && (!g_fullscreen || (GetKeyState(VK_SHIFT) & 0x8000))) g_params.quit = true;
+            if (wp == 'M') g_params.mirror = !g_params.mirror, g_params.resized = true;
+            if (wp >= '1' && wp < '1' + tfx::kEffects) g_touch.select(static_cast<int>(wp - '1'));
+            if (wp == 'H') g_touch.set_hold(!g_touch.hold());
+            return 0;
+        case WM_SETCURSOR:
+            if (g_fullscreen && LOWORD(lp) == HTCLIENT) {
+                SetCursor(nullptr);
+                return TRUE;
+            }
+            break;
+    }
+    return DefWindowProcW(hwnd, msg, wp, lp);
+}
+
+bool create_output(Gpu& g, Output& o, int index, const RECT& r, bool fullscreen) {
+    const DWORD style = fullscreen ? WS_POPUP : WS_OVERLAPPEDWINDOW;
+    RECT wr = r;
+    if (!fullscreen) AdjustWindowRect(&wr, style, FALSE);
+    wchar_t title[64];
+    swprintf_s(title, L"Himmel output %d", index + 1);
+    o.hwnd = CreateWindowExW(fullscreen ? WS_EX_TOPMOST : 0, L"HimmelOutput", title, style, wr.left, wr.top,
+                             wr.right - wr.left, wr.bottom - wr.top, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+    if (!o.hwnd) return false;
+    ShowWindow(o.hwnd, SW_SHOWNOACTIVATE);
+    RECT cr;
+    GetClientRect(o.hwnd, &cr);
+    o.w = std::max<LONG>(1, cr.right);
+    o.h = std::max<LONG>(1, cr.bottom);
+
+    DXGI_SWAP_CHAIN_DESC1 sd{};
+    sd.Width = static_cast<UINT>(o.w);
+    sd.Height = static_cast<UINT>(o.h);
+    sd.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    sd.SampleDesc.Count = 1;
+    sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    sd.BufferCount = 2;
+    sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    sd.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
+    ComPtr<IDXGISwapChain1> sc1;
+    HRESULT hr = g.factory->CreateSwapChainForHwnd(g.dev.Get(), o.hwnd, &sd, nullptr, nullptr, &sc1);
+    if (FAILED(hr)) {
+        log("swap chain %d failed 0x%08lx", index + 1, hr);
+        return false;
+    }
+    g.factory->MakeWindowAssociation(o.hwnd, DXGI_MWA_NO_ALT_ENTER);
+    sc1.As(&o.swap);
+    o.swap->SetMaximumFrameLatency(1);
+    o.waitable = o.swap->GetFrameLatencyWaitableObject();
+
+    ComPtr<ID3D11Texture2D> back;
+    o.swap->GetBuffer(0, IID_PPV_ARGS(&back));
+    g.dev->CreateRenderTargetView(back.Get(), nullptr, &o.rtv);
+
+    D3D11_TEXTURE2D_DESC td{};
+    td.Width = kOverlayW;
+    td.Height = kOverlayH;
+    td.MipLevels = td.ArraySize = 1;
+    td.Format = DXGI_FORMAT_R8_UNORM;
+    td.SampleDesc.Count = 1;
+    td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    g.dev->CreateTexture2D(&td, nullptr, &o.overlay);
+    g.dev->CreateShaderResourceView(o.overlay.Get(), nullptr, &o.overlay_srv);
+    log("output %d: %dx%d %s", index + 1, o.w, o.h, fullscreen ? "fullscreen" : "window");
+    return true;
+}
+
+void resize_output(Gpu& g, Output& o) {
+    RECT cr;
+    GetClientRect(o.hwnd, &cr);
+    const int w = std::max<LONG>(1, cr.right), h = std::max<LONG>(1, cr.bottom);
+    if (w == o.w && h == o.h) return;
+    o.rtv.Reset();
+    g.ctx->OMSetRenderTargets(0, nullptr, nullptr);
+    g.ctx->Flush();
+    o.swap->ResizeBuffers(0, static_cast<UINT>(w), static_cast<UINT>(h), DXGI_FORMAT_UNKNOWN,
+                          DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT);
+    ComPtr<ID3D11Texture2D> back;
+    o.swap->GetBuffer(0, IID_PPV_ARGS(&back));
+    g.dev->CreateRenderTargetView(back.Get(), nullptr, &o.rtv);
+    o.w = w;
+    o.h = h;
+}
+
+// Canvas layout: span = side by side, mirror = one output-sized canvas.
+void layout(Gpu& g, std::vector<Output>& outs, bool mirror, PatternCB& cb) {
+    int total_w = 0, max_w = 0, max_h = 0;
+    for (auto& o : outs) total_w += o.w, max_w = std::max(max_w, o.w), max_h = std::max(max_h, o.h);
+    make_canvas(g, mirror ? max_w : total_w, max_h);
+    std::fill(std::begin(cb.seams), std::end(cb.seams), 0.0f);
+    int x = 0;
+    for (size_t i = 0; i < outs.size(); ++i) {
+        auto& o = outs[i];
+        if (mirror) {
+            o.src[0] = 0, o.src[1] = 0, o.src[2] = 1, o.src[3] = 1;
+        } else {
+            o.src[0] = static_cast<float>(x) / g.canvas_w;
+            o.src[1] = 0;
+            o.src[2] = static_cast<float>(o.w) / g.canvas_w;
+            o.src[3] = static_cast<float>(o.h) / g.canvas_h;
+            x += o.w;
+            if (i + 1 < outs.size() && i < 7) cb.seams[i] = static_cast<float>(x);
+        }
+    }
+}
+
+void update_overlay(Gpu& g, Output& o, int index, int count, bool mirror, float fps, bool mk2, int weapons,
+                    const char* clip_line, const tfx::Params& fx) {
+    mk2::Canvas<kOverlayW, kOverlayH> c;
+    char line[160];
+    const auto name = tfx::info(fx.effect).name;
+    std::snprintf(line, sizeof(line), "HIMMEL  OUT %d/%d  %dx%d  %s  %.1f FPS  MK2 %s  WEAPONS %d  FX %.*s %s", index + 1,
+                  count, o.w, o.h, mirror ? "MIRROR" : "SPAN", fps, mk2 ? "OK" : "OFF", weapons,
+                  static_cast<int>(name.size()), name.data(), fx.active ? "ON" : "-");
+    c.text(2, 3, line);
+    c.text(2, 14, clip_line);
+    for (int y = 0; y < kOverlayH; ++y)
+        for (int x = 0; x < kOverlayW; ++x) o.overlay_px[y * kOverlayW + x] = c.get(x, y) ? 255 : 0;
+    g.ctx->UpdateSubresource(o.overlay.Get(), 0, nullptr, o.overlay_px.data(), kOverlayW, 0);
+}
+
+// Knob value -> unit, shared by the frame loop and the MK2 screen readout.
+float pad_fade_s(float k) { return 2.0f * std::pow(0.015f, k); }        // 2 s .. 0.03 s
+double bar_rate(float k) { return 0.02 + 0.8 * k * k; }               // canvas widths per second
+// Clip page: speed -2x..+2x (0.75 = 1x, a small dead zone = stop), zoom 0.25x..4x (0.5 = fill).
+float clip_speed(float k) { return std::fabs(k - 0.5f) < 0.02f ? 0.0f : (k - 0.5f) * 4.0f; }
+float clip_zoom(float k) { return 0.25f * std::pow(16.0f, k); }
+
+constexpr std::array<std::string_view, mk2::kKnobs> kKnobLabels = {"HUE", "SATURATE", "SPEED", "ZOOM",
+                                                                   "GRID", "BAR", "PAD FADE", "MASTER"};
+constexpr std::array<std::string_view, mk2::kKnobs> kClipLabels = {"OPACITY", "SPEED", "ZOOM", "POS X",
+                                                                   "POS Y", "", "", "MASTER"};
+// Touch FX page: X and Y take the selected effect's own names.
+constexpr std::array<std::string_view, mk2::kKnobs> kFxLabels = {"EFFECT", "DEPTH", "X", "Y",
+                                                                 "HOLD", "", "", "MASTER"};
+constexpr int kFxKnobStep = 84;  // effect knob: raw units per effect (about 12 per turn)
+constexpr std::array<std::string_view, mk2::kKnobs> kCamLabels = {"OPACITY", "ZOOM", "POS X", "POS Y",
+                                                                  "MIRROR", "BRIGHT", "CONTRAST", "MASTER"};
+
+// What the MK2 screens show about the clip (filled by the frame loop).
+struct ClipView {
+    char name[40] = "NO CLIP";
+    char state[24] = "";
+    int index = -1, count = 0;
+    char cam[48] = "NO CAMERA";
+    char lat[48] = "SAMPLING = LATENCY TEST";
+};
+
+// Touch FX page knobs: effect (steps), depth, X, Y, hold.
+void fx_knob(Params& p, int k, int delta) {
+    if (k == 0) {
+        p.fx_knob_acc += delta;
+        while (p.fx_knob_acc >= kFxKnobStep) g_touch.step(1), p.fx_knob_acc -= kFxKnobStep;
+        while (p.fx_knob_acc <= -kFxKnobStep) g_touch.step(-1), p.fx_knob_acc += kFxKnobStep;
+        return;
+    }
+    float& v = p.fx[static_cast<size_t>(k)];
+    v = std::clamp(v + delta / 1000.0f, 0.0f, 1.0f);
+    if (k == 1) g_touch.set_depth(v);
+    if (k == 2 || k == 3) g_touch.set_xy(p.fx[2], p.fx[3]);
+    if (k == 4) g_touch.set_hold(v > 0.5f);
+}
+
+// Knob values follow the touch (the finger moves X / Y, keys toggle hold).
+void fx_sync_knobs(Params& p) {
+    p.fx[0] = (g_touch.effect() + 0.5f) / tfx::kEffects;
+    p.fx[1] = g_touch.depth();
+    p.fx[2] = g_touch.target_x();
+    p.fx[3] = g_touch.target_y();
+    if ((p.fx[4] > 0.5f) != g_touch.hold()) p.fx[4] = g_touch.hold() ? 1.0f : 0.0f;
+}
+
+// The pad under the Touch FX position (1..16, Pad 1 bottom-left).
+int fx_cursor_pad() {
+    const int cx = std::min(3, static_cast<int>(g_touch.target_x() * 4));
+    const int cy = std::min(3, static_cast<int>(g_touch.target_y() * 4));
+    return cy * 4 + cx + 1;
+}
+
+void hsv_to_rgb(float h, float s, float v, float out[3]) {
+    for (int i = 0; i < 3; ++i) {
+        const float k = std::fabs(std::fmod(h + (3 - i) / 3.0f, 1.0f) * 6.0f - 3.0f) - 1.0f;
+        out[i] = v * (1.0f + s * (std::clamp(k, 0.0f, 1.0f) - 1.0f));
+    }
+}
+
+// ---------------------------------------------------------------- MK2 input
+struct Mk2Link {
+    mk2::SharedMemory shm;
+    bool open = false;
+    uint64_t next_try_us = 0;
+    uint64_t earliest_event_us = 0;  // oldest event consumed this frame (for latency)
+
+    void poll(uint64_t t) {
+        if (open || t < next_try_us) return;
+        next_try_us = t + 1000000;
+        if (shm.open()) {
+            open = true;
+            shm.get()->rings[kEngineRing].attach();
+            log("MK2 controller found, listening on ring %d", kEngineRing);
+        }
+    }
+    bool alive(uint64_t t) const {
+        return open && shm.get()->status.connected.load() &&
+               t - std::min(t, shm.get()->status.heartbeat_us.load()) < 500000;
+    }
+    void drain(Params& p) {
+        earliest_event_us = 0;
+        if (!open) return;
+        auto& ring = shm.get()->rings[kEngineRing];
+        if (!ring.attached.load()) ring.attach();  // a restarted controller may have reset it
+        mk2::Event e;
+        while (ring.pop(e)) {
+            if (!earliest_event_us) earliest_event_us = e.t_us;
+            switch (e.type) {
+                case mk2::EventType::KnobDelta: {
+                    p.touched = e.id;
+                    p.touched_us = e.t_us;
+                    if (p.page == 3 && e.id != 7) {
+                        fx_knob(p, e.id, e.value);
+                        break;
+                    }
+                    float& v = e.id == 7 || p.page == 0 ? p.knob[e.id] : p.page == 1 ? p.clip[e.id] : p.cam[e.id];
+                    v = std::clamp(v + e.value / 1000.0f, 0.0f, 1.0f);
+                    break;
+                }
+                case mk2::EventType::PadHit:
+                    if (p.page == 3) {  // pads = a 4x4 touch surface, velocity = first pressure
+                        p.fx_pads_down |= static_cast<uint16_t>(1u << (e.id - 1));
+                        p.fx_pad = e.id;
+                        const auto pt = tfx::mk2_pad_point(e.id);
+                        g_touch.touch_down(tfx::Source::Mk2Pads, pt.x, pt.y, e.value / 127.0f);
+                        break;
+                    }
+                    p.pad[e.id - 1] = e.value / 127.0f;
+                    if (p.page == 1) p.clip_jump = (e.id - 1) / 16.0f;  // pads = 16 jump points
+                    break;
+                case mk2::EventType::EncoderDelta:  // browse wheel: clips, or effects on the Touch FX page
+                    if (p.page == 3) g_touch.step(e.value);
+                    else p.clip_step += e.value;
+                    break;
+                case mk2::EventType::PadPressure:
+                    if (p.page == 3) {
+                        if (e.id == p.fx_pad) g_touch.touch_pressure(tfx::Source::Mk2Pads, std::min(1.0f, e.value / 3300.0f));
+                        break;
+                    }
+                    p.pad[e.id - 1] = std::max(p.pad[e.id - 1], std::min(1.0f, e.value / 3300.0f));
+                    break;
+                case mk2::EventType::PadRelease:
+                    p.fx_pads_down &= static_cast<uint16_t>(~(1u << (e.id - 1)));
+                    if (e.id != p.fx_pad) break;
+                    p.fx_pad = 0;
+                    for (int n = 16; n >= 1; --n) {  // another pad still held becomes the finger
+                        if (p.fx_pads_down & (1u << (n - 1))) {
+                            p.fx_pad = n;
+                            const auto pt = tfx::mk2_pad_point(n);
+                            g_touch.touch_move(tfx::Source::Mk2Pads, pt.x, pt.y, g_touch.pressure());
+                            break;
+                        }
+                    }
+                    if (!p.fx_pad) g_touch.touch_up(tfx::Source::Mk2Pads);
+                    break;
+                case mk2::EventType::ButtonDown:
+                    if (e.id == static_cast<int>(mk2::Button::Navigate)) p.mirror = !p.mirror, p.resized = true;
+                    if (e.id == static_cast<int>(mk2::Button::PageLeft) || e.id == static_cast<int>(mk2::Button::PageRight))
+                        p.page = (p.page + (e.id == static_cast<int>(mk2::Button::PageRight) ? 1 : kPages - 1)) % kPages,
+                        p.touched = -1;
+                    if (e.id == static_cast<int>(mk2::Button::Sampling)) p.latency_toggle = true;
+                    if (e.id == static_cast<int>(mk2::Button::Play)) p.clip_paused = !p.clip_paused;
+                    if (e.id == static_cast<int>(mk2::Button::Restart)) p.clip_jump = 0.0f;
+                    break;
+                default: break;
+            }
+        }
+    }
+    // The knob page on the MK2 screens (~30 Hz, only the strips that change are sent).
+    uint64_t next_screen_us = 0;
+    himmel::mk2::ui::Screen canvas;
+    std::array<uint8_t, mk2::kScreenBytes> left{}, right{};
+    void screens(const Params& p, float fps, uint64_t t, const ClipView& cv) {
+        if (!open || t < next_screen_us) return;
+        next_screen_us = t + 33000;
+        namespace ui = himmel::mk2::ui;
+        ui::PerformModel m;
+        char buf[48];
+        const tfx::EffectInfo& fi = tfx::info(g_touch.effect());
+        if (p.page == 3) {
+            std::snprintf(buf, sizeof(buf), "TOUCH FX %d/%d %.*s", g_touch.effect() + 1, tfx::kEffects,
+                          static_cast<int>(fi.name.size()), fi.name.data());
+            m.head[0].left.set(buf);
+            m.head[0].right.set("P4 TOUCH FX");
+            std::snprintf(buf, sizeof(buf), "%s%s", g_touch.envelope() > 0 ? "ON AIR" : "OFF",
+                          g_touch.hold() ? "  HOLD" : "");
+            m.head[1].left.set(buf);
+            m.head[1].right.set("PADS = X/Y");
+        } else if (p.page == 0) {
+            m.head[0].left.set("HIMMEL ENGINE");
+            m.head[0].right.set("P1 TEST CARD");
+            std::snprintf(buf, sizeof(buf), "%s  %.0f FPS", p.mirror ? "MIRROR" : "SPAN", fps);
+            m.head[1].left.set(buf);
+            m.head[1].right.set("PAGE = CLIP");
+        } else if (p.page == 2) {
+            m.head[0].left.set(cv.cam);
+            m.head[0].right.set("P3 CAMERA");
+            m.head[1].left.set(cv.lat);
+        } else {
+            std::snprintf(buf, sizeof(buf), "%d/%d %s", cv.index + 1, cv.count, cv.name);
+            m.head[0].left.set(buf);
+            m.head[0].right.set("P2 CLIP");
+            m.head[1].left.set(cv.state);
+            m.head[1].right.set("ENC=CLIP PAD=JUMP");
+        }
+        for (int k = 0; k < mk2::kKnobs; ++k) {
+            auto& slot = m.knobs[static_cast<size_t>(k)];
+            const bool clip_knob = p.page == 1 && k != 7;
+            const bool cam_knob = p.page == 2 && k != 7;
+            const size_t ks = static_cast<size_t>(k);
+            if (p.page == 3 && k != 7) {
+                const float v = p.fx[ks];
+                slot.label.set(k == 2 ? fi.x_label : k == 3 ? fi.y_label : k == 1 ? std::string_view("DEPTH") : kFxLabels[ks]);
+                slot.norm = v;
+                if (k == 0) slot.value.set(fi.name);
+                else if (k == 4) slot.value.set(g_touch.hold() ? "ON" : "OFF");
+                else if (!kFxLabels[ks].empty()) {
+                    std::snprintf(buf, sizeof(buf), "%d%%", static_cast<int>(std::lround(v * 100)));
+                    slot.value.set(buf);
+                }
+                continue;
+            }
+            const float v = clip_knob ? p.clip[ks] : cam_knob ? p.cam[ks] : p.knob[ks];
+            slot.label.set(clip_knob ? kClipLabels[ks] : cam_knob ? kCamLabels[ks] : kKnobLabels[ks]);
+            slot.norm = v;
+            if (cam_knob) {
+                slot.bipolar = k == 2 || k == 3 || k == 5 || k == 6;
+                if (k == 1) std::snprintf(buf, sizeof(buf), "%.2fX", clip_zoom(v));
+                else if (k == 4) std::snprintf(buf, sizeof(buf), "%s", v > 0.5f ? "ON" : "OFF");
+                else if (slot.bipolar) std::snprintf(buf, sizeof(buf), "%+d", static_cast<int>(std::lround((v - 0.5f) * 200)));
+                else std::snprintf(buf, sizeof(buf), "%d%%", static_cast<int>(std::lround(v * 100)));
+            } else if (clip_knob) {
+                slot.bipolar = k == 1 || k == 3 || k == 4;
+                if (k == 1) std::snprintf(buf, sizeof(buf), "%.2fX", clip_speed(v));
+                else if (k == 2) std::snprintf(buf, sizeof(buf), "%.2fX", clip_zoom(v));
+                else if (k == 3 || k == 4) std::snprintf(buf, sizeof(buf), "%+d", static_cast<int>(std::lround((v - 0.5f) * 200)));
+                else std::snprintf(buf, sizeof(buf), "%d%%", static_cast<int>(std::lround(v * 100)));
+            } else if (k == 2) std::snprintf(buf, sizeof(buf), "%.2f/S", bar_rate(v));
+            else if (k == 6) std::snprintf(buf, sizeof(buf), "%.2fS", pad_fade_s(v));
+            else std::snprintf(buf, sizeof(buf), "%d%%", static_cast<int>(std::lround(v * 100)));
+            slot.value.set(slot.label.empty() ? "" : buf);
+        }
+        m.touched = p.touched >= 0 && t - std::min(t, p.touched_us) < 1500000 ? p.touched : -1;
+        ui::draw_perform(canvas, m);
+        canvas.split(left.data(), right.data());
+        mk2::seq_write_bytes(shm.get()->outputs.screen_seq[0], shm.get()->outputs.screen[0], left.data(), mk2::kScreenBytes);
+        mk2::seq_write_bytes(shm.get()->outputs.screen_seq[1], shm.get()->outputs.screen[1], right.data(), mk2::kScreenBytes);
+    }
+    // Pad LEDs follow the pad flashes; Navigate shows the output mode.
+    void leds(const Params& p) {
+        if (!open) return;
+        mk2::LedState s{};
+        if (p.page == 3) {  // Touch FX: the pads are the surface; the cursor cell is bright in the effect colour
+            float rgb[3];
+            hsv_to_rgb(tfx::info(g_touch.effect()).hue, 0.8f, 1.0f, rgb);
+            const int cursor = fx_cursor_pad();
+            const bool on = g_touch.finger_down() || g_touch.hold();
+            for (int i = 0; i < mk2::kPads; ++i) {
+                const float lvl = i + 1 == cursor ? (on ? 1.0f : 0.35f) : 0.06f;
+                for (int c = 0; c < 3; ++c) s.pad_rgb[i][c] = static_cast<uint8_t>(rgb[c] * lvl * 127);
+            }
+        } else {
+            for (int i = 0; i < mk2::kPads; ++i) {
+                const auto v = static_cast<uint8_t>(std::clamp(p.pad[i], 0.0f, 1.0f) * 127);
+                s.pad_rgb[i][0] = v;
+                s.pad_rgb[i][1] = v;
+                s.pad_rgb[i][2] = static_cast<uint8_t>(std::max<int>(v, 12));
+            }
+        }
+        s.buttons[static_cast<int>(mk2::led_of(mk2::Button::Navigate).index)] = p.mirror ? 127 : 20;
+        s.buttons[static_cast<int>(mk2::led_of(mk2::Button::PageLeft).index)] = p.page == 0 ? 127 : 20;
+        s.buttons[static_cast<int>(mk2::led_of(mk2::Button::PageRight).index)] = p.page > 0 ? 127 : 20;
+        s.buttons[static_cast<int>(mk2::led_of(mk2::Button::Sampling).index)] = p.page == 2 ? 60 : 10;
+        s.transport[static_cast<int>(mk2::led_of(mk2::Button::Play).index)] = p.clip_paused ? 20 : 127;
+        mk2::seq_write(shm.get()->outputs.led_seq, shm.get()->outputs.leds, s);
+    }
+};
+
+
+// ---------------------------------------------------------------- other weapons
+// Every weapon driver (weapon_blocks.exe, weapon_nuvj.exe, ...) owns one block
+// "Local\HimmelWeapon<N>". Ring 0 is ours. What a control does here comes from the
+// driver's header (role, knob slot, pad numbers), so this code knows no weapon by name.
+namespace wpn = himmel::weapon;
+
+void hsv(float h, float s, float v, uint8_t out[3]) {
+    h = h - std::floor(h);
+    const float r = std::clamp(std::fabs(h * 6.0f - 3.0f) - 1.0f, 0.0f, 1.0f);
+    const float gg = std::clamp(2.0f - std::fabs(h * 6.0f - 2.0f), 0.0f, 1.0f);
+    const float b = std::clamp(2.0f - std::fabs(h * 6.0f - 4.0f), 0.0f, 1.0f);
+    out[0] = static_cast<uint8_t>(255 * v * (1 - s + s * r));
+    out[1] = static_cast<uint8_t>(255 * v * (1 - s + s * gg));
+    out[2] = static_cast<uint8_t>(255 * v * (1 - s + s * b));
+}
+
+struct WeaponLink {
+    struct Slot {
+        wpn::SharedMemory shm;
+        bool open = false;
+        bool was_alive = false;
+        std::array<float, wpn::kMaxPads> flash{};
+        std::array<uint8_t, wpn::kMaxControls> led_last{};
+        bool led_written = false;
+        uint8_t px[wpn::kMaxPixels][3] = {};
+        uint8_t px_last[wpn::kMaxPixels][3] = {};
+        wpn::Display disp_last{};
+        bool disp_written = false;
+    };
+    std::array<Slot, wpn::kMaxSlots> slots;
+    uint64_t next_try_us = 0, next_out_us = 0;
+    uint64_t earliest_event_us = 0;
+
+    void poll(uint64_t t) {
+        if (t < next_try_us) return;
+        next_try_us = t + 1000000;
+        for (int i = 0; i < wpn::kMaxSlots; ++i) {
+            Slot& s = slots[static_cast<size_t>(i)];
+            if (s.open || !s.shm.open(i + 1)) continue;
+            s.open = true;
+            s.shm.get()->rings[wpn::kEngineRing].attach();
+            s.led_written = s.disp_written = false;
+            const auto& h = s.shm.get()->header;
+            log("weapon slot %d: %s (%s)%s, listening on ring %d", i + 1, h.name, h.driver, h.simulated ? " simulated" : "",
+                wpn::kEngineRing);
+        }
+    }
+    static bool alive(const Slot& s, uint64_t t) {
+        return s.open && s.shm.get()->status.connected.load() &&
+               t - std::min(t, s.shm.get()->status.heartbeat_us.load()) < 500000;
+    }
+    int alive_count(uint64_t t) {
+        int n = 0;
+        for (size_t i = 0; i < slots.size(); ++i) {
+            Slot& s = slots[i];
+            const bool a = alive(s, t);
+            if (a != s.was_alive && s.open) {
+                s.was_alive = a;
+                log("weapon slot %zu: %s %s", i + 1, s.shm.get()->header.name, a ? "connected" : "offline");
+            }
+            n += a;
+        }
+        return n;
+    }
+
+    void drain(Params& p) {
+        earliest_event_us = 0;
+        for (Slot& s : slots) {
+            if (!s.open) continue;
+            auto* b = s.shm.get();
+            const wpn::Header& h = b->header;
+            auto& ring = b->rings[wpn::kEngineRing];
+            if (!ring.attached.load()) ring.attach();  // a restarted driver may have reset it
+            mk2::Event e;
+            while (ring.pop(e)) {
+                if (!earliest_event_us || e.t_us < earliest_event_us) earliest_event_us = e.t_us;
+                const uint8_t role = e.id < wpn::kMaxControls ? h.role[e.id] : wpn::kRoleNone;
+                const uint8_t slot = e.id < wpn::kMaxControls ? h.knob_slot[e.id] : wpn::kNone;
+                auto knob = [&](uint8_t k) -> float& {
+                    return k == 7 || p.page == 0 ? p.knob[k] : p.page == 1 ? p.clip[k] : p.cam[k];
+                };
+                switch (e.type) {
+                    case mk2::EventType::KnobDelta:
+                        if (role == wpn::kRoleKnob && slot < mk2::kKnobs) {
+                            float& v = knob(slot);
+                            v = std::clamp(v + e.value / 1000.0f, 0.0f, 1.0f);
+                            p.touched = slot, p.touched_us = e.t_us;
+                        }
+                        break;
+                    case mk2::EventType::Fader:
+                        if (role == wpn::kRoleKnob && slot < mk2::kKnobs) {
+                            knob(slot) = std::clamp(e.value / 16383.0f, 0.0f, 1.0f);
+                            p.touched = slot, p.touched_us = e.t_us;
+                        }
+                        break;
+                    case mk2::EventType::EncoderDelta:
+                        if (role == wpn::kRoleBrowse) p.clip_step += e.value > 0 ? 1 : -1;
+                        break;
+                    case mk2::EventType::PadHit:
+                        if (e.id >= 1 && e.id <= wpn::kMaxPads) {
+                            const float v = e.value / 127.0f;
+                            p.pad[(e.id - 1) % mk2::kPads] = v;
+                            s.flash[e.id - 1] = v;
+                            if (p.page == 1) p.clip_jump = ((e.id - 1) % mk2::kPads) / 16.0f;
+                        }
+                        break;
+                    case mk2::EventType::PadPressure:
+                        if (e.id >= 1 && e.id <= wpn::kMaxPads) {
+                            const float v = std::min(1.0f, e.value / 3300.0f);
+                            float& pv = p.pad[(e.id - 1) % mk2::kPads];
+                            pv = std::max(pv, v);
+                            s.flash[e.id - 1] = std::max(s.flash[e.id - 1], v);
+                        }
+                        break;
+                    case mk2::EventType::ButtonDown:
+                        switch (role) {
+                            case wpn::kRolePageNext: p.page = (p.page + 1) % 3, p.touched = -1; break;
+                            case wpn::kRolePagePrev: p.page = (p.page + 2) % 3, p.touched = -1; break;
+                            case wpn::kRoleBrowse:
+                            case wpn::kRoleBrowseNext: p.clip_step += 1; break;
+                            case wpn::kRoleBrowsePrev: p.clip_step -= 1; break;
+                            case wpn::kRolePlay: p.clip_paused = !p.clip_paused; break;
+                            case wpn::kRoleRestart: p.clip_jump = 0.0f; break;
+                            case wpn::kRoleMirror: p.mirror = !p.mirror, p.resized = true; break;
+                            default: break;
+                        }
+                        break;
+                    default: break;
+                }
+            }
+        }
+    }
+
+    // LEDs, pixels and the display, ~30 Hz, written only when they change.
+    void outputs(const Params& p, float dt, float fps, uint64_t t, const ClipView& cv) {
+        const float fade = std::exp(-dt / pad_fade_s(p.knob[6]));
+        for (Slot& s : slots)
+            for (float& f : s.flash) f = f * fade < 0.002f ? 0.0f : f * fade;
+        if (t < next_out_us) return;
+        next_out_us = t + 33000;
+        for (Slot& s : slots) {
+            if (!alive(s, t)) {
+                s.led_written = s.disp_written = false;
+                continue;
+            }
+            auto* b = s.shm.get();
+            const wpn::Header& h = b->header;
+            if (h.caps & wpn::kCapLedLevels) {
+                std::array<uint8_t, wpn::kMaxControls> led{};
+                for (int i = 0; i < wpn::kMaxControls && i < static_cast<int>(h.controls); ++i) {
+                    switch (h.role[i]) {
+                        case wpn::kRolePageNext: led[i] = p.page > 0 ? 127 : 20; break;
+                        case wpn::kRolePagePrev: led[i] = p.page == 0 ? 127 : 20; break;
+                        case wpn::kRolePlay: led[i] = p.clip_paused ? 20 : 127; break;
+                        case wpn::kRoleMirror: led[i] = p.mirror ? 127 : 20; break;
+                        default: break;
+                    }
+                }
+                for (int n = 0; n < wpn::kMaxPads; ++n)
+                    if (h.pad_control[n] != wpn::kNone)
+                        led[h.pad_control[n]] = static_cast<uint8_t>(std::clamp(s.flash[static_cast<size_t>(n)], 0.0f, 1.0f) * 127);
+                if (!s.led_written || led != s.led_last) {
+                    mk2::seq_write(b->outputs.led_seq, b->outputs.led, *reinterpret_cast<uint8_t(*)[wpn::kMaxControls]>(led.data()));
+                    s.led_last = led;
+                    s.led_written = true;
+                }
+            }
+            if ((h.caps & wpn::kCapPixels) && h.pixel_w * h.pixel_h <= wpn::kMaxPixels) {
+                const float hue = p.knob[0];
+                const float base = 0.10f + 0.15f * static_cast<float>(p.page);
+                if (h.pixel_h == 1) {  // a row of keys: key n = pad number n
+                    for (int k = 0; k < h.pixel_w; ++k) {
+                        const float f = s.flash[static_cast<size_t>(k)];
+                        hsv(hue + (k % 12) / 24.0f, 0.8f - 0.8f * f, std::max(base * (k % 12 == 0 ? 2.0f : 1.0f), f), s.px[k]);
+                    }
+                } else {  // a grid: pads 1..16 as 4 x 4 zones of 3 x 3 cells, Pad 1 bottom-left
+                    const int w = h.pixel_w, hh = h.pixel_h;
+                    for (int y = 0; y < hh; ++y)
+                        for (int x = 0; x < w; ++x) {
+                            const int col = x * 4 / w, row = 3 - y * 4 / hh;
+                            const bool gap = (x % 4 == 3) || (y % 4 == 3);
+                            const float f = gap ? 0.0f : s.flash[static_cast<size_t>(col + 4 * row)];
+                            hsv(hue + (col + 4 * row) / 32.0f, 0.85f - 0.85f * f, gap ? 0.0f : std::max(base, f),
+                                s.px[y * w + x]);
+                        }
+                }
+                if (std::memcmp(s.px, s.px_last, sizeof(s.px)) != 0) {
+                    mk2::seq_write(b->outputs.pixel_seq, b->outputs.pixel, s.px);
+                    std::memcpy(s.px_last, s.px, sizeof(s.px));
+                }
+            }
+            if (h.caps & wpn::kCapDisplay) {
+                wpn::Display d{};
+                static constexpr const char* kPage[3] = {"TESTCARD", "  CLIP", " CAMERA"};
+                std::snprintf(d.text, sizeof(d.text), "%s", kPage[p.page % 3]);
+                if (p.page == 1 && cv.count) std::snprintf(d.alpha, sizeof(d.alpha), "%.11s", cv.name);
+                else std::snprintf(d.alpha, sizeof(d.alpha), "HIMMEL VJ");
+                std::snprintf(d.number[0], sizeof(d.number[0]), "%d", std::clamp(static_cast<int>(fps + 0.5f), 0, 199));
+                std::snprintf(d.number[1], sizeof(d.number[1]), "%02d", p.page + 1);
+                const bool recent = p.touched >= 0 && t - std::min(t, p.touched_us) < 1500000;
+                const size_t tk = static_cast<size_t>(std::max(p.touched, 0));
+                const float tv = !recent ? 0.0f : tk == 7 || p.page == 0 ? p.knob[tk] : p.page == 1 ? p.clip[tk] : p.cam[tk];
+                d.bar[0] = static_cast<int8_t>(recent ? std::lround(tv * wpn::nuvj::kRampSteps) : -1);
+                d.bar[1] = static_cast<int8_t>(std::lround(p.knob[7] * wpn::nuvj::kRampSteps));
+                d.marks = wpn::nuvj::kMarkRule | wpn::nuvj::kMarkBpm | wpn::nuvj::kMarkPage | wpn::nuvj::kMarkData |
+                          (recent ? wpn::nuvj::kMarkLast : 0u) |
+                          (p.page == 0 ? wpn::nuvj::kMarkBoxA : p.page == 1 ? wpn::nuvj::kMarkBoxB : wpn::nuvj::kMarkBoxC) |
+                          (p.mirror ? wpn::nuvj::kMarkBoxD : 0u) | (p.clip_paused ? 0u : wpn::nuvj::kMarkFull);
+                if (!s.disp_written || std::memcmp(&d, &s.disp_last, sizeof(d)) != 0) {
+                    mk2::seq_write(b->outputs.display_seq, b->outputs.display, d);
+                    s.disp_last = d;
+                    s.disp_written = true;
+                }
+            }
+        }
+    }
+
+    void shutdown() {
+        for (Slot& s : slots) {
+            if (!s.open) continue;
+            auto* b = s.shm.get();
+            std::array<uint8_t, wpn::kMaxControls> off{};
+            uint8_t px[wpn::kMaxPixels][3] = {};
+            mk2::seq_write(b->outputs.led_seq, b->outputs.led, *reinterpret_cast<uint8_t(*)[wpn::kMaxControls]>(off.data()));
+            mk2::seq_write(b->outputs.pixel_seq, b->outputs.pixel, px);
+            b->rings[wpn::kEngineRing].detach();
+        }
+    }
+};
+
+}  // namespace
+
+int main(int argc, char** argv) {
+    timeBeginPeriod(1);
+    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    const Config cfg = parse_args(argc, argv);
+    if (cfg.midi_list) {
+        const auto ports = himmel::engine::MidiIn::list();
+        std::printf("MIDI input ports (%zu):\n", ports.size());
+        for (size_t i = 0; i < ports.size(); ++i) std::printf("  %zu  %s\n", i, ports[i].c_str());
+        std::printf("Use: himmel_render --entrancer-midi \"part of a name\" [--entrancer-channel N]\n");
+        return 0;
+    }
+    g_fullscreen = cfg.fullscreen;
+    g_params.mirror = cfg.mirror;
+
+    himmel::engine::EngineShm eshm;
+    himmel::engine::EngineStatus* es = eshm.create() ? eshm.get() : nullptr;
+    auto set_msg = [&](const char* m) {
+        if (es) strncpy_s(es->message, sizeof(es->message), m, _TRUNCATE);
+        log("%s", m);
+    };
+
+    Gpu g;
+    if (!init_gpu(g)) return 2;
+    log("GPU: %s", g.adapter);
+
+    WNDCLASSW wc{};
+    wc.lpfnWndProc = wndproc;
+    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    wc.lpszClassName = L"HimmelOutput";
+    RegisterClassW(&wc);
+
+    const auto mons = monitors();
+    const int n = cfg.outputs ? cfg.outputs : (cfg.fullscreen ? static_cast<int>(mons.size()) : 3);
+    std::vector<Output> outs(static_cast<size_t>(n));
+    g_outs = &outs;
+    for (int i = 0; i < n; ++i) {
+        RECT r;
+        const bool fs = cfg.fullscreen && i < static_cast<int>(mons.size());
+        if (fs) r = mons[static_cast<size_t>(i)];
+        else {
+            const int x0 = 40 + i * (cfg.win_w + 24) % 1800, y0 = 80 + (i * (cfg.win_w + 24) / 1800) * (cfg.win_h + 60);
+            r = {x0, y0, x0 + cfg.win_w, y0 + cfg.win_h};
+        }
+        if (!create_output(g, outs[static_cast<size_t>(i)], i, r, fs)) return 2;
+    }
+    if (es) es->outputs.store(static_cast<uint32_t>(n));
+
+    PatternCB pcb{};
+    layout(g, outs, g_params.mirror, pcb);
+    std::vector<HANDLE> waits;
+    for (auto& o : outs) waits.push_back(o.waitable);
+
+    // Clips: the worker loads/decodes, this thread only uploads ready frames.
+    himmel::engine::ClipPlayer player(g.dev.Get(), cfg.clips.empty() ? find_clips() : cfg.clips);
+    log("clips: %zu in the playlist%s", player.playlist().size(),
+        player.playlist().empty() ? " (put .mov files under media/ or pass --clip)" : "");
+    if (!player.playlist().empty()) player.load(0);
+    himmel::engine::LoadedClip* shown = nullptr;
+    double clip_pos = 0.0;
+    int64_t uploaded = -1;
+    int clip_index = 0;
+    uint32_t clip_misses = 0, seen_fail = 0;
+    uint64_t clip_decoded_last = 0;
+    ClipView cv;
+    cv.count = static_cast<int>(player.playlist().size());
+    char clip_line[96] = "CLIP  none";
+    int page_led_last = -1;
+    bool paused_led_last = false;
+    int fx_led_last = -2;
+    bool trails_live = false;  // fx_prev holds a valid last frame
+
+    // Camera: its own capture thread; this thread only uploads the newest frame.
+    std::unique_ptr<himmel::engine::CameraCapture> cam;
+    if (cfg.camera) cam = std::make_unique<himmel::engine::CameraCapture>(cfg.camera_name, cfg.camera_index);
+    ComPtr<ID3D11Texture2D> cam_y, cam_uv;
+    ComPtr<ID3D11ShaderResourceView> cam_y_srv, cam_uv_srv;
+    int cam_w = 0, cam_h = 0;
+    uint64_t cam_seq = 0;
+    uint32_t cam_opens_seen = 0;
+    std::string cam_error_seen;
+
+    // Glass-to-glass loop test: the canvas flips black/white, the camera (pointed
+    // at an output) reports when it sees the change. Result = Present() -> camera.
+    struct LatencyTest {
+        bool active = false, light = false, switch_pending = false, detected = true;
+        uint64_t phase_start = 0, t_switch = 0;
+        double dark_sum = 0, light_sum = 0;
+        int dark_n = 0, light_n = 0, cycle = 0, n = 0;
+        float dark = -1, light_level = -1;
+        std::array<double, 32> res{};
+    } lat;
+    constexpr uint64_t kLatPhaseUs = 700000;
+    constexpr int kLatRuns = 16;
+
+    Mk2Link mk2link;
+    WeaponLink weaponlink;
+    int weapons_alive_last = -1;
+
+    // Entrancer-style unit (simulator now, the real one over MIDI later).
+    std::unique_ptr<himmel::engine::EntrancerLink> elink;
+    if (cfg.entrancer_port) {
+        elink = std::make_unique<himmel::engine::EntrancerLink>(static_cast<uint16_t>(cfg.entrancer_port));
+        if (elink->ok()) log("entrancer: listening on UDP 127.0.0.1:%d", cfg.entrancer_port);
+        else log("entrancer: UDP port %d is busy, no Entrancer input", cfg.entrancer_port), elink.reset();
+    }
+    himmel::engine::entrancer::Mapper emap;       // the simulator (UDP)
+    himmel::engine::entrancer::Mapper emap_midi;  // the real unit (MIDI in): its own parser, never mixed
+    emap_midi.set_channel(cfg.entrancer_channel);
+    std::unique_ptr<himmel::engine::MidiIn> emidi;
+    uint32_t emidi_gen = 0;
+    if (!cfg.entrancer_midi.empty()) {
+        emidi = std::make_unique<himmel::engine::MidiIn>(cfg.entrancer_midi);
+        log("entrancer: waiting for a MIDI input port with \"%s\" in its name (channel %s)", cfg.entrancer_midi.c_str(),
+            cfg.entrancer_channel ? std::to_string(cfg.entrancer_channel).c_str() : "all");
+    }
+    bool entrancer_alive = false, was_frozen = false;
+    double fx_beats = 0.0;
+    std::array<uint8_t, 1024> midi_buf{};
+
+    const uint64_t t0 = now_us();
+    uint64_t last_frame = t0, stats_start = t0, frames = 0, stat_frames = 0, overlay_next = 0;
+    double interval_sum = 0, interval_max = 0, lat_sum = 0;
+    uint32_t late = 0, lat_n = 0;
+    float fps = 0;
+    bool mk2_was_alive = false;
+    double bar_pos = 0.0;
+    int exit_code = 0;
+    std::array<float, mk2::kPads> led_last{};
+    led_last.fill(-1);
+    bool mirror_led_last = !g_params.mirror;
+    set_msg("running");
+
+    while (!g_params.quit) {
+        // 1. Wait until the swap chains can take a frame (max latency 1).
+        WaitForMultipleObjects(static_cast<DWORD>(waits.size()), waits.data(), TRUE, 100);
+        const uint64_t t = now_us();
+        const double dt = (t - last_frame) / 1e6;
+        last_frame = t;
+
+        // 2. Window messages.
+        MSG msg;
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+        if (es && es->stop_request.load()) g_params.quit = true;
+        if (g_params.resized) {
+            g_params.resized = false;
+            for (auto& o : outs) resize_output(g, o);
+            layout(g, outs, g_params.mirror, pcb);
+            overlay_next = 0;
+        }
+
+        // 3. Input.
+        mk2link.poll(t);
+        mk2link.drain(g_params);
+        const bool mk2_alive = mk2link.alive(t);
+        weaponlink.poll(t);
+        weaponlink.drain(g_params);
+        const int weapons_alive = weaponlink.alive_count(t);
+        if (weapons_alive != weapons_alive_last) {
+            weapons_alive_last = weapons_alive;
+            overlay_next = 0;
+        }
+        if (mk2_alive != mk2_was_alive) {
+            if (!mk2_alive) {  // a lost weapon lifts its finger (Hold keeps the effect)
+                g_touch.source_lost(tfx::Source::Mk2Pads);
+                g_params.fx_pads_down = 0, g_params.fx_pad = 0;
+            }
+            set_msg(mk2_alive ? "MK2 connected" : "MK2 offline");
+            mk2_was_alive = mk2_alive;
+            overlay_next = 0;
+        }
+        // Entrancer: its MIDI bytes become Touch FX. Quiet for 1 s = lost (the
+        // simulator sends active sensing every 250 ms).
+        if (elink) {
+            for (size_t nb; (nb = elink->read(midi_buf.data(), midi_buf.size())) > 0;) emap.feed(midi_buf.data(), nb, g_touch);
+            const uint64_t rx = elink->last_rx_us();
+            const bool alive = rx && t - std::min(t, rx) < 1000000;
+            if (alive != entrancer_alive) {
+                if (!alive) emap.lost(g_touch);
+                set_msg(alive ? "Entrancer connected" : "Entrancer lost");
+                entrancer_alive = alive;
+            }
+        }
+        // The real unit over MIDI: alive while its port is open (it need not send
+        // active sensing). A pulled cable closes the port; it reopens by itself.
+        if (emidi) {
+            if (emidi->generation() != emidi_gen) {
+                emidi_gen = emidi->generation();
+                if (emidi->is_open()) {
+                    set_msg("Entrancer MIDI connected");
+                    log("entrancer: MIDI port \"%s\" open", emidi->port_name());
+                } else {
+                    emap_midi.lost(g_touch);
+                    set_msg("Entrancer MIDI lost (waiting for the port to come back)");
+                }
+            }
+            for (size_t nb; (nb = emidi->read(midi_buf.data(), midi_buf.size())) > 0;) emap_midi.feed(midi_buf.data(), nb, g_touch);
+        }
+        const bool midi_alive = emidi && emidi->is_open();
+        // The simulator's tempo while it plays; the real unit sends none (120 BPM).
+        const auto& etempo = entrancer_alive ? emap.state() : emap_midi.state();
+        fx_beats += dt * etempo.bpm / 60.0;
+
+        // Knob 7: pad fade time, 2 s (left) .. 0.03 s (right), exponential.
+        const float fade = std::exp(-static_cast<float>(dt) / pad_fade_s(g_params.knob[6]));
+        for (auto& p : g_params.pad) p = p * fade < 0.002f ? 0.0f : p * fade;
+        // Knob 3: bar speed, integrated so turning the knob never makes the bar jump.
+        bar_pos = std::fmod(bar_pos + bar_rate(g_params.knob[2]) * dt, 1.0);
+        if (g_params.clip_step && !player.playlist().empty()) {  // browse wheel: next / previous clip
+            const int count = static_cast<int>(player.playlist().size());
+            clip_index = ((clip_index + g_params.clip_step) % count + count) % count;
+            g_params.clip_step = 0;
+            player.load(clip_index);
+        }
+        if (player.load_failed.load() != seen_fail) {
+            seen_fail = player.load_failed.load();
+            set_msg(player.last_error);
+        }
+
+        // Camera: upload the newest frame (NV12 -> R8 + R8G8 textures).
+        bool cam_visible = false;
+        if (cam) {
+            if (cam->opens.load() != cam_opens_seen) {
+                cam_opens_seen = cam->opens.load();
+                std::snprintf(cv.cam, sizeof(cv.cam), "%s", cam->format);
+                log("camera: %s  %s", cam->name, cam->format);
+            }
+            if (!cam->running.load() && cam->error[0] && cam_error_seen != cam->error) {
+                cam_error_seen = cam->error;
+                log("camera: %s", cam->error);
+                std::snprintf(cv.cam, sizeof(cv.cam), "CAMERA OFF");
+            }
+            if (const himmel::engine::CameraFrame* cf = cam->latest()) {
+                if (cf->width != cam_w || cf->height != cam_h) {  // rare: first frame or a new format
+                    cam_w = cf->width, cam_h = cf->height;
+                    D3D11_TEXTURE2D_DESC td{};
+                    td.Width = static_cast<UINT>(cam_w);
+                    td.Height = static_cast<UINT>(cam_h);
+                    td.MipLevels = td.ArraySize = 1;
+                    td.Format = DXGI_FORMAT_R8_UNORM;
+                    td.SampleDesc.Count = 1;
+                    td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+                    cam_y.Reset(), cam_uv.Reset(), cam_y_srv.Reset(), cam_uv_srv.Reset();
+                    g.dev->CreateTexture2D(&td, nullptr, &cam_y);
+                    td.Width /= 2, td.Height /= 2, td.Format = DXGI_FORMAT_R8G8_UNORM;
+                    g.dev->CreateTexture2D(&td, nullptr, &cam_uv);
+                    g.dev->CreateShaderResourceView(cam_y.Get(), nullptr, &cam_y_srv);
+                    g.dev->CreateShaderResourceView(cam_uv.Get(), nullptr, &cam_uv_srv);
+                    cam_seq = 0;
+                }
+                if (cf->seq != cam_seq) {
+                    g.ctx->UpdateSubresource(cam_y.Get(), 0, nullptr, cf->y.data(), static_cast<UINT>(cam_w), 0);
+                    g.ctx->UpdateSubresource(cam_uv.Get(), 0, nullptr, cf->uv.data(), static_cast<UINT>(cam_w), 0);
+                    cam_seq = cf->seq;
+                }
+                cam_visible = cam->running.load();
+            }
+        }
+
+        // Latency test state machine (Sampling starts / stops it).
+        if (g_params.latency_toggle) {
+            g_params.latency_toggle = false;
+            if (lat.active) {
+                lat.active = false;
+                std::snprintf(cv.lat, sizeof(cv.lat), "TEST STOPPED");
+            } else if (!cam || !cam->running.load()) {
+                std::snprintf(cv.lat, sizeof(cv.lat), "NO CAMERA");
+            } else {
+                lat = LatencyTest{};
+                lat.active = true;
+                lat.phase_start = t;
+                std::snprintf(cv.lat, sizeof(cv.lat), "POINT CAMERA AT SCREEN");
+                log("latency test: started (camera must see an output)");
+            }
+        }
+        himmel::engine::LumaSample ls;
+        while (cam && cam->pop_luma(ls)) {
+            if (!lat.active) continue;
+            if (!lat.light) {
+                if (ls.t_us > lat.phase_start + 350000) lat.dark_sum += ls.luma, ++lat.dark_n;
+            } else {
+                if (lat.t_switch && !lat.detected && ls.t_us > lat.t_switch) {
+                    const float thr = lat.light_level > lat.dark + 12 ? (lat.dark + lat.light_level) * 0.5f : lat.dark + 25.0f;
+                    if (ls.luma > thr) {
+                        lat.detected = true;
+                        if (lat.cycle > 0 && lat.n < static_cast<int>(lat.res.size()))
+                            lat.res[static_cast<size_t>(lat.n++)] = (ls.t_us - lat.t_switch) / 1000.0;
+                        std::snprintf(cv.lat, sizeof(cv.lat), "TESTING %d/%d", lat.n, kLatRuns);
+                    }
+                }
+                if (ls.t_us > lat.phase_start + 350000) lat.light_sum += ls.luma, ++lat.light_n;
+            }
+        }
+        if (lat.active && t - lat.phase_start >= kLatPhaseUs) {
+            if (!lat.light) {
+                if (lat.dark_n) lat.dark = static_cast<float>(lat.dark_sum / lat.dark_n);
+                lat.dark_sum = 0, lat.dark_n = 0;
+                lat.light = true, lat.switch_pending = true, lat.detected = false, lat.t_switch = 0;
+            } else {
+                if (lat.light_n) lat.light_level = static_cast<float>(lat.light_sum / lat.light_n);
+                lat.light_sum = 0, lat.light_n = 0;
+                lat.light = false;
+                ++lat.cycle;
+            }
+            lat.phase_start = t;
+            if (lat.n >= kLatRuns || lat.cycle > 3 * kLatRuns) {
+                lat.active = false;
+                if (lat.n >= 3) {
+                    std::sort(lat.res.begin(), lat.res.begin() + lat.n);
+                    const double med = lat.res[static_cast<size_t>(lat.n / 2)];
+                    std::snprintf(cv.lat, sizeof(cv.lat), "LOOP %.0f MS (%.0f-%.0f)", med, lat.res[0],
+                                  lat.res[static_cast<size_t>(lat.n - 1)]);
+                    log("latency test: screen -> camera loop median %.1f ms, min %.1f, max %.1f (%d runs; dark %.0f, light %.0f)",
+                        med, lat.res[0], lat.res[static_cast<size_t>(lat.n - 1)], lat.n, lat.dark, lat.light_level);
+                } else {
+                    std::snprintf(cv.lat, sizeof(cv.lat), "NO FLASH SEEN");
+                    log("latency test: the camera never saw the flash (dark %.0f, light %.0f) - point it at an output",
+                        lat.dark, lat.light_level);
+                }
+            }
+        }
+
+        // Clip: advance the play head, ask the worker for that frame, upload it if it is ready.
+        himmel::engine::LoadedClip* clip = player.current();
+        if (clip != shown) {
+            shown = clip;
+            uploaded = -1;
+            clip_pos = 0.0;
+            overlay_next = 0;
+            cv.index = player.loaded_index.load();
+            strncpy_s(cv.name, sizeof(cv.name), clip->name.c_str(), _TRUNCATE);
+            for (char* ch = cv.name; *ch; ++ch) *ch = static_cast<char>(std::toupper(static_cast<unsigned char>(*ch)));
+            log("clip %d/%d: %s  %s %dx%d %.2f fps %zu frames", cv.index + 1, cv.count, clip->name.c_str(),
+                himmel::media::hap_texture_name(clip->texture), clip->track.width, clip->track.height, clip->track.fps,
+                clip->track.frames());
+        }
+        bool clip_visible = false;
+        if (clip) {
+            const double nframes = static_cast<double>(clip->track.frames());
+            if (g_params.clip_jump >= 0.0f) clip_pos = g_params.clip_jump * nframes, g_params.clip_jump = -1.0f;
+            const float spd = clip_speed(g_params.clip[1]);
+            if (!g_params.clip_paused) clip_pos += dt * clip->track.fps * spd;
+            clip_pos = std::fmod(clip_pos, nframes);
+            if (clip_pos < 0) clip_pos += nframes;
+            const int64_t f = std::min(static_cast<int64_t>(clip_pos), static_cast<int64_t>(nframes) - 1);
+            player.request(f, spd < 0 ? -1 : 1);
+            if (f != uploaded) {
+                if (const uint8_t* data = player.acquire(f)) {
+                    g.ctx->UpdateSubresource(clip->tex, 0, nullptr, data, static_cast<UINT>(clip->row_pitch), 0);
+                    player.release();
+                    uploaded = f;
+                } else {
+                    ++clip_misses;
+                }
+            }
+            clip_visible = uploaded >= 0;
+            std::snprintf(cv.state, sizeof(cv.state), "%s %lld/%zu", g_params.clip_paused ? "PAUSE" : "PLAY",
+                          static_cast<long long>(f + 1), clip->track.frames());
+        }
+
+        // Touch FX: advance the envelope / smoothing once per frame.
+        const tfx::Params fxp = g_touch.update(static_cast<float>(dt));
+        fx_sync_knobs(g_params);
+        const int fx_led_key = g_params.page == 3
+            ? fx_cursor_pad() * 64 + g_touch.effect() * 4 + (g_touch.finger_down() || g_touch.hold() ? 1 : 0) : -1;
+
+        if (mk2_alive) mk2link.screens(g_params, fps, t, cv);
+        bool leds_changed = g_params.mirror != mirror_led_last || g_params.page != page_led_last ||
+                            g_params.clip_paused != paused_led_last || fx_led_key != fx_led_last;
+        for (int i = 0; i < mk2::kPads; ++i) leds_changed |= std::fabs(g_params.pad[i] - led_last[i]) > 0.02f;
+        if (leds_changed && mk2_alive) {
+            mk2link.leds(g_params);
+            led_last = g_params.pad;
+            mirror_led_last = g_params.mirror;
+            page_led_last = g_params.page;
+            paused_led_last = g_params.clip_paused;
+            fx_led_last = fx_led_key;
+        }
+
+        weaponlink.outputs(g_params, static_cast<float>(dt), fps, t, cv);
+
+        // 4. Render the canvas.
+        const auto& k = g_params.knob;
+        const double secs = (t - t0) / 1e6;
+        pcb.time = static_cast<float>(secs);
+        pcb.canvas_w = static_cast<float>(g.canvas_w);
+        pcb.canvas_h = static_cast<float>(g.canvas_h);
+        pcb.hue = k[0], pcb.sat = k[1], pcb.speed = k[2], pcb.zoom = k[3], pcb.grid = k[4], pcb.bar = k[5];
+        pcb.master = 1.0f;
+        pcb.bar_pos = static_cast<float>(bar_pos);
+        pcb.beat = static_cast<float>(std::pow(1.0 - std::fmod(secs * 2.0, 1.0), 3.0));  // 120 BPM pulse
+        for (int i = 0; i < 16; ++i) pcb.pads[i] = g_params.pad[i];
+        D3D11_MAPPED_SUBRESOURCE ms;
+        if (SUCCEEDED(g.ctx->Map(g.cb_pattern.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &ms))) {
+            std::memcpy(ms.pData, &pcb, sizeof(pcb));
+            g.ctx->Unmap(g.cb_pattern.Get(), 0);
+        }
+        D3D11_VIEWPORT vp{0, 0, static_cast<float>(g.canvas_w), static_cast<float>(g.canvas_h), 0, 1};
+        g.ctx->RSSetViewports(1, &vp);
+        g.ctx->OMSetRenderTargets(1, g.canvas_rtv.GetAddressOf(), nullptr);
+        g.ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        g.ctx->IASetInputLayout(nullptr);
+        g.ctx->VSSetShader(g.vs.Get(), nullptr, 0);
+        g.ctx->PSSetShader(g.ps_pattern.Get(), nullptr, 0);
+        g.ctx->PSSetConstantBuffers(0, 1, g.cb_pattern.GetAddressOf());
+        g.ctx->Draw(3, 0);
+        if (lat.active) {  // the latency test owns the canvas
+            const float c = lat.light ? 1.0f : 0.0f;
+            const float col[4] = {c, c, c, 1.0f};
+            g.ctx->ClearRenderTargetView(g.canvas_rtv.Get(), col);
+            clip_visible = false;
+            cam_visible = false;
+        }
+
+        // 4b. Clip layer over the test card (cover-fit, zoom, position, opacity).
+        const float opacity = g_params.clip[0];
+        if (clip_visible && opacity > 0.001f) {
+            const float cw = static_cast<float>(clip->track.width), ch = static_cast<float>(clip->track.height);
+            const float sc = std::max(g.canvas_w / cw, g.canvas_h / ch) * clip_zoom(g_params.clip[2]);
+            ClipCB ccb{};
+            ccb.xform[0] = g.canvas_w / (cw * sc);
+            ccb.xform[1] = g.canvas_h / (ch * sc);
+            ccb.xform[2] = -(g_params.clip[3] - 0.5f);
+            ccb.xform[3] = g_params.clip[4] - 0.5f;
+            ccb.info[0] = cw / clip->tex_w;
+            ccb.info[1] = ch / clip->tex_h;
+            using HT = himmel::media::HapTexture;
+            ccb.info[2] = clip->texture == HT::DXT5 ? 1.0f : clip->texture == HT::YCoCgDXT5 ? 2.0f
+                                                    : clip->texture == HT::RGTC1 ? 3.0f : 0.0f;
+            ccb.info[3] = opacity;
+            if (SUCCEEDED(g.ctx->Map(g.cb_clip.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &ms))) {
+                std::memcpy(ms.pData, &ccb, sizeof(ccb));
+                g.ctx->Unmap(g.cb_clip.Get(), 0);
+            }
+            ID3D11SamplerState* lin = g.lin.Get();
+            g.ctx->PSSetSamplers(0, 1, &lin);
+            g.ctx->PSSetShader(g.ps_clip.Get(), nullptr, 0);
+            g.ctx->PSSetConstantBuffers(2, 1, g.cb_clip.GetAddressOf());
+            g.ctx->PSSetShaderResources(0, 1, &clip->srv);
+            g.ctx->OMSetBlendState(g.blend_alpha.Get(), nullptr, 0xFFFFFFFF);
+            g.ctx->Draw(3, 0);
+            g.ctx->OMSetBlendState(nullptr, nullptr, 0xFFFFFFFF);
+            ID3D11ShaderResourceView* none = nullptr;
+            g.ctx->PSSetShaderResources(0, 1, &none);
+        }
+
+        // 4c. Camera layer on top (NV12 -> RGB in the shader, mirror, brightness/contrast).
+        const auto& ck = g_params.cam;
+        if (cam_visible && ck[0] > 0.001f && cam_y_srv) {
+            const float cw = static_cast<float>(cam_w), ch = static_cast<float>(cam_h);
+            const float sc = std::max(g.canvas_w / cw, g.canvas_h / ch) * clip_zoom(ck[1]);
+            ClipCB kcb{};
+            kcb.xform[0] = g.canvas_w / (cw * sc) * (ck[4] > 0.5f ? -1.0f : 1.0f);  // mirror = flip x
+            kcb.xform[1] = g.canvas_h / (ch * sc);
+            kcb.xform[2] = -(ck[2] - 0.5f) * (ck[4] > 0.5f ? -1.0f : 1.0f);
+            kcb.xform[3] = ck[3] - 0.5f;
+            kcb.info[0] = (ck[5] - 0.5f) * 1.0f;            // brightness -0.5..+0.5
+            kcb.info[1] = std::pow(4.0f, (ck[6] - 0.5f) * 2);  // contrast 0.25x..4x
+            kcb.info[3] = ck[0];
+            if (SUCCEEDED(g.ctx->Map(g.cb_camera.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &ms))) {
+                std::memcpy(ms.pData, &kcb, sizeof(kcb));
+                g.ctx->Unmap(g.cb_camera.Get(), 0);
+            }
+            ID3D11SamplerState* lin = g.lin.Get();
+            g.ctx->PSSetSamplers(0, 1, &lin);
+            g.ctx->PSSetShader(g.ps_camera.Get(), nullptr, 0);
+            g.ctx->PSSetConstantBuffers(3, 1, g.cb_camera.GetAddressOf());
+            ID3D11ShaderResourceView* cs[2] = {cam_y_srv.Get(), cam_uv_srv.Get()};
+            g.ctx->PSSetShaderResources(2, 2, cs);
+            g.ctx->OMSetBlendState(g.blend_alpha.Get(), nullptr, 0xFFFFFFFF);
+            g.ctx->Draw(3, 0);
+            g.ctx->OMSetBlendState(nullptr, nullptr, 0xFFFFFFFF);
+            ID3D11ShaderResourceView* none2[2] = {};
+            g.ctx->PSSetShaderResources(2, 2, none2);
+        }
+
+        // 4d. Touch FX: one pass over the whole canvas (reads a copy of it).
+        if (fxp.active && !lat.active) {
+            const bool trails = fxp.effect == static_cast<int>(tfx::Effect::Trails);
+            g.ctx->OMSetRenderTargets(0, nullptr, nullptr);
+            g.ctx->CopyResource(g.fx_src.Get(), g.canvas.Get());
+            if (trails && !trails_live) g.ctx->CopyResource(g.fx_prev.Get(), g.canvas.Get());
+            TouchFxCB fcb{};
+            fcb.x = fxp.x, fcb.y = fxp.y, fcb.mix = fxp.mix, fcb.time = static_cast<float>(secs);
+            fcb.effect = static_cast<float>(fxp.effect);
+            fcb.beat = static_cast<float>(std::fmod(fx_beats, 4096.0));  // 120 BPM or the Entrancer's tempo
+            fcb.w = static_cast<float>(g.canvas_w), fcb.h = static_cast<float>(g.canvas_h);
+            if (SUCCEEDED(g.ctx->Map(g.cb_touchfx.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &ms))) {
+                std::memcpy(ms.pData, &fcb, sizeof(fcb));
+                g.ctx->Unmap(g.cb_touchfx.Get(), 0);
+            }
+            g.ctx->RSSetViewports(1, &vp);
+            g.ctx->OMSetRenderTargets(1, g.canvas_rtv.GetAddressOf(), nullptr);
+            ID3D11SamplerState* lin = g.lin.Get();
+            g.ctx->PSSetSamplers(0, 1, &lin);
+            g.ctx->PSSetShader(g.ps_touchfx.Get(), nullptr, 0);
+            g.ctx->PSSetConstantBuffers(4, 1, g.cb_touchfx.GetAddressOf());
+            ID3D11ShaderResourceView* fs[2] = {g.fx_src_srv.Get(), g.fx_prev_srv.Get()};
+            g.ctx->PSSetShaderResources(4, 2, fs);
+            g.ctx->Draw(3, 0);
+            ID3D11ShaderResourceView* none4[2] = {};
+            g.ctx->PSSetShaderResources(4, 2, none4);
+            if (trails) {
+                g.ctx->OMSetRenderTargets(0, nullptr, nullptr);
+                g.ctx->CopyResource(g.fx_prev.Get(), g.canvas.Get());
+            }
+            trails_live = trails;
+        } else {
+            trails_live = false;
+        }
+
+        // 4e. Entrancer MUTE/FREEZE: keep showing the picture from the moment it was pressed.
+        const bool freeze = ((entrancer_alive && emap.state().freeze) || (midi_alive && emap_midi.state().freeze)) && !lat.active;
+        if (freeze || was_frozen) g.ctx->OMSetRenderTargets(0, nullptr, nullptr);
+        if (freeze && !was_frozen) g.ctx->CopyResource(g.frozen.Get(), g.canvas.Get());
+        if (freeze) g.ctx->CopyResource(g.canvas.Get(), g.frozen.Get());
+        was_frozen = freeze;
+        if (elink) {
+            const auto& es2 = emap.state();
+            elink->set_status(himmel::engine::EntrancerLink::pack_status(
+                es2.program, fxp.effect, fxp.active, g_touch.hold(), freeze, es2.video_off, es2.bpm));
+        }
+
+        // 5. Each output shows its part of the canvas (+ status overlay).
+        const bool overlay_due = t >= overlay_next;
+        if (overlay_due) {
+            overlay_next = t + 1000000;
+            using HT = himmel::media::HapTexture;
+            if (clip)
+                std::snprintf(clip_line, sizeof(clip_line), "CLIP %d/%d %s  %s %dX%d  DECODE MAX %.1f MS  MISSED %u",
+                              cv.index + 1, cv.count, cv.name,
+                              clip->texture == HT::YCoCgDXT5 ? "HAP Q" : clip->texture == HT::DXT5 ? "HAP ALPHA" : "HAP",
+                              clip->track.width, clip->track.height, player.stats().decode_us_max.load() / 1000.0,
+                              clip_misses);
+        }
+        ID3D11SamplerState* samplers[2] = {g.lin.Get(), g.pnt.Get()};
+        g.ctx->PSSetSamplers(0, 2, samplers);
+        g.ctx->PSSetShader(g.ps_blit.Get(), nullptr, 0);
+        HRESULT present_hr = S_OK;
+        for (size_t i = 0; i < outs.size(); ++i) {
+            auto& o = outs[i];
+            if (overlay_due)
+                update_overlay(g, o, static_cast<int>(i), n, g_params.mirror, fps, mk2_alive, weapons_alive, clip_line, fxp);
+            BlitCB bcb{};
+            std::memcpy(bcb.src, o.src, sizeof(bcb.src));
+            bcb.overlay[0] = 8, bcb.overlay[1] = 8;
+            bcb.overlay[2] = static_cast<float>(kOverlayW * kOverlayScale);
+            bcb.overlay[3] = static_cast<float>(kOverlayH * kOverlayScale);
+            bcb.out_master = lat.active ? 1.0f : k[7];
+            if (SUCCEEDED(g.ctx->Map(g.cb_blit.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &ms))) {
+                std::memcpy(ms.pData, &bcb, sizeof(bcb));
+                g.ctx->Unmap(g.cb_blit.Get(), 0);
+            }
+            ID3D11ShaderResourceView* null_srv[2] = {};
+            g.ctx->PSSetShaderResources(0, 2, null_srv);
+            D3D11_VIEWPORT ov{0, 0, static_cast<float>(o.w), static_cast<float>(o.h), 0, 1};
+            g.ctx->RSSetViewports(1, &ov);
+            g.ctx->OMSetRenderTargets(1, o.rtv.GetAddressOf(), nullptr);
+            ID3D11ShaderResourceView* srv[2] = {g.canvas_srv.Get(), o.overlay_srv.Get()};
+            g.ctx->PSSetShaderResources(0, 2, srv);
+            g.ctx->PSSetConstantBuffers(1, 1, g.cb_blit.GetAddressOf());
+            g.ctx->Draw(3, 0);
+            const HRESULT hr = o.swap->Present(1, 0);
+            if (FAILED(hr)) present_hr = hr;
+        }
+        if (lat.switch_pending) {  // first white frame handed to the swap chains
+            lat.t_switch = now_us();
+            lat.switch_pending = false;
+        }
+        ID3D11ShaderResourceView* null_srv[2] = {};
+        g.ctx->PSSetShaderResources(0, 2, null_srv);
+        if (present_hr == DXGI_ERROR_DEVICE_REMOVED || present_hr == DXGI_ERROR_DEVICE_RESET) {
+            char m[96];
+            std::snprintf(m, sizeof(m), "GPU device lost (0x%08lx): exiting so the supervisor restarts us",
+                          static_cast<unsigned long>(g.dev->GetDeviceRemovedReason()));
+            set_msg(m);
+            exit_code = 3;
+            break;
+        }
+
+        // 6. Stats + heartbeat.
+        const uint64_t t_done = now_us();
+        if (weaponlink.earliest_event_us && (!mk2link.earliest_event_us || weaponlink.earliest_event_us < mk2link.earliest_event_us))
+            mk2link.earliest_event_us = weaponlink.earliest_event_us;
+        if (mk2link.earliest_event_us && mk2link.earliest_event_us <= t_done) {
+            lat_sum += static_cast<double>(t_done - mk2link.earliest_event_us);
+            ++lat_n;
+        }
+        ++frames;
+        ++stat_frames;
+        interval_sum += dt;
+        interval_max = std::max(interval_max, dt);
+        if (dt > 1.5 / 60.0 && frames > 2) ++late;
+        if (es) {
+            es->heartbeat_us.store(t_done);
+            es->frames.store(frames);
+        }
+        if (t_done - stats_start >= 5000000) {
+            const double period = (t_done - stats_start) / 1e6;
+            fps = static_cast<float>(stat_frames / period);
+            const double avg_ms = interval_sum / stat_frames * 1000.0;
+            const double lat_ms = lat_n ? lat_sum / lat_n / 1000.0 : 0.0;
+            const uint64_t dec = player.stats().decoded.load();
+            log("%.1f fps  frame avg %.2f ms  max %.2f ms  late %u  input->present %s%.2f ms (%u)  clip: %.0f decodes/s, "
+                "max %.2f ms, missed %u, errors %u",
+                fps, avg_ms, interval_max * 1000.0, late, lat_n ? "" : "-", lat_ms, lat_n,
+                (dec - clip_decoded_last) / period, player.stats().decode_us_max.load() / 1000.0, clip_misses,
+                player.stats().errors.load());
+            clip_decoded_last = dec;
+            player.stats().decode_us_max.store(0);
+            if (es) {
+                es->fps_x100.store(static_cast<uint32_t>(fps * 100));
+                es->frame_ms_avg_x100.store(static_cast<uint32_t>(avg_ms * 100));
+                es->frame_ms_max_x100.store(static_cast<uint32_t>(interval_max * 100000));
+                es->late_frames.store(late);
+                es->mk2_connected.store(mk2_alive ? 1 : 0);
+                es->input_to_present_us.store(static_cast<uint32_t>(lat_n ? lat_sum / lat_n : 0));
+            }
+            stats_start = t_done;
+            stat_frames = 0;
+            interval_sum = interval_max = lat_sum = 0;
+            lat_n = 0;
+        }
+    }
+
+    if (mk2link.open) {
+        mk2::LedState off{};
+        mk2::seq_write(mk2link.shm.get()->outputs.led_seq, mk2link.shm.get()->outputs.leds, off);
+        mk2link.shm.get()->rings[kEngineRing].detach();
+    }
+    weaponlink.shutdown();
+    set_msg("stopped");
+    timeEndPeriod(1);
+    return exit_code;
+}

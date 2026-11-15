@@ -43,7 +43,7 @@ flowchart LR
 | `himmel.exe` | Starts the others in a job object, watches their heartbeats, restarts them (0.25 s, doubling to 10 s if they keep dying), kills one that has been silent for 2 s, logs everything. | The job object closes all children; start it again. (Run it from a service or a watchdog for unattended installs.) |
 | `mk2_controller.exe` | Owns the MK2: reads it at ~750 Hz, publishes events, sends LEDs and screens, reconnects when the cable is pulled. | The renderer keeps playing; it shows "MK2 OFF" and picks the controller up again when it is back (~0.3 s). |
 | `weapon_blocks.exe lightpad\|lumi`, `weapon_nuvj.exe`, `weapon_apc20.exe` | One per weapon (`weapons/README.md`): owns the device over WinMM, publishes events, sends LEDs / pixels / LCD, reconnects. Lets go of the device (settings back, LEDs off) on Ctrl+C or the supervisor's stop request. | The renderer keeps playing and picks the weapon up again. |
-| `himmel_render.exe` | Outputs, canvas, test card, clips, camera, MK2 and weapon control. | The supervisor restarts it within a second. |
+| `himmel_render.exe` | The deck engine: model (2 × 4 layers, FX slots, crossfader, TAKE), command ring in, state + preview blocks out, MK2 Perform, outputs. (`himmel_render_legacy.exe`: the parked test card / camera / Touch FX renderer.) | The supervisor restarts it within a second; it restores the show from `Local\HimmelState`. |
 | Later: GUI, workers, bridges | Operator GUI (Dear ImGui), import/analysis workers, sync bridges (Ableton Link, Pro DJ Link). | Same rule: the output keeps going. |
 
 ## Shared memory

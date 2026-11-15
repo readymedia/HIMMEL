@@ -21,6 +21,9 @@ Status values:
 | D91 | **2–3 track agents at a time**, never more than 3, each spawned as its own session with the template in `agents/README.md` §5. Each task fits one context, lives on `claude/<track>-<topic>` and is merged by the LEAD within 1–2 days | DECIDED (owner, 2026-11-15) | `agents/README.md` §5 |
 | D92 | **Development machine: the owner's dev laptop** (GTX 1070, one screen, outputs as windows) until M12; the RTX 5090 show PC comes at M12 | DECIDED (owner, 2026-11-15) | `build-v1.md` M12 |
 | D93 | One weapon list: 1 MK2 + 2 Lightpad = main; 3–8 integrations; 9 APC20 secondary; NuVJ becomes the second main weapon if M10 checks out. Per-weapon detail moved from `CLAUDE.md` to `weapons/README.md` | TECH (LEAD, M0, from D27 / D49) | `weapons/README.md` |
+| D9x-S1a | **When does PROGRAM flip on a manual crossfader move?** Slice engine: only when the fader reaches an end (0 = A, 1 = B); in between the last end stays PROGRAM. Option B: past the middle (0.5). A TAKE / CUT always flips when it lands | PROPOSED (ENGINE S1, 2026-11-15; LEAD to number) | `agents/handoff/engine.md`, `src/engine/src/deck_model.cpp` |
+| D9x-S1b | **TAKE pressed while a TAKE is running.** Slice engine: finishes it now (lands, PROGRAM flips). Options: ignore the second press; reverse back to where it started | PROPOSED (ENGINE S1, 2026-11-15) | same |
+| D9x-S1c | **Layer order in a deck.** Slice engine: layer 1 is the bottom, layer 4 is on top (as Resolume / VDMX). TAKE longer than 60 s is clamped to 60 s | PROPOSED (ENGINE S1, 2026-11-15) | same |
 
 ## 2026-11-11
 
