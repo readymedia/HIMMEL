@@ -85,9 +85,9 @@ Nothing half-done. Next step for the engine is in "Next up".
 
 ## GUESSES
 - **Program flip rule** (deck_model.cpp `set_crossfader`): a manual fader flips
-  PROGRAM only at the ends. Medium confidence. PROPOSED D9x-S1a.
-- **TAKE during TAKE finishes it now.** Low confidence. PROPOSED D9x-S1b.
-- **Layer 1 = bottom**, TAKE clamped to 60 s. PROPOSED D9x-S1c.
+  PROGRAM only at the ends. Medium confidence. PROPOSED D94.
+- **TAKE during TAKE finishes it now.** Low confidence. PROPOSED D95.
+- **Layer 1 = bottom**, TAKE clamped to 60 s. PROPOSED D96.
 - **Effect defaults** (fx_catalog.cpp) chosen to be visible but tasteful. Medium;
   owner tunes after playing.
 - **Strobe / RotoZoom spin run on a fake 120 BPM clock** until the audio clock
@@ -102,7 +102,7 @@ Nothing half-done. Next step for the engine is in "Next up".
   move the probe to a worker (or the ingest DB, M7) before big libraries.
 
 ## Open questions for the owner
-- D9x-S1a / b / c in `docs/decisions.md` (PROGRAM flip rule, TAKE during TAKE,
+- D94 / D95 / D96 in `docs/decisions.md` (PROGRAM flip rule, TAKE during TAKE,
   layer order). LEAD to give them numbers.
 
 ## How to build / run / test this track

@@ -43,10 +43,33 @@ public:
 
 private:
     // Implementation state (fixed size). CONTROL may change these freely.
+    // Focus is a ROLE (PREP = the PREVIEW deck, PLAY = the PROGRAM deck) plus a
+    // layer, so it stays on "PREVIEW layer n" when a TAKE swaps the decks.
+    enum : uint8_t { kPrep = 0, kPlay = 1 };
+
+    void sync(const protocol::LiveState& s, CommandSink& sink);
+    void send(protocol::Command c, CommandSink& sink);
+    void send_focus(const protocol::LiveState& s, CommandSink& sink);
+    uint8_t focus_deck(const protocol::LiveState& s) const;
+    int pad_pages(const protocol::Catalog& cat) const;
+    void on_knob(int k, int delta, const protocol::LiveState& s, const protocol::Catalog& cat, CommandSink& sink);
+    void cycle_fx(uint8_t deck, uint8_t layer, const protocol::FxSlotState& slot, int dir,
+                  const protocol::Catalog& cat, CommandSink& sink);
+
     bool shift_ = false;
     uint32_t seq_ = 0;
     int pad_page_ = 0;
-    uint8_t reserved_[256] = {};
+    uint8_t focus_side_ = kPrep;     // D75: start focus PREP
+    uint8_t focus_layer_ = 0;
+    bool synced_ = false;            // false until the first state is seen (and after reset())
+    uint32_t epoch_ = 0;
+    uint8_t last_program_ = 0;
+    uint8_t seen_focus_deck_ = protocol::kNone, seen_focus_layer_ = protocol::kNone;
+    uint16_t pads_held_ = 0;         // bit (pad - 1)
+    int touched_knob_ = -1;          // inverted on the screen for a moment
+    uint64_t touched_us_ = 0;
+    uint64_t last_event_us_ = 0;
+    int master_choose_acc_ = 0;      // SHIFT + knob 8: raw units toward the next effect
 };
 
 }  // namespace himmel::perform
