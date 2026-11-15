@@ -1,0 +1,86 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: MIT · Copyright (c) 2026 ReadyMedia.no and Himmel contributors -->
+<!-- Himmel Perform (playable slice, D90). Served by himmel_ui (src/ui_bridge). Plain HTML/CSS/JS, no build step. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Himmel · Perform</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header id="top">
+  <div class="brand">HIMMEL</div>
+  <div class="chip" id="engineChip" title="The render engine, as the bridge sees it">ENGINE …</div>
+  <div class="chip dim" id="fpsChip">– fps</div>
+  <div class="chip dim" id="mk2Chip" title="Producer 0: weapon mappers inside the engine (MK2)">MK2</div>
+  <div class="chip dim" id="guiChip" title="Producer 1: this page through himmel_ui">GUI</div>
+  <div class="chip dim mono" id="seqChip" title="Commands sent by this page / last one the engine applied">sent 0</div>
+  <div class="chip warn hidden" id="rejChip" title="Commands the engine refused (command-protocol.md §5)">refused 0</div>
+  <div class="spacer"></div>
+  <div class="hint" id="armHint"></div>
+  <button class="black" id="blackBtn" title="Master black (the outputs stay alive)">BLACK</button>
+</header>
+
+<main id="perform">
+  <section class="side prev" id="sidePrev">
+    <div class="monhead"><span class="tally prev">PREVIEW</span><span class="deckname" id="prevDeck">Deck –</span><span class="note">off air · prepare here</span></div>
+    <div class="monitor" id="monPrev"><div class="nopic">no picture</div></div>
+    <div class="strips" id="stripsPrev"></div>
+  </section>
+
+  <section class="take" id="takeCol">
+    <div class="lbl">MAIN</div>
+    <div class="monitor small" id="monMain"><canvas id="cvMain" width="480" height="270"></canvas><div class="nopic">no picture</div></div>
+    <button class="takeBtn" id="takeBtn" title="Auto TAKE: PREVIEW travels to PROGRAM (space)">
+      <span class="ring" id="takeRing"></span><span class="t">TAKE</span><span class="pct mono" id="takePct"></span><span class="hw">PLAY · space</span>
+    </button>
+    <div class="takeTime">
+      <span class="lbl">time</span>
+      <select id="takeMs" title="TAKE duration">
+        <option value="0">default</option><option value="500">0.5 s</option><option value="1000">1 s</option>
+        <option value="2000">2 s</option><option value="4000">4 s</option><option value="8000">8 s</option>
+      </select>
+    </div>
+    <button class="cutBtn" id="cutBtn" title="CUT: swap PREVIEW and PROGRAM now (enter)">CUT <span class="hw">RESTART · enter</span></button>
+    <div class="xf">
+      <div class="xfends"><span class="deckA">A</span><span class="lbl">crossfader</span><span class="deckB">B</span></div>
+      <input type="range" id="xf" min="0" max="1" step="0.001" value="0" title="Crossfader (moving it cancels a running TAKE)">
+    </div>
+  </section>
+
+  <section class="side prog" id="sideProg">
+    <div class="monhead"><span class="tally prog">PROGRAM</span><span class="deckname" id="progDeck">Deck –</span><span class="note">on air</span></div>
+    <div class="monitor" id="monProg"><div class="nopic">no picture</div></div>
+    <div class="strips" id="stripsProg"></div>
+  </section>
+
+  <aside class="library">
+    <div class="libhead"><span class="lbl">CLIPS</span><input id="clipFilter" type="search" placeholder="filter" autocomplete="off"></div>
+    <div class="cliplist" id="clipList"></div>
+    <div class="libfoot dim">Click a clip, then a layer. Or drag it onto a layer. Double-click = into the focused layer.</div>
+  </aside>
+
+  <section class="inspector" id="inspector">
+    <div class="tabs">
+      <button data-tab="layer" class="on" id="tabLayer">LAYER</button>
+      <button data-tab="deck" id="tabDeck">DECK</button>
+      <button data-tab="master" id="tabMaster">MASTER FX</button>
+      <div class="layerbar" id="layerBar">
+        <span class="nm" id="inspClip">–</span>
+        <span class="lbl">speed</span><input type="range" id="inspSpeed" min="-4" max="4" step="0.01" title="Speed (double-click = 1x)"><span class="mono val" id="inspSpeedVal">1.00x</span>
+        <div class="jump" id="inspJump" title="Click to jump"><i></i></div>
+        <button id="inspRestart" title="Restart the clip">⟲</button>
+        <button id="inspEject" title="Empty this layer">eject</button>
+      </div>
+    </div>
+    <div class="slots" id="slots"></div>
+  </section>
+</main>
+
+<div id="overlay" class="overlay hidden"><div class="box"><div class="big" id="ovTitle">…</div><div id="ovText"></div></div></div>
+<div id="toasts"></div>
+<template id="cvTpl"><canvas width="480" height="270"></canvas></template>
+<script src="app.js"></script>
+</body>
+</html>

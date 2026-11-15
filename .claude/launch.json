@@ -2,6 +2,13 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "himmel-ui",
+      "runtimeExecutable": "build/bin/Release/himmel_ui.exe",
+      "runtimeArgs": ["--port", "8790"],
+      "port": 8790,
+      "url": "http://127.0.0.1:8790"
+    },
+    {
       "name": "mk2-live",
       "runtimeExecutable": "python",
       "runtimeArgs": [
