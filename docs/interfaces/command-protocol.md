@@ -1,0 +1,142 @@
+# Command protocol (`Local\HimmelCommands`)
+
+Status: **version 1, written by the LEAD 2026-11-15** for the playable slice
+(D90). Header: [`src/protocol/include/himmel/protocol/commands.h`](../../src/protocol/include/himmel/protocol/commands.h)
+(the header is the source of truth for field layout; this page is the why and
+the rules). Change it only with a PR to this page + the header, agreed by the
+LEAD. **Append-only:** never renumber a `CommandType` or an enum value.
+
+## 1. What it is
+
+Everything that wants to change the show (the GUI, weapon mappers, OSC, test
+tools) sends **commands**. The render process is the only consumer. It
+validates every command and applies it **at a frame boundary**; the result is
+visible in the state block ([`engine-state.md`](engine-state.md)). Nobody
+else ever touches engine objects (build-v1 §4.3).
+
+```
+himmel_ui (GUI) ──ring 1──┐
+OSC (M13)       ──ring 2──┤
+tools / tests   ──ring 3──┼──► himmel_render: validate ▸ apply at frame start ▸ LiveState
+MK2 Perform     ──ring 0──┘        (in-process producer, same Command + same validation)
+```
+
+## 2. The block
+
+- Name `Local\HimmelCommands`, struct `CommandBlock`: header (magic `HCMD`,
+  version 1, size), 8 `ProducerInfo` (pid, heartbeat) and 8 SPSC rings of
+  1024 × 32-byte commands (~260 KB).
+- **Whoever comes first creates it** (`CreateFileMappingW` on the paging file
+  opens the existing one if it is there); the creator zero-fills it and then
+  writes the header last. Everyone checks magic, version and size before use,
+  and treats a mismatch as "not there" (log once, retry every second).
+- Because the GUI bridge keeps its handle open, the block survives a renderer
+  restart.
+
+## 3. Producer slots
+
+| Slot | Producer | Writer process |
+|---|---|---|
+| 0 `Perform` | weapon mappers (MK2 Perform, later Lightpad / NuVJ) | `himmel_render` itself |
+| 1 `Gui` | the web GUI | `himmel_ui` |
+| 2 `Osc` | OSC in (M13) | `himmel_osc` or the bridge |
+| 3 `Tool` | tests, scripts | `himmel_cmd`, test programs |
+| 4–7 | spare | — |
+
+Exactly one process writes a slot. A producer writes its `pid` into
+`producers[slot]` when it starts, updates `heartbeat_us` on every push, and
+sends `Hello` at least every second when idle. The engine shows a producer as
+alive in `LiveState.producer_alive` if its heartbeat is < 2 s old.
+
+The in-process Perform producer may skip the shared ring (the render process
+queues its commands in a local `SpscRing`), but its commands go through the
+**same validation** and are counted under slot 0.
+
+## 4. The command
+
+32 bytes: `type`, `flags`, `deck`, `layer`, `slot`, `param`, `seq`, `i`,
+`f[4]`. Unused targets are `kNone` (0xFF); master-level FX use
+`deck = kMasterDeck` (0xFE). `seq` is the producer's own running number
+(starting at 1); the engine writes the last applied one into
+`LiveState.acked_seq[slot]`, so a producer can tell when its command is on air.
+`flags & kRelative` makes `f[0]` a delta (knobs and wheels send deltas;
+the GUI sends absolute values).
+
+| Type | Targets | Argument | Notes |
+|---|---|---|---|
+| `LayerClip` | deck, layer | `i` = clip id, −1 = empty | Clip ids index `Catalog.clip`. Loading never blocks the frame: the clip player opens in its worker; until the first frame is ready the layer shows the clip's placeholder colour (build-v1 §4.4) |
+| `LayerOpacity` | deck, layer | `f[0]` 0..1 | clamped |
+| `LayerBlend` | deck, layer | `i` = `BlendMode` | |
+| `LayerMute` | deck, layer | `i` = 0 / 1 / 2 (toggle) | |
+| `LayerPlay` | deck, layer | `i` = `PlayAction` | |
+| `LayerSpeed` | deck, layer | `f[0]` −4..4 | |
+| `LayerJump` | deck, layer | `f[0]` 0..1 | |
+| `FxSet` | deck / master, layer or `kNone`, slot | `i` = effect id, −1 = empty | Effect ids index `Catalog.effect`. Setting an effect resets its params to the catalog defaults |
+| `FxParam` | same + `param` | `f[0]` 0..1 | normalised; the meaning is in the catalog |
+| `FxBypass` | same | `i` = 0 / 1 / 2 | |
+| `FxMix` | same | `f[0]` 0..1 | dry / wet |
+| `Crossfader` | — | `f[0]` 0 (A) .. 1 (B) | a manual move cancels a running TAKE |
+| `Take` | — | `i` = ms, 0 = default (slice: 2000 ms) | travels to the other end; when it lands, `program_deck` flips |
+| `Cut` | — | — | jumps to the other end now; `program_deck` flips |
+| `Black` | — | `i` = 0 / 1 / 2 | master black (the outputs stay alive) |
+| `Focus` | deck, layer | — | the focused layer, shared by the MK2 and the GUI |
+| `Hello` | — | `i` = pid | keeps the producer alive |
+
+**PREVIEW / PROGRAM.** Commands always name a real deck (0 = A, 1 = B). The
+deck on air is `LiveState.program_deck` (the side the crossfader rests on);
+the other one is PREVIEW. Weapon mappers translate "PREVIEW layer 2" into a
+deck using the state they read; the engine never guesses what a producer meant.
+
+## 5. Validation (the engine, before anything else)
+
+1. Unknown `type` → refused (`Reject::UnknownType`).
+2. A target out of range for that type → refused (`BadTarget`).
+3. A clip or effect id not in the catalog → refused (`BadId`).
+4. NaN / inf, or an enum value out of range → refused (`BadValue`). Values in
+   range but too big (opacity 1.3) are **clamped**, not refused.
+5. More than `kMaxCommandsPerSecond` (4000) from one producer in one second →
+   the rest are refused (`RateLimited`). A stuck producer cannot flood the engine.
+6. Every refusal increments `LiveState.rejected[slot]` and sets
+   `last_reject[slot]`; the engine logs the first refusal per producer per
+   second, never more.
+7. The engine drains at most 256 commands per producer per frame, so even a
+   full ring costs a bounded time; the rest wait for the next frame.
+
+## 6. Weapon mappers inside the engine (`himmel_perform`)
+
+Mappers turn weapon events into commands. They live in `src/perform/`
+(CONTROL track) and are called by the render process:
+
+- `Mk2Perform::on_event(event, live, catalog, sink)` for each MK2 event;
+- `Mk2Perform::tick(now, live, catalog, sink, leds, screens)` once per frame
+  (or at ~30 Hz) for time-based behaviour and the LED / screen outputs, which
+  the engine then writes into `Local\HimmelMk2`;
+- `Mk2Perform::reset()` when the MK2 (re)connects.
+
+They are pure logic: **no heap, no locks, no I/O, no Windows calls** (they
+run in the frame loop), unit-tested without hardware. Header:
+[`src/perform/include/himmel/perform/mk2_perform.h`](../../src/perform/include/himmel/perform/mk2_perform.h).
+The LEAD committed a stub (wheel = crossfader, PLAY = TAKE, RESTART = CUT) so
+ENGINE can call it before CONTROL delivers the real mapping.
+
+## 7. Lifecycle and failure rules
+
+- **Engine starts / restarts:** it opens or creates the block, then calls
+  `skip_all()` on every ring: commands queued before the restart are dropped,
+  never replayed. It bumps `LiveState.epoch`, so producers resync from the
+  state block.
+- **A producer dies:** nothing happens to the show. Its slot simply goes quiet;
+  its heartbeat ages out. A restarted producer reuses its slot and continues
+  its `seq` from 1 (the engine does not require seq to be monotonic across
+  pids; acks are per slot).
+- **Ring full:** the producer drops the command and counts it (`dropped`);
+  the GUI shows a warning. It never blocks.
+- **Version mismatch:** a reader that finds another version logs once and
+  stays disconnected (the show plays on).
+
+## 8. Not in version 1 (later, append-only)
+
+Scenes / save / recall / undo (SHOW, M3), clip transport modes and cue
+points (M2), output routing and black per output (M6), reactions (M8),
+outputs and resolution (M6), project open / save (M3), strings (paths) — the
+slice uses catalog ids only.

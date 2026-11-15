@@ -33,6 +33,25 @@ learn + the phone remote, Ableton Link / Pro DJ Link bridges, audio beat
 tracking, ASIO, the live sampler, pen masks and mesh warp, pack with media,
 clip audio (optional).
 
+## 0a. The playable slice (D90, now: after M0, before the rest of M1)
+
+**Goal:** the owner can play Himmel early and tell us what to change. One
+thin path through every layer, built by 3 track agents in parallel (D91)
+against the contracts the LEAD wrote first:
+[`interfaces/command-protocol.md`](interfaces/command-protocol.md),
+[`interfaces/engine-state.md`](interfaces/engine-state.md),
+[`interfaces/preview-block.md`](interfaces/preview-block.md) (headers in
+`src/protocol/`, mapper contract in `src/perform/`).
+
+| Task | Track · branch | Builds | Done when |
+|---|---|---|---|
+| **S1** | ENGINE · `claude/engine-slice-decks` | Deck model (2 decks × 4 layers, pure + unit-tested), command consumer + validation, `LiveState` + `Catalog` writer, crossfader / TAKE / CUT / black, 4 clip players per deck (HAP from `media/`), blend + opacity, FX slots (layer, deck, master) with ~6 cheap effects in one uber-shader, preview block, `Mk2Perform` called from the frame loop, supervisor starts `himmel_ui.exe` | `himmel.exe --sim` plays 2 × 4 layers; TAKE / CUT from `himmel_cmd` and the MK2 sim; previews readable; `engine_tests` green; 30 min soak, 0 late frames on the GTX 1070 |
+| **S2** | CONTROL · `claude/control-slice-perform` | `Mk2Perform` for the slice (subset of `design/perform.md`): focus by groups, knobs 1–4 on the focused layer, wheel = TAKE (endless T-bar), PLAY / RESTART = TAKE / CUT, pads = clips into the focused layer, FX on / off, screens left PREVIEW / right PROGRAM, LEDs; `perform_tests` | Every mapping unit-tested against a fake sink; plays through the MK2 simulator once S1 is in |
+| **S3** | GUI · `claude/gui-slice-web` | `himmel_ui.exe` (C++, HTTP + SSE on 127.0.0.1:8790, no new big deps), web app in `gui/`: two decks × 4 layers with previews, clip list, effect slots with params, crossfader + TAKE / CUT, focus; runs against a fake engine until S1 lands | The owner clicks clips into layers, sets effects and takes from the browser; killing / restarting `himmel_ui` never changes the outputs |
+
+Then: the LEAD merges S1–S3, tells the owner how to start it, and the owner
+plays. M1–M13 grow from there (build-v1 §3a).
+
 ## 1. What we have to build on
 
 | Exists | Where | Becomes |

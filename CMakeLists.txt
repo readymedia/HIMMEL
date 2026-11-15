@@ -31,6 +31,8 @@ FetchContent_Declare(snappy
 FetchContent_MakeAvailable(hidapi json snappy)
 
 enable_testing()
+add_subdirectory(src/protocol)
 add_subdirectory(src/controller)
+add_subdirectory(src/perform)
 add_subdirectory(src/media)
 add_subdirectory(src/engine)
