@@ -105,6 +105,59 @@
   #genLog td.hex { color: #7f838c; white-space: normal; word-break: break-all; }
   #genLog tr.up td.dir { color: #7ff0b0; } #genLog tr.down td.dir { color: #c8b8ff; }
   @media (max-width: 760px) { #gen { grid-template-columns: 1fr; } }
+  /* video-mixer weapons (profile "live": "mixer", kinds "fader" and deco "display" / "monitor") */
+  .fader { border-radius: 6px; }
+  .fader .ftrack { position: absolute; left: 50%; top: 14px; bottom: 14px; width: 8px; margin-left: -4px;
+                   background: #050506; border-radius: 4px; box-shadow: inset 0 0 0 1px #2c2c31; }
+  .fader .fhandle { position: absolute; left: 0; right: 0; height: 26px; margin-top: -13px; border-radius: 4px;
+                    background: linear-gradient(#d9dbe0, #8d9097); box-shadow: 0 3px 8px #000a; }
+  .fader .fhandle::after { content: ""; position: absolute; left: 6px; right: 6px; top: 12px; height: 2px; background: #333; }
+  .fader .fend { position: absolute; left: 0; right: 0; text-align: center; font-size: 8px; font-weight: 700; color: var(--label); }
+  .fader.on .fhandle { box-shadow: 0 0 14px #fff8, 0 3px 8px #000a; }
+  body.sim .fader { cursor: ns-resize; }
+  .deco-display { position: absolute; background: #1a0d05; border: 2px solid #000; border-radius: 3px; color: #ff9d2e;
+                  font: 700 18px/1 Consolas, monospace; display: flex; align-items: center; justify-content: center;
+                  text-shadow: 0 0 6px #ff9d2e88; letter-spacing: 1px; }
+  .deco-monitor { position: absolute; background: #000; border: 6px solid #222327; border-radius: 6px; box-shadow: 0 8px 24px #0008; }
+  .deco-monitor canvas { width: 100%; height: 100%; display: block; }
+  .deco-monitor span { position: absolute; left: 0; right: 0; top: -20px; text-align: center; font-size: 9px; font-weight: 700;
+                       color: var(--label); letter-spacing: .5px; }
+  .deco-rect { position: absolute; }
+  .deco-text { position: absolute; white-space: nowrap; line-height: 1.05; transform: translate(-50%, -50%); text-align: center;
+               font-family: "Arial Narrow", Arial, sans-serif; letter-spacing: .2px; pointer-events: none; }
+  .deco-text.left { transform: translate(0, -50%); text-align: left; }
+  .deco-text.right { transform: translate(-100%, -50%); text-align: right; }
+  .deco-jack { position: absolute; border-radius: 50%; background: radial-gradient(circle, #111 0 22%, #d9b84a 24% 46%, #8a8d93 48% 70%, #c9ccd1 72%);
+               box-shadow: 0 1px 2px #0008; }
+  .deco-ladder { position: absolute; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; }
+  .deco-ladder i { display: block; height: 3px; background: #dfe3ec; opacity: .35; }
+  .deco-ladder i.lit { opacity: 1; background: #ff3b30; box-shadow: 0 0 2px #ff3b30; }
+  .dialdot { position: absolute; width: 3px; height: 3px; border-radius: 50%; background: #2a3150; }
+  .knob.black { background: radial-gradient(circle at 45% 35%, #3a3a3e, #0b0b0c 70%); border: 2px solid #050505;
+                box-shadow: 0 3px 6px #0008, inset 0 -2px 3px #000; }
+  .knob.black .ind { top: 4%; height: 38%; width: 3px; margin-left: -1.5px; }
+  .b.rb { border-radius: 50%; background: radial-gradient(circle at 40% 35%, color-mix(in srgb, var(--led) 30%, #9aa0a6), color-mix(in srgb, var(--led) 25%, #3d4146) 75%);
+          box-shadow: 0 0 0 2px #22273a, 0 2px 3px #0008; }
+  .b.rb.lit { background: radial-gradient(circle at 40% 35%, #fff, var(--led) 45%, color-mix(in srgb, var(--led) 70%, #000) 100%);
+              box-shadow: 0 0 0 2px #22273a, 0 0 14px var(--led); }
+  .b.cap { background: linear-gradient(#f4f4f2, #cfd0cc); border-radius: 3px; box-shadow: 0 3px 0 #8f9196, 0 4px 6px #0006; color: #222; }
+  .b.cap .tick { position: absolute; left: 50%; top: 4px; width: 3px; height: 10px; margin-left: -1.5px; background: #444; border-radius: 1px; }
+  .b.cap.lit .tick { background: var(--led); box-shadow: 0 0 6px var(--led); }
+  .b.dark { background: linear-gradient(#5b2a2a, #331616); border-radius: 3px; box-shadow: 0 3px 0 #1b0c0c, 0 4px 8px #0008; }
+  .b.dark.lit { background: linear-gradient(#b3322b, #6e1a16); box-shadow: 0 3px 0 #1b0c0c, 0 0 16px var(--led); }
+  .b.rb.on, .b.cap.on, .b.dark.on { transform: translateY(1px); filter: brightness(1.15); }
+  .plate { border-radius: 50%; background: radial-gradient(circle, #d7dadf 0 62%, #c3c6cc 63% 100%); box-shadow: 0 0 0 2px #9ea3ab, 0 4px 14px #0005; }
+  .plate .pscrew { position: absolute; width: 10px; height: 10px; margin: -5px; border-radius: 50%; background: radial-gradient(circle, #555 0 20%, #b9bcc2 30%); }
+  .plate .pslot { position: absolute; background: #1a1b1f; border-radius: 4px; box-shadow: inset 0 0 8px #000; }
+  .plate .psq { position: absolute; background: #2a3150; }
+  .plate .pend { position: absolute; width: 14px; height: 14px; margin: -7px; background: #2a3150; color: #fff; font: 900 10px/14px Arial; text-align: center; }
+  .plate .pgrip { position: absolute; border-radius: 10px; background: linear-gradient(135deg, #3d3f45, #121316 70%); box-shadow: 0 6px 12px #000a, inset 0 2px 2px #ffffff22; }
+  .plate .pstem { position: absolute; border-radius: 4px; background: linear-gradient(90deg, #26282d, #0d0e10); box-shadow: 0 4px 8px #0008; }
+  body.sim .plate { cursor: grab; }
+  .mixeronly { display: none; }
+  body.mixer .mixeronly { display: block; }
+  body.mixer .blocksonly { display: none !important; }
+  #xSetup td { padding: 0 10px 0 0; }
 </style>
 </head>
 <body>
@@ -129,10 +182,33 @@
   <div class="card">
     <h2>Play the simulated weapon</h2>
     <div class="help" id="genHelp"></div>
-    <div class="row"><label>Finger force <input type="range" id="gForce" min="5" max="100" value="45"></label>
+    <div class="row blocksonly"><label>Finger force <input type="range" id="gForce" min="5" max="100" value="45"></label>
       <span id="gForceV" class="mono"></span></div>
   </div>
-  <div class="card">
+  <div class="card mixeronly">
+    <h2>Host (the live view standing in for Himmel) → drives the mixer over MIDI</h2>
+    <div class="row seg">A input <button data-x="A1">1</button><button data-x="A2">2</button><button data-x="A3">3</button><button data-x="A4">4</button>
+      &nbsp; B input <button data-x="B1">1</button><button data-x="B2">2</button><button data-x="B3">3</button><button data-x="B4">4</button></div>
+    <div class="row"><label>T-bar (CC) <input type="range" id="xTbar" min="0" max="1000" value="0"></label>
+      <button id="xTake">Auto take</button><label>in <input type="number" id="xTakeS" value="1.5" min="0.1" max="10" step="0.1" style="width:52px"> s</label></div>
+    <div class="row"><label>Output fade <input type="range" id="xFade" min="-1000" max="1000" value="0"></label>
+      <span class="help">needs Himmel's MIDI setup (unassigned at the factory)</span></div>
+    <div class="row"><label><input type="checkbox" id="xClock"> Send MIDI clock at</label>
+      <input type="number" id="xBpm" value="128" min="40" max="250" step="1" style="width:60px"> BPM (drives BPM SYNC)</div>
+    <div class="row"><button id="xSetupH"><b>Send Himmel's MIDI setup</b> (SysEx)</button><button id="xSetupF">Factory setup</button></div>
+    <div class="help">At the factory the V-4 sends only the inputs, memory and the T-bar (CC#11). Himmel's setup gives every
+      effect, transition, transformer, output fade and BPM sync its own CC with 15 SysEx DT1 messages (20 ms apart), so
+      Himmel can see the whole panel.</div>
+    <div class="row"><label><input type="checkbox" id="xNote"> Note Mode on the V-4</label>
+      <button data-n="36">note 24H (A1)</button><button data-n="48">note 30H (B4)</button>
+      <label><input type="checkbox" id="xThru"> MIDI Thru on (the V-4 goes quiet)</label></div>
+    <div id="xHostInfo" class="mono small"></div>
+  </div>
+  <div class="card mixeronly" style="grid-column: 1 / -1">
+    <h2>MIDI setup in the (simulated) V-4: what each panel function sends</h2>
+    <table id="xSetup" class="mono small"></table>
+  </div>
+  <div class="card blocksonly" id="gHostCard">
     <h2>Host (the live view standing in for Himmel)</h2>
     <div class="row seg" id="gLed">
       <button data-m="touch">Touch glow</button>
@@ -154,7 +230,7 @@
       like the real one. The LEDs you see are decoded from the SysEx the host sent to the block.</div>
     <div id="gHostInfo" class="mono small"></div>
   </div>
-  <div class="card" style="grid-column: 1 / -1" id="gHwCard">
+  <div class="card blocksonly" style="grid-column: 1 / -1" id="gHwCard">
     <h2>Real block</h2>
     <div class="row"><button id="gHw">Use the real block</button>
       <span class="help">Plug it in with USB and close ROLI Connect / Dashboard. The probe enters API mode and
@@ -172,8 +248,8 @@
       <span id="gZInfo" class="mono small"></span></div>
   </div>
   <div class="card" style="grid-column: 1 / -1">
-    <h2>MIDI monitor (every message between block and host)</h2>
-    <div class="row"><label><input type="checkbox" id="gNoise"> Show pings, ACKs and LED data</label></div>
+    <h2 id="gLogTitle">MIDI monitor (every message between block and host)</h2>
+    <div class="row"><label><input type="checkbox" id="gNoise"> <span id="gNoiseLabel">Show pings, ACKs and LED data</span></label></div>
     <table id="genLog"></table>
   </div>
   <div class="card" style="grid-column: 1 / -1">
@@ -275,7 +351,7 @@ const els = {};          // control name -> control (with .el)
 const panel = document.getElementById("panel");
 function add(html, cls, style) { const d = document.createElement("div"); d.className = cls; Object.assign(d.style, style); d.innerHTML = html; panel.appendChild(d); return d; }
 const esc = t => String(t).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
-const ctxs = {}, imgs = {};
+const ctxs = {}, imgs = {}, decoEls = {};
 // 256x64 screens drawn at 1:1 device pixels, scaled to the panel (aspect 4:1)
 let lastScr = {};
 function drawScreen(side, b64) {
@@ -342,11 +418,33 @@ function buildPanel(w, wireFn = wire) {
   document.getElementById("title").textContent = w.name + " Live";
   panel.style.width = w.panel.w + "px"; panel.style.height = w.panel.h + "px";
   for (const d of w.deco || []) {  // drawing only: device body, connectors, ports (not controls)
-    if (d.kind === "body") add("", "deco-body", { left: d.x + "px", top: d.y + "px", width: d.w + "px", height: d.h + "px", borderRadius: (d.r || 0) + "px" });
+    const box = { left: d.x + "px", top: d.y + "px", width: d.w + "px", height: d.h + "px" };
+    if (d.kind === "body") add("", "deco-body", Object.assign(box, { borderRadius: (d.r || 0) + "px" }, d.fill ? { background: d.fill } : {}));
+    else if (d.kind === "rect") add("", "deco-rect", Object.assign(box, { borderRadius: (d.r || 0) + "px", background: d.fill || "transparent",
+                                                                          border: d.stroke ? "1.5px solid " + d.stroke : "none" }));
+    else if (d.kind === "text") {  // printed lettering; x is the left edge, centre or right edge (align), y the middle of the line
+      const t = add(esc(d.label).replace(/\n/g, "<br>"), "deco-text " + (d.align || "center"),
+                    { left: d.x + "px", top: d.y + "px", fontSize: (d.size || 9) + "px", color: d.color || "", fontWeight: d.weight || 800,
+                      fontStyle: d.style || "", fontFamily: d.font || "" });
+      t.style.zIndex = d.z || "";
+    }
+    else if (d.kind === "jack") add("", "deco-jack", { left: (d.x - d.r) + "px", top: (d.y - d.r) + "px", width: 2 * d.r + "px", height: 2 * d.r + "px" });
+    else if (d.kind === "ladder") {  // a column of LED bars (e.g. the beat ladder under BPM SYNC), lit from the simulator
+      const l = add(Array.from({ length: d.n }, (_, i) => `<i style="width:${Math.round(40 + 60 * i / Math.max(1, d.n - 1))}%"></i>`).join(""),
+                    "deco-ladder", Object.assign(box, { zIndex: d.z || "" }));
+      decoEls["ladder:" + (d.source || "")] = { ladder: l, source: d.source, n: d.n };
+    }
     else if (d.kind === "dna") add("", "deco-dna", { left: d.x + "px", top: d.y + "px" });
     else if (d.kind === "port") add(`<span${d.w > d.h ? ' style="transform: translate(-50%, -50%)"' : ""}>${esc(d.label || "")}</span>`, "deco-port", { left: d.x + "px", top: d.y + "px", width: d.w + "px", height: d.h + "px" });
+    else if (d.kind === "display") decoEls[d.id] = add("", "deco-display", Object.assign(box, d.color ? { color: d.color, textShadow: `0 0 8px ${d.color}aa` } : {},
+                                                                                  d.size ? { fontSize: d.size + "px" } : {}));
+    else if (d.kind === "monitor") {  // a video monitor drawn by the page from the simulator's state
+      const m = add(`<canvas width="320" height="240"></canvas><span>${esc(d.label || "")}</span>`, "deco-monitor", { left: d.x + "px", top: d.y + "px", width: d.w + "px", height: d.h + "px" });
+      decoEls[d.id] = { el: m, ctx: m.firstChild.getContext("2d"), source: d.source };
+    }
   }
-  add(esc(w.badge || w.name), "brand", {});
+  add(esc(w.badge || w.name), "brand", w.brand ? { left: w.brand.x + "px", top: w.brand.y + "px", fontSize: (w.brand.size || 15) + "px",
+                                                   color: w.brand.color || "" } : {});
   for (const s of w.sections || []) {
     add(esc(s.label), "sec", { left: s.x + "px", top: s.y + "px" });
     add("", "rule", { left: s.x + "px", top: (s.y + 12) + "px", width: s.w + "px" });
@@ -360,10 +458,18 @@ function buildPanel(w, wireFn = wire) {
   for (const c of w.controls) {
     let d;
     if (c.kind === "button") {
-      d = add(esc(c.label || "").replace(/\n/g, "<br>"), "c b", { left: c.x + "px", top: c.y + "px", width: c.w + "px", height: c.h + "px" });
+      // optional looks (video mixers): round LED buttons, light key caps with an LED tick, dark square buttons
+      const look = c.shape === "round" ? " rb" : c.style === "cap" ? " cap" : c.style === "dark" ? " dark" : "";
+      d = add(esc(c.label || "").replace(/\n/g, "<br>") + (c.style === "cap" ? '<i class="tick"></i>' : ""), "c b" + look,
+              { left: c.x + "px", top: c.y + "px", width: c.w + "px", height: c.h + "px" });
+      if (c.led_color && look) d.style.setProperty("--led", c.led_color);
     } else if (c.kind === "knob" || c.kind === "encoder") {
-      d = add('<div class="ind"></div>', "c knob", { left: (c.x - c.r) + "px", top: (c.y - c.r) + "px", width: 2 * c.r + "px", height: 2 * c.r + "px" });
-      c.val = add("", "kval", { left: (c.x - 30) + "px", top: (c.y + c.r + 3) + "px" });
+      for (let i = 0; i < (c.dial || 0); i++) {  // printed dots around the knob
+        const a = (-135 + 270 * i / (c.dial - 1)) * Math.PI / 180, rr = c.r + 8;
+        add("", "dialdot", { left: (c.x + rr * Math.sin(a) - 1.5) + "px", top: (c.y - rr * Math.cos(a) - 1.5) + "px" });
+      }
+      d = add('<div class="ind"></div>', "c knob" + (c.style === "black" ? " black" : ""), { left: (c.x - c.r) + "px", top: (c.y - c.r) + "px", width: 2 * c.r + "px", height: 2 * c.r + "px" });
+      c.val = add("", "kval", { left: (c.x - 30) + "px", top: (c.y + c.r + (c.dial ? 9 : 3)) + "px", display: c.show_value === false ? "none" : "" });
       panel.appendChild(d);
     } else if (c.kind === "pad") {
       d = add('<span class="pn">' + c.n + '</span><span class="pv"></span>', "c pad", { left: c.x + "px", top: c.y + "px", width: c.w + "px", height: c.h + "px" });
@@ -373,6 +479,15 @@ function buildPanel(w, wireFn = wire) {
     } else if (c.kind === "surface") {  // multi-touch surface with an LED grid under it
       d = add(`<canvas width="${c.w * 2}" height="${c.h * 2}"></canvas>`, "c surface", { left: c.x + "px", top: c.y + "px", width: c.w + "px", height: c.h + "px" });
       c.ctx = d.firstChild.getContext("2d");
+    } else if (c.kind === "fader" && c.plate) {  // a T-bar on a round plate that can be mounted turned 90 degrees
+      d = add("", "c fader plate", { left: c.x + "px", top: c.y + "px", width: c.w + "px", height: c.h + "px" });
+      c.el = d;
+      c.orient = savedOrient(c);
+      buildPlate(c);
+    } else if (c.kind === "fader") {  // a T-bar / fader: absolute position 0..1 from the first end to the second
+      const ends = c.ends || ["", ""];
+      d = add(`<div class="fend" style="top:-12px">${esc(ends[0])}</div><div class="ftrack"></div><div class="fhandle"></div>` +
+              `<div class="fend" style="bottom:-12px">${esc(ends[1])}</div>`, "c fader", { left: c.x + "px", top: c.y + "px", width: c.w + "px", height: c.h + "px" });
     } else continue;
     d.title = c.name;
     c.el = d; els[c.name] = c;
@@ -576,8 +691,10 @@ function startGeneric(wid) {
   document.body.classList.add("generic", "sim");
   simOn = true;
   fetch("/weapon?id=" + encodeURIComponent(wid)).then(r => r.json()).then(w => {
+    document.body.classList.toggle("mixer", w.live === "mixer");
     buildPanel(w, wireGeneric);
-    document.getElementById("genHelp").innerHTML = (w.controls.some(c => c.kind === "key")
+    if (w.live === "mixer") startMixer(w);
+    else document.getElementById("genHelp").innerHTML = (w.controls.some(c => c.kind === "key")
       ? "<b>Keys:</b> click a key; lower on the key = harder strike. Hold for pressure (it grows, the scroll " +
         "wheel changes it), drag sideways to glide. A touch screen plays chords.<br>" : "") +
       (w.controls.some(c => c.kind === "surface")
@@ -621,6 +738,44 @@ setInterval(() => { for (const [id, f] of fingers) if (fingerZ(f) < 1) sendFinge
 
 function wireGeneric(c) {
   const el = c.el;
+  if (c.kind === "knob") {  // generic weapons: drag up/down or scroll; "steps" knobs click from detent to detent
+    const stepPx = c.steps ? 18 : 1;
+    el.addEventListener("pointerdown", e => { e.preventDefault(); el.setPointerCapture(e.pointerId); c.dragY = e.clientY; });
+    el.addEventListener("pointermove", e => {
+      if (!el.hasPointerCapture(e.pointerId)) return;
+      const n = Math.trunc((c.dragY - e.clientY) / stepPx);
+      if (n) { c.dragY -= n * stepPx; gsim({ name: c.name, delta: n }); }
+    });
+    el.addEventListener("wheel", e => {
+      e.preventDefault();
+      gsim({ name: c.name, delta: (e.deltaY < 0 ? 1 : -1) * (c.steps ? 1 : 4) });
+    }, { passive: false });
+    return;
+  }
+  if (c.kind === "fader") {  // absolute: the handle follows the pointer
+    const at = e => {
+      const r = el.getBoundingClientRect();
+      if (c.plate) {  // travel PLATE_A..PLATE_B of the plate; vertical: A near you (bottom), horizontal: A left
+        const k = c.orient === "horizontal" ? (e.clientX - r.left) / r.width : 1 - (e.clientY - r.top) / r.height;
+        return Math.min(1, Math.max(0, (k - PLATE_A) / (PLATE_B - PLATE_A)));
+      }
+      const pad = 14 * r.height / c.h;
+      return Math.min(1, Math.max(0, (e.clientY - r.top - pad) / (r.height - 2 * pad)));
+    };
+    el.addEventListener("pointerdown", e => { e.preventDefault(); el.setPointerCapture(e.pointerId); c.last = 0; gsim({ name: c.name, value: at(e) }); });
+    el.addEventListener("pointermove", e => {
+      if (!el.hasPointerCapture(e.pointerId)) return;
+      const now = performance.now();
+      if (now - c.last > 15) { c.last = now; gsim({ name: c.name, value: at(e) }); }
+    });
+    el.addEventListener("pointerup", e => gsim({ name: c.name, value: at(e) }));
+    el.addEventListener("wheel", e => {
+      e.preventDefault();
+      const v = ((G && G.faders && G.faders[c.name]) || 0) + (e.deltaY < 0 ? -0.04 : 0.04) * (c.plate ? -1 : 1);  // plate: wheel up = towards B
+      gsim({ name: c.name, value: Math.min(1, Math.max(0, v)) });
+    }, { passive: false });
+    return;
+  }
   if (c.kind === "button") {
     el.addEventListener("pointerdown", e => { e.preventDefault(); el.setPointerCapture(e.pointerId); gsim({ name: c.name, down: true }); });
     const up = () => gsim({ name: c.name, down: false });
@@ -711,6 +866,7 @@ function drawSurface(c, s) {
 let lastLogKey = "";
 function renderGeneric(s) {
   G = s;
+  if (s.mixer) { renderMixer(s); return; }
   const conn = document.getElementById("conn");
   const nm = W ? W.name : gid;
   if (s.hardware) {
@@ -793,6 +949,234 @@ function renderGeneric(s) {
     lastLogKey = key;
     document.getElementById("genLog").innerHTML = log.slice().reverse().map(([t, dir, hex, text]) =>
       `<tr class="${dir.startsWith("block") ? "up" : "down"}"><td>${esc(t)}</td><td class="dir">${esc(dir)}</td>` +
+      `<td>${esc(text)}</td><td class="hex">${esc(hex)}</td></tr>`).join("") || "<tr><td>-</td></tr>";
+  }
+}
+
+// ================= video-mixer weapons (profile "live": "mixer", e.g. the V-4) =================
+// The panel is the mixer; the host card is Himmel driving it over MIDI. The monitors are drawn here from
+// the simulator's state, so you can see what the mixer would output (a sketch, not the device's real effects).
+function startMixer(w) {
+  document.getElementById("genHelp").innerHTML =
+    "<b>Buttons:</b> hold the mouse button down. INPUT SELECT picks the input on A and B; effect buttons toggle " +
+    "(a press on the blinking one turns it off) and the CONTROL dial adjusts the blinking one. <b>Knobs:</b> drag " +
+    "up/down or scroll; MEMORY clicks between 1 and 8. <b>T-bar:</b> drag it or scroll. MENU / ▲ / ▼ / ENTER work the " +
+    "on-screen menu on the preview monitor. The simulator produces the V-4's real MIDI bytes (see the MIDI monitor)." +
+    '<div class="row"><button id="xRotate">Turn the T-bar 90°</button><span id="xRotateInfo" class="help"></span></div>';
+  const fd = Object.values(els).find(c => c.plate);
+  const rot = document.getElementById("xRotate");
+  if (!fd || (fd.orientations || []).length < 2) rot.parentNode.style.display = "none";
+  else rot.onclick = () => {
+    const o = fd.orientations, next = o[(o.indexOf(fd.orient) + 1) % o.length];
+    fd.orient = next;
+    try { localStorage.setItem("himmel.plate." + gid + "." + fd.name, next); } catch (e) {}
+    buildPlate(fd);
+  };
+  if (fd) buildPlate(fd);   // also fills in the orientation note
+  document.getElementById("gLogTitle").textContent = "MIDI monitor (every message between the V-4 and the host)";
+  document.getElementById("gNoiseLabel").textContent = "Show MIDI clock";
+  document.querySelectorAll("[data-x]").forEach(b => b.onclick = () => gpost({ host_select: [b.dataset.x[0], +b.dataset.x[1]] }));
+  document.querySelectorAll("[data-n]").forEach(b => b.onclick = () => gpost({ host_note: +b.dataset.n }));
+  const tb = document.getElementById("xTbar");
+  tb.oninput = () => { tb.dataset.touched = Date.now(); gpost({ host_tbar: tb.value / 1000 }); };
+  document.getElementById("xFade").oninput = e => gpost({ host_fade: e.target.value / 1000 });
+  document.getElementById("xTake").onclick = () => gpost({ host_take: true, seconds: +document.getElementById("xTakeS").value || 1.5 });
+  const clk = () => gpost({ host_clock: document.getElementById("xClock").checked, bpm: +document.getElementById("xBpm").value || 128 });
+  document.getElementById("xClock").onchange = clk;
+  document.getElementById("xBpm").onchange = clk;
+  document.getElementById("xSetupH").onclick = () => gpost({ host_setup: "himmel" });
+  document.getElementById("xSetupF").onclick = () => gpost({ host_setup: "factory" });
+  document.getElementById("xNote").onchange = e => gpost({ note_mode: e.target.checked });
+  document.getElementById("xThru").onchange = e => gpost({ midi_thru: e.target.checked });
+}
+
+// ---- the T-bar plate: drawn for its orientation (the real one can be mounted turned 90 degrees) ----
+const PLATE_A = 0.24, PLATE_B = 0.76;   // travel along the plate: A end and B end (fractions of its size)
+function savedOrient(c) {
+  try { const o = localStorage.getItem("himmel.plate." + gid + "." + c.name); if ((c.orientations || []).includes(o)) return o; } catch (e) {}
+  return c.orientation || "vertical";
+}
+function buildPlate(c) {
+  const el = c.el, S = c.w, hz = c.orient === "horizontal";
+  // positions along the travel axis (u, 0..1 from the A end) and across it (v, 0..1)
+  const at = (u, v) => hz ? { left: u * S, top: v * S } : { left: v * S, top: (1 - u) * S };
+  let h = "";
+  for (const [x, y] of [[0.5, 0.06], [0.94, 0.5], [0.5, 0.94], [0.06, 0.5]]) h += `<i class="pscrew" style="left:${x * S}px;top:${y * S}px"></i>`;
+  const slotLen = (PLATE_B - PLATE_A + 0.14) * S, slotW = 0.13 * S, a0 = PLATE_A - 0.07;
+  const sl = at(a0, 0.5), slot = hz ? { left: sl.left, top: sl.top - slotW / 2, width: slotLen, height: slotW }
+                                    : { left: sl.left - slotW / 2, top: sl.top - slotLen, width: slotW, height: slotLen };
+  h += `<i class="pslot" style="left:${slot.left}px;top:${slot.top}px;width:${slot.width}px;height:${slot.height}px"></i>`;
+  // the printed scales: squares that grow towards their end, A on one side, B on the other
+  const N = 9;
+  for (const [side, endLab, grow] of [[0.27, "A", -1], [0.73, "B", 1]]) {
+    for (let i = 0; i < N; i++) {
+      const u = PLATE_A + (PLATE_B - PLATE_A) * i / (N - 1), k = grow > 0 ? i / (N - 1) : 1 - i / (N - 1);
+      const sz = 3 + 7 * k, p = at(u, side);
+      h += `<i class="psq" style="left:${p.left - sz / 2}px;top:${p.top - sz / 2}px;width:${sz}px;height:${sz}px"></i>`;
+    }
+    const e = at(grow > 0 ? PLATE_B + 0.07 : PLATE_A - 0.07, side);
+    h += `<b class="pend" style="left:${e.left}px;top:${e.top}px">${endLab}</b>`;
+  }
+  h += '<i class="pstem"></i><i class="pgrip"></i>';
+  el.innerHTML = h;
+  c.grip = el.querySelector(".pgrip"); c.stem = el.querySelector(".pstem");
+  const info = document.getElementById("xRotateInfo");
+  if (info) info.textContent = hz ? "Mounted left/right now: A left, B right." : "Mounted up/down now: A near you (bottom), B away (top).";
+  placePlate(c, (G && G.faders && G.faders[c.name]) || 0);
+}
+function placePlate(c, v) {  // the black T grip across the slot, with its stem down into the slot
+  const S = c.w, hz = c.orient === "horizontal", u = PLATE_A + (PLATE_B - PLATE_A) * v;
+  const gl = 0.62 * S, gw = 0.12 * S, sl = 0.09 * S, sw = 0.24 * S;
+  const st = (el, o) => Object.assign(el.style, { left: o[0] + "px", top: o[1] + "px", width: o[2] + "px", height: o[3] + "px" });
+  if (hz) { const x = u * S; st(c.grip, [x - gw / 2, S / 2 - gl / 2, gw, gl]); st(c.stem, [x - sw / 2, S / 2 - sl / 2, sw, sl]); }
+  else { const y = (1 - u) * S; st(c.grip, [S / 2 - gl / 2, y - gw / 2, gl, gw]); st(c.stem, [S / 2 - sl / 2, y - sw / 2, sl, sw]); }
+}
+
+const mxBuf = {};
+function mxCanvas(k) { if (!mxBuf[k]) { const c = document.createElement("canvas"); c.width = 320; c.height = 240; mxBuf[k] = c; } return mxBuf[k]; }
+function mxInput(g, n, t) {  // four made-up camera/clip sources, one look each
+  g.save(); g.globalAlpha = 1; g.globalCompositeOperation = "source-over";
+  if (n === 1) {  // colour bars
+    ["#c0c0c0", "#c0c000", "#00c0c0", "#00c000", "#c000c0", "#c00000", "#0000c0"].forEach((c, i) => { g.fillStyle = c; g.fillRect(i * 320 / 7, 0, 320 / 7 + 1, 180); });
+    g.fillStyle = "#111"; g.fillRect(0, 180, 320, 60);
+    g.fillStyle = "#fff"; g.fillRect((t * 80) % 340 - 20, 196, 20, 28);
+  } else if (n === 2) {  // sky and a sun
+    const gr = g.createLinearGradient(0, 0, 0, 240); gr.addColorStop(0, "#0b2a6b"); gr.addColorStop(1, "#5aa7e8");
+    g.fillStyle = gr; g.fillRect(0, 0, 320, 240);
+    g.fillStyle = "#ffd166"; g.beginPath(); g.arc(160 + 110 * Math.cos(t * 0.7), 120 - 70 * Math.sin(t * 0.7), 30, 0, 7); g.fill();
+    g.fillStyle = "#1d3b1d"; g.fillRect(0, 200, 320, 40);
+  } else if (n === 3) {  // scrolling checkerboard
+    const o = (t * 40) % 64;
+    for (let y = -64; y < 240; y += 32) for (let x = -64; x < 320; x += 32) {
+      g.fillStyle = ((x + y) / 32) % 2 === 0 ? "#1f8a4c" : "#0c2d19"; g.fillRect(x + o, y + o, 32, 32);
+    }
+  } else {  // rings
+    g.fillStyle = "#200010"; g.fillRect(0, 0, 320, 240);
+    for (let r = 160; r > 0; r -= 18) { g.strokeStyle = `hsl(${(r * 2 + t * 90) % 360} 90% 60%)`; g.lineWidth = 7;
+      g.beginPath(); g.arc(160, 120, r * (0.8 + 0.2 * Math.sin(t * 2)), 0, 7); g.stroke(); }
+  }
+  g.fillStyle = "#000a"; g.fillRect(8, 8, 52, 20); g.fillStyle = "#fff"; g.font = "bold 14px Segoe UI"; g.fillText("IN " + n, 14, 23);
+  g.restore();
+}
+function mxChannel(ch, m, t) {  // an input with its channel's effects (factory assignment), drawn into a buffer
+  const c = mxCanvas(ch), g = c.getContext("2d"), tmp = mxCanvas(ch + "t"), tg = tmp.getContext("2d");
+  mxInput(g, ch === "A" ? m.a : m.b, t);
+  const fx = ch === "A" ? m.fx_a : m.fx_b, val = ch === "A" ? m.fx_val_a : m.fx_val_b;
+  if (fx[3] === "MULTI") { tg.drawImage(c, 0, 0); for (let i = 0; i < 4; i++) g.drawImage(tmp, (i % 2) * 160, (i >> 1) * 120, 160, 120); }
+  if (fx[0] === "MIRROR") { tg.drawImage(c, 0, 0); g.save(); g.translate(320, 0); g.scale(-1, 1); g.drawImage(tmp, 0, 0, 160, 240, 0, 0, 160, 240); g.restore(); }
+  if (fx[2] === "COLORIZE") { g.save(); g.globalCompositeOperation = "color"; g.fillStyle = `hsl(${val[2] * 2.8} 90% 50%)`; g.fillRect(0, 0, 320, 240); g.restore(); }
+  if (fx[1] === "NEGATIVE") { g.save(); g.globalCompositeOperation = "difference"; g.fillStyle = "#fff"; g.fillRect(0, 0, 320, 240); g.restore(); }
+  if (fx[0] === "STROBE" && Math.floor(t * (2 + val[0] / 10)) % 2) { g.fillStyle = "#000"; g.fillRect(0, 0, 320, 240); }
+  return c;
+}
+function mxProgram(g, m, t) {
+  const A = mxChannel("A", m, t), B = mxChannel("B", m, t);
+  let k = m.tbar;                       // 0 = A, 1 = B
+  if (m.bpm_sync) k = m.beat % 2;       // BPM SYNC: cut on every beat
+  if (m.transformer_a) k = 0;
+  if (m.transformer_b) k = 1;
+  g.globalAlpha = 1; g.globalCompositeOperation = "source-over";
+  const key = m.fx_b[1] || m.fx_b[2] || m.fx_b[3];
+  if (key) {  // keys and P in P: B over A; the video fader sets the key level / window size
+    g.drawImage(A, 0, 0);
+    if (m.fx_b[3]) { const s = 0.25 + 0.5 * m.tbar; g.drawImage(B, 320 * (1 - s) - 10, 10, 320 * s, 240 * s); g.strokeStyle = "#fff"; g.strokeRect(320 * (1 - s) - 10, 10, 320 * s, 240 * s); }
+    else { g.globalCompositeOperation = m.fx_b[1] ? "screen" : "lighten"; g.globalAlpha = 0.3 + 0.7 * m.tbar; g.drawImage(B, 0, 0); }
+  } else if (m.trans === "WIPE") {
+    g.drawImage(A, 0, 0); const x = 320 * k; g.drawImage(B, 0, 0, x || 0.01, 240, 0, 0, x || 0.01, 240);
+  } else if (m.trans === "EFX") {
+    g.drawImage(A, -320 * k, 0); g.drawImage(B, 320 * (1 - k), 0);
+  } else {
+    g.drawImage(A, 0, 0); g.globalAlpha = k; g.drawImage(B, 0, 0);
+  }
+  g.globalAlpha = 1; g.globalCompositeOperation = "source-over";
+  if (m.fade) { g.fillStyle = m.fade > 0 ? `rgba(255,255,255,${m.fade})` : `rgba(0,0,0,${-m.fade})`; g.fillRect(0, 0, 320, 240); }
+}
+function mxMonitor(d, m, t) {
+  const g = d.ctx;
+  if (d.source === "preview" && m.preview !== "out") { mxInput(g, m.preview, t); }
+  else mxProgram(g, m, t);
+  if (d.source === "preview") { g.fillStyle = "#000a"; g.fillRect(200, 210, 112, 22); g.fillStyle = "#3ddc84"; g.font = "bold 12px Consolas";
+    g.fillText(m.preview === "out" ? "PREVIEW: OUT" : "PREVIEW: IN " + m.preview, 206, 226); }
+  if (d.source === "preview" && G && G.menu && G.menu.open) {  // the on-screen menu (MENU / up / down / ENTER)
+    const mn = G.menu;
+    g.fillStyle = "#000c"; g.fillRect(14, 30, 292, 22 + 20 * mn.items.length);
+    g.fillStyle = "#fff"; g.font = "bold 13px Consolas"; g.fillText("V-4 MENU (simulated)", 24, 46);
+    mn.items.forEach(([name, val], i) => {
+      const y = 68 + 20 * i;
+      if (i === mn.sel) { g.fillStyle = "#3b5bdb"; g.fillRect(18, y - 14, 284, 19); }
+      g.fillStyle = "#fff"; g.font = "12px Consolas"; g.fillText(name, 24, y); g.fillText(String(val), 220, y);
+    });
+  }
+}
+
+let lastMixLog = "";
+function renderMixer(s) {
+  const conn = document.getElementById("conn"), nm = W ? W.name : gid;
+  conn.textContent = s.engine ? nm + " simulated, playing Himmel" : nm + " simulated · " + (s.mode_name || "");
+  conn.className = "pill sim";
+  const held = new Set(s.held || []), lit = s.lit || {};
+  for (const c of Object.values(els)) {
+    if (c.kind === "button") {
+      const on = held.has(c.name), col = lit[c.name];
+      c.el.classList.toggle("on", on);
+      if (c.led_color && (c.shape || c.style)) { c.el.classList.toggle("lit", !!col); continue; }  // drawn LED buttons
+      c.el.style.background = on ? (c.on_color || "") : col ? col : "";
+      c.el.style.color = !on && col ? "#111" : "";
+      c.el.style.boxShadow = !on && col ? `0 0 10px ${col}` : "";
+    } else if (c.kind === "knob") {
+      const v = (s.knobs || {})[c.name] ?? 0, r = c.range || 127;
+      const ang = c.endless ? v / 128 * 360 : -135 + 270 * v / r;
+      c.el.firstChild.style.transform = `rotate(${ang}deg)`;
+      c.val.textContent = (s.knob_text || {})[c.name] ?? v;
+    } else if (c.kind === "fader") {
+      const v = (s.faders || {})[c.name] ?? 0;
+      if (c.plate) placePlate(c, v);
+      else c.el.querySelector(".fhandle").style.top = (14 + v * (c.h - 28)) + "px";
+    }
+  }
+  for (const [id, text] of Object.entries(s.displays || {})) if (decoEls[id]) decoEls[id].textContent = text;
+  const t = performance.now() / 1000;
+  for (const d of Object.values(decoEls)) {
+    if (d.ctx && s.mix) mxMonitor(d, s.mix, t);
+    if (d.ladder && d.source === "beat" && s.mix) {  // the BPM SYNC ladder runs down once per beat
+      const n = s.mix.bpm_sync ? Math.ceil((1 - s.mix.phase) * d.n) : 0;
+      [...d.ladder.children].forEach((b, i) => b.classList.toggle("lit", i >= d.n - n));
+    }
+  }
+  const h = s.host || {}, seen = h.seen || {}, m = s.mix || {};
+  const tb = document.getElementById("xTbar");
+  if (!(Date.now() - (+tb.dataset.touched || 0) < 1500)) tb.value = Math.round((m.tbar || 0) * 1000);
+  document.getElementById("xClock").checked = !!h.clock;
+  document.getElementById("xNote").checked = !!(s.device || {}).note_mode;
+  document.getElementById("xThru").checked = !!(s.device || {}).midi_thru;
+  document.querySelectorAll("[data-x]").forEach(b => b.classList.toggle("on", (b.dataset.x[0] === "A" ? m.a : m.b) === +b.dataset.x[1]));
+  document.getElementById("xHostInfo").textContent =
+    `Himmel has seen: A ${seen.a ?? "-"}  B ${seen.b ?? "-"}  T-bar ${seen.tbar ?? "-"}  memory ${seen.memory ?? "-"}\n` +
+    `Himmel assumes the ${h.setup} MIDI setup${h.take_busy ? "   · auto take running" : ""}\n` +
+    `last events: ${(h.events || []).slice(-4).join("  |  ") || "-"}`;
+  const st = document.getElementById("xSetup"), key = JSON.stringify(s.setup);
+  if (st.dataset.key !== key) {
+    st.dataset.key = key;
+    const rows = s.setup || [];
+    const half = Math.ceil(rows.length / 2);
+    st.innerHTML = rows.slice(0, half).map((r, i) => `<tr><td>${esc(r[0])}</td><td><b>${esc(r[1])}</b></td><td>&nbsp;&nbsp;&nbsp;</td>` +
+      (rows[half + i] ? `<td>${esc(rows[half + i][0])}</td><td><b>${esc(rows[half + i][1])}</b></td>` : "") + "</tr>").join("") +
+      `<tr><td colspan="5" class="help">Always sent: inputs A/B (bank 00/01 + program), memory (bank 50H + program).</td></tr>`;
+  }
+  const k = s.counts || {}, dev = s.device || {};
+  document.getElementById("gStatus").textContent = [
+    (s.notes || []).join(" / "),
+    `V-4: ${s.mode_name}, receives on ${dev.rx_ch}, Note Mode ${dev.note_mode ? "on" : "off"}, MIDI Thru ${dev.midi_thru ? "on" : "off"}` +
+      (s.engine ? `  (an engine on UDP 127.0.0.1:${s.engine_port} is talking to it)` : `  · engine link: UDP 127.0.0.1:${s.engine_port}`),
+    `mix: A = IN ${m.a}${(m.fx_a || []).filter(Boolean).map(x => " + " + x).join("")}   B = IN ${m.b}${(m.fx_b || []).filter(Boolean).map(x => " + " + x).join("")}   ` +
+      `${m.trans} ${Math.round((m.tbar || 0) * 100)}% B   fade ${m.fade}   BPM ${m.bpm}${m.bpm_sync ? " (sync on)" : ""}   memory ${m.memory}   transition time ${m.trans_time} s`,
+    `messages: V-4 → host ${k.to_host || 0}, host → V-4 ${k.to_device || 0}, rejected ${k.bad || 0}`,
+  ].join("\n");
+  const log = s.log || [], lk = log.map(r => r[0] + r[2]).join("|");
+  if (lk !== lastMixLog) {
+    lastMixLog = lk;
+    document.getElementById("genLog").innerHTML = log.slice().reverse().map(([t, dir, hex, text]) =>
+      `<tr class="${dir.startsWith("V-4") ? "up" : "down"}"><td>${esc(t)}</td><td class="dir">${esc(dir)}</td>` +
       `<td>${esc(text)}</td><td class="hex">${esc(hex)}</td></tr>`).join("") || "<tr><td>-</td></tr>";
   }
 }

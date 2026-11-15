@@ -25,6 +25,7 @@ A weapon has up to four parts:
 | 5 | **NuVJ** (Numark NuVJ, 2008) | USB-MIDI: 2 × 9 pads, 2 jog wheels, 2 speed faders, crossfader, 12 knobs, 2 push BANK encoders, 31 LEDs, front switches, blue segment LCD (feedback by SysEx) | [`nuvj.weapon.json`](nuvj.weapon.json) | [`tools/nuvj_sim.py`](../tools/nuvj_sim.py) | **Checked on the owner's unit (2026-11-11)**: map of all 53 controls verified, 31 LEDs, LCD text and the whole segment map (camera mapper); protocol in [`docs/nuvj-protocol.md`](../docs/nuvj-protocol.md). C++ driver `weapon_nuvj.exe` (checked with the simulator) |
 | 9 | **APC20** (Akai APC20), a **secondary weapon** | USB-MIDI: 8 × 5 clip grid (green / red / amber, blinking), 5 scene, 8 clip stop, Shift, 9 transport / track select, 3 × 8 track buttons, Cue Level encoder, 8 faders + master | [`apc20.weapon.json`](apc20.weapon.json) | [`tools/apc20_sim.py`](../tools/apc20_sim.py) | Simulated from public protocol facts; probe, LED test and map learning ready. Not yet checked on the owner's unit (it needs its 12 V adapter) |
 | 6 | **KF4** (Korg KF4 krossfour, 2005) | SD video mixer: 4 inputs onto A/B, crossfader with 4 curves, BK/WH/chroma/luma key, HOLD, monitor select. **No data port** | [`kf4.weapon.json`](kf4.weapon.json) | [`tools/kf4_sim.py`](../tools/kf4_sim.py) + [`tools/kf4_live.html`](../tools/kf4_live.html) | Simulated with picture outputs; the real unit cannot be a control surface directly. Details and options: [`kf4.md`](kf4.md) |
+| 7 | **V-4 Mixer** (Roland / EDIROL V-4, 4-channel SD video mixer) | MIDI (5-pin DIN, via any USB-MIDI interface): T-bar, input A/B 1-4, 4 effects + CONTROL dial per channel, MIX / WIPE / EFX, transformers, output fade, BPM, memory | [`v4.weapon.json`](v4.weapon.json) | [`tools/v4_sim.py`](../tools/v4_sim.py) | Simulated only (the owner has no V-4, 2026-11-10). Protocol from the owner's manual |
 
 ## The live view: one tool for every weapon
 
@@ -408,6 +409,11 @@ it, it stays awake. To undo: *Uninstall device* and replug.
 - **Engine link:** UDP 127.0.0.1:8769 (8768 is the Entrancer engine).
 
 ## Weapon no. 5: the NuVJ
+| Function | CC | Function | CC |
+| Transition time | 7 (factory) | A effect 1-4 | 16-19 |
+| Video fader | 11 (factory) | B effect 1-4 | 80-83 |
+| Transition select | 20 | Output fade | 23 |
+| Transformer A / B | 21 / 22 | BPM sync | 24 |
 
 The owner's **Numark NuVJ** (2008, made for ArKaos' NuVJ software) is a
 two-deck VJ controller. It is a class-compliant USB-MIDI device, powered by USB

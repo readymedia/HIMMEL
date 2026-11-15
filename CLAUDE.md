@@ -268,6 +268,24 @@ The full mapping is `docs/design/hardware-mapping.md` §3 and
     - Events go as JSON datagrams to UDP 127.0.0.1:8771 (not read by the
       engine yet). Panel positions and a few behaviours are guesses until
       checked on the owner's unit.
+  - **Weapon no. 7 = the V-4 video mixer (Roland / EDIROL V-4, SD, 4 channels;
+    owner's choice 2026-11-10). The owner has none, so it is simulated only.**
+    - Profile `weapons/v4.weapon.json` (badge "HIMMEL · V4"). The owner wants it
+      to look as much like the real V-4 as possible.
+      - It is drawn from his photos by `tools/v4_profile.py`.
+      - The T-bar plate turns 90°: vertical or horizontal mounting.
+      - New profile words: kind `fader` (with `plate`, `orientations`), button
+        looks, knob `steps` / `endless` / `style`, and deco `rect` / `text` /
+        `jack` / `ladder` / `display` / `monitor`.
+      - `"live": "mixer"` makes the page show mixer cards instead of BLOCKS cards.
+    - `tools/v4_sim.py`: SimV4 / V4Host / V4Live, self-test included. UDP
+      engine link 8773. Launch config `v4-live` (port 8781). Checked in the browser
+      2026-11-10.
+    - MIDI only (5-pin DIN, needs a USB-MIDI interface).
+      - Inputs = Bank 00/01 + Program 0-3; memory = Bank 50H + Program 0-7.
+      - T-bar = CC#11 at the factory; everything else needs a MIDI setup
+        sent as Roland SysEx DT1 (model 00 5B).
+      - Details and open questions: `weapons/README.md`.
 - **Visual mapping is the way to work with the controller. Keep it and build on
   it** (the owner wants graphical tools, not terminal tables):
   - `tools/mk2_live.py` + `tools/mk2_live.html`: a browser live view of the MK2
