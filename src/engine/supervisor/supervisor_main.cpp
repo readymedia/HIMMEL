@@ -2,13 +2,20 @@
 // Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // himmel.exe - the supervisor (CLAUDE.md "Processes").
 //
-//   himmel [--no-controller] [--weapons LIST | --no-weapons] [--sim] [-- render arguments ...]
+//   himmel [--no-controller] [--weapons LIST | --no-weapons] [--sim] [--no-ui] [--legacy]
+//          [-- render arguments ...]
 //   e.g. himmel -- --outputs 3 --fullscreen
 //   --sim: no hardware; the MK2 controller and the weapon drivers talk to the
 //          simulators in tools/mk2_live.py (MK2 8766, Lightpad 8767, LUMI 8769, NuVJ 8774,
 //          APC20 8782).
 //   --weapons lightpad,lumi,nuvj,apc20: the weapon drivers to run (default: all four);
 //          a driver whose device is not plugged in just waits for it.
+//   --no-ui: do not start himmel_ui.exe (the web GUI bridge, started only if it
+//          exists next to himmel.exe). The UI is just another child: it never
+//          talks to the renderer except through the shared blocks, so a dead or
+//          hung UI is restarted without touching the outputs.
+//   --legacy: run the parked pre-slice renderer (himmel_render_legacy.exe: test
+//          card, camera, Touch FX, Entrancer) instead of the deck engine.
 //
 // Starts mk2_controller.exe, the weapon drivers (weapon_blocks.exe lightpad / lumi,
 // weapon_nuvj.exe, weapon_apc20.exe) and himmel_render.exe from its own folder and keeps them alive
@@ -156,7 +163,7 @@ int main(int argc, char** argv) {
     std::snprintf(name, sizeof(name), "himmel-%04d-%02d-%02d.log", st.wYear, st.wMonth, st.wDay);
     _wfopen_s(&g_logfile, (dir / "logs" / name).c_str(), L"a");
 
-    bool with_controller = true;
+    bool with_controller = true, with_ui = true, legacy = false;
     std::wstring render_args, ctl_args;
     std::string weapons = "lightpad,lumi,nuvj,apc20";
     for (int i = 1; i < argc; ++i) {
@@ -165,6 +172,8 @@ int main(int argc, char** argv) {
         else if (a == "--no-weapons") weapons.clear();
         else if (a == "--weapons" && i + 1 < argc) weapons = argv[++i];
         else if (a == "--sim") ctl_args = L"--sim";
+        else if (a == "--no-ui") with_ui = false;
+        else if (a == "--legacy") legacy = true;
         else if (a == "--") {
             for (++i; i < argc; ++i) render_args += widen(argv[i]) + L" ";
         }
@@ -179,7 +188,15 @@ int main(int argc, char** argv) {
     himmel::mk2::SharedMemory mshm;
 
     Child ctl{"controller", (dir / "mk2_controller.exe").wstring(), ctl_args};
-    Child ren{"render", (dir / "himmel_render.exe").wstring(), render_args};
+    Child ren{"render", (dir / (legacy ? "himmel_render_legacy.exe" : "himmel_render.exe")).wstring(), render_args};
+    // The web GUI bridge (S3). No heartbeat block of its own yet: the supervisor only
+    // restarts it when it exits. GUESS: a hung UI is not detected (it cannot hurt the
+    // show: the renderer never waits for it); add a heartbeat when himmel_ui has one.
+    Child ui{"ui", (dir / "himmel_ui.exe").wstring(), L""};
+    if (with_ui && !fs::exists(ui.exe, ec)) {
+        log("ui: %s not found - running without the web GUI", fs::path(ui.exe).filename().string().c_str());
+        with_ui = false;
+    }
     ctl.ctx = &mshm;
     ctl.heartbeat = [](void* p) -> uint64_t {
         auto* m = static_cast<himmel::mk2::SharedMemory*>(p);
@@ -234,6 +251,7 @@ int main(int argc, char** argv) {
     std::vector<Child*> children = {&ctl};
     for (auto& w : weapon_children) children.push_back(w.get());
     children.push_back(&ren);
+    if (with_ui) children.push_back(&ui);
     constexpr uint64_t kHungUs = 2000000, kGraceUs = 8000000;  // grace: start-up (GPU, shaders, USB)
     uint64_t next_report = now_us() + 60000000;
 
@@ -252,6 +270,7 @@ int main(int argc, char** argv) {
                 reap(*c, "exited");
                 continue;
             }
+            if (!c->heartbeat) continue;  // exit detection only
             const uint64_t hb = c->heartbeat(c->ctx);
             const uint64_t since = std::max(hb, c->started_us);
             // Signed: the child may write a heartbeat newer than t between our reads.
@@ -277,6 +296,7 @@ int main(int argc, char** argv) {
     log("stopping");
     if (auto* s = eshm.get()) s->stop_request.store(1);
     stop_child(ren, 3000);
+    stop_child(ui, 1000);  // after the renderer: the outputs never wait for the GUI
     // The drivers put their devices back (config, LEDs) first. They got the console Ctrl+C
     // too; the stop request also reaches them when the window was closed instead.
     for (auto& shm : weapon_shm)

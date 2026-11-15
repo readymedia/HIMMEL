@@ -51,7 +51,10 @@ Everything lands in `build\bin\Release\`:
 | Program | What it is |
 |---|---|
 | `himmel.exe` | The supervisor: starts and guards the controller and the renderer. **This is what you run for a show.** |
-| `himmel_render.exe` | The renderer (outputs, test card, clips, camera). |
+| `himmel_render.exe` | The deck engine: 2 decks × 4 HAP layers, effects, crossfader / TAKE, outputs; driven by commands (GUI, MK2, `himmel_cmd`). |
+| `himmel_render_legacy.exe` | The parked pre-deck renderer (test card, camera, Touch FX, Entrancer, knob pages): `himmel.exe --legacy`. |
+| `himmel_cmd.exe` | Sends any engine command from the command line and prints the show (`himmel_cmd clip a 1 0 -- take`). |
+| `preview_dump.exe` | Saves the engine's preview pictures (decks, MAIN, outputs) as PNG. |
 | `mk2_controller.exe` | The MK2 process: reads the device, drives LEDs and screens. |
 | `mk2_monitor.exe` | Test client: prints every MK2 event, lights what you touch. |
 | `mk2_pages_demo.exe` | The MK2 screen pages, live on the device. |
@@ -145,6 +148,11 @@ The simulator sends the same USB reports as the hardware over UDP on
 ([weapons/README.md](../weapons/README.md)).
 
 ### Playing it from the MK2
+
+> Since the playable slice (2026-11-15) `himmel_render.exe` is the deck engine
+> and the MK2 plays it through the Perform mapping (`docs/design/perform.md`;
+> until it lands: wheel = crossfader, PLAY = TAKE, RESTART = CUT). The knob
+> pages below belong to the parked renderer: start it with `himmel.exe --legacy`.
 
 | Control | Page 1: TEST CARD | Page 2: CLIP | Page 3: CAMERA | Page 4: TOUCH FX |
 |---|---|---|---|---|
