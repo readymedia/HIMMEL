@@ -30,11 +30,9 @@ Three agents run the slice: S1 ENGINE, S2 CONTROL, S3 GUI.
   ui_bridge 122, weapon 163). Checked together: `himmel.exe --sim` starts
   `himmel_ui`; `himmel_cmd` loads clips / FX; the web page on 8790 shows
   previews and TAKE flips PROGRAM; the MK2 sim shows the engine's Perform
-  screens. NOT checked: MK2 sim *input* to the engine. `mk2_controller --sim`
-  flapped "MK2 lost / connected" many times a second while a leftover
-  `mk2_live.py --sim` from S1's soak (started 19:48) was running; the LEAD was
-  not allowed to kill it. Re-check with exactly one simulator; if it still
-  flaps, it is a CONTROL bug (likely WSAECONNRESET treated as device loss).
+  screens. MK2 sim input: fixed by CONTROL (bba57af, merged 2026-11-15:
+  newest simulator wins, resets ignored, no flapping; mk2_tests 4306). CONTROL
+  checked groups / wheel / TAKE reaching the engine; the LEAD has not re-run it.
 - Open owner choices: D94–D100 (PROPOSED).
 - Soak: 6 late frames in 30 min windowed on the laptop (an idle run had 7 in
   10 min); a fullscreen soak on a quiet machine is still owed (S1 handoff).
