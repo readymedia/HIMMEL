@@ -24,7 +24,7 @@ Three agents run the slice: S1 ENGINE, S2 CONTROL, S3 GUI.
   maschine_test, nuvj, nuvj_games, ohm64, v4; `mk2_fun_check`.
 
 ## In progress
-- Slice tasks S1–S3 spawned as sessions (see `roadmap.md` §0a). Merge each when
+- Slice tasks S1–S3 are proposed as session cards (ENGINE task_e54b9e81, CONTROL task_3f8775da, GUI task_8131885e; the app only lets the owner start them). Briefs = `roadmap.md` §0a + the cards. Merge each when
   its report says done and the LEAD has built + run every test on `main` + the
   branch. Order: S1 first (the others depend on it running), then S2, then S3.
 
