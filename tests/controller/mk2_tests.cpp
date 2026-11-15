@@ -13,6 +13,7 @@
 #include "himmel/mk2/output.h"
 #include "himmel/mk2/pages.h"
 #include "himmel/mk2/shared.h"
+#include "himmel/mk2/sim_link.h"
 
 using namespace himmel::mk2;
 
@@ -346,6 +347,58 @@ static void test_pages() {
     CHECK(s.view() == "HELL");
 }
 
+// Which simulator the controller listens to (sim_link.h, SimPeerPolicy).
+static void test_sim_peer_policy() {
+    std::printf("sim peer policy\n");
+    using V = SimPeerPolicy::Verdict;
+    {  // one simulator: one session, every datagram accepted
+        SimPeerPolicy p;
+        uint64_t t = 1'000'000;
+        CHECK(p.on_datagram(100, t) == V::NewPeer);
+        bool all = true;
+        for (int i = 0; i < 1000; ++i) all = all && p.on_datagram(100, t += 4000) == V::Accept;
+        CHECK(all);
+        CHECK(p.on_datagram(0, t) == V::Drop);  // no sender address
+    }
+    {  // an old simulator (100) keeps streaming, a new one (200) starts: the new one wins once
+        SimPeerPolicy p;
+        uint64_t t = 1'000'000;
+        CHECK(p.on_datagram(100, t) == V::NewPeer);
+        CHECK(p.on_datagram(200, t += 2000) == V::NewPeer);
+        int new_peers = 0, accepted = 0, dropped = 0;
+        for (int i = 0; i < 2000; ++i) {  // interleaved: no flapping
+            t += 2000;
+            const V v = p.on_datagram(i % 2 ? 100 : 200, t);
+            new_peers += v == V::NewPeer;
+            accepted += v == V::Accept;
+            dropped += v == V::Drop;
+        }
+        CHECK(new_peers == 0);
+        CHECK(accepted == 1000 && dropped == 1000);
+        CHECK(p.peer() == 200 && p.ignored(100));
+        // A third simulator starts: it wins too; both older ones are ignored.
+        CHECK(p.on_datagram(300, t += 2000) == V::NewPeer);
+        CHECK(p.on_datagram(200, t += 2000) == V::Drop);
+        CHECK(p.on_datagram(100, t += 2000) == V::Drop);
+        CHECK(p.on_datagram(300, t += 2000) == V::Accept);
+        // The peer is closed: after the idle time the ignored one takes over (once).
+        t += kSimPeerIdleUs + 1000;
+        CHECK(p.on_datagram(100, t) == V::NewPeer);
+        CHECK(p.on_datagram(100, t += 4000) == V::Accept);
+        CHECK(p.on_datagram(200, t += 4000) == V::Drop);  // still ignored while 100 is alive
+        CHECK(p.peer() == 100 && !p.ignored(100));
+    }
+    {  // a restarted simulator (new port) while the old one is gone: one new session
+        SimPeerPolicy p;
+        uint64_t t = 1'000'000;
+        CHECK(p.on_datagram(100, t) == V::NewPeer);
+        t += 2'000'000;
+        CHECK(p.on_datagram(101, t) == V::NewPeer);
+        CHECK(!p.ignored(100));  // it was not alive, so it is not held against it
+        CHECK(p.on_datagram(101, t += 4000) == V::Accept);
+    }
+}
+
 int main() {
     test_map_file_matches_default();
     test_bad_map_is_rejected();
@@ -356,6 +409,7 @@ int main() {
     test_screen();
     test_ring_and_seqlock();
     test_pages();
+    test_sim_peer_policy();
     std::printf("\n%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

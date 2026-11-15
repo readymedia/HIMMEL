@@ -2,6 +2,8 @@
 // Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 #include "himmel/mk2/sim_link.h"
 
+#include "himmel/mk2/types.h"
+
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -68,26 +70,46 @@ bool SimLink::bind(uint16_t port, std::string& why) {
 int SimLink::recv(uint8_t* buf, size_t cap, int timeout_ms) {
     if (sock_ == kInvalid) return -1;
     SOCKET s = as_socket(sock_);
-    fd_set rd;
-    FD_ZERO(&rd);
-    FD_SET(s, &rd);
-    timeval tv{timeout_ms / 1000, (timeout_ms % 1000) * 1000};
-    const int r = select(0, &rd, nullptr, nullptr, &tv);
-    if (r == 0) return 0;
-    if (r < 0) return -1;
-    sockaddr_in from{};
-    int flen = sizeof(from);
-    const int n = recvfrom(s, reinterpret_cast<char*>(buf), static_cast<int>(cap), 0,
-                           reinterpret_cast<sockaddr*>(&from), &flen);
-    if (n < 0) {
-        const int e = WSAGetLastError();
-        // Too big for buf, nothing there after all, or an ICMP echo: not fatal.
-        return (e == WSAEMSGSIZE || e == WSAEWOULDBLOCK || e == WSAECONNRESET) ? 0 : -1;
+    const uint64_t deadline = now_us() + static_cast<uint64_t>(timeout_ms) * 1000;
+    for (;;) {  // datagrams from an ignored simulator do not end the wait
+        const uint64_t t = now_us();
+        const uint64_t left = deadline > t ? deadline - t : 0;
+        fd_set rd;
+        FD_ZERO(&rd);
+        FD_SET(s, &rd);
+        timeval tv{static_cast<long>(left / 1000000), static_cast<long>(left % 1000000)};
+        const int r = select(0, &rd, nullptr, nullptr, &tv);
+        if (r == 0) return 0;
+        if (r < 0) return -1;
+        sockaddr_in from{};
+        int flen = sizeof(from);
+        const int n = recvfrom(s, reinterpret_cast<char*>(buf), static_cast<int>(cap), 0,
+                               reinterpret_cast<sockaddr*>(&from), &flen);
+        if (n < 0) {
+            const int e = WSAGetLastError();
+            // Too big for buf, nothing there after all, or an ICMP "port unreachable"
+            // echo of an earlier send (WSAECONNRESET): never fatal, never a new peer.
+            if (e == WSAEMSGSIZE || e == WSAEWOULDBLOCK || e == WSAECONNRESET) {
+                if (left == 0) return 0;
+                continue;
+            }
+            return -1;
+        }
+        if (from.sin_addr.s_addr != htonl(INADDR_LOOPBACK)) continue;
+        const bool first = peer_port_.load(std::memory_order_acquire) == 0;
+        switch (policy_.on_datagram(from.sin_port, now_us())) {
+            case SimPeerPolicy::Verdict::Drop:
+                if (left == 0) return 0;
+                continue;  // another simulator: ignored while ours is alive
+            case SimPeerPolicy::Verdict::NewPeer:
+                peer_port_.store(from.sin_port, std::memory_order_release);
+                if (!first) peer_changed_.store(true, std::memory_order_release);
+                break;
+            case SimPeerPolicy::Verdict::Accept:
+                break;
+        }
+        return n;
     }
-    if (from.sin_addr.s_addr != htonl(INADDR_LOOPBACK)) return 0;
-    const uint16_t old = peer_port_.exchange(from.sin_port, std::memory_order_acq_rel);
-    if (old != 0 && old != from.sin_port) peer_changed_.store(true, std::memory_order_release);
-    return n;
 }
 
 void SimLink::send(const uint8_t* data, size_t len) {
