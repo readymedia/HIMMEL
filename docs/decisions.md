@@ -21,6 +21,9 @@ Status values:
 | D91 | **2–3 track agents at a time**, never more than 3, each spawned as its own session with the template in `agents/README.md` §5. Each task fits one context, lives on `claude/<track>-<topic>` and is merged by the LEAD within 1–2 days | DECIDED (owner, 2026-11-15) | `agents/README.md` §5 |
 | D92 | **Development machine: the owner's dev laptop** (GTX 1070, one screen, outputs as windows) until M12; the RTX 5090 show PC comes at M12 | DECIDED (owner, 2026-11-15) | `build-v1.md` M12 |
 | D93 | One weapon list: 1 MK2 + 2 Lightpad = main; 3–8 integrations; 9 APC20 secondary; NuVJ becomes the second main weapon if M10 checks out. Per-weapon detail moved from `CLAUDE.md` to `weapons/README.md` | TECH (LEAD, M0, from D27 / D49) | `weapons/README.md` |
+| S2-a | **MK2 slice: FX buttons.** `PAD MODE` = next effect in FX slot 1 of the focused layer (`SHIFT` = previous), `NAVIGATE` = bypass it. Both buttons get their 0.1 meaning back later (FX PADS / OUTPUTS). Alternative: an FX knob page with `PAGE < >` | PROPOSED (CONTROL, 2026-11-15; LEAD renumbers) | `agents/handoff/control.md` "Slice mapping" |
+| S2-b | **MK2 slice: pad paging on `TRANSPORT < >`** (16 catalog clips per page) instead of dice back / forward (`hardware-mapping.md` §3.5, no dice in the slice). Pad 1 (bottom-left) = the first clip of the page; the GUI's 4 × 4 grid should use the same order | PROPOSED (CONTROL, 2026-11-15) | same |
+| S2-c | **MK2 slice: knobs 5–8 = master FX slot 1 params 1–4** as stand-in macros until scenes exist; `SHIFT` + knob 8 = choose the master effect; `SHIFT` + other knobs = fine (1/10) | PROPOSED (CONTROL, 2026-11-15) | same |
 
 ## 2026-11-11
 
