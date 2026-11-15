@@ -1,5 +1,5 @@
 # LEAD handoff
-Updated: 2026-11-15 by the LEAD session (Claude Code, main checkout) · Branch: main
+Updated: 2026-11-15 (end of day) by the LEAD session (Claude Code, main checkout) · Branch: main
 
 ## State in one paragraph
 M0 is done (merged, built, tested, pushed; remote branches deleted). The owner's
@@ -36,6 +36,23 @@ Three agents run the slice: S1 ENGINE, S2 CONTROL, S3 GUI.
 - Open owner choices: D94–D100 (PROPOSED).
 - Soak: 6 late frames in 30 min windowed on the laptop (an idle run had 7 in
   10 min); a fullscreen soak on a quiet machine is still owed (S1 handoff).
+
+## Start here tomorrow (2026-11-15 evening)
+- The owner reported: **neither the MK2 simulator nor the real MK2 drives the
+  engine yet.** Real MK2: `himmel.exe --sim` never touches hardware; run
+  `himmel.exe` without `--sim` with every MK2 Live page closed, and check.
+  Simulator: with the sim link fix merged, only 1 of several group presses
+  reached the engine (Perform ack 12 → 13), and the sim never showed the
+  engine's screens. An orphaned `mk2_live.py --sim` from S1's soak was
+  sending at the same time; it is closed now. Re-test with exactly one
+  simulator. If it still fails, send to CONTROL: `SimPeerPolicy`
+  (`src/controller/include/himmel/mk2/sim_link.h`) hands the peer back to an
+  ignored sender after 1 s of silence from the current one, and an idle sim
+  then stays dropped. Also check that the live view's sim sends anything when
+  idle.
+- Small bug: the supervisor opens `logs/himmel-*.log` without read sharing, so
+  nobody can read the log while Himmel runs.
+- Everything was shut down at the owner's request; nothing runs.
 
 ## Next up (ordered)
 1. Owner plays the slice; collect feedback; settle D94–D100.
