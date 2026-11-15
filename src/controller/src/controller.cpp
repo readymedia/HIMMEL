@@ -44,6 +44,7 @@ struct Device {
     virtual ~Device() = default;
     virtual int read(uint8_t* buf, size_t cap, int timeout_ms) = 0;
     virtual bool write(const uint8_t* data, size_t len) = 0;
+    virtual const char* lost_reason() const { return "USB read/write error"; }
 };
 
 struct HidDevice final : Device {
@@ -66,15 +67,22 @@ struct SimDevice final : Device {
             link.send(&hello, 1);
         }
         const int n = link.recv(buf, cap, timeout_ms);
-        if (link.take_peer_changed()) return -1;  // new simulator: new session, full resend
+        if (link.take_peer_changed()) {  // another simulator took over: new session, full resend
+            switched = true;
+            return -1;
+        }
         return n;
     }
     bool write(const uint8_t* data, size_t len) override {
         link.send(data, len);
         return true;
     }
+    const char* lost_reason() const override {
+        return switched ? "another simulator took over" : "simulator link error";
+    }
     SimLink& link;
     uint64_t last_hello_us = 0;
+    std::atomic<bool> switched{false};
 };
 }  // namespace detail
 
@@ -256,7 +264,7 @@ void Controller::run(const std::atomic<bool>& stop) {
             const uint64_t t = now_us();
             st.heartbeat_us.store(t);
             if (s.io_error.load()) {
-                reason = "USB read/write error";
+                reason = s.dev->lost_reason();
                 break;
             }
             // The pad report streams at ~750 Hz: silence means the device is gone.

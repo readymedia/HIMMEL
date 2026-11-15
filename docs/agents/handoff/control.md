@@ -1,8 +1,8 @@
 # CONTROL handoff
-Updated: 2026-11-15 by the S2 CONTROL session · Branch: claude/control-slice-perform · Last commit: see git log
+Updated: 2026-11-15 by the CONTROL session (sim link fix) · Branch: claude/control-sim-link-fix · Last commit: see git log
 
 ## State in one paragraph
-MK2: verified map, C++ controller (`src/controller`, shared memory `Local\HimmelMk2`, LEDs, screens, reconnect, `--sim` over UDP 8766), screen pages (`pages.cpp`), Python live view + simulator + games. Generic weapon block + drivers for Lightpad / LUMI / NuVJ / APC20 (`weapons/README.md`). **New (S2): `himmel::perform::Mk2Perform` plays the slice** (`src/perform/`): focus by groups, wheel = TAKE T-bar, knobs, pads = clips, FX buttons, LEDs and both screens; 120 unit checks in `perform_tests.exe`. Not yet run end-to-end: S1 (`claude/engine-slice-decks`) was not pushed when this was written, so the engine does not call the mapper yet.
+MK2: verified map, C++ controller (`src/controller`, shared memory `Local\HimmelMk2`, LEDs, screens, reconnect, `--sim` over UDP 8766), screen pages (`pages.cpp`), Python live view + simulator + games. Generic weapon block + drivers for Lightpad / LUMI / NuVJ / APC20 (`weapons/README.md`). **New (S2): `himmel::perform::Mk2Perform` plays the slice** (`src/perform/`): focus by groups, wheel = TAKE T-bar, knobs, pads = clips, FX buttons, LEDs and both screens; 120 unit checks in `perform_tests.exe`. **Checked end-to-end 2026-11-15** (main fa84ed0 + the sim link fix): a simulated MK2 through `himmel.exe --sim` sets the focus (Group C → B3), moves the crossfader (wheel +6 → 0.200), runs a TAKE (PLAY) that flips PROGRAM, after which the focus follows its role (B3 → A3), and the engine's screens / LEDs reach the simulator.
 
 ## Slice mapping (2026-11)
 Subset of `docs/design/perform.md` v4 / `hardware-mapping.md` §3. Focus is a **role** (PREP = the PREVIEW deck, PLAY = the PROGRAM deck) + a layer: after a TAKE the rows keep meaning prepare / live, and the mapper re-sends `Focus` for the deck that now has the role. A focus set by the GUI is adopted.
@@ -36,10 +36,16 @@ Subset of `docs/design/perform.md` v4 / `hardware-mapping.md` §3. Focus is a **
 - S2 slice mapper + tests (branch `claude/control-slice-perform`, see git log). Earlier history: `CLAUDE.md` "Next steps" and `docs/roadmap.md`.
 
 ## In progress
-- Waiting for S1 to be pushed; then merge it locally and check through `himmel.exe --sim` + `python tools/mk2_live.py --sim` (screens + LEDs in the live view).
+- Nothing. Last task: the sim link fix (below).
+
+## Done 2026-11-15: MK2 sim link no longer flaps with two simulators
+- **Cause:** `SimLink::recv` treated every datagram from a different UDP source port as "a new simulator", and `SimDevice::read` turned that into a lost device. With two simulators sending at once (a forgotten `mk2_live.py --sim` from a soak run plus a new one), the sender alternated on almost every datagram, so `mk2_controller --sim` reconnected many times per second ("MK2 lost (USB read/write error)") and input never settled. With one simulator it was stable.
+- **Fix:** `SimPeerPolicy` (`src/controller/include/himmel/mk2/sim_link.h`, pure, tested in `mk2_tests`): one sender is the peer. A **brand-new** sender takes over once (the last started simulator wins), and the old one is then ignored (its datagrams are dropped). A peer that has been silent for 1 s (`kSimPeerIdleUs`) is replaced by whoever sends next. WSAECONNRESET and ignored datagrams never end a `recv` wait. A planned switch logs "another simulator took over". The weapon drivers' UDP links (`weapon/midi.cpp`) use the same `SimLink`, so they get the same behaviour.
+- **Checked live:** `himmel.exe --sim --no-ui --no-weapons` with a forgotten `mk2_live.py --sim` (PID 7284) still sending to 8766, plus a scripted `mk2_sim.SimMk2`. Focus, crossfader and TAKE all changed in `himmel_cmd state`. The log shows one switch when ours started and one reconnect when it closed, no flapping. Script: the session scratchpad `sim_e2e.py` (not in git).
+- `CLAUDE.md` line "A new simulator port = new session" is now: "the newest simulator wins; others are ignored while it is alive" (LEAD file, not edited here).
 
 ## Next up (ordered)
-1. End-to-end check with S1 (above); fix whatever the engine's validation refuses (watch `LiveState.rejected[0]`).
+1. The owner plays the slice through the live view (screens + LEDs) and on the real MK2.
 2. The owner plays it; settle the PROPOSED rows D97–D99 in `docs/decisions.md`.
 3. Then the full perform.md mapping: double-tap group, LOOKS / SLICE / FX PADS pad modes, knob pages (`PAGE < >`), Top 5–8 holds, `ERASE` undo, `REC`, `ENTER`, pad targets.
 - Older items kept: `roles` section in the profiles; Phase 1c MK2 (SLICE, PRESS, HIT, scratch); Block SCRUB, LUMI SLICE KEYS; M13 OSC; M6 display drop-out with ENGINE.
@@ -59,6 +65,8 @@ Subset of `docs/design/perform.md` v4 / `hardware-mapping.md` §3. Focus is a **
 VS 2022 Build Tools' bundled CMake: `cmake -S . -B build -G "Visual Studio 17 2022" -A x64`, `cmake --build build --config Release`, then `ctest --test-dir build -C Release` (7 suites) or `build\bin\Release\perform_tests.exe`.
 
 ## Gotchas found
+- Only one simulator per sim port is used (the newest). A forgotten live view does no harm now, but its own panel then shows its own screens, not the engine's. Close stray `mk2_live.py --sim` processes when testing.
+- `himmel.exe --help` is not a help flag: it starts the real (hardware) stack.
 - `Mk2Perform::sync()` runs at the start of `on_event` and `tick`, so events before the first tick are fine. Commands sent in a frame are not in the `LiveState` passed until the next frame; the mapper keeps its own focus so a group press is not undone by the stale state.
 - `pages.h`'s `draw_perform` fills the whole screen with knob slots, so the slice screen is drawn by the mapper itself with the `pages.h` helpers (`text_in`, `text_anchored`, `kKnobColumn`); no controller change was needed.
 
