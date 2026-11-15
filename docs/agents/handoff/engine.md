@@ -14,7 +14,11 @@ span / mirror outputs. The old renderer (test card, camera + latency test, Touch
 FX, Entrancer, weapon knob pages) is **parked** as `himmel_render_legacy.exe`
 (`himmel.exe --legacy`). Tested with `himmel_cmd`, the MK2 simulator and the S3
 GUI bridge (which was already sending real commands to this engine on the dev
-laptop); 30-minute soak in `docs/measurements/2026-11-15-slice-engine-soak.md`.
+laptop); 30-minute soak in `docs/measurements/2026-11-15-slice-engine-soak.md`:
+60 fps, 0 crashes, CPU 1.7 ms / GPU 1.3 ms per frame, but **6 late frames**
+(single missed vsyncs); an idle control run with no commands had 7 in 10 min,
+so they come from the windowed laptop setup, not the engine. Not yet proven:
+0 late frames fullscreen on a quiet machine.
 
 ## Done (with commits)
 - `src/engine/include/himmel/engine/deck_model.h` + `src/deck_model.cpp`: the
@@ -62,6 +66,8 @@ laptop); 30-minute soak in `docs/measurements/2026-11-15-slice-engine-soak.md`.
 Nothing half-done. Next step for the engine is in "Next up".
 
 ## Next up (ordered)
+0. **Late-frame proof:** log each late frame with its own numbers, then soak
+   fullscreen on a quiet machine (laptop screen fullscreen, later the 5090).
 1. **Off-air deck at thumbnail size** (design/engine.md §2): today both decks
    render at canvas size every frame. Plan: per-deck viewport scale + uv scale in
    ps_layer / ps_fx / ps_mix; full size from the frame a TAKE starts.
