@@ -12,7 +12,7 @@ effect, bypass, mix and parameters) at the bottom.
 
 ## Done (with commits)
 - `himmel_ui.exe`, `fake_engine.exe`, `ui_bridge_tests.exe` (122 checks), `gui/`, launch config `himmel-ui`,
-  getting-started "Play the slice from the web GUI", D94 PROPOSED (layout). Commit on `claude/gui-slice-web`.
+  getting-started "Play the slice from the web GUI", D100 PROPOSED (layout). Commit on `claude/gui-slice-web`.
 - Checked in the browser preview at 1366 × 768 against `fake_engine`: load clips (click-then-layer; drag and double-click
   wired the same way), effects + params on a layer and on master, opacity / mute / blend, TAKE (space, ring fills,
   decks swap sides, focus follows), CUT (Enter), BLACK, a local refusal toast (clip id 99).
@@ -58,7 +58,7 @@ Nothing. S1 (`claude/engine-slice-decks`) was not pushed when this was written, 
 - `GUESS:` clicking a layer strip sends `Focus` (= pressing its group button); the strip's own controls do not.
 
 ## Open questions for the owner
-- D94 (PROPOSED): the slice page layout (see `docs/decisions.md`).
+- D100 (PROPOSED): the slice page layout (see `docs/decisions.md`).
 
 ## How to build / run / test this track
 - Build: `cmake --build build --config Release --target himmel_ui fake_engine ui_bridge_tests`
