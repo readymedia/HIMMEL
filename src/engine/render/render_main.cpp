@@ -5,6 +5,7 @@
 //   himmel_render [--outputs N] [--fullscreen] [--size 640x360] [--mode span|mirror]
 //                 [--clip file.mov ...] [--no-overlay] [--preview-fps N] [--stats-csv]
 //                 [--flash-cap HZ] [--test-signal] [--ticker "TEXT"]   (effects: src/engine/fx/, M5)
+//                 [--av-offset MS] [--no-audio]   (music: Local\HimmelAudio from himmel_audio.exe, M8)
 //
 // * Show model: DeckModel (2 decks x 4 layers, FX slots on layer / deck / master,
 //   crossfader, TAKE / CUT / black / focus). Every change comes in as a Command:
@@ -54,6 +55,7 @@
 #include "himmel/engine/clip_catalog.h"
 #include "himmel/engine/clip_player.h"
 #include "himmel/engine/deck_model.h"
+#include "himmel/engine/reactions.h"
 #include "himmel/engine/engine_shared.h"
 #include "himmel/engine/fx_catalog.h"
 #include "himmel/engine/log_ring.h"
@@ -101,7 +103,9 @@ struct Config {
     int preview_fps = 20;
     std::vector<std::string> clips;
     float flash_cap = 0;       // D65: optional per-show flash cap (flashes/s), 0 = off (default)
-    bool test_signal = false;  // feed the reactions the TestSignal until audio exists (M8)
+    bool test_signal = false;  // feed the reactions the TestSignal instead of the audio block (checks)
+    bool audio = true;         // M8: reactions from Local\HimmelAudio (himmel_audio.exe)
+    float av_offset_ms = 0;    // M8: beat / bar signals this much early (music.md §4 AV offset)
     std::string ticker = "HIMMEL";  // GUESS: the text generator's text until shows carry it (M3)
 };
 
@@ -120,6 +124,8 @@ Config parse_args(int argc, char** argv) {
         else if (a == "--overlay") c.overlay = true, overlay_set = true;
         else if (a == "--flash-cap") c.flash_cap = std::clamp(static_cast<float>(std::atof(next().c_str())), 0.0f, 30.0f);
         else if (a == "--test-signal") c.test_signal = true;
+        else if (a == "--no-audio") c.audio = false;
+        else if (a == "--av-offset") c.av_offset_ms = std::clamp(static_cast<float>(std::atof(next().c_str())), -200.0f, 200.0f);
         else if (a == "--ticker") c.ticker = next();
         else if (a == "--preview-fps") c.preview_fps = std::clamp(std::atoi(next().c_str()), 15, 30);
         else if (a == "--size") {
@@ -771,6 +777,17 @@ int main(int argc, char** argv) {
     }
     auto model = std::make_unique<DeckModel>(*catalog);
 
+    // ---- music (M8): Local\HimmelAudio, mapped once; himmel_audio.exe may come and go.
+    himmel::engine::AudioLink audio_link;
+    himmel::engine::ReactionFeed reaction_feed;
+    himmel::audio::Signals audio_sig{};
+    himmel::audio::ClockSource audio_midi{};
+    bool audio_was_ok = false, midi_was_leading = false;
+    if (cfg.audio && !cfg.test_signal) {
+        if (audio_link.open()) LOG("audio: reactions listen to %ls (AV offset %.0f ms)", himmel::audio::kBlockName, cfg.av_offset_ms);
+        else LOG("audio: cannot map %ls - reactions stay still", himmel::audio::kBlockName);
+    }
+
     // ---- state block: restore from a block that survived the last renderer
     StateLink state;
     {
@@ -820,7 +837,7 @@ int main(int argc, char** argv) {
             ok ? "" : " - SOME FAILED (they pass the picture through)");
         if (!report.empty()) LOG("fx: %.200s", report.c_str());
         if (cfg.flash_cap > 0) LOG("fx: flash cap %.1f flashes/s (D65)", cfg.flash_cap);
-        if (cfg.test_signal) LOG("fx: reactions get the test signal (no audio yet, M8)");
+        if (cfg.test_signal) LOG("fx: reactions get the test signal (not the audio block)");
     }
     g_fx = fxg.get();
 
@@ -952,6 +969,23 @@ int main(int argc, char** argv) {
         drain(static_cast<int>(proto::Producer::Perform), *perform_ring);
         if (cmd.blk)
             for (int slot = 1; slot < proto::kProducers; ++slot) drain(slot, cmd.blk->rings[slot]);
+        // Music (M8): copy the audio block; an external MIDI clock leads the show clock.
+        const bool audio_ok = cfg.audio && !cfg.test_signal && audio_link.read(t, audio_sig, audio_midi);
+        {
+            const himmel::engine::ClockLead lead =
+                cfg.audio && audio_link.alive() ? himmel::engine::midi_lead(audio_midi, t) : himmel::engine::ClockLead{};
+            model->follow_clock(lead.active, lead.bpm, lead.beat, lead.phase, t, dt);
+            if (lead.active != midi_was_leading) {
+                midi_was_leading = lead.active;
+                if (lead.active) LOG("clock: MIDI clock leads (%.1f BPM%s)", lead.bpm, lead.phase ? ", phase locked" : "");
+                else LOG("clock: MIDI clock gone - internal / tap clock keeps %.1f BPM", model->bpm());
+            }
+        }
+        if (audio_ok != audio_was_ok) {
+            audio_was_ok = audio_ok;
+            if (audio_ok) LOG("audio: hearing \"%s\" (%u Hz)", audio_link.input().device, audio_link.input().sample_rate);
+            else LOG("audio: no audio - reactions glide to rest");
+        }
         model->tick(t);
         if (t >= alive_next) {
             alive_next = t + 250000;
@@ -1089,14 +1123,16 @@ int main(int argc, char** argv) {
         g.ctx->Begin(g.q_disjoint[qi].Get());
         g.ctx->End(g.q_begin[qi].Get());
         {
-            // The internal beat clock (tap / BPM, M2); the audio clock feeds it in M8.
+            // The show clock (tap / BPM, M2; MIDI clock leads when it runs, M8).
             himmel::fx::FrameCtx fc;
             fc.time_s = (t - t0) / 1e6;
             fc.beats = std::max(0.0, model->beat(t));
             fc.bpm = static_cast<float>(model->bpm());
             fc.dt = static_cast<float>(dt);
             fc.flash_cap_hz = cfg.flash_cap;
-            if (cfg.test_signal) fc.sig = himmel::fx::TestSignal::at(fc.time_s, fc.beats);  // else silence until M8
+            if (cfg.test_signal) fc.sig = himmel::fx::TestSignal::at(fc.time_s, fc.beats);
+            else reaction_feed.update(audio_ok ? &audio_sig : nullptr,
+                                      model->beat(t + static_cast<int64_t>(cfg.av_offset_ms * 1000.0f)), fc.dt, fc.sig);
             g_fx->begin_frame(fc);
         }
         const float black[4] = {0, 0, 0, 1};

@@ -83,6 +83,11 @@ public:
     const protocol::TransportSection& transport() const { return transport_; }
     double beat(uint64_t t_us) const { return clock_.beat(t_us); }
     double bpm() const { return clock_.bpm(); }
+    // An external clock leads (MIDI clock from himmel_audio, M8): once per frame
+    // before tick(). While `active`, the clock follows it (BeatClock::follow), Tap and
+    // Bpm commands are acked but ignored, and ClockState::source = 2.
+    void follow_clock(bool active, double bpm, double beat, bool phase, uint64_t now_us, double dt_s);
+    bool clock_external() const { return clock_external_; }
 
     // True once after anything but position / frame stats changed.
     bool take_structure_dirty() {
@@ -161,6 +166,7 @@ private:
     bool dirty_ = true;
     Playhead ph_[kLayerSlots];
     BeatClock clock_;
+    bool clock_external_ = false;  // M8: an external clock leads (follow_clock)
     uint64_t last_tick_us_ = 0;
     double last_beat_ = 0.0;
     Pending pending_[kLayerSlots];
