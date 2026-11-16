@@ -53,6 +53,9 @@ namespace {
 
 std::atomic<bool> g_quit{false};
 std::atomic<int> g_connections{0};
+// --watch: read-only. Never opens the command block (no producer slot, /cmd refuses) and never
+// attaches an MK2 ring, so it can watch a show another bridge or tool is driving.
+bool g_watch = false;
 constexpr int kMaxConnections = 64;
 
 uint64_t now_us() {
@@ -122,7 +125,7 @@ bool push_command(Command c, uint32_t& seq_out, std::string& err) {
     std::shared_lock vl(g_eng.views);
     std::lock_guard pl(g_eng.push_m);
     if (g_eng.commands_st != ShmStatus::Ok) {
-        err = "the command block is not there (engine not started yet)";
+        err = g_watch ? "this bridge runs with --watch (read-only)" : "the command block is not there (engine not started yet)";
         return false;
     }
     auto* blk = g_eng.commands.as<CommandBlock>();
@@ -187,8 +190,8 @@ struct Mk2Mirror {
             close();
             return false;
         }
-        blk->rings[kMk2GuiRing].attach();
-        attached = true;
+        if (!g_watch) blk->rings[kMk2GuiRing].attach();
+        attached = !g_watch;
         led_seq = scr_seq[0] = scr_seq[1] = 0;
         return true;
     }
@@ -227,7 +230,7 @@ std::string poll_mk2(Clock::time_point now, bool retry) {
     const bool alive = now - m.last_beat_change < std::chrono::milliseconds(1500);
     Event e{};
     int n = 0;
-    while (n < 4096 && m.blk->rings[kMk2GuiRing].pop(e)) {
+    while (m.attached && n < 4096 && m.blk->rings[kMk2GuiRing].pop(e)) {
         ++n;
         switch (e.type) {
             case EventType::ButtonDown: if (e.id < kButtons) m.pressed |= 1ull << e.id; break;
@@ -332,7 +335,7 @@ void poller() {
                                                                     kPreviewMagic, kPreviewVersion, false);
                     if (g_eng.preview_st != ShmStatus::Ok) g_eng.preview.close();
                 }
-                if (g_eng.commands_st != ShmStatus::Ok) {
+                if (g_eng.commands_st != ShmStatus::Ok && !g_watch) {
                     if (!vl.owns_lock()) vl.lock();
                     std::lock_guard pl(g_eng.push_m);
                     ShmStatus st = g_eng.commands.create_or_open(kCommandShmName, sizeof(CommandBlock),
@@ -433,6 +436,7 @@ void poller() {
                       {"commands", cw},
                       {"preview", pw},
                       {"engine_pid", engine_pid},
+                      {"watch", g_watch},
                       {"bridge_pid", pid},
                       {"epoch", last_epoch},
                       {"frame", frame},
@@ -755,6 +759,7 @@ int main(int argc, char** argv) {
         const std::string a = argv[k];
         if (a == "--port" && k + 1 < argc) port = std::atoi(argv[++k]);
         else if (a == "--gui" && k + 1 < argc) gui = argv[++k];
+        else if (a == "--watch") g_watch = true;
         else if (a == "--help" || a == "-h") {
             std::printf("himmel_ui [--port 8790] [--gui DIR]\n  Serves the web GUI on http://127.0.0.1:PORT\n");
             return 0;
