@@ -9,6 +9,7 @@
 //   ps_mix     - deck A / deck B through the crossfader into MAIN
 //   ps_blit    - MAIN (its part for this output) onto the swap chain, black, status overlay
 //   ps_down    - a box-filtered small copy for the preview block (BGRA target)
+//   ps_trans   - a layer's FADE transition: the old picture (kept) -> the new source (M2)
 #pragma once
 
 namespace himmel::engine {
@@ -104,6 +105,12 @@ float4 ps_layer(VSOut i) : SV_Target {
 // Effects live in fx/ (one shader each, himmel::fx::FxGpu, M5); they use registers b5, s4-s7, t0, t2.
 
 // ---------------------------------------------------------------- mixer / outputs
+// tex0 = the layer's old picture (kept when the transition started), tex1 = the new
+// source (straight alpha), m_info.x = progress 0..1. Alpha crossfades too.
+float4 ps_trans(VSOut i) : SV_Target {
+    return lerp(tex0.Sample(pnt, i.uv), tex1.Sample(pnt, i.uv), saturate(m_info.x));
+}
+
 float4 ps_mix(VSOut i) : SV_Target {
     float3 a = tex0.Sample(pnt, i.uv).rgb;
     float3 b = tex1.Sample(pnt, i.uv).rgb;

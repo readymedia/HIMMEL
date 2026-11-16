@@ -136,13 +136,13 @@ maths, no allocation):
 5. **Flash cap** (§7).
 
 In 0.1 the per-slot scope choice lives in the engine's `SlotRuntime`
-(default SLOT); there is no command to change it yet. PROPOSED (D101): an
+(default SLOT); there is no command to change it yet. PROPOSED (D106): an
 `FxScope` command with the scene model in M3.
 
 Levels: the slice has slots on **layers, decks and master** (`kFxSlots` = 4
 each, command-protocol.md §4). The resolver does not care which level a slot
 is on; each chain has its own runtime (`FxGpu` chains: layers 0–7, decks 8–9,
-master 10, outputs 11–15 reserved). **Clip** and **output** slots come with
+master 10, the HIT layer 11, outputs 12–15 reserved). **Clip** and **output** slots come with
 the clip variants (M2 / M3) and the output model (M6); they only need their
 own chain ids.
 
@@ -168,7 +168,7 @@ own chain ids.
 - On an **empty layer** (no clip) the engine draws the layer when one of its
   active slots holds a generator: the source is transparent black
   (`ps_source` mode 6), the generator paints it, and the layer's opacity and
-  blend mode apply as for a clip. PROPOSED (D102): a proper "layer source =
+  blend mode apply as for a clip. PROPOSED (D107): a proper "layer source =
   generator" command with M3; this rule keeps the protocol unchanged for 0.1.
 - **Feedback** (`state: feedback`, trails): the engine keeps the slot's
   previous output in one of 4 canvas-sized textures (made at resize, never per

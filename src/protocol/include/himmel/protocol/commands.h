@@ -26,6 +26,8 @@ inline constexpr int kFxSlots = 4;          // per layer, per deck and on master
 inline constexpr int kFxParams = 8;
 inline constexpr uint8_t kNone = 0xFF;      // "not used" for deck / layer / slot / param
 inline constexpr uint8_t kMasterDeck = 0xFE; // deck field of master-level FX commands
+inline constexpr uint8_t kHitDeck = 0xFD;    // deck field of the HIT layer (layer must be 0); M2, clips-and-playback.md §3.3
+inline constexpr int kCuePoints = 16;        // cue points per clip (clips-and-playback.md §2.4)
 
 // Fixed producer slots (one ring each; exactly one process writes a slot).
 enum class Producer : uint8_t {
@@ -62,17 +64,86 @@ enum class CommandType : uint16_t {
     Focus = 16,         // deck, layer: the focused layer (D48-D53 "last group pressed")
     // ---- housekeeping ----
     Hello = 17,         // i = producer's pid; marks the producer alive (also every 1 s)
+    // ---- clip transport (M2, design/clips-and-playback.md §2-3) ----   deck (or kHitDeck), layer
+    LayerSet = 18,      // param = LayerParam; i or f[0] (float params: Relative = delta)
+    LayerTrigger = 19,  // i = clip id (-1 = the layer's clip), f[0] = velocity 0..1 (0 = full); flags kRelease = pad up
+    LayerCue = 20,      // slot = cue 0..15, i = CueAction; Set: f[0] = position 0..1 of the clip, < 0 = the playhead
+    LayerBeatLoop = 21, // f[0] = loop length in beats (1/16..16), 0 = off (catch-up per LayerParam::CatchUp)
+    LayerScratch = 22,  // i = 1 hold / move, 0 = let go; f[0] = position 0..1 of the clip (Relative: delta in clip seconds)
+    Clock = 23,         // param = ClockParam; i / f[0]
     // ---- effects (M5) ----     deck (or kMasterDeck), layer (kNone = deck level), slot
-    FxPress = 18,       // f[0] 0..1 pressure on the slot's PRESS target (0 = released); docs/interfaces/effect-metadata.md §5
+    FxPress = 24,       // f[0] 0..1 pressure on the slot's PRESS target (0 = released); docs/interfaces/effect-metadata.md §5
     Count
 };
 
 enum class BlendMode : int32_t { Normal = 0, Add = 1, Screen = 2, Multiply = 3, Difference = 4, Lighten = 5, Count };
-enum class PlayAction : int32_t { Pause = 0, Play = 1, Toggle = 2, Restart = 3 };
+enum class PlayAction : int32_t {
+    Pause = 0, Play = 1, Toggle = 2, Restart = 3,
+    Release = 4,   // M2: leave the inner loop and play the outro (loop-out -> out)
+    Stop = 5,      // M2: fade out (the layer's fade-out time), then the layer is empty
+    Count
+};
+
+// ---- clip transport (M2) ---------------------------------------------------
+// LayerSet.param. Settings live per layer (and the HIT layer); they are shown in
+// the state block's transport section (TransportSection, state.h).
+enum class LayerParam : uint8_t {
+    Mode = 0,           // i = PlayMode
+    Direction = 1,      // i = 0 forward, 1 backward
+    In = 2,             // f 0..1 of the clip (the range keeps at least one frame)
+    Out = 3,            // f 0..1 of the clip
+    LoopIn = 4,         // f 0..1 of the clip: inner loop start
+    LoopOut = 5,        // f 0..1 of the clip: inner loop end
+    InnerLoop = 6,      // i = Toggle value: the 4-point loop on / off
+    TimeBase = 7,       // i = TimeBase
+    Beats = 8,          // f 0.25..64: BPM time base, the in..out range lasts this many beats
+    Interval = 9,       // f 1/16..64: random / chop interval (beats with BPM time base, else seconds)
+    Distance = 10,      // f 0..1: random jump distance, part of the range
+    Slices = 11,        // i 2..16: chop slices
+    StepFrames = 12,    // i 1..64: step mode, frames per step
+    StepDiv = 13,       // f 1/16..16: step mode, one step every (beats with BPM time base, else seconds)
+    Glide = 14,         // f 0..16 beats: speed changes glide over this time (0 = jump)
+    Trigger = 15,       // i = TriggerStyle
+    StartPos = 16,      // i = StartPos
+    FadeIn = 17,        // f 0..10 s: a triggered clip fades in (0 = cut)
+    FadeOut = 18,       // f 0..10 s: stop / release / eject fades out (0 = cut)
+    Snap = 19,          // i = GridDiv, or -1 = follow the global grid
+    Target = 20,        // i = ClipTarget
+    Autopilot = 21,     // i = AutopilotMode
+    AutopilotCount = 22,// i 1..64 loops
+    Transition = 23,    // i = TransitionType (when the layer gets a new clip)
+    TransitionTime = 24,// f 0..10 s
+    CatchUp = 25,       // i = Toggle value: beat loop release returns to where the clip would be
+    ScratchSnap = 26,   // i = Toggle value: on scratch release, snap back (1) or stay (0)
+    ReverseHold = 27,   // i = 1 held / 0 let go: momentary reverse with catch-up
+    Seed = 28,          // i: random / chop / autopilot seed (same seed = same pattern)
+    Count
+};
+enum class PlayMode : uint8_t { Loop = 0, PingPong = 1, OnceHold = 2, OnceEject = 3, OnceNext = 4, Random = 5, Chop = 6, Step = 7, Scratch = 8, Count };
+enum class TimeBase : uint8_t { Free = 0, Bpm = 1, Count };
+enum class TriggerStyle : uint8_t { Normal = 0, Toggle = 1, Piano = 2, Legato = 3, Count };
+enum class StartPos : uint8_t { Restart = 0, Continue = 1, Count };
+enum class ClipTarget : uint8_t { Own = 0, Free = 1, Hit = 2, Count };
+enum class AutopilotMode : uint8_t { Off = 0, Next = 1, Previous = 2, Random = 3, Same = 4, Count };
+// Later types (wipes, push, zoom, luma, noise, blur, flash) are appended.
+enum class TransitionType : uint8_t { Cut = 0, Fade = 1, BlackDip = 2, Count };
+// Beat snap: off, 1/4 beat, 1 beat, 1 bar (4 beats), 2 bars, 4 bars.
+enum class GridDiv : uint8_t { Off = 0, Quarter = 1, Beat = 2, Bar = 3, TwoBars = 4, FourBars = 5, Count };
+enum class CueAction : int32_t { Jump = 0, Set = 1, Clear = 2, Count };
+// Clock.param. The internal clock (tap / set); audio and Link clocks come in M8.
+enum class ClockParam : uint8_t {
+    Tap = 0,            // a tap: tempo from the last taps, the tap lands on a beat
+    Bpm = 1,            // f 20..300 (Relative: delta)
+    Nudge = 2,          // f -1..1 beats: shift the phase
+    Resync = 3,         // beat 0 is now
+    Grid = 4,           // i = GridDiv: the global beat snap
+    Count
+};
 enum ToggleValue : int32_t { kOff = 0, kOn = 1, kToggle = 2 };
 
 // Command.flags
 inline constexpr uint16_t kRelative = 1u << 0;   // f[0] is a delta, not an absolute value
+inline constexpr uint16_t kRelease = 1u << 1;    // LayerTrigger: the pad / key was let go
 
 struct Command {
     CommandType type;   // 2

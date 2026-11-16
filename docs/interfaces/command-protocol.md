@@ -1,6 +1,10 @@
 # Command protocol (`Local\HimmelCommands`)
 
-Status: **version 1, written by the LEAD 2026-11-15** for the playable slice
+Status: **version 1, written by the LEAD 2026-11-15** for the playable slice;
+**M2 clip transport appended by ENGINE 2026-11-16** (§4a: types 18–23,
+`PlayAction` 4–5, `kHitDeck`, `kRelease`; the block layout and
+`kCommandVersion` are unchanged, an older engine refuses the new types as
+`UnknownType`)
 (D90). Header: [`src/protocol/include/himmel/protocol/commands.h`](../../src/protocol/include/himmel/protocol/commands.h)
 (the header is the source of truth for field layout; this page is the why and
 the rules). Change it only with a PR to this page + the header, agreed by the
@@ -81,7 +85,29 @@ the GUI sends absolute values).
 | `Black` | — | `i` = 0 / 1 / 2 | master black (the outputs stay alive) |
 | `Focus` | deck, layer | — | the focused layer, shared by the MK2 and the GUI |
 | `Hello` | — | `i` = pid | keeps the producer alive |
-| `FxPress` (18, M5) | deck / master, layer or `kNone`, slot | `f[0]` 0..1 pressure (0 = released), absolute only | the slot's PRESS target ([`effect-metadata.md`](effect-metadata.md) §5); the engine shapes the release. Added by FX 2026-11-16, additive (no version bump) |
+| `FxPress` (24, M5) | deck / master, layer or `kNone`, slot | `f[0]` 0..1 pressure (0 = released), absolute only | the slot's PRESS target ([`effect-metadata.md`](effect-metadata.md) §5); the engine shapes the release. Added by FX 2026-11-16, additive (no version bump) |
+
+`LayerPlay` also takes `Release` (4: leave the inner loop, play the outro) and
+`Stop` (5: fade out by the layer's fade-out time, then empty) since M2.
+`LayerSpeed` is the **target** speed since M2: the playhead glides to it over
+the layer's glide time (default 1 beat, `design/clips-and-playback.md` §2.7).
+Every layer command above also accepts the **HIT layer**: `deck = kHitDeck`
+(0xFD), `layer = 0`. FX and `Focus` do not (no FX slots on the HIT layer in
+0.1).
+
+## 4a. Clip transport (M2, `design/clips-and-playback.md` §2–3)
+
+| Type | Targets | Argument | Notes |
+|---|---|---|---|
+| `LayerSet` (18) | deck (or `kHitDeck`), layer, `param` = `LayerParam` | `i` (enums, counts, toggles) or `f[0]` (floats; `kRelative` = delta) | One command for every transport setting: mode, direction, in / out, inner loop (loop-in / loop-out / on), time base + beats, random / chop interval + distance + slices, step frames + division, glide, trigger style, start position, fade in / out, beat snap (−1 = global), clip target, autopilot + count, transition + time, catch-up, scratch snap, REVERSE held, seed. Enums out of range are refused; numbers are clamped (ranges in the header) |
+| `LayerTrigger` (19) | deck (or `kHitDeck`), layer | `i` = clip id (−1 = the layer's clip), `f[0]` = velocity 0..1 (0 = full); `flags & kRelease` = the pad was let go | A **pad launch**: the addressed layer's trigger style (NORMAL / TOGGLE / PIANO / LEGATO), start position, clip target (OWN / FREE / HIT) and beat snap apply. On PROGRAM (and on the HIT layer) it waits for the snap; PREVIEW never waits. On the HIT layer the velocity is the start opacity and a release fades it out |
+| `LayerCue` (20) | deck, layer, `slot` = cue 0..15 | `i` = `CueAction` (Jump 0, Set 1, Clear 2); Set: `f[0]` 0..1, < 0 = at the playhead | Cue points belong to the **clip** (every layer playing it sees them). A pad with no cue point jumps to that 16th of in..out. A jump ends a beat loop / scratch; on PROGRAM it waits for the snap. Needs a clip on the layer (`BadTarget` otherwise) |
+| `LayerBeatLoop` (21) | deck, layer | `f[0]` = beats (1/16..16), 0 = off | Starts at the playhead; a new length keeps the start (pressure = shorter). Off returns to where the clip would be when catch-up is on |
+| `LayerScratch` (22) | deck, layer | `i` = 1 hold / move, 0 = let go; `f[0]` = 0..1 of the clip, `kRelative` = delta in clip seconds | In SCRATCH mode it moves the playhead itself; in other modes it holds the playhead and lets go with snap-back or stay |
+| `Clock` (23) | — , `param` = `ClockParam` | Tap; Bpm `f[0]` 20..300 (`kRelative` = delta); Nudge `f[0]` ±1 beat; Resync; Grid `i` = `GridDiv` | The internal beat clock until the audio clock (M8). Grid = the global beat snap (default off) |
+
+The resulting state (settings + playhead status + clock + the HIT layer) is
+in the state block's **transport section** ([`engine-state.md`](engine-state.md)).
 
 **PREVIEW / PROGRAM.** Commands always name a real deck (0 = A, 1 = B). The
 deck on air is `LiveState.program_deck` (the side the crossfader rests on);
@@ -137,7 +163,7 @@ ENGINE can call it before CONTROL delivers the real mapping.
 
 ## 8. Not in version 1 (later, append-only)
 
-Scenes / save / recall / undo (SHOW, M3), clip transport modes and cue
-points (M2), output routing and black per output (M6), reactions (M8),
+Scenes / save / recall / undo (SHOW, M3), output routing and black per
+output (M6), reactions (M8),
 outputs and resolution (M6), project open / save (M3), strings (paths) — the
 slice uses catalog ids only.

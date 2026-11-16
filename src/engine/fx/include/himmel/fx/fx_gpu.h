@@ -31,12 +31,13 @@ struct Target {
 };
 
 // Chains (one runtime state per slot): layers 0..7 (deck*4 + layer), deck A 8, deck B 9,
-// master 10, outputs 11..15 (later). See chain_layer() etc.
+// master 10, the HIT layer 11 (M2), outputs 12..15 (later). See chain_layer() etc.
 inline constexpr int kChains = 16;
 inline constexpr int kFeedbackPool = 4;   // GUESS: 4 trails at once is plenty in 0.1 (more = pass-through)
 inline constexpr int chain_layer(int deck, int layer) { return deck * protocol::kLayersPerDeck + layer; }
 inline constexpr int chain_deck(int deck) { return 8 + deck; }
 inline constexpr int kChainMaster = 10;
+inline constexpr int kChainHit = 11;
 
 class FxGpu {
 public:

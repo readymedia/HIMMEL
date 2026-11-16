@@ -99,7 +99,7 @@ static void test_layer_commands() {
     const uint32_t g1 = m.jump_gen(0, 2);
     CHECK(send(m, make(CommandType::LayerPlay, 0, 2, static_cast<int>(PlayAction::Restart))) == Reject::None);
     CHECK(m.jump_gen(0, 2) == g1 + 1 && m.jump_to(0, 2) == 0.0f);
-    CHECK(send(m, make(CommandType::LayerPlay, 0, 2, 4)) == Reject::BadValue);
+    CHECK(send(m, make(CommandType::LayerPlay, 0, 2, static_cast<int32_t>(PlayAction::Count))) == Reject::BadValue);
 
     CHECK(send(m, make(CommandType::LayerJump, 0, 2, 0, 1.7f)) == Reject::None);
     CHECK(m.jump_to(0, 2) == 1.0f && m.jump_gen(0, 2) == g1 + 2);

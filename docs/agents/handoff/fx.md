@@ -29,7 +29,7 @@ are data: the engine feeds silence until M8, or `TestSignal` with
     begin_frame, `make_canvas` → `FxGpu::resize`, generator layers;
     `slice_shaders.h` lost the old `ps_fx` uber-shader, `ps_source` mode 6
     (transparent); `deck_model.cpp` FxPress; `fx_catalog.h/.cpp` = enum +
-    wrapper; protocol `FxPress = 18`, `FxSlotState::press`,
+    wrapper; protocol `FxPress = 24`, `FxSlotState::press`,
     `EffectInfo::reserved[0]` = kind; `ui_bridge` json_codec knows `FxPress`;
     `himmel_cmd fx T S EFFECT [PRESET]`, `himmel_cmd press T S V`.
   - Render args: `--flash-cap N`, `--test-signal`, `--ticker "TEXT"`.
@@ -58,12 +58,12 @@ are data: the engine feeds silence until M8, or `TestSignal` with
 
 ## Next up (ordered)
 1. Owner plays the effects (GUI on 8790 / `himmel_cmd`); tune defaults,
-   presets and reactions (D104).
+   presets and reactions (D108).
 2. M8 hook: replace the silent `FrameCtx::sig` with the audio block, the BPM /
    beats with the show clock (`render_main.cpp`, the `FrameCtx` block).
 3. REACT macro + knob 6 AUDIO amount (scale `reaction.amount` per slot):
    needs a per-slot field or command (with M8 / M3).
-4. `FxScope` command + LOOK values from scenes (M3, D102).
+4. `FxScope` command + LOOK values from scenes (M3, D106).
 5. More tier-1 effects from the design table: threshold, palette map,
    levels, tint, flip, 3D turn, twirl, bulge, edge detect, flash, chroma key,
    luma to alpha, crop; generators: plasma, checker, starfield, spectrum,
@@ -75,7 +75,7 @@ are data: the engine feeds silence until M8, or `TestSignal` with
   contrast: energy → bright; colorize: bass → light; mirror: bass → center;
   rotozoom: bass → zoom; blur: bass → size; trails: bass → decay; luma key:
   bass → level; text: kick → size) and all `good` ranges / presets. Medium
-  confidence; the owner tunes them by playing. D104.
+  confidence; the owner tunes them by playing. D108.
 - GUESS: invert's snare reaction flips the picture *back* (amount −1),
   because its default AMOUNT is 1 (fully inverted). Medium.
 - GUESS: 4 feedback textures are enough (`kFeedbackPool`); a 5th trails slot
@@ -86,8 +86,8 @@ are data: the engine feeds silence until M8, or `TestSignal` with
   pulse, rings and PRESS release until M8.
 
 ## Open questions for the owner
-- D102 (protocol additions), D103 (generators in FX slots), D104 (flash cap
-  model + guessed default reactions). D101 is TECH.
+- D106 (protocol additions), D107 (generators in FX slots), D108 (flash cap
+  model + guessed default reactions). D105 is TECH.
 
 ## How to build / run / test this track
 - Build as usual (see `CLAUDE.md`); the `fx/` folder is embedded by a custom
@@ -111,4 +111,4 @@ are data: the engine feeds silence until M8, or `TestSignal` with
 ## Interfaces touched
 - New: `docs/interfaces/effect-metadata.md` (version 1).
 - `command-protocol.md` (FxPress), `engine-state.md` (press, kind byte),
-  `interfaces/README.md`. All additive; LEAD to confirm (D102).
+  `interfaces/README.md`. All additive; LEAD to confirm (D106).

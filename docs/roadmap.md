@@ -52,6 +52,25 @@ against the contracts the LEAD wrote first:
 Then: the LEAD merges S1–S3, tells the owner how to start it, and the owner
 plays. M1–M13 grow from there (build-v1 §3a).
 
+## 0b. Autonomous waves (owner, 2026-11-16: "autonom utvikling frem til fungerende versjon")
+
+At most 3 track agents per wave (D91). The LEAD merges each branch when the
+build, every test and every `--selftest` are green, and writes the next wave
+in `agents/handoff/lead.md`. Owner choices that would block use the design
+default and stay PROPOSED (D94–D100 are run that way).
+
+| Wave | Track · branch | Task |
+|---|---|---|
+| 1 | CONTROL · `claude/control-mk2-input` | MK2 (sim + real) drives the engine, with an end-to-end check |
+| 1 | ENGINE · `claude/engine-m2-transport` | M2 clip transport; supervisor log read-sharing fix |
+| 1 | FX · `claude/fx-m5-effects` | M5 tier-1 effects + generators, metadata with default reaction, PRESS / scopes, optional cap |
+| 2 | SHOW · `claude/show-m3-projects` | M3 projects, scenes, kits, songs, undo |
+| 2 | GUI · `claude/gui-m11-v1` | M11 GUI v1 on the new engine features |
+| 2 | AUDIO · `claude/audio-m8-reactions` | M8 audio-reactive everything |
+| 3 | MEDIA · `claude/media-m7-ingest` | M7 ingest |
+| 3 | ENGINE · `claude/engine-m6-outputs` | M6 outputs, curtains, displays by identity |
+| 3 | CONTROL · `claude/control-m9-lightpad` | M9 Lightpad TOUCH / MIX / SCRUB, then M13 OSC |
+
 ## 1. What we have to build on
 
 | Exists | Where | Becomes |

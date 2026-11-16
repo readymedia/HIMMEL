@@ -55,6 +55,11 @@ private:
     SharedBlock* shm_;
     LogFn log_;
     std::unique_ptr<SimLink> sim_;  // bound once, kept across sessions
+    // Diagnostics for the log (2026-11-16): what reached ring 0 (the engine's ring).
+    std::atomic<uint64_t> ring0_events_{0};
+    std::atomic<uint64_t> buttons_down_{0};
+    std::atomic<uint64_t> knob_moves_{0};
+    std::atomic<uint64_t> pad_hits_{0};
 };
 
 }  // namespace himmel::mk2

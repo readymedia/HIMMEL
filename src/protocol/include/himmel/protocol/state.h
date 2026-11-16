@@ -18,7 +18,7 @@ namespace himmel::protocol {
 
 inline constexpr const wchar_t* kStateShmName = L"Local\\HimmelState";
 inline constexpr uint32_t kStateMagic = 0x54534D48;  // "HMST"
-inline constexpr uint32_t kStateVersion = 1;
+inline constexpr uint32_t kStateVersion = 2;  // 2: + transport section (M2)
 
 inline constexpr int kMaxClips = 256;
 inline constexpr int kMaxEffects = 64;
@@ -101,6 +101,80 @@ struct Catalog {
     EffectInfo effect[kMaxEffects];
 };
 
+// ---- transport section (M2, design/clips-and-playback.md §2-3) --------------
+enum class PlayheadPhase : uint8_t {
+    Empty = 0,      // no clip
+    Playing = 1,
+    Paused = 2,
+    Holding = 3,    // ONCE · HOLD reached the end
+    Intro = 4,      // inner loop on: in -> loop-out, then the inner loop
+    InnerLoop = 5,  // looping between loop-in and loop-out
+    Outro = 6,      // released: loop-out -> out
+    Count
+};
+
+struct LayerTransport {
+    // Settings (LayerSet; LayerParam names the field).
+    uint8_t mode;              // PlayMode
+    uint8_t time_base;         // TimeBase
+    uint8_t trigger;           // TriggerStyle
+    uint8_t start;             // StartPos
+    uint8_t target;            // ClipTarget
+    uint8_t autopilot;         // AutopilotMode
+    uint8_t transition;        // TransitionType
+    uint8_t snap;              // GridDiv, kNone = the global grid
+    uint8_t inner_loop;        // 1 = 4-point loop on
+    uint8_t catch_up;          // 1 = beat loop release returns to the shadow playhead
+    uint8_t scratch_snap;      // 1 = snap back after a scratch, 0 = stay
+    uint8_t slices;            // chop: 2..16
+    uint8_t step_frames;       // step: 1..64
+    uint8_t autopilot_count;   // 1..64 loops
+    uint8_t backward;          // Direction: 1 = backward
+    uint8_t reverse_hold;      // 1 while REVERSE is held
+    float in, out;             // 0..1 of the clip
+    float loop_in, loop_out;   // 0..1 of the clip
+    float beats;               // BPM time base: range length in beats
+    float interval;            // random / chop interval
+    float distance;            // random distance 0..1 of the range
+    float step_div;            // step interval
+    float glide;               // beats
+    float fade_in, fade_out;   // seconds
+    float transition_time;     // seconds
+    uint32_t seed;
+    // Status (the engine writes these every frame a clip plays).
+    uint8_t phase;             // PlayheadPhase
+    uint8_t beat_loop;         // 1 = a beat loop is running
+    uint8_t scratching;        // 1 = held by a scratch
+    uint8_t pending;           // 1 = a launch / jump waits for the beat snap
+    float beat_loop_beats;     // its length
+    float speed_now;           // the speed after the glide (LayerState.speed is the target)
+    float gain;                // fade envelope 0..1 (multiplies the opacity)
+    float transition_progress; // 0..1 while a layer transition runs, 1 when done
+    float pending_beats;       // beats until the waiting launch fires
+    float velocity;            // of the last trigger, 0..1
+    uint32_t loops;            // loops since the clip started (autopilot counts these)
+    int32_t frame;             // the frame on screen (-1 = none)
+    float cue[kCuePoints];     // the loaded clip's cue points, 0..1 of the clip; < 0 = not set
+};
+
+struct ClockState {
+    float bpm;                 // 20..300
+    uint8_t grid;              // GridDiv: the global beat snap
+    uint8_t source;            // 0 = internal, 1 = tapped
+    uint8_t reserved[2];
+    double beat;               // running beat count at time_us (beat 0 = the last resync)
+    uint64_t time_us;          // engine clock of this sample
+    uint32_t taps;             // taps in the current tap run
+    uint32_t reserved2;
+};
+
+struct TransportSection {
+    ClockState clock;
+    LayerTransport layer[kDecks][kLayersPerDeck];
+    LayerState hit;            // the HIT layer (on top of PROGRAM, never saved in a look; fx unused)
+    LayerTransport hit_transport;
+};
+
 struct EngineStatusMirror {
     std::atomic<uint64_t> heartbeat_us;   // engine clock at the last live write
     std::atomic<uint32_t> pid;
@@ -118,6 +192,8 @@ struct StateBlock {
     LiveState live;
     alignas(64) std::atomic<uint32_t> catalog_seq;
     Catalog catalog;
+    alignas(64) std::atomic<uint32_t> transport_seq;   // version 2
+    TransportSection transport;
 };
 #ifdef _MSC_VER
 #pragma warning(pop)

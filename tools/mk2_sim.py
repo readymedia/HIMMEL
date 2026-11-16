@@ -29,6 +29,14 @@ mk2_controller.exe --sim (or himmel.exe --sim) listens. The controller treats
 it exactly like the USB device and sends its LED and screen reports back.
 While those arrive, engine_active() is true and the live view shows the
 engine's screens and LEDs instead of its own.
+
+Only ONE simulator plays Himmel: the newest one started. Another one that is
+still sending (a forgotten live view, a test script) is ignored, and the
+controller tells it so with the one-byte report 0xFD a few times a second;
+then busy() is true and the live view says so and offers "Take over" (a new
+simulator socket, which makes it the newest). Before 2026-11-16 the ignored
+one got no word at all: its presses vanished and its panel never showed the
+engine's screens.
 """
 
 import socket
@@ -37,6 +45,8 @@ import time
 
 ENGINE_ADDR = ("127.0.0.1", 8766)   # mk2_controller --sim (kSimDefaultPort)
 ENGINE_TIMEOUT = 1.0                # the controller says hello every 250 ms
+BUSY_TIMEOUT = 1.0                  # the controller says "ignored" (0xFD) every 250 ms
+HELLO, BUSY = 0xFE, 0xFD            # sim_link.h kSimHelloReport / kSimBusyReport
 CONTROLS_RESEND = 0.5               # a controller that starts late still learns the knob positions
 
 PAD_PERIOD = 0.004
@@ -67,6 +77,7 @@ class SimMk2:
         self.wake = threading.Event()
         # link to the engine (mk2_controller --sim)
         self.rx_time = 0.0
+        self.busy_time = 0.0                  # last 0xFD: another simulator plays Himmel
         self.rx_leds = {0x80: [0] * 48, 0x81: [0] * 56, 0x82: [0] * 31}
         self.rx_screens = {"left": bytearray(2048), "right": bytearray(2048)}
         self.udp = None
@@ -97,6 +108,10 @@ class SimMk2:
     def engine_active(self):
         return time.time() - self.rx_time < ENGINE_TIMEOUT
 
+    def busy(self):
+        """True while the controller ignores us because a newer simulator plays Himmel."""
+        return time.time() - self.busy_time < BUSY_TIMEOUT and not self.engine_active()
+
     def _forward(self, report):
         if self.udp is not None:
             try:
@@ -123,6 +138,9 @@ class SimMk2:
             if not r:
                 continue
             rid = r[0]
+            if rid == BUSY:
+                self.busy_time = time.time()
+                continue
             self.rx_time = time.time()
             if rid in self.rx_leds and len(r) >= 1 + len(self.rx_leds[rid]):
                 self.rx_leds[rid] = list(r[1:1 + len(self.rx_leds[rid])])

@@ -420,6 +420,12 @@ one lacks (a fader for the MK2, pressure for the NuVJ).
 
 ## 10. Engine notes (for the ENGINE track)
 
+> **Built in M2 (2026-11-16):** the playhead runs in the render thread at the
+> frame start as pure arithmetic (`src/engine/include/himmel/engine/transport.h`,
+> D104), so a command and the frame it changes are the same frame; the decode
+> worker decodes the wanted frames and keeps the 16 jump targets per layer warm.
+> Commands: `docs/interfaces/command-protocol.md` §4a.
+
 - The playhead state machine runs in the clip player's **decode worker**,
   driven by the beat clock; the render loop only picks the ready frame
   (no change to the render-loop rules).
