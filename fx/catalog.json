@@ -1,0 +1,9 @@
+{
+  "_comment": "Catalog order of the built-in effects and generators. The position is the effect id in the engine catalog and in the state block: APPEND ONLY, never reorder or remove (docs/interfaces/effect-metadata.md).",
+  "order": [
+    "hue_sat", "invert", "mirror", "kaleido", "rgb_split", "rotozoom", "strobe", "pixelate",
+    "bright_contrast", "colorize", "posterize", "tile", "zoom_pulse", "wave", "shake", "blur", "glow",
+    "trails", "luma_key",
+    "gen_solid", "gen_noise", "gen_lines", "gen_rings", "gen_shapes", "gen_ticker"
+  ]
+}

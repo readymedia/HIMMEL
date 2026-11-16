@@ -1,0 +1,18 @@
+{
+  "id": "wave", "name": "Wave", "kind": "effect", "family": "distort", "tier": 1, "shelf": "builtin",
+  "params": [
+    {"id": "freq", "name": "FREQ", "min": 2, "max": 32, "unit": "waves", "default": 0.3, "good": [0.1, 0.6]},
+    {"id": "height", "name": "HEIGHT", "min": 0, "max": 5, "unit": "% height", "default": 0.3, "good": [0.1, 0.6]},
+    {"id": "speed", "name": "SPEED", "min": -4, "max": 4, "unit": "rad/s", "default": 0.7, "good": [0.55, 0.85], "speed": true},
+    {"id": "angle", "name": "ANGLE", "min": 0, "max": 180, "unit": "deg", "default": 0.0, "good": [0, 1]}
+  ],
+  "main": ["freq", "height"],
+  "reaction": {"signal": "bass", "param": "height", "amount": 0.3, "attack_ms": 10, "release_ms": 250, "mode": "add", "curve": "soft", "threshold": 0.15},
+  "press": {"param": "height", "lo": 0.1, "hi": 1.0, "curve": "lin", "release_beats": 0.5},
+  "presets": [
+    {"name": "subtle", "values": {"freq": 0.15, "height": 0.12, "speed": 0.6, "angle": 0.0}},
+    {"name": "extreme", "values": {"freq": 0.6, "height": 0.8, "speed": 0.9, "angle": 0.25}}
+  ],
+  "cost": {"class": "S"}, "passes": 1, "state": "none",
+  "help": ["Ripples the picture like water.", "The bass makes the waves higher."]
+}

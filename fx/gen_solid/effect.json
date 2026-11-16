@@ -1,0 +1,18 @@
+{
+  "id": "gen_solid", "name": "Solid / Gradient", "kind": "generator", "family": "basic", "tier": 1, "shelf": "builtin",
+  "params": [
+    {"id": "hue", "name": "HUE", "min": 0, "max": 360, "unit": "deg", "default": 0.62, "good": [0, 1]},
+    {"id": "angle", "name": "ANGLE", "min": 0, "max": 360, "unit": "deg", "default": 0.25, "good": [0, 1]},
+    {"id": "spread", "name": "SPREAD", "min": 0, "max": 360, "unit": "deg hue", "default": 0.3, "good": [0, 0.5]},
+    {"id": "bright", "name": "BRIGHT", "min": 0, "max": 100, "unit": "%", "default": 0.8, "good": [0.3, 1]}
+  ],
+  "main": ["hue", "angle"],
+  "reaction": {"signal": "beat", "param": "hue", "amount": 0.08, "attack_ms": 0, "release_ms": 300, "mode": "trigger", "curve": "linear", "threshold": 0.5, "hold_beats": 0.25},
+  "press": {"param": "bright", "lo": 0.4, "hi": 1.0, "curve": "lin", "release_beats": 0.5},
+  "presets": [
+    {"name": "subtle", "values": {"hue": 0.6, "angle": 0.25, "spread": 0.0, "bright": 0.5}},
+    {"name": "extreme", "values": {"hue": 0.9, "angle": 0.1, "spread": 0.8, "bright": 1.0}}
+  ],
+  "cost": {"class": "S"}, "passes": 1, "state": "none",
+  "help": ["A flat colour, or a gradient when SPREAD > 0.", "ANGLE turns the gradient."]
+}

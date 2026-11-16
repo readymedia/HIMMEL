@@ -1,0 +1,18 @@
+{
+  "id": "luma_key", "name": "Luma Key", "kind": "effect", "family": "key", "tier": 1, "shelf": "builtin",
+  "params": [
+    {"id": "level", "name": "LEVEL", "min": 0, "max": 100, "unit": "% luma", "default": 0.2, "good": [0.05, 0.6]},
+    {"id": "soft", "name": "SOFT", "min": 0, "max": 100, "unit": "%", "default": 0.15, "good": [0.05, 0.4]},
+    {"id": "invert", "name": "INVERT", "min": 0, "max": 1, "unit": "", "default": 0.0, "good": [0, 1], "steps": 2, "labels": ["DARK OUT", "LIGHT OUT"]}
+  ],
+  "main": ["level", "soft"],
+  "reaction": {"signal": "bass", "param": "level", "amount": 0.15, "attack_ms": 20, "release_ms": 300, "mode": "add", "curve": "soft", "threshold": 0.2},
+  "press": {"param": "level", "lo": 0.2, "hi": 0.7, "curve": "lin", "release_beats": 0.5},
+  "presets": [
+    {"name": "subtle", "values": {"level": 0.08, "soft": 0.2, "invert": 0}},
+    {"name": "extreme", "values": {"level": 0.5, "soft": 0.05, "invert": 0}}
+  ],
+  "levels": ["clip", "layer"],
+  "cost": {"class": "S"}, "passes": 1, "state": "none",
+  "help": ["Makes the dark parts see-through, so the", "layers below show. Works on a layer."]
+}

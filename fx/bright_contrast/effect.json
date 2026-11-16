@@ -1,0 +1,17 @@
+{
+  "id": "bright_contrast", "name": "Bright / Contrast", "kind": "effect", "family": "colour", "tier": 1, "shelf": "builtin",
+  "params": [
+    {"id": "bright", "name": "BRIGHT", "min": -50, "max": 50, "unit": "%", "default": 0.55, "good": [0.4, 0.65]},
+    {"id": "contrast", "name": "CONTRAST", "min": 0.25, "max": 4, "unit": "x", "default": 0.6, "good": [0.4, 0.75], "curve": "exp"},
+    {"id": "gamma", "name": "GAMMA", "min": 0.35, "max": 2.8, "unit": "", "default": 0.5, "good": [0.35, 0.65], "curve": "exp"}
+  ],
+  "main": ["bright", "contrast"],
+  "reaction": {"signal": "energy", "param": "bright", "amount": 0.1, "attack_ms": 200, "release_ms": 1500, "mode": "add", "curve": "soft", "threshold": 0.0},
+  "press": {"param": "bright", "lo": 0.5, "hi": 0.8, "curve": "lin", "release_beats": 0.5},
+  "presets": [
+    {"name": "subtle", "values": {"bright": 0.52, "contrast": 0.55, "gamma": 0.5}},
+    {"name": "extreme", "values": {"bright": 0.6, "contrast": 0.85, "gamma": 0.4}}
+  ],
+  "cost": {"class": "S"}, "passes": 1, "state": "none",
+  "help": ["Lifts or dims the picture and sets its punch.", "Centre = as is. GAMMA bends the mid-tones."]
+}

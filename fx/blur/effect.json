@@ -1,0 +1,17 @@
+{
+  "id": "blur", "name": "Blur", "kind": "effect", "family": "blur", "tier": 1, "shelf": "builtin",
+  "params": [
+    {"id": "size", "name": "SIZE", "min": 0, "max": 3, "unit": "% height", "default": 0.35, "good": [0.15, 0.7]},
+    {"id": "direction", "name": "DIRECTION", "min": 0, "max": 180, "unit": "deg", "default": 0.0, "good": [0, 1]},
+    {"id": "shape", "name": "SHAPE", "min": 0, "max": 1, "unit": "", "default": 0.0, "good": [0, 1], "steps": 2, "labels": ["ROUND", "LINE"]}
+  ],
+  "main": ["size", "direction"],
+  "reaction": {"signal": "bass", "param": "size", "amount": 0.2, "attack_ms": 20, "release_ms": 300, "mode": "add", "curve": "soft", "threshold": 0.2},
+  "press": {"param": "size", "lo": 0.1, "hi": 1.0, "curve": "lin", "release_beats": 0.5},
+  "presets": [
+    {"name": "subtle", "values": {"size": 0.15, "direction": 0.0, "shape": 0}},
+    {"name": "extreme", "values": {"size": 0.9, "direction": 0.0, "shape": 1}}
+  ],
+  "cost": {"class": "M"}, "passes": 1, "state": "none",
+  "help": ["Soft focus. SHAPE LINE = motion blur", "along DIRECTION. One pass, 24 taps."]
+}

@@ -1,0 +1,17 @@
+{
+  "id": "trails", "name": "Trails", "kind": "effect", "family": "feedback", "tier": 1, "shelf": "builtin",
+  "params": [
+    {"id": "decay", "name": "DECAY", "min": 0.8, "max": 0.99, "unit": "per frame", "default": 0.6, "good": [0.3, 0.85]},
+    {"id": "drift", "name": "DRIFT", "min": -2, "max": 2, "unit": "% zoom/frame", "default": 0.5, "good": [0.4, 0.6]},
+    {"id": "mode", "name": "MODE", "min": 0, "max": 1, "unit": "", "default": 0.0, "good": [0, 1], "steps": 2, "labels": ["LIGHTEN", "BLEND"]}
+  ],
+  "main": ["decay", "drift"],
+  "reaction": {"signal": "bass", "param": "decay", "amount": 0.15, "attack_ms": 20, "release_ms": 400, "mode": "add", "curve": "soft", "threshold": 0.2},
+  "press": {"param": "decay", "lo": 0.6, "hi": 1.0, "curve": "lin", "release_beats": 1.0},
+  "presets": [
+    {"name": "subtle", "values": {"decay": 0.35, "drift": 0.5, "mode": 0}},
+    {"name": "extreme", "values": {"decay": 0.95, "drift": 0.65, "mode": 0}}
+  ],
+  "cost": {"class": "S"}, "passes": 1, "state": "feedback",
+  "help": ["Moving things leave trails (feedback).", "DRIFT zooms the trail in or out."]
+}

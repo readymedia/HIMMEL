@@ -1,0 +1,21 @@
+{
+  "id": "strobe", "name": "Strobe", "kind": "effect", "family": "light", "tier": 1, "shelf": "builtin",
+  "params": [
+    {"id": "rate", "name": "RATE", "min": 0, "max": 7, "unit": "beats", "default": 0.3125, "good": [0.25, 0.8], "steps": 8,
+     "labels": ["4", "2", "1", "1/2", "1/4", "1/8", "1/16", "1/32"]},
+    {"id": "color", "name": "COLOR", "min": 0, "max": 100, "unit": "% white", "default": 1.0, "good": [0, 1]},
+    {"id": "duty", "name": "DUTY", "min": 5, "max": 95, "unit": "%", "default": 0.3, "good": [0.1, 0.5]},
+    {"id": "level", "name": "LEVEL", "min": 0, "max": 100, "unit": "%", "default": 0.75, "good": [0.5, 1]}
+  ],
+  "main": ["rate", "color"],
+  "reaction": {"signal": "kick", "param": "level", "amount": 0.5, "attack_ms": 0, "release_ms": 150, "mode": "add", "curve": "hard", "threshold": 0.2},
+  "press": {"param": "rate", "lo": 0.5625, "hi": 0.9375, "curve": "steps", "release_beats": 0.5},
+  "presets": [
+    {"name": "subtle", "values": {"rate": 0.3125, "color": 1.0, "duty": 0.15, "level": 0.4}},
+    {"name": "extreme", "values": {"rate": 0.6875, "color": 1.0, "duty": 0.5, "level": 1.0}},
+    {"name": "blackout", "values": {"rate": 0.4375, "color": 0.0, "duty": 0.5, "level": 1.0}}
+  ],
+  "flash": {"mode": "rate", "param": "rate", "duty": "duty", "beats": [4, 2, 1, 0.5, 0.25, 0.125, 0.0625, 0.03125]},
+  "cost": {"class": "S"}, "passes": 1, "state": "none",
+  "help": ["Flashes on the beat: RATE 4 beats .. 1/32.", "The optional show flash cap (off by default) limits it."]
+}

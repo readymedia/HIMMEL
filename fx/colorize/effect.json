@@ -1,0 +1,19 @@
+{
+  "id": "colorize", "name": "Colorize", "kind": "effect", "family": "colour", "tier": 1, "shelf": "builtin",
+  "params": [
+    {"id": "dark", "name": "DARK", "min": 0, "max": 360, "unit": "deg hue", "default": 0.66, "good": [0, 1]},
+    {"id": "light", "name": "LIGHT", "min": 0, "max": 360, "unit": "deg hue", "default": 0.1, "good": [0, 1]},
+    {"id": "sat", "name": "SAT", "min": 0, "max": 100, "unit": "%", "default": 0.8, "good": [0.4, 1]},
+    {"id": "contrast", "name": "CONTRAST", "min": 0.5, "max": 2, "unit": "x", "default": 0.5, "good": [0.3, 0.8]}
+  ],
+  "main": ["dark", "light"],
+  "reaction": {"signal": "bass", "param": "light", "amount": 0.08, "attack_ms": 20, "release_ms": 400, "mode": "add", "curve": "soft", "threshold": 0.15},
+  "press": {"param": "sat", "lo": 0.8, "hi": 1.0, "curve": "lin", "release_beats": 0.5},
+  "presets": [
+    {"name": "subtle", "values": {"dark": 0.6, "light": 0.12, "sat": 0.4, "contrast": 0.5}},
+    {"name": "extreme", "values": {"dark": 0.85, "light": 0.45, "sat": 1.0, "contrast": 0.8}}
+  ],
+  "cost": {"class": "S"}, "passes": 1, "state": "none",
+  "compat": {"avoid": [], "not_with": ["hue_sat"]},
+  "help": ["Duotone: the shadows take one colour,", "the highlights another."]
+}

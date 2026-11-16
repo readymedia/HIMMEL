@@ -1,0 +1,19 @@
+{
+  "id": "hue_sat", "name": "Hue / Sat", "kind": "effect", "family": "colour", "tier": 1, "shelf": "builtin",
+  "params": [
+    {"id": "hue", "name": "HUE", "min": 0, "max": 360, "unit": "deg", "default": 0.25, "good": [0, 1]},
+    {"id": "sat", "name": "SAT", "min": 0, "max": 200, "unit": "%", "default": 0.6, "good": [0.3, 0.9]},
+    {"id": "spin", "name": "SPIN", "min": -0.25, "max": 0.25, "unit": "turn/s", "default": 0.5, "good": [0.4, 0.6], "speed": true}
+  ],
+  "main": ["hue", "sat"],
+  "reaction": {"signal": "mid", "param": "hue", "amount": 0.25, "attack_ms": 30, "release_ms": 400, "mode": "add", "curve": "soft", "threshold": 0.1},
+  "press": {"param": "sat", "lo": 0.5, "hi": 1.0, "curve": "lin", "release_beats": 0.5},
+  "presets": [
+    {"name": "subtle", "values": {"hue": 0.06, "sat": 0.55, "spin": 0.5}},
+    {"name": "extreme", "values": {"hue": 0.5, "sat": 1.0, "spin": 0.75}},
+    {"name": "mono", "values": {"hue": 0.0, "sat": 0.0, "spin": 0.5}}
+  ],
+  "cost": {"class": "S"}, "passes": 1, "state": "none",
+  "compat": {"avoid": [], "not_with": ["colorize"]},
+  "help": ["Turns the colours round the colour wheel.", "SAT 0 = grey, 50 % = as is, 100 % = double."]
+}

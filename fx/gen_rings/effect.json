@@ -1,0 +1,18 @@
+{
+  "id": "gen_rings", "name": "Rings", "kind": "generator", "family": "pattern", "tier": 1, "shelf": "builtin",
+  "params": [
+    {"id": "count", "name": "COUNT", "min": 1, "max": 25, "unit": "rings", "default": 0.25, "good": [0.1, 0.6]},
+    {"id": "pulse", "name": "PULSE", "min": 0, "max": 100, "unit": "% on the beat", "default": 0.5, "good": [0.2, 0.8]},
+    {"id": "speed", "name": "SPEED", "min": -1, "max": 1, "unit": "rings/s", "default": 0.7, "good": [0.55, 0.85], "speed": true},
+    {"id": "width", "name": "WIDTH", "min": 0, "max": 100, "unit": "% of the gap", "default": 0.2, "good": [0.05, 0.5]}
+  ],
+  "main": ["count", "pulse"],
+  "reaction": {"signal": "kick", "param": "pulse", "amount": 0.4, "attack_ms": 5, "release_ms": 200, "mode": "add", "curve": "hard", "threshold": 0.2},
+  "press": {"param": "width", "lo": 0.2, "hi": 0.8, "curve": "lin", "release_beats": 0.5},
+  "presets": [
+    {"name": "subtle", "values": {"count": 0.15, "pulse": 0.2, "speed": 0.6, "width": 0.1}},
+    {"name": "extreme", "values": {"count": 0.7, "pulse": 1.0, "speed": 0.9, "width": 0.4}}
+  ],
+  "cost": {"class": "S"}, "passes": 1, "state": "none",
+  "help": ["Rings flowing out of the centre;", "PULSE thickens them on every beat."]
+}

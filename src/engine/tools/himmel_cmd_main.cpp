@@ -13,6 +13,8 @@
 //   himmel_cmd mute D L [on|off|toggle] | play D L pause|play|toggle|restart
 //   himmel_cmd fx T S EFFECT               T = a1..a4 / b1..b4 (layer), a / b (deck), m (master);
 //                                          S = slot 1..4; EFFECT = id, name or -1
+//   himmel_cmd fx T S EFFECT PRESET        ... then set the preset's knobs (subtle, extreme, ...: fx/<id>/effect.json)
+//   himmel_cmd press T S V                 PRESS 0..1 on the slot (0 = release)
 //   himmel_cmd param T S P V | mix T S V | bypass T S [on|off|toggle]   P = 1..8
 //   himmel_cmd focus D L | hello | raw TYPE DECK LAYER SLOT PARAM I F   (raw: protocol numbers)
 //   himmel_cmd flood N                     N opacity commands at once (rate-limit test)
@@ -40,6 +42,7 @@
 
 #include "himmel/engine/deck_model.h"
 #include "himmel/engine/shm_block.h"
+#include "himmel/fx/fx.h"
 #include "himmel/protocol/commands.h"
 #include "himmel/protocol/state.h"
 
@@ -62,7 +65,7 @@ void usage() {
         "  take [ms] | cut | black [on|off|toggle] | xfade V | nudge DELTA\n"
         "  clip D L ID | opacity D L V | speed D L V | jump D L V | blend D L MODE\n"
         "  mute D L [on|off|toggle] | play D L pause|play|toggle|restart | focus D L\n"
-        "  fx T S EFFECT | param T S P V | mix T S V | bypass T S [on|off|toggle]\n"
+        "  fx T S EFFECT [PRESET] | param T S P V | mix T S V | press T S V | bypass T S [on|off|toggle]\n"
         "  raw TYPE DECK LAYER SLOT PARAM I F | hello | flood N\n"
         "  D = a|b, L = 1..4, T = a1..b4 (layer) | a | b (deck) | m (master), S = 1..4, P = 1..8\n"
         "  chain with --:  himmel_cmd clip a 1 0 -- clip a 2 1 -- take\n");
@@ -260,7 +263,26 @@ int run_one(Engine& e, const std::vector<std::string>& a, const Catalog& cat) {
         const int act = v == "pause" ? 0 : v == "play" ? 1 : v == "restart" ? 3 : 2;
         return layer_cmd(CommandType::LayerPlay, act, 0);
     }
-    if (c == "fx") return a.size() < 4 ? 1 : fx_cmd(CommandType::FxSet, kNone, effect_id(a[3], cat), 0);
+    if (c == "fx") {
+        if (a.size() < 4) return 1;
+        const int id = effect_id(a[3], cat);
+        const int r = fx_cmd(CommandType::FxSet, kNone, id, 0);
+        if (r != 0 || a.size() < 5 || id < 0) return r;
+        const auto& lib = himmel::fx::builtin();
+        if (id >= lib.count()) return 1;
+        const auto& m = lib.meta(id);
+        const int pr = m.find_preset(a[4].c_str());
+        if (pr < 0) {
+            std::printf("%s has no preset '%s' (", m.name, a[4].c_str());
+            for (int k = 0; k < m.presets; ++k) std::printf("%s%s", k ? ", " : "", m.preset[k].name);
+            std::printf(")\n");
+            return 1;
+        }
+        for (int p = 0; p < m.params; ++p)
+            if (const int rp = fx_cmd(CommandType::FxParam, static_cast<uint8_t>(p), 0, m.preset[pr].v[p]); rp != 0) return rp;
+        return 0;
+    }
+    if (c == "press") return a.size() < 4 ? 1 : fx_cmd(CommandType::FxPress, kNone, 0, f(3));
     if (c == "param") return a.size() < 5 || n(3) < 1 ? 1 : fx_cmd(CommandType::FxParam, static_cast<uint8_t>(n(3) - 1), 0, f(4));
     if (c == "mix") return fx_cmd(CommandType::FxMix, kNone, 0, f(3));
     if (c == "bypass") return fx_cmd(CommandType::FxBypass, kNone, a.size() > 3 ? toggle_of(a[3]) : kToggle, 0);

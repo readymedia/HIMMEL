@@ -1,0 +1,17 @@
+{
+  "id": "glow", "name": "Glow", "kind": "effect", "family": "light", "tier": 1, "shelf": "builtin",
+  "params": [
+    {"id": "amount", "name": "AMOUNT", "min": 0, "max": 200, "unit": "%", "default": 0.5, "good": [0.2, 0.8]},
+    {"id": "threshold", "name": "THRESHOLD", "min": 0, "max": 100, "unit": "% luma", "default": 0.55, "good": [0.3, 0.8]},
+    {"id": "size", "name": "SIZE", "min": 0, "max": 4, "unit": "% height", "default": 0.4, "good": [0.2, 0.8]}
+  ],
+  "main": ["amount", "threshold"],
+  "reaction": {"signal": "energy", "param": "amount", "amount": 0.3, "attack_ms": 100, "release_ms": 1000, "mode": "add", "curve": "soft", "threshold": 0.0},
+  "press": {"param": "amount", "lo": 0.3, "hi": 1.0, "curve": "lin", "release_beats": 0.5},
+  "presets": [
+    {"name": "subtle", "values": {"amount": 0.25, "threshold": 0.7, "size": 0.3}},
+    {"name": "extreme", "values": {"amount": 1.0, "threshold": 0.3, "size": 0.9}}
+  ],
+  "cost": {"class": "M"}, "passes": 1, "state": "none",
+  "help": ["Bright parts bleed light (bloom), one pass.", "THRESHOLD picks how bright a part must be."]
+}

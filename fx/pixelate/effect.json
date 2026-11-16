@@ -1,0 +1,16 @@
+{
+  "id": "pixelate", "name": "Pixelate", "kind": "effect", "family": "stylize", "tier": 1, "shelf": "builtin",
+  "params": [
+    {"id": "size", "name": "SIZE", "min": 1, "max": 64, "unit": "px", "default": 0.3, "good": [0.15, 0.6]},
+    {"id": "poster", "name": "POSTER", "min": 0, "max": 1, "unit": "", "default": 0.0, "good": [0, 0.6]}
+  ],
+  "main": ["size", "poster"],
+  "reaction": {"signal": "kick", "param": "size", "amount": 0.3, "attack_ms": 5, "release_ms": 200, "mode": "add", "curve": "hard", "threshold": 0.2},
+  "press": {"param": "size", "lo": 0.15, "hi": 0.8, "curve": "lin", "release_beats": 0.5},
+  "presets": [
+    {"name": "subtle", "values": {"size": 0.15, "poster": 0.0}},
+    {"name": "extreme", "values": {"size": 0.7, "poster": 0.8}}
+  ],
+  "cost": {"class": "S"}, "passes": 1, "state": "none",
+  "help": ["Big square pixels, 1..64 px.", "POSTER cuts the colours to a few levels."]
+}

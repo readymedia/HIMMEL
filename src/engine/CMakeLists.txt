@@ -1,5 +1,8 @@
 # Engine skeleton: supervisor (himmel.exe) + render process (himmel_render.exe).
 
+# Effects and generators (FX track): himmel_fx, himmel_fx_gpu, fx_tests, fx_check.
+add_subdirectory(fx)
+
 add_library(himmel_engine_shared STATIC src/engine_shared.cpp src/clip_player.cpp src/camera_capture.cpp src/touch_fx.cpp src/entrancer.cpp src/entrancer_link.cpp src/midi_in.cpp)
 target_include_directories(himmel_engine_shared PUBLIC include)
 target_link_libraries(himmel_engine_shared PUBLIC himmel_media PRIVATE d3d11 mfplat mf mfreadwrite mfuuid ole32 ws2_32 winmm)
@@ -7,7 +10,7 @@ target_link_libraries(himmel_engine_shared PUBLIC himmel_media PRIVATE d3d11 mfp
 # The slice's show model (pure: no GPU, no Windows) - docs/interfaces/command-protocol.md.
 add_library(himmel_engine_model STATIC src/deck_model.cpp src/fx_catalog.cpp)
 target_include_directories(himmel_engine_model PUBLIC include)
-target_link_libraries(himmel_engine_model PUBLIC himmel_protocol)
+target_link_libraries(himmel_engine_model PUBLIC himmel_protocol himmel_fx)
 
 # Named shared-memory blocks + the clip catalog (Windows, start-up only).
 add_library(himmel_engine_ipc STATIC src/shm_block.cpp src/clip_catalog.cpp)
@@ -17,7 +20,7 @@ target_link_libraries(himmel_engine_ipc PUBLIC himmel_protocol himmel_media)
 # The slice engine (decks, FX, previews, MK2 Perform).
 add_executable(himmel_render render/render_main.cpp)
 target_link_libraries(himmel_render PRIVATE himmel_engine_shared himmel_engine_model himmel_engine_ipc himmel_perform
-                      himmel_mk2 d3d11 dxgi d3dcompiler winmm)
+                      himmel_mk2 himmel_fx_gpu d3d11 dxgi d3dcompiler winmm)
 
 # PARKED pre-slice renderer: test card, camera + latency test, Touch FX, Entrancer, weapon knob pages.
 add_executable(himmel_render_legacy render/legacy_main.cpp)

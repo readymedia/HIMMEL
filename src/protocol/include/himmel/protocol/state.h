@@ -29,7 +29,7 @@ inline constexpr int kParamNameLen = 16;
 struct FxSlotState {
     int16_t effect;            // effect id, -1 = empty
     uint8_t bypass;            // 1 = bypassed
-    uint8_t reserved;
+    uint8_t press;             // PRESS 0..255 (FxPress; 0 = released). The engine shapes the release (effect-metadata.md §5)
     float mix;                 // 0..1 dry/wet
     float param[kFxParams];    // 0..1, normalised; meaning from the catalog
 };
@@ -89,7 +89,7 @@ struct ClipInfo {
 struct EffectInfo {
     char name[kNameLen];
     uint8_t param_count;       // 0..kFxParams
-    uint8_t reserved[3];
+    uint8_t reserved[3];       // [0] = kind: 0 effect, 1 generator (effect-metadata.md)
     char param_name[kFxParams][kParamNameLen];
     float param_default[kFxParams];
 };

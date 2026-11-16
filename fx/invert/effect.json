@@ -1,0 +1,17 @@
+{
+  "id": "invert", "name": "Invert", "kind": "effect", "family": "colour", "tier": 1, "shelf": "builtin",
+  "params": [
+    {"id": "amount", "name": "AMOUNT", "min": 0, "max": 100, "unit": "%", "default": 1.0, "good": [0, 1]},
+    {"id": "luma", "name": "LUMA", "min": 0, "max": 1, "unit": "", "default": 0.0, "good": [0, 1]}
+  ],
+  "main": ["amount", "luma"],
+  "reaction": {"signal": "snare", "param": "amount", "amount": -1.0, "attack_ms": 0, "release_ms": 120, "mode": "trigger", "curve": "hard", "threshold": 0.3, "hold_beats": 0, "range": [0, 1]},
+  "press": {"param": "amount", "lo": 0.0, "hi": 1.0, "curve": "lin", "release_beats": 0.25},
+  "presets": [
+    {"name": "subtle", "values": {"amount": 0.35, "luma": 1.0}},
+    {"name": "extreme", "values": {"amount": 1.0, "luma": 0.0}}
+  ],
+  "flash": {"mode": "level", "param": "amount"},
+  "cost": {"class": "S"}, "passes": 1, "state": "none",
+  "help": ["Negative picture. LUMA 1 flips only the brightness,", "so the colours stay. A snare flips it back for a moment."]
+}

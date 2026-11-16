@@ -62,6 +62,8 @@ enum class CommandType : uint16_t {
     Focus = 16,         // deck, layer: the focused layer (D48-D53 "last group pressed")
     // ---- housekeeping ----
     Hello = 17,         // i = producer's pid; marks the producer alive (also every 1 s)
+    // ---- effects (M5) ----     deck (or kMasterDeck), layer (kNone = deck level), slot
+    FxPress = 18,       // f[0] 0..1 pressure on the slot's PRESS target (0 = released); docs/interfaces/effect-metadata.md §5
     Count
 };
 
