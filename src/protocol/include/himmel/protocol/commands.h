@@ -71,6 +71,8 @@ enum class CommandType : uint16_t {
     LayerBeatLoop = 21, // f[0] = loop length in beats (1/16..16), 0 = off (catch-up per LayerParam::CatchUp)
     LayerScratch = 22,  // i = 1 hold / move, 0 = let go; f[0] = position 0..1 of the clip (Relative: delta in clip seconds)
     Clock = 23,         // param = ClockParam; i / f[0]
+    // ---- effects (M5) ----     deck (or kMasterDeck), layer (kNone = deck level), slot
+    FxPress = 24,       // f[0] 0..1 pressure on the slot's PRESS target (0 = released); docs/interfaces/effect-metadata.md §5
     Count
 };
 

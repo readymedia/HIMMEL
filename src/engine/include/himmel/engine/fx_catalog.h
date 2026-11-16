@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 ReadyMedia.no and Himmel contributors
-// The slice's built-in effects: one precompiled uber-shader (render/slice_shaders.h),
-// any effect in any FX slot (layer, deck, master). Pure data, no GPU.
+// The engine's built-in effects and generators. Since M5 the source of truth is
+// the fx/ folder (one effect.json + one .hlsl per effect, order in
+// fx/catalog.json), parsed by himmel::fx (src/engine/fx/,
+// docs/interfaces/effect-metadata.md). This header keeps the ids as names for
+// code and tests; fx_tests checks that they match fx/catalog.json.
 //
-// The effect id is the index in this table and in Catalog.effect. The shader
-// switches on the same index (keep them in step: append only).
+// The effect id is the index in the catalog: APPEND ONLY.
 #pragma once
 
 #include <cstdint>
@@ -14,29 +16,37 @@
 namespace himmel::engine::fx {
 
 enum class Effect : int {
-    HueSat = 0,    // HUE turn, SAT 0..2x, BRIGHT -/+, CONTRAST 0.25..4x
-    Invert = 1,    // AMOUNT, LUMA (0 = invert RGB, 1 = invert brightness only)
-    Mirror = 2,    // MODE (left / right / top / bottom / quad), CENTER
-    Kaleido = 3,   // SEGMENTS 2..16, TURN, ZOOM
-    RgbSplit = 4,  // AMOUNT, ANGLE
-    RotoZoom = 5,  // ZOOM 0.25..4x, ANGLE, SPIN (centre = still), TILE (0 clamp, 1 repeat)
-    Strobe = 6,    // RATE (4..1/4 beats), COLOR (black .. white), DUTY
-    Pixelate = 7,  // SIZE 1..64 px, POSTER (levels, 0 = off)
+    HueSat = 0,
+    Invert = 1,
+    Mirror = 2,
+    Kaleido = 3,
+    RgbSplit = 4,
+    RotoZoom = 5,
+    Strobe = 6,
+    Pixelate = 7,
+    BrightContrast = 8,
+    Colorize = 9,
+    Posterize = 10,
+    Tile = 11,
+    ZoomPulse = 12,
+    Wave = 13,
+    Shake = 14,
+    Blur = 15,
+    Glow = 16,
+    Trails = 17,
+    LumaKey = 18,
+    // generators
+    GenSolid = 19,
+    GenNoise = 20,
+    GenLines = 21,
+    GenRings = 22,
+    GenShapes = 23,
+    GenTicker = 24,
     Count
 };
 inline constexpr int kEffectCount = static_cast<int>(Effect::Count);
 
-struct EffectDef {
-    const char* name;
-    int params;
-    const char* param_name[4];
-    float param_default[4];
-};
-
-// Table in fx_catalog.cpp.
-const EffectDef& effect_def(int id);
-
-// Fills catalog.effect / effect_count from the table (start-up, not the frame loop).
+// Fills catalog.effect / effect_count from fx/ (start-up, not the frame loop).
 void fill_catalog(protocol::Catalog& catalog);
 
 }  // namespace himmel::engine::fx

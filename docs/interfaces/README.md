@@ -15,7 +15,7 @@ LEAD; then both sides are built. See `docs/agents/README.md`.
 | `himmel_perform` mapper API (`src/perform/include/himmel/perform/mk2_perform.h`) | CONTROL → ENGINE (in-process) | **Version 1, 2026-11-15**, `command-protocol.md` §6 |
 | `himmel_ui` HTTP (127.0.0.1:8790) | bridge ↔ web app | Internal to the GUI track |
 | `weapon-block.md` (`Local\HimmelWeapon<N>`, touch events, roles) | CONTROL → ENGINE | **Phase 1–2** (plan in `weapons/README.md`) |
-| `effect-metadata.md` | FX → SHOW / GUI | **Phase 4** (fields in `docs/design/effects-and-generators.md` §1) |
+| [`effect-metadata.md`](effect-metadata.md) (`fx/<id>/effect.json`, PRESS, scopes, reactions, flash cap, shader contract) | FX → ENGINE / SHOW / GUI | **Version 1, 2026-11-16** (M5) |
 | `library-db.md` + sidecar JSON | MEDIA → SHOW / GUI | **Phase 3** |
 | `show-files.md` (`himmel-show/1`: banks, scenes, cues, songs, moods) | SHOW ↔ GUI | **Phase 5** |
 | `audio-block.md` (signals, clock) | AUDIO → ENGINE / SHOW | **Phase 7** |

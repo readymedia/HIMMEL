@@ -1,0 +1,19 @@
+{
+  "id": "kaleido", "name": "Kaleido", "kind": "effect", "family": "space", "tier": 1, "shelf": "builtin",
+  "params": [
+    {"id": "segments", "name": "SEGMENTS", "min": 2, "max": 16, "unit": "", "default": 0.3, "good": [0.07, 0.72], "steps": 15},
+    {"id": "turn", "name": "TURN", "min": 0, "max": 360, "unit": "deg", "default": 0.0, "good": [0, 1]},
+    {"id": "zoom", "name": "ZOOM", "min": 0.25, "max": 4, "unit": "x", "default": 0.5, "good": [0.35, 0.7], "curve": "exp"},
+    {"id": "spin", "name": "SPIN", "min": -0.25, "max": 0.25, "unit": "turn/s", "default": 0.5, "good": [0.4, 0.6], "speed": true}
+  ],
+  "main": ["segments", "turn"],
+  "reaction": {"signal": "mid", "param": "turn", "amount": 0.1, "attack_ms": 30, "release_ms": 400, "mode": "add", "curve": "soft", "threshold": 0.1},
+  "press": {"param": "segments", "lo": 0.07, "hi": 0.71, "curve": "steps", "release_beats": 0.5},
+  "presets": [
+    {"name": "subtle", "values": {"segments": 0.07, "turn": 0.0, "zoom": 0.5, "spin": 0.52}},
+    {"name": "extreme", "values": {"segments": 0.8, "turn": 0.25, "zoom": 0.3, "spin": 0.65}}
+  ],
+  "cost": {"class": "S"}, "passes": 1, "state": "none",
+  "compat": {"avoid": [], "not_with": ["mirror"]},
+  "help": ["Folds the picture into a kaleidoscope.", "SEGMENTS 2..16; PRESS adds segments."]
+}

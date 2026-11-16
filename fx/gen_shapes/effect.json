@@ -1,0 +1,18 @@
+{
+  "id": "gen_shapes", "name": "Shapes", "kind": "generator", "family": "pattern", "tier": 1, "shelf": "builtin",
+  "params": [
+    {"id": "sides", "name": "SIDES", "min": 3, "max": 8, "unit": "", "default": 0.1, "good": [0, 1], "steps": 6},
+    {"id": "spin", "name": "SPIN", "min": -0.5, "max": 0.5, "unit": "turn/s", "default": 0.6, "good": [0.4, 0.7], "speed": true},
+    {"id": "size", "name": "SIZE", "min": 5, "max": 95, "unit": "% height", "default": 0.5, "good": [0.3, 0.8]},
+    {"id": "copies", "name": "COPIES", "min": 1, "max": 6, "unit": "", "default": 0.5, "good": [0, 1], "steps": 6}
+  ],
+  "main": ["sides", "spin"],
+  "reaction": {"signal": "beat", "param": "size", "amount": 0.15, "attack_ms": 0, "release_ms": 250, "mode": "trigger", "curve": "linear", "threshold": 0.5, "hold_beats": 0},
+  "press": {"param": "size", "lo": 0.5, "hi": 1.0, "curve": "lin", "release_beats": 0.5},
+  "presets": [
+    {"name": "subtle", "values": {"sides": 0.1, "spin": 0.52, "size": 0.4, "copies": 0.0}},
+    {"name": "extreme", "values": {"sides": 0.9, "spin": 0.8, "size": 0.9, "copies": 0.95}}
+  ],
+  "cost": {"class": "M"}, "passes": 1, "state": "none",
+  "help": ["Spinning outlined polygons (3..8 sides),", "COPIES nests up to 6 inside each other."]
+}

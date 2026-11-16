@@ -153,6 +153,12 @@ simulator goes quiet.
   free while sampling. Hap Q's YCoCg → RGB happens in the shader.
 - **Camera**: NV12 planes uploaded as R8 + R8G8 textures, BT.709 → RGB in the shader.
 - The MK2 screen pages are drawn on the CPU (512×64 bits) at ~30 Hz.
+- **Effects and generators** (`fx/`, `src/engine/fx/`, M5): one pixel shader
+  per effect, all compiled at start-up in worker threads; each active FX slot
+  is one full-screen pass on the chain's ping-pong pair. Per slot and frame the
+  CPU resolves scope → PRESS → reaction → flash cap (pure maths) and maps one
+  constant buffer. Trails use a pool of 4 feedback textures made at resize.
+  Contract: `docs/interfaces/effect-metadata.md`.
 
 ## Source map
 
@@ -165,9 +171,11 @@ src/controller/   himmel_mk2 library: map, input parsing + pad tracker, LED/scre
                   app/: weapon_blocks, weapon_nuvj, weapon_apc20, weapon_monitor
 src/media/        himmel_media: MOV reader, HAP decoder; tools/hap_probe
 src/engine/       engine_shared (status block), clip_player, camera_capture,
+                  fx/ (himmel_fx: metadata + resolve; himmel_fx_gpu; fx_tests, fx_check),
                   render/ (himmel_render + shaders), supervisor/ (himmel)
 tests/            controller/mk2_tests.cpp, controller/weapon_tests.cpp, media/media_tests.cpp
-tools/            Python: MK2 live view + mapper, screen prototypes and fun modes, measurements
+fx/               effects + generators: <id>/effect.json + <id>/<id>.hlsl, catalog.json
+tools/            fx_check/ (C++); Python: MK2 live view + mapper, screen prototypes and fun modes, measurements
 ```
 
 ## Measured on the dev PC (GTX 1070)

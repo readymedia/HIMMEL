@@ -4,6 +4,7 @@
 //
 //   himmel_render [--outputs N] [--fullscreen] [--size 640x360] [--mode span|mirror]
 //                 [--clip file.mov ...] [--no-overlay] [--preview-fps N] [--stats-csv]
+//                 [--flash-cap HZ] [--test-signal] [--ticker "TEXT"]   (effects: src/engine/fx/, M5)
 //
 // * Show model: DeckModel (2 decks x 4 layers, FX slots on layer / deck / master,
 //   crossfader, TAKE / CUT / black / focus). Every change comes in as a Command:
@@ -15,8 +16,8 @@
 //   (DeckA, DeckB, Main, Output1..3) through staging textures mapped with
 //   DO_NOT_WAIT - the frame never waits for the GPU.
 // * Render: per deck, up to 4 HAP layers (one ClipPlayer worker each) composited
-//   with blend mode + opacity, layer FX and deck FX in one precompiled
-//   uber-shader; A / B through the crossfader into MAIN, master FX, black, then
+//   with blend mode + opacity, layer FX and deck FX (himmel::fx::FxGpu: one
+//   shader per effect from fx/, compiled at start-up); A / B through the crossfader into MAIN, master FX, black, then
 //   onto 1..8 outputs (span or mirror). A missing / loading clip shows its
 //   placeholder colour.
 // * The MK2: ring 0 of Local\HimmelMk2 -> himmel::perform::Mk2Perform; its LEDs
@@ -57,6 +58,8 @@
 #include "himmel/engine/fx_catalog.h"
 #include "himmel/engine/log_ring.h"
 #include "himmel/engine/shm_block.h"
+#include "himmel/fx/fx_gpu.h"
+#include "himmel/fx/signals.h"
 #include "himmel/mk2/output.h"
 #include "himmel/mk2/shared.h"
 #include "himmel/mk2/types.h"
@@ -85,6 +88,7 @@ constexpr int kEngineRing = 0;          // ring 0 of the MK2 block belongs to th
 constexpr int kDrainPerProducer = 256;  // command-protocol.md §5.7
 
 himmel::engine::LogRing* g_log = nullptr;
+himmel::fx::FxGpu* g_fx = nullptr;  // effects + generators (made at start-up)
 #define LOG(...) g_log->logf(__VA_ARGS__)
 
 // ---------------------------------------------------------------- config
@@ -96,6 +100,9 @@ struct Config {
     bool overlay = true;
     int preview_fps = 20;
     std::vector<std::string> clips;
+    float flash_cap = 0;       // D65: optional per-show flash cap (flashes/s), 0 = off (default)
+    bool test_signal = false;  // feed the reactions the TestSignal until audio exists (M8)
+    std::string ticker = "HIMMEL";  // GUESS: the text generator's text until shows carry it (M3)
 };
 
 Config parse_args(int argc, char** argv) {
@@ -111,6 +118,9 @@ Config parse_args(int argc, char** argv) {
         else if (a == "--clip") c.clips.push_back(next());
         else if (a == "--no-overlay") c.overlay = false, overlay_set = true;
         else if (a == "--overlay") c.overlay = true, overlay_set = true;
+        else if (a == "--flash-cap") c.flash_cap = std::clamp(static_cast<float>(std::atof(next().c_str())), 0.0f, 30.0f);
+        else if (a == "--test-signal") c.test_signal = true;
+        else if (a == "--ticker") c.ticker = next();
         else if (a == "--preview-fps") c.preview_fps = std::clamp(std::atoi(next().c_str()), 15, 30);
         else if (a == "--size") {
             const std::string s = next();
@@ -146,11 +156,6 @@ struct LayerCB {
     float info[4];
     float color[4];
     float blend[4];
-};
-struct FxCB {
-    float param[4];
-    float info[4];
-    float size[4];
 };
 struct MixCB {
     float info[4];
@@ -189,8 +194,8 @@ struct Gpu {
     ComPtr<ID3D11DeviceContext> ctx;
     ComPtr<IDXGIFactory2> factory;
     ComPtr<ID3D11VertexShader> vs;
-    ComPtr<ID3D11PixelShader> ps_source, ps_layer, ps_fx, ps_mix, ps_blit, ps_down, ps_trans;
-    ComPtr<ID3D11Buffer> cb_layer, cb_fx, cb_mix, cb_blit, cb_down;
+    ComPtr<ID3D11PixelShader> ps_source, ps_layer, ps_mix, ps_blit, ps_down, ps_trans;
+    ComPtr<ID3D11Buffer> cb_layer, cb_mix, cb_blit, cb_down;
     ComPtr<ID3D11SamplerState> lin, pnt, wrap;
     // Texture pool (canvas size), made at start-up and on resize only.
     Rt deck[kDecks][2];  // ping-pong per deck
@@ -256,11 +261,11 @@ bool init_gpu(Gpu& g) {
     ComPtr<ID3DBlob> b;
     if (!compile("vs_full", "vs_5_0", b)) return false;
     g.dev->CreateVertexShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g.vs);
-    if (!make_ps(g, "ps_source", g.ps_source) || !make_ps(g, "ps_layer", g.ps_layer) || !make_ps(g, "ps_fx", g.ps_fx) ||
+    if (!make_ps(g, "ps_source", g.ps_source) || !make_ps(g, "ps_layer", g.ps_layer) ||
         !make_ps(g, "ps_mix", g.ps_mix) || !make_ps(g, "ps_blit", g.ps_blit) || !make_ps(g, "ps_down", g.ps_down) ||
         !make_ps(g, "ps_trans", g.ps_trans))
         return false;
-    if (!make_cb(g, sizeof(LayerCB), g.cb_layer) || !make_cb(g, sizeof(FxCB), g.cb_fx) ||
+    if (!make_cb(g, sizeof(LayerCB), g.cb_layer) ||
         !make_cb(g, sizeof(MixCB), g.cb_mix) || !make_cb(g, sizeof(BlitCB), g.cb_blit) ||
         !make_cb(g, sizeof(DownCB), g.cb_down))
         return false;
@@ -316,6 +321,7 @@ void make_canvas(Gpu& g, int w, int h) {
     for (auto& r : g.hold) make_rt(g, r, w, h, DXGI_FORMAT_R8G8B8A8_UNORM);
     g.canvas_w = w;
     g.canvas_h = h;
+    if (g_fx && !g_fx->resize(w, h)) LOG("fx: no feedback textures at %dx%d (trails pass through)", w, h);
     constexpr int targets = 8 + kLayerSlots;
     LOG("canvas %dx%d (texture pool: %d targets, %.1f MB)", w, h, targets, targets * 1.0 * w * h * 4 / 1048576.0);
 }
@@ -687,26 +693,14 @@ void overlay_text(Gpu& g, Output& o, const char* line) {
     g.ctx->UpdateSubresource(o.overlay.Get(), 0, nullptr, o.overlay_px.data(), kOverlayW, 0);
 }
 
-bool fx_active(const proto::FxSlotState& s) { return s.effect >= 0 && !s.bypass && s.mix > 0.001f; }
+bool fx_active(const proto::FxSlotState& s) { return g_fx && g_fx->active(s); }
 
-// Runs the active slots of an FX chain on a ping-pong pair; returns the index holding the result.
-int run_fx(Gpu& g, Rt pair[2], int cur, const proto::FxSlotState (&slots)[kFxSlots], float time_s, float beats) {
-    for (const auto& s : slots) {
-        if (!fx_active(s)) continue;
-        FxCB cb{};
-        for (int p = 0; p < 4; ++p) cb.param[p] = s.param[p];
-        cb.info[0] = static_cast<float>(s.effect);
-        cb.info[1] = s.mix;
-        cb.info[2] = time_s;
-        cb.info[3] = beats;
-        cb.size[0] = static_cast<float>(pair[0].w), cb.size[1] = static_cast<float>(pair[0].h);
-        cb.size[2] = 1.0f / pair[0].w, cb.size[3] = 1.0f / pair[0].h;
-        upload_cb(g, g.cb_fx.Get(), cb);
-        g.ctx->PSSetConstantBuffers(1, 1, g.cb_fx.GetAddressOf());
-        pass(g, pair[1 - cur].rtv.Get(), pair[0].w, pair[0].h, g.ps_fx.Get(), pair[cur].srv.Get(), nullptr);
-        cur = 1 - cur;
-    }
-    return cur;
+// Runs the active slots of an FX chain on a ping-pong pair (himmel::fx::FxGpu: one shader per
+// effect, PRESS / scope / reaction / flash cap resolved per slot); returns the index holding the result.
+int run_fx(Gpu& g, Rt pair[2], int cur, const proto::FxSlotState (&slots)[kFxSlots], int chain) {
+    const himmel::fx::Target t[2] = {{pair[0].tex.Get(), pair[0].rtv.Get(), pair[0].srv.Get()},
+                                     {pair[1].tex.Get(), pair[1].rtv.Get(), pair[1].srv.Get()}};
+    return g_fx ? g_fx->run_chain(g.ctx.Get(), t, pair[0].w, pair[0].h, cur, slots, chain) : cur;
 }
 
 void rgb_of(uint32_t rgb, float out[4]) {
@@ -738,6 +732,8 @@ void layer_cb(Gpu& g, const LayerRuntime& rt, const proto::LayerState& ls, const
     } else if (ls.clip >= 0) {  // loading or missing: the clip's placeholder colour (build-v1 §4.4)
         cb.info[2] = 4.0f;
         rgb_of(cat.clip[ls.clip].thumb_rgb, cb.color);
+    } else {  // no clip, a generator in an FX slot: it paints on transparent (effect-metadata.md §6)
+        cb.info[2] = 6.0f;
     }
 }
 
@@ -816,6 +812,17 @@ int main(int argc, char** argv) {
     Gpu g;
     if (!init_gpu(g)) return 2;
     LOG("GPU: %s", g.adapter);
+    auto fxg = std::make_unique<himmel::fx::FxGpu>();
+    {
+        std::string report;
+        const bool ok = fxg->init(g.dev.Get(), himmel::fx::builtin(), cfg.ticker.c_str(), &report);
+        LOG("fx: %d effects, shaders compiled in %.0f ms%s", himmel::fx::builtin().count(), fxg->compile_ms(),
+            ok ? "" : " - SOME FAILED (they pass the picture through)");
+        if (!report.empty()) LOG("fx: %.200s", report.c_str());
+        if (cfg.flash_cap > 0) LOG("fx: flash cap %.1f flashes/s (D65)", cfg.flash_cap);
+        if (cfg.test_signal) LOG("fx: reactions get the test signal (no audio yet, M8)");
+    }
+    g_fx = fxg.get();
 
     WNDCLASSW wc{};
     wc.lpfnWndProc = wndproc;
@@ -1081,9 +1088,17 @@ int main(int argc, char** argv) {
         const int qi = q_index;
         g.ctx->Begin(g.q_disjoint[qi].Get());
         g.ctx->End(g.q_begin[qi].Get());
-        const float time_s = static_cast<float>((t - t0) / 1e6);
-        // The internal beat clock (tap / BPM, M2); the audio clock feeds it in M8.
-        const float beats = static_cast<float>(std::fmod(std::max(0.0, model->beat(t)), 4096.0));
+        {
+            // The internal beat clock (tap / BPM, M2); the audio clock feeds it in M8.
+            himmel::fx::FrameCtx fc;
+            fc.time_s = (t - t0) / 1e6;
+            fc.beats = std::max(0.0, model->beat(t));
+            fc.bpm = static_cast<float>(model->bpm());
+            fc.dt = static_cast<float>(dt);
+            fc.flash_cap_hz = cfg.flash_cap;
+            if (cfg.test_signal) fc.sig = himmel::fx::TestSignal::at(fc.time_s, fc.beats);  // else silence until M8
+            g_fx->begin_frame(fc);
+        }
         const float black[4] = {0, 0, 0, 1};
         int deck_out[kDecks] = {0, 0};
         for (int d = 0; d < kDecks; ++d) {
@@ -1097,7 +1112,8 @@ int main(int argc, char** argv) {
                 const proto::LayerTransport& tr = model->layer_transport(s);
                 const LayerRuntime& rt = layers[s];
                 const float opacity = ls.opacity * tr.gain;  // fades / black-dip (M2)
-                if (ls.clip < 0 || ls.mute || opacity <= 0.001f) continue;  // nobody sees it: skip
+                // nobody sees it: skip (an empty layer with a generator in an FX slot is drawn)
+                if ((ls.clip < 0 && !g_fx->has_generator(ls.fx)) || ls.mute || opacity <= 0.001f) continue;
                 LayerCB cb;
                 ID3D11ShaderResourceView* src = nullptr;
                 layer_cb(g, rt, ls, *catalog, opacity, cb, src);
@@ -1121,7 +1137,7 @@ int main(int argc, char** argv) {
                              g.layer[0].srv.Get());
                         lk = 1;
                     }
-                    lk = run_fx(g, g.layer, lk, ls.fx, time_s, beats);
+                    lk = run_fx(g, g.layer, lk, ls.fx, s == kHitSlot ? himmel::fx::kChainHit : himmel::fx::chain_layer(d, l));
                     cb.info[2] = 5.0f;
                     src = g.layer[lk].srv.Get();
                 }
@@ -1130,7 +1146,7 @@ int main(int argc, char** argv) {
                 pass(g, g.deck[d][1 - cur].rtv.Get(), g.canvas_w, g.canvas_h, g.ps_layer.Get(), g.deck[d][cur].srv.Get(), src);
                 cur = 1 - cur;
             }
-            deck_out[d] = run_fx(g, g.deck[d], cur, live.deck[d].fx, time_s, beats);
+            deck_out[d] = run_fx(g, g.deck[d], cur, live.deck[d].fx, himmel::fx::chain_deck(d));
         }
         MixCB mc{};
         mc.info[0] = live.crossfader;
@@ -1138,7 +1154,7 @@ int main(int argc, char** argv) {
         g.ctx->PSSetConstantBuffers(2, 1, g.cb_mix.GetAddressOf());
         pass(g, g.main[0].rtv.Get(), g.canvas_w, g.canvas_h, g.ps_mix.Get(), g.deck[0][deck_out[0]].srv.Get(),
              g.deck[1][deck_out[1]].srv.Get());
-        const int main_k = run_fx(g, g.main, 0, live.master_fx, time_s, beats);
+        const int main_k = run_fx(g, g.main, 0, live.master_fx, himmel::fx::kChainMaster);
         ID3D11ShaderResourceView* main_srv = g.main[main_k].srv.Get();
 
         // 7. Outputs.

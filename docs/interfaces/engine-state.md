@@ -39,6 +39,10 @@ their own rate (30 Hz is plenty) and diff.
 - Ids: clip id = index into `catalog.clip`, effect id = index into
   `catalog.effect`; −1 = none. Ids are stable while the catalog's seq is
   unchanged.
+- Effects (M5, FX, additive): `FxSlotState::press` (was `reserved`) = the
+  slot's PRESS 0..255 from `FxPress`; `EffectInfo::reserved[0]` = kind
+  (0 effect, 1 generator). The full metadata (units, presets, reactions)
+  is in `fx/<id>/effect.json` ([`effect-metadata.md`](effect-metadata.md)).
 
 - The transport section is written in the same frame as `live`; a reader
   that needs both consistent reads `live` first, then `transport`, and may

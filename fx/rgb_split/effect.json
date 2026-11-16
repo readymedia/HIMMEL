@@ -1,0 +1,17 @@
+{
+  "id": "rgb_split", "name": "RGB Split", "kind": "effect", "family": "glitch", "tier": 1, "shelf": "builtin",
+  "params": [
+    {"id": "distance", "name": "DISTANCE", "min": 0, "max": 5, "unit": "% width", "default": 0.3, "good": [0.1, 0.6]},
+    {"id": "angle", "name": "ANGLE", "min": 0, "max": 360, "unit": "deg", "default": 0.0, "good": [0, 1]},
+    {"id": "spin", "name": "SPIN", "min": -0.5, "max": 0.5, "unit": "turn/s", "default": 0.5, "good": [0.4, 0.6], "speed": true}
+  ],
+  "main": ["distance", "angle"],
+  "reaction": {"signal": "kick", "param": "distance", "amount": 0.4, "attack_ms": 5, "release_ms": 180, "mode": "add", "curve": "hard", "threshold": 0.2},
+  "press": {"param": "distance", "lo": 0.1, "hi": 1.0, "curve": "exp", "release_beats": 0.5},
+  "presets": [
+    {"name": "subtle", "values": {"distance": 0.1, "angle": 0.0, "spin": 0.5}},
+    {"name": "extreme", "values": {"distance": 0.9, "angle": 0.125, "spin": 0.7}}
+  ],
+  "cost": {"class": "S"}, "passes": 1, "state": "none",
+  "help": ["Pulls red and blue apart.", "The kick pushes them further."]
+}

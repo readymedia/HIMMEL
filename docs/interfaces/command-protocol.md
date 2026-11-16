@@ -75,7 +75,7 @@ the GUI sends absolute values).
 | `LayerPlay` | deck, layer | `i` = `PlayAction` | |
 | `LayerSpeed` | deck, layer | `f[0]` −4..4 | |
 | `LayerJump` | deck, layer | `f[0]` 0..1 | |
-| `FxSet` | deck / master, layer or `kNone`, slot | `i` = effect id, −1 = empty | Effect ids index `Catalog.effect`. Setting an effect resets its params to the catalog defaults |
+| `FxSet` | deck / master, layer or `kNone`, slot | `i` = effect id, −1 = empty | Effect ids index `Catalog.effect` (order: `fx/catalog.json`, append only; [`effect-metadata.md`](effect-metadata.md)). Setting an effect resets its params to the catalog defaults and PRESS to 0. A generator on a layer without a clip still draws (effect-metadata.md §6) |
 | `FxParam` | same + `param` | `f[0]` 0..1 | normalised; the meaning is in the catalog |
 | `FxBypass` | same | `i` = 0 / 1 / 2 | |
 | `FxMix` | same | `f[0]` 0..1 | dry / wet |
@@ -85,6 +85,7 @@ the GUI sends absolute values).
 | `Black` | — | `i` = 0 / 1 / 2 | master black (the outputs stay alive) |
 | `Focus` | deck, layer | — | the focused layer, shared by the MK2 and the GUI |
 | `Hello` | — | `i` = pid | keeps the producer alive |
+| `FxPress` (24, M5) | deck / master, layer or `kNone`, slot | `f[0]` 0..1 pressure (0 = released), absolute only | the slot's PRESS target ([`effect-metadata.md`](effect-metadata.md) §5); the engine shapes the release. Added by FX 2026-11-16, additive (no version bump) |
 
 `LayerPlay` also takes `Release` (4: leave the inner loop, play the outro) and
 `Stop` (5: fade out by the layer's fade-out time, then empty) since M2.

@@ -194,6 +194,7 @@ Reject DeckModel::validate(const Command& c) const {
             if (!fx_target(c)) return Reject::BadTarget;
             return is_toggle(c.i) ? Reject::None : Reject::BadValue;
         case CommandType::FxMix:
+        case CommandType::FxPress:
             if (!fx_target(c)) return Reject::BadTarget;
             return finite(c.f[0]) ? Reject::None : Reject::BadValue;
         case CommandType::Crossfader:
@@ -699,6 +700,11 @@ Reject DeckModel::apply(const Command& c, uint64_t now_us) {
             s->mix = clamp01(with_delta(s->mix, c));
             break;
         }
+        case CommandType::FxPress: {  // absolute only; the renderer shapes velocity / release (himmel::fx::resolve)
+            FxSlotState* s = fx_slot(c);
+            s->press = static_cast<uint8_t>(std::lround(clamp01(c.f[0]) * 255.0f));
+            break;
+        }
         case CommandType::Crossfader:
             live_.take_active = 0;  // a manual move cancels a running TAKE
             live_.take_progress = 0.0f;
@@ -1039,7 +1045,8 @@ const char* command_name(CommandType t) {
     static constexpr const char* kNames[] = {"nop",   "clip",    "opacity", "blend",    "mute",    "play",
                                              "speed", "jump",    "fx",      "param",    "bypass",  "mix",
                                              "xfade", "take",    "cut",     "black",    "focus",   "hello",
-                                             "set",   "trigger", "cue",     "beatloop", "scratch", "clock"};
+                                             "set",   "trigger", "cue",     "beatloop", "scratch", "clock",
+                                             "press"};
     const auto i = static_cast<size_t>(t);
     return i < sizeof(kNames) / sizeof(kNames[0]) ? kNames[i] : "?";
 }

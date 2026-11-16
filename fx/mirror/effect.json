@@ -1,0 +1,18 @@
+{
+  "id": "mirror", "name": "Mirror", "kind": "effect", "family": "space", "tier": 1, "shelf": "builtin",
+  "params": [
+    {"id": "mode", "name": "MODE", "min": 0, "max": 4, "unit": "", "default": 0.1, "good": [0, 1], "steps": 5,
+     "labels": ["LEFT", "RIGHT", "TOP", "BOTTOM", "QUAD"]},
+    {"id": "center", "name": "CENTER", "min": 0, "max": 100, "unit": "%", "default": 0.5, "good": [0.3, 0.7]}
+  ],
+  "main": ["mode", "center"],
+  "reaction": {"signal": "bass", "param": "center", "amount": 0.15, "attack_ms": 20, "release_ms": 250, "mode": "add", "curve": "soft", "threshold": 0.15},
+  "press": {"param": "center", "lo": 0.5, "hi": 0.25, "curve": "lin", "release_beats": 0.5},
+  "presets": [
+    {"name": "subtle", "values": {"mode": 0.1, "center": 0.5}},
+    {"name": "extreme", "values": {"mode": 0.9, "center": 0.35}}
+  ],
+  "cost": {"class": "S"}, "passes": 1, "state": "none",
+  "compat": {"avoid": [], "not_with": ["kaleido"]},
+  "help": ["Copies one half onto the other.", "QUAD mirrors both ways; CENTER moves the fold."]
+}

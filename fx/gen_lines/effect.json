@@ -1,0 +1,18 @@
+{
+  "id": "gen_lines", "name": "Lines", "kind": "generator", "family": "pattern", "tier": 1, "shelf": "builtin",
+  "params": [
+    {"id": "count", "name": "COUNT", "min": 1, "max": 41, "unit": "lines", "default": 0.2, "good": [0.05, 0.5]},
+    {"id": "speed", "name": "SPEED", "min": -2, "max": 2, "unit": "lines/s", "default": 0.6, "good": [0.4, 0.8], "speed": true},
+    {"id": "angle", "name": "ANGLE", "min": 0, "max": 180, "unit": "deg", "default": 0.0, "good": [0, 1]},
+    {"id": "width", "name": "WIDTH", "min": 0, "max": 100, "unit": "% of the gap", "default": 0.25, "good": [0.05, 0.6]}
+  ],
+  "main": ["count", "speed"],
+  "reaction": {"signal": "kick", "param": "width", "amount": 0.3, "attack_ms": 5, "release_ms": 180, "mode": "add", "curve": "hard", "threshold": 0.2},
+  "press": {"param": "width", "lo": 0.2, "hi": 0.9, "curve": "lin", "release_beats": 0.5},
+  "presets": [
+    {"name": "subtle", "values": {"count": 0.1, "speed": 0.55, "angle": 0.0, "width": 0.1}},
+    {"name": "extreme", "values": {"count": 0.6, "speed": 0.9, "angle": 0.25, "width": 0.5}}
+  ],
+  "cost": {"class": "S"}, "passes": 1, "state": "none",
+  "help": ["Moving white stripes (with alpha, so they sit", "over the layers below). Tint them with Colorize."]
+}

@@ -41,6 +41,7 @@ constexpr Spec kSpecs[] = {
     {CommandType::FxParam, "FxParam", DeckRule::DeckOrMaster, LayerRule::Optional, true, true, Arg::Float, 0, 1, true},
     {CommandType::FxBypass, "FxBypass", DeckRule::DeckOrMaster, LayerRule::Optional, true, false, Arg::Toggle, 0, 0, false},
     {CommandType::FxMix, "FxMix", DeckRule::DeckOrMaster, LayerRule::Optional, true, false, Arg::Float, 0, 1, true},
+    {CommandType::FxPress, "FxPress", DeckRule::DeckOrMaster, LayerRule::Optional, true, false, Arg::Float, 0, 1, false},
     {CommandType::Crossfader, "Crossfader", DeckRule::None, LayerRule::None, false, false, Arg::Float, 0, 1, true},
     {CommandType::Take, "Take", DeckRule::None, LayerRule::None, false, false, Arg::TakeMs, 0, 0, false},
     {CommandType::Cut, "Cut", DeckRule::None, LayerRule::None, false, false, Arg::None, 0, 0, false},

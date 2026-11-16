@@ -1,0 +1,17 @@
+{
+  "id": "tile", "name": "Tile", "kind": "effect", "family": "space", "tier": 1, "shelf": "builtin",
+  "params": [
+    {"id": "tiles", "name": "TILES", "min": 1, "max": 8, "unit": "", "default": 0.15, "good": [0.13, 0.5], "steps": 8},
+    {"id": "mirror", "name": "MIRROR", "min": 0, "max": 1, "unit": "", "default": 1.0, "good": [0, 1], "steps": 2, "labels": ["OFF", "ON"]},
+    {"id": "scroll", "name": "SCROLL", "min": -0.5, "max": 0.5, "unit": "tile/s", "default": 0.5, "good": [0.4, 0.6], "speed": true}
+  ],
+  "main": ["tiles", "mirror"],
+  "reaction": {"signal": "beat", "param": "tiles", "amount": 0.5, "attack_ms": 0, "release_ms": 200, "mode": "trigger", "curve": "steps", "threshold": 0.5, "hold_beats": 0.5, "range": [0.125, 0.375]},
+  "press": {"param": "tiles", "lo": 0.13, "hi": 0.6, "curve": "steps", "release_beats": 0.5},
+  "presets": [
+    {"name": "subtle", "values": {"tiles": 0.13, "mirror": 1, "scroll": 0.5}},
+    {"name": "extreme", "values": {"tiles": 0.9, "mirror": 1, "scroll": 0.7}}
+  ],
+  "cost": {"class": "M"}, "passes": 1, "state": "none",
+  "help": ["Repeats the picture in a grid, 1..8 tiles.", "MIRROR flips every other tile; SCROLL moves them."]
+}
