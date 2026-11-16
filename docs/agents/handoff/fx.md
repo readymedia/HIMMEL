@@ -44,9 +44,12 @@ are data: the engine feeds silence until M8, or `TestSignal` with
   engine's VS once per chain. No locks, no files, no allocation.
 
 ## Checked
-- `fx_tests` 76 051 checks, all other test programs green (deck 143,
-  entrancer 238, media 31, mk2 4306, perform 120, protocol 1111, touch_fx 77,
-  ui_bridge 122, weapon 163).
+- Branch is merged with `main` up to 009306e (ENGINE M2, CONTROL mk2-input):
+  `FxPress` = command 24, FX decisions D105–D108, the HIT layer is FX chain 11,
+  the M2 beat clock / BPM feed the effects.
+- `fx_tests` 76 051 checks, all other test programs green after the merge
+  (deck 143, entrancer 238, media 31, mk2 4316, mk2_chain 18, perform 120,
+  protocol 1111, touch_fx 77, transport 1440, ui_bridge 122, weapon 163).
 - `fx_check`: every effect within its cost class on the GTX 1070,
   `docs/measurements/2026-11-16-fx-m5-gpu.md`; sheets in `docs/images/fx-sheet*.png`.
 - In the engine (windowed, 960x540): ~11 FX passes, 3.5 min, 60 fps, 0 late
