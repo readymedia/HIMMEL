@@ -43,10 +43,22 @@ are data: the engine feeds silence until M8, or `TestSignal` with
   trails add one `CopyResource`. `VSGetShader`/`VSSetShader` restore the
   engine's VS once per chain. No locks, no files, no allocation.
 
+## Checked
+- `fx_tests` 76 051 checks, all other test programs green (deck 143,
+  entrancer 238, media 31, mk2 4306, perform 120, protocol 1111, touch_fx 77,
+  ui_bridge 122, weapon 163).
+- `fx_check`: every effect within its cost class on the GTX 1070,
+  `docs/measurements/2026-11-16-fx-m5-gpu.md`; sheets in `docs/images/fx-sheet*.png`.
+- In the engine (windowed, 960x540): ~11 FX passes, 3.5 min, 60 fps, 0 late
+  frames after start-up, GPU 2.4 ms; generators on empty layers, trails,
+  ticker text, PRESS and presets via `himmel_cmd` all seen in the preview.
+- Not checked: the web GUI's effect list with 25 entries (catalog-driven,
+  should just work), the MK2 effect stepping (SHIFT + knob 8 / PAD MODE) over
+  25 entries, a fullscreen soak.
+
 ## Next up (ordered)
-1. Run the engine with effects on the laptop (`himmel.exe --sim` or
-   `himmel_render` + `himmel_cmd`), soak a few minutes with several FX and
-   `--flash-cap 3 --test-signal`; check `fx: ...` log lines (see "In progress").
+1. Owner plays the effects (GUI on 8790 / `himmel_cmd`); tune defaults,
+   presets and reactions (D104).
 2. M8 hook: replace the silent `FrameCtx::sig` with the audio block, the BPM /
    beats with the show clock (`render_main.cpp`, the `FrameCtx` block).
 3. REACT macro + knob 6 AUDIO amount (scale `reaction.amount` per slot):

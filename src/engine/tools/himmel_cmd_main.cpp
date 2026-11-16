@@ -222,6 +222,11 @@ int effect_id(const std::string& s, const Catalog& cat) {
             if (*p != ' ' && *p != '/') compact += static_cast<char>(std::tolower(static_cast<unsigned char>(*p)));
         if (compact == s) return static_cast<int>(e);
     }
+    // The metadata id (fx/<id>, e.g. gen_ticker), if the engine runs the same built-in set.
+    const auto& lib = himmel::fx::builtin();
+    if (const int id = lib.find(s.c_str()); id >= 0 && id < static_cast<int>(cat.effect_count) &&
+                                            std::strcmp(cat.effect[id].name, lib.meta(id).name) == 0)
+        return id;
     return 9999;  // the engine refuses it (BadId)
 }
 

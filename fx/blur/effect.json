@@ -13,5 +13,5 @@
     {"name": "extreme", "values": {"size": 0.9, "direction": 0.0, "shape": 1}}
   ],
   "cost": {"class": "M"}, "passes": 1, "state": "none",
-  "help": ["Soft focus. SHAPE LINE = motion blur", "along DIRECTION. One pass, 24 taps."]
+  "help": ["Soft focus. SHAPE LINE = motion blur", "along DIRECTION. One pass, 16-24 taps."]
 }

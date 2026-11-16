@@ -1,4 +1,4 @@
-// Blur: one pass, 24 bilinear taps on a golden-angle spiral (round) or along a line.
+// Blur: one pass, 16 bilinear taps on a golden-angle spiral (round) or 24 along a line.
 // Size 0..3 % of the height (linear). A small per-pixel turn of the pattern hides banding.
 float4 fx(float2 uv, float4 s) {
     float r = P.x * 0.03;
@@ -8,8 +8,8 @@ float4 fx(float2 uv, float4 s) {
     float4 acc = s;
     float wsum = 1;
     if (step_of(P.z, 2) < 0.5) {
-        [unroll] for (int k = 1; k <= 24; ++k) {
-            float rr = sqrt(k / 24.0);
+        [unroll] for (int k = 1; k <= 16; ++k) {
+            float rr = sqrt(k / 16.0);
             float a = k * 2.39996 + jitter;
             float w = 1.2 - rr;
             acc += tex(uv + float2(cos(a), sin(a)) * rr * sc) * w;
