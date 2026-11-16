@@ -41,6 +41,7 @@
 #include <chrono>
 #include <cstdarg>
 #include <cstdio>
+#include <share.h>
 #include <filesystem>
 #include <string>
 #include <memory>
@@ -161,7 +162,8 @@ int main(int argc, char** argv) {
     GetLocalTime(&st);
     char name[64];
     std::snprintf(name, sizeof(name), "himmel-%04d-%02d-%02d.log", st.wYear, st.wMonth, st.wDay);
-    _wfopen_s(&g_logfile, (dir / "logs" / name).c_str(), L"a");
+    // Shared for reading (_SH_DENYWR), so the log can be read / tailed while Himmel runs.
+    g_logfile = _wfsopen((dir / "logs" / name).c_str(), L"a", _SH_DENYWR);
 
     bool with_controller = true, with_ui = true, legacy = false;
     std::wstring render_args, ctl_args;

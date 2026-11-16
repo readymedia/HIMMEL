@@ -9,8 +9,8 @@ LEAD; then both sides are built. See `docs/agents/README.md`.
 | `Local\HimmelMk2` (events, LEDs, screens, status) | CONTROL → ENGINE / GUI | Exists. See `docs/mk2-controller-spec.md` and `src/controller/include/himmel/mk2/shared.h` |
 | MK2 sim link (UDP 8766) | Simulators → `mk2_controller` | Exists. See `sim_link.h` |
 | `Local\HimmelEngine` (engine status) | ENGINE → supervisor / GUI | Exists (basic). Heartbeat / stop for the supervisor; the GUI uses `engine-state.md` |
-| [`engine-state.md`](engine-state.md) (`Local\HimmelState`: live show model + catalog) | ENGINE → GUI / weapons | **Version 1, 2026-11-15** (slice) |
-| [`command-protocol.md`](command-protocol.md) (`Local\HimmelCommands`: layer, FX, crossfader, take, cut, focus) | GUI / weapons / OSC → ENGINE | **Version 1, 2026-11-15** (slice); scenes / save / transport appended later |
+| [`engine-state.md`](engine-state.md) (`Local\HimmelState`: live show model + catalog + transport) | ENGINE → GUI / weapons | **Version 2, 2026-11-16** (M2 transport section) |
+| [`command-protocol.md`](command-protocol.md) (`Local\HimmelCommands`: layer, FX, crossfader, take, cut, focus) | GUI / weapons / OSC → ENGINE | **Version 1, 2026-11-15** (slice); **M2 clip transport appended 2026-11-16** (§4a); scenes / save appended later |
 | [`preview-block.md`](preview-block.md) (`Local\HimmelPreview`: 480×270 BGRA of A, B, MAIN, outputs) | ENGINE → GUI | **Version 1, 2026-11-15** (slice) |
 | `himmel_perform` mapper API (`src/perform/include/himmel/perform/mk2_perform.h`) | CONTROL → ENGINE (in-process) | **Version 1, 2026-11-15**, `command-protocol.md` §6 |
 | `himmel_ui` HTTP (127.0.0.1:8790) | bridge ↔ web app | Internal to the GUI track |
