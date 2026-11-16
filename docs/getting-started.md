@@ -170,7 +170,17 @@ crossfader and the clip list.
      pressing a group button on the MK2. The panel at the bottom shows the
      focused layer's effects: pick an effect per slot, then its mix and
      parameters (double-click a slider = default). DECK FX and MASTER FX
-     are the tabs next to it.
+     are the tabs next to it. The list has 19 effects and 6 generators
+     (`fx/`); a generator on an empty layer draws by itself.
+   - From a terminal: `himmel_cmd fx a1 1 kaleido extreme` (layer A1, slot 1,
+     with its `extreme` preset), `himmel_cmd press a1 1 0.8` (PRESS),
+     `himmel_cmd fx m 1 strobe` (master). `himmel_render --flash-cap 3`
+     limits strobe / flash to 3 per second (off by default, D65);
+     `--test-signal` lets the reactions move with a fake beat until audio
+     exists; `--ticker "TEXT"` sets the text generator.
+   - See every effect without the engine: `build\bin\Release\fx_check.exe`
+     writes PNGs + contact sheets to `tools/_screens/fx/` and prints the GPU
+     time per effect.
    - **TAKE** (space or the ring) travels PREVIEW to PROGRAM; **CUT**
      (Enter) swaps at once; the crossfader moves by hand; **BLACK** is top
      right.
