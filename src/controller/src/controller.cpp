@@ -4,6 +4,7 @@
 
 #include <array>
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <thread>
 
@@ -19,15 +20,25 @@ constexpr unsigned short kVid = 0x17CC;
 constexpr unsigned short kPid = 0x1140;
 constexpr int kHidInterface = 2;
 
-hid_device* open_device(std::string& why) {
+hid_device* open_device(std::string& why, std::string& opened) {
     hid_device_info* list = hid_enumerate(kVid, kPid);
     hid_device* dev = nullptr;
+    int seen = 0;
     for (auto* d = list; d && !dev; d = d->next) {
+        ++seen;
         if (d->interface_number != kHidInterface && d->interface_number != -1) continue;
         dev = hid_open_path(d->path);
-        if (!dev) why = "hid_open_path failed (NI software running?)";
+        if (!dev) {
+            why = "the MK2 is plugged in but could not be opened (close NI Maschine / NIHardwareAgent and every MK2 Live page)";
+        } else {
+            char line[160];
+            std::snprintf(line, sizeof(line), "MK2 opened over USB (17cc:1140, HID interface %d, release %x)",
+                          d->interface_number, d->release_number);
+            opened = line;
+        }
     }
-    if (!list) why = "MK2 not found";
+    if (!list) why = "MK2 not found on USB (17cc:1140): is it plugged in and switched on?";
+    else if (!dev && why.empty()) why = "MK2 found (" + std::to_string(seen) + " HID interfaces) but not interface 2";
     hid_free_enumeration(list);
     if (dev) hid_set_nonblocking(dev, 0);
     return dev;
@@ -78,7 +89,7 @@ struct SimDevice final : Device {
         return true;
     }
     const char* lost_reason() const override {
-        return switched ? "another simulator took over" : "simulator link error";
+        return switched ? "a different simulator is playing now" : "simulator link error";
     }
     SimLink& link;
     uint64_t last_hello_us = 0;
@@ -103,14 +114,19 @@ Controller::~Controller() = default;
 
 std::unique_ptr<detail::Device> Controller::open(std::string& why) {
     if (!cfg_.sim) {
-        hid_device* h = open_device(why);
+        std::string opened;
+        hid_device* h = open_device(why, opened);
+        if (h) set_message(opened);
         if (!h) {
             sleep_ms(static_cast<int>(cfg_.reopen_interval_ms));
             return nullptr;
         }
         return std::make_unique<detail::HidDevice>(h);
     }
-    if (!sim_) sim_ = std::make_unique<SimLink>();
+    if (!sim_) {
+        sim_ = std::make_unique<SimLink>();
+        sim_->set_busy_notice(true);  // an ignored live view shows "another simulator is playing Himmel"
+    }
     if (!sim_->bind(cfg_.sim_port, why)) {
         sleep_ms(static_cast<int>(cfg_.reopen_interval_ms));
         return nullptr;
@@ -128,6 +144,10 @@ std::unique_ptr<detail::Device> Controller::open(std::string& why) {
 void Controller::publish(const Event& e) {
     for (auto& ring : shm_->rings)
         if (ring.attached.load(std::memory_order_acquire)) ring.push(e);
+    if (shm_->rings[0].attached.load(std::memory_order_relaxed)) ring0_events_.fetch_add(1, std::memory_order_relaxed);
+    if (e.type == EventType::ButtonDown) buttons_down_.fetch_add(1, std::memory_order_relaxed);
+    else if (e.type == EventType::KnobDelta || e.type == EventType::EncoderDelta) knob_moves_.fetch_add(1, std::memory_order_relaxed);
+    else if (e.type == EventType::PadHit) pad_hits_.fetch_add(1, std::memory_order_relaxed);
 }
 
 void Controller::set_message(const std::string& m) {
@@ -259,10 +279,43 @@ void Controller::run(const std::atomic<bool>& stop) {
         std::thread writer([&] { writer_loop(s); });
 
         std::string reason;
+        // Diagnostics: a summary 1 s after connecting, then whenever the controls
+        // were used (at most every 5 s); a warning when nobody reads ring 0.
+        const uint64_t t_connect = now_us();
+        uint64_t next_summary = t_connect + 1000000, ctl0 = st.control_reports.load(), pad0 = st.pad_reports.load();
+        uint64_t last_ev = ~uint64_t{0};
+        bool warned_ring0 = false;
         while (!stop.load()) {
             sleep_ms(20);
             const uint64_t t = now_us();
             st.heartbeat_us.store(t);
+            if (sim_) {
+                if (const uint16_t p = sim_->take_new_ignored(); p && log_)
+                    log_("ignoring another MK2 simulator (udp port " + std::to_string(p) +
+                         "): only the newest one plays Himmel; close the other one, or press Take over in it");
+            }
+            if (!warned_ring0 && t - t_connect > 3000000 && !shm_->rings[0].attached.load()) {
+                warned_ring0 = true;
+                if (log_) log_("input is not reaching the engine yet: nobody reads ring 0 (is himmel_render running?)");
+            }
+            const uint64_t ev = buttons_down_.load() + knob_moves_.load() + pad_hits_.load();
+            if (t >= next_summary && ev != last_ev) {
+                char line[256];
+                std::snprintf(line, sizeof(line),
+                              "input: %llu control + %llu pad reports this session; %llu presses, %llu knob/wheel moves, "
+                              "%llu pad hits so far; ring 0 (engine) %s, %llu events, %u dropped%s",
+                              static_cast<unsigned long long>(st.control_reports.load() - ctl0),
+                              static_cast<unsigned long long>(st.pad_reports.load() - pad0),
+                              static_cast<unsigned long long>(buttons_down_.load()),
+                              static_cast<unsigned long long>(knob_moves_.load()),
+                              static_cast<unsigned long long>(pad_hits_.load()),
+                              shm_->rings[0].attached.load() ? "attached" : "NOT attached",
+                              static_cast<unsigned long long>(ring0_events_.load()), shm_->rings[0].dropped.load(),
+                              sim_ && sim_->dropped() ? " (another simulator ignored)" : "");
+                if (log_) log_(line);
+                last_ev = ev;
+                next_summary = t + 5000000;
+            }
             if (s.io_error.load()) {
                 reason = s.dev->lost_reason();
                 break;

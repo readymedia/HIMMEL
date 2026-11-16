@@ -98,9 +98,17 @@ int SimLink::recv(uint8_t* buf, size_t cap, int timeout_ms) {
         if (from.sin_addr.s_addr != htonl(INADDR_LOOPBACK)) continue;
         const bool first = peer_port_.load(std::memory_order_acquire) == 0;
         switch (policy_.on_datagram(from.sin_port, now_us())) {
-            case SimPeerPolicy::Verdict::Drop:
+            case SimPeerPolicy::Verdict::Drop: {  // another simulator: ignored while ours is alive
+                dropped_.fetch_add(1, std::memory_order_relaxed);
+                const auto notice = policy_.on_dropped(from.sin_port, now_us());
+                if (notice == SimPeerPolicy::Notice::SendFirst) new_ignored_.store(ntohs(from.sin_port), std::memory_order_release);
+                if (notice != SimPeerPolicy::Notice::None && busy_notice_) {
+                    const uint8_t busy = kSimBusyReport;
+                    send_to(from.sin_port, &busy, 1);
+                }
                 if (left == 0) return 0;
-                continue;  // another simulator: ignored while ours is alive
+                continue;
+            }
             case SimPeerPolicy::Verdict::NewPeer:
                 peer_port_.store(from.sin_port, std::memory_order_release);
                 if (!first) peer_changed_.store(true, std::memory_order_release);
@@ -112,8 +120,9 @@ int SimLink::recv(uint8_t* buf, size_t cap, int timeout_ms) {
     }
 }
 
-void SimLink::send(const uint8_t* data, size_t len) {
-    const uint16_t port = peer_port_.load(std::memory_order_acquire);
+void SimLink::send(const uint8_t* data, size_t len) { send_to(peer_port_.load(std::memory_order_acquire), data, len); }
+
+void SimLink::send_to(uint16_t port, const uint8_t* data, size_t len) {
     if (sock_ == kInvalid || port == 0) return;
     sockaddr_in to{};
     to.sin_family = AF_INET;
