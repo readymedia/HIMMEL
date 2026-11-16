@@ -46,7 +46,7 @@ green" (build + every test + every `--selftest`), for every wave branch.
 ### Wave 1 (running, started 2026-11-16)
 | Track · branch | Task | Merged |
 |---|---|---|
-| CONTROL · `claude/control-mk2-input` | MK2 sim + real MK2 drive the engine; e2e check; owner steps for the real MK2 | — |
+| CONTROL · `claude/control-mk2-input` | MK2 sim + real MK2 drive the engine; e2e check; owner steps for the real MK2 | **merged 2026-11-16** (d43ac94): one sim works end to end (`tools/mk2_e2e.py` PASS, `mk2_chain_tests` 18); an ignored second sim now says so (red pill + Take over); `logs/mk2-<date>.log`. Real MK2 not yet checked by the owner |
 | ENGINE · `claude/engine-m2-transport` | M2 clip transport (`design/clips-and-playback.md` §2–3, §10); supervisor log read sharing | — |
 | FX · `claude/fx-m5-effects` | M5: metadata + default reaction, 16 tier-1 effects, 6 generators, PRESS / scopes, optional cap | — |
 
