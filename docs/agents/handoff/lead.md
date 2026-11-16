@@ -47,7 +47,7 @@ green" (build + every test + every `--selftest`), for every wave branch.
 | Track · branch | Task | Merged |
 |---|---|---|
 | CONTROL · `claude/control-mk2-input` | MK2 sim + real MK2 drive the engine; e2e check; owner steps for the real MK2 | **merged 2026-11-16** (d43ac94): one sim works end to end (`tools/mk2_e2e.py` PASS, `mk2_chain_tests` 18); an ignored second sim now says so (red pill + Take over); `logs/mk2-<date>.log`. Real MK2 not yet checked by the owner |
-| ENGINE · `claude/engine-m2-transport` | M2 clip transport (`design/clips-and-playback.md` §2–3, §10); supervisor log read sharing | — |
+| ENGINE · `claude/engine-m2-transport` | M2 clip transport (`design/clips-and-playback.md` §2–3, §10); supervisor log read sharing | **merged 2026-11-16** (a355739): transport_tests 1440; state block **v2** (transport section); commands 18–23 appended; D101–D104 PROPOSED with defaults |
 | FX · `claude/fx-m5-effects` | M5: metadata + default reaction, 16 tier-1 effects, 6 generators, PRESS / scopes, optional cap | — |
 
 Merge order: CONTROL first (unblocks playing), then ENGINE, then FX (FX
@@ -132,6 +132,7 @@ CONTROL M9 Lightpad (then M13 OSC). Then M10 NuVJ, M12 QA soak rig.
 - `python tools/make_test_clips.py` recreates the HAP test clips in `media/test/`.
 
 ## Gotchas found
+- Two renderers at once (e.g. an agent's test `himmel_render` from its worktree) share the `Local\Himmel*` blocks and steal each other's ring-0 events: `mk2_e2e.py` failed until the other one exited. Check `tasklist` before e2e runs.
 - Git auto-merge of `weapons/README.md` interleaved sections from different
   branches without conflict markers. After a merge that touches it, check the
   `## ` headings order.
