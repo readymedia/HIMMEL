@@ -39,7 +39,9 @@ Three agents run the slice: S1 ENGINE, S2 CONTROL, S3 GUI.
 
 ## Autonomous waves (owner 2026-11-16, `roadmap.md` §0b)
 The owner's session (local_84946746…) starts each wave's sessions; the LEAD
-merges each branch when green and writes the next wave here.
+merges each branch when green and writes the next wave here. **Standing
+approval:** the owner told the LEAD session on 2026-11-16 "Yes, merge when
+green" (build + every test + every `--selftest`), for every wave branch.
 
 ### Wave 1 (running, started 2026-11-16)
 | Track · branch | Task | Merged |
