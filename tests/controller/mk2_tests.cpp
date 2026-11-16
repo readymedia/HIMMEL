@@ -397,6 +397,33 @@ static void test_sim_peer_policy() {
         CHECK(!p.ignored(100));  // it was not alive, so it is not held against it
         CHECK(p.on_datagram(101, t += 4000) == V::Accept);
     }
+    {  // 2026-11-16: an ignored simulator is told so (0xFD), rate-limited, first notice flagged once
+        using N = SimPeerPolicy::Notice;
+        SimPeerPolicy p;
+        uint64_t t = 1'000'000;
+        CHECK(p.on_datagram(100, t) == V::NewPeer);  // the owner's live view
+        CHECK(p.on_datagram(200, t += 1000) == V::NewPeer);  // a forgotten simulator starts later and wins
+        CHECK(p.on_dropped(200, t) == N::None);  // the peer is never told
+        int first = 0, sent = 0;
+        for (int i = 0; i < 500; ++i) {  // 1 s of the live view streaming every 2 ms
+            t += 2000;
+            p.on_datagram(200, t);
+            if (p.on_datagram(100, t + 1) != V::Drop) continue;
+            const N n = p.on_dropped(100, t + 1);
+            first += n == N::SendFirst;
+            sent += n != N::None;
+        }
+        CHECK(first == 1);
+        CHECK(sent >= 4 && sent <= 5);  // every kSimBusyNoticeUs (250 ms)
+        // The other one stops: the live view gets the link back and is no longer told.
+        t += kSimPeerIdleUs + 1000;
+        CHECK(p.on_datagram(100, t) == V::NewPeer);
+        CHECK(p.on_dropped(100, t) == N::None);
+        // Ignored again later: a fresh first notice.
+        CHECK(p.on_datagram(300, t += 1000) == V::NewPeer);
+        CHECK(p.on_datagram(100, t += 1000) == V::Drop);
+        CHECK(p.on_dropped(100, t) == N::SendFirst);
+    }
 }
 
 int main() {

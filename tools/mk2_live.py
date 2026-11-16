@@ -109,6 +109,11 @@ class Live:
         return isinstance(t, mk2_sim.SimMk2) and t.engine_active()
 
     # ---------- map file ----------
+    def sim_busy(self):
+        """Another (newer) MK2 simulator plays Himmel; ours is ignored by the controller."""
+        t = self.t
+        return isinstance(t, mk2_sim.SimMk2) and t.busy()
+
     def load(self):
         try:
             with open(mk.MAP_PATH, encoding="utf-8") as f:
@@ -507,6 +512,7 @@ class Live:
                 "sim": self.sim,
                 "simulated": self.simulated(),
                 "engine": self.engine_active(),
+                "sim_busy": self.sim_busy(),
                 "leds": self.led_state(),
                 "notes": self.notes[-2:],
                 "reports": dict(m.reports) if m else {},
@@ -585,6 +591,11 @@ class Live:
             return self.sim_input(d["sim_input"])
         with self.lock:
             m = self.m
+            if d.get("sim_takeover") and self.simulated():
+                # A new simulator socket is the newest sender: the controller switches to it.
+                self.swap = True
+                self.message = "Taking over: this simulator plays Himmel now"
+                return
             if "sim" in d:
                 self.sim = bool(d["sim"])
                 self.learn = None

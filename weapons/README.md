@@ -182,6 +182,25 @@ Himmel"). Everything between the reports and the engine is the code that runs
 with the real MK2. Stop simulating and the controller reports the MK2 lost
 after 1 s; the engine keeps running, as with a pulled cable.
 
+**Only one simulator plays: the newest one started** (`SimPeerPolicy`,
+`src/controller/include/himmel/mk2/sim_link.h`). Another one that is still
+sending (a forgotten `mk2_live.py --sim`, a test script) is ignored; the
+controller answers it with the one-byte report `FD` every 250 ms, and its page
+turns the pill red ("IGNORED: another simulator plays Himmel") and shows
+**Take over** (a new simulator socket, so it becomes the newest). The
+controller logs "ignoring another MK2 simulator". This was the cause of the
+owner's 2026-11-15 report "the simulator does not drive the engine": a soak
+run's simulator had taken the link, and the page in front of him got no word.
+
+Checks without hardware: `build\bin\Release\mk2_chain_tests.exe` (two UDP
+simulators -> the real controller -> ring 0 -> Mk2Perform -> commands, and LEDs /
+screens back) and `python tools/mk2_e2e.py` (starts `himmel.exe --sim --no-ui
+--no-weapons`, presses every group, turns knob 1 and the wheel, runs a TAKE,
+and asserts each change in the engine state, plus the screens / LEDs coming
+back). `mk2_controller` logs to `logs\mk2-YYYY-MM-DD.log` next to the exe: the
+mode (REAL / SIMULATED), "MK2 opened over USB", and an "input: ..." summary
+whenever the controls are used.
+
 `himmel.exe --sim` also starts the Lightpad, LUMI and NuVJ drivers in sim mode.
 Open their live views (`--weapon lightpad` / `lumi` / `nuvj`, each on its own
 port) and they play the engine too; see

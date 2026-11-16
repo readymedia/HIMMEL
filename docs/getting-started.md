@@ -142,6 +142,13 @@ span/mirror.
    is now Himmel's MK2: its screens show the engine's pages, its LEDs are the
    engine's LEDs, and your clicks, drags and scrolls play the engine (the table
    below applies). Keyboard Shift = Shift.
+4. Red pill **"IGNORED: another simulator plays Himmel"**? Another MK2
+   simulator (a forgotten page or script) is still running, and only the
+   newest one plays. Close it, or press **Take over**.
+
+Check the whole chain without a browser: `python tools/mk2_e2e.py` (starts
+its own `himmel.exe --sim`, plays groups, knobs, the wheel and TAKE, and
+checks the engine state).
 
 The simulator sends the same USB reports as the hardware over UDP on
 127.0.0.1:8766; the controller does the rest exactly as with the real device

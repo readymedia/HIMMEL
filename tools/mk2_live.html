@@ -18,6 +18,7 @@
   .pill { padding: 3px 10px; border-radius: 99px; background: #26272b; font-size: 12px; }
   .pill.ok { background: #143d27; color: #7ff0b0; } .pill.bad { background: #4a1719; color: #ffb3b5; }
   .pill.sim { background: #2b2350; color: #c8b8ff; }
+  .tools button.busy { background: #7a1d22; color: #fff; border-color: #ff6b70; }
   .tools button.simon { background: #4b3a99; border-color: #6b55d6; color: #fff; }
   body.sim #panel { border-color: #6b55d6; box-shadow: 0 0 0 2px #6b55d633, 0 20px 60px #0008; }
   body.sim .c { cursor: grab; touch-action: none; }
@@ -169,6 +170,7 @@
   <div class="progress mk2only"><div id="bar"></div></div>
   <span class="tools mk2only">
     <button id="simBtn" title="No MK2 here? Play the drawn panel with the mouse">Simulate</button>
+    <button id="takeBtn" class="busy" hidden title="Another MK2 simulator is playing Himmel right now (only the newest one counts). Click to make this one play.">Take over</button>
     <button data-led="pads">Pad LEDs</button>
     <button data-led="groups">Group LEDs</button>
     <button data-led="buttons">Button LEDs</button>
@@ -566,6 +568,7 @@ function fit() {
 }
 window.addEventListener("resize", fit);
 document.getElementById("simBtn").onclick = () => post({ sim: !simOn });
+document.getElementById("takeBtn").onclick = () => post({ sim_takeover: true });
 
 const ledCss = (rgb, a) => `rgba(${rgb[0] * 2},${rgb[1] * 2},${rgb[2] * 2},${a})`;
 function hexToRgba(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${n >> 8 & 255},${n & 255},${a})`; }
@@ -579,8 +582,10 @@ function render(s) {
   sb.textContent = simOn ? "■ Stop simulating" : "Simulate";
   sb.classList.toggle("simon", simOn);
   const nm = W ? W.name : "";
-  conn.textContent = s.engine ? nm + " simulated, playing Himmel" : s.simulated ? nm + " simulated" : s.connected ? nm + " connected" : nm + " not connected";
-  conn.className = "pill " + (s.simulated ? "sim" : s.connected ? "ok" : "bad");
+  conn.textContent = s.sim_busy ? nm + " simulated, IGNORED: another simulator plays Himmel"
+    : s.engine ? nm + " simulated, playing Himmel" : s.simulated ? nm + " simulated" : s.connected ? nm + " connected" : nm + " not connected";
+  conn.className = "pill " + (s.sim_busy ? "bad" : s.simulated ? "sim" : s.connected ? "ok" : "bad");
+  document.getElementById("takeBtn").hidden = !s.sim_busy;
   const leds = s.leds || {};
   const seen = new Set(s.seen), held = new Set(s.held), mapped = new Set(s.mapped);
   document.getElementById("count").textContent = `${seen.size} / ${s.total} seen` + (s.verified ? " ✓ verified" : "");
