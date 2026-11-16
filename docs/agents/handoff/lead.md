@@ -43,18 +43,24 @@ merges each branch when green and writes the next wave here. **Standing
 approval:** the owner told the LEAD session on 2026-11-16 "Yes, merge when
 green" (build + every test + every `--selftest`), for every wave branch.
 
-### Wave 1 (running, started 2026-11-16)
+### Wave 1 — **done 2026-11-16** (all three merged; main builds, 12 test programs + every self-test + `mk2_e2e.py` green)
 | Track · branch | Task | Merged |
 |---|---|---|
 | CONTROL · `claude/control-mk2-input` | MK2 sim + real MK2 drive the engine; e2e check; owner steps for the real MK2 | **merged 2026-11-16** (d43ac94): one sim works end to end (`tools/mk2_e2e.py` PASS, `mk2_chain_tests` 18); an ignored second sim now says so (red pill + Take over); `logs/mk2-<date>.log`. Real MK2 not yet checked by the owner |
 | ENGINE · `claude/engine-m2-transport` | M2 clip transport (`design/clips-and-playback.md` §2–3, §10); supervisor log read sharing | **merged 2026-11-16** (a355739): transport_tests 1440; state block **v2** (transport section); commands 18–23 appended; D101–D104 PROPOSED with defaults |
-| FX · `claude/fx-m5-effects` | M5: metadata + default reaction, 16 tier-1 effects, 6 generators, PRESS / scopes, optional cap | — |
+| FX · `claude/fx-m5-effects` | M5: metadata + default reaction, 16 tier-1 effects, 6 generators, PRESS / scopes, optional cap | **merged 2026-11-16** (a4de4a7): 19 effects + 6 generators in `fx/`, `effect-metadata.md`, fx_tests 76051, max 0.40 ms GPU (blur) on the GTX 1070; `FxPress` = command 24; D105 TECH, D106–D108 PROPOSED with defaults |
 
 Merge order: CONTROL first (unblocks playing), then ENGINE, then FX (FX
 likely touches the uber-shader / effect catalog that ENGINE also touches:
 expect conflicts in `src/engine/`; resolve keeping both, rebuild, retest).
 
-### Wave 2 (next, at most 3; start when wave 1 is merged)
+### Wave 2 — **ready to start** (wave 1 is merged)
+Rules for every wave-2 agent (add to each brief): **one Himmel stack per
+machine** — before starting `himmel.exe` / `himmel_render.exe` / a test
+renderer, check `tasklist`; never leave one running when you stop (two
+renderers share `Local\Himmel*` and corrupt each other's state / input).
+Read `docs/interfaces/engine-state.md` v2 (transport) and
+`effect-metadata.md`; new commands are appended after 24 (`FxPress`).
 1. **SHOW · `claude/show-m3-projects`.** M3 (`build-v1.md`): projects
    (`design/projects.md`: folder format, new / open / recent / save / save as,
    `.himmelshow` export, atomic save worker, autosave journal + restore,
@@ -70,7 +76,9 @@ expect conflicts in `src/engine/`; resolve keeping both, rebuild, retest).
    drawer (transport modes, in / out, cue points), effect browser with the FX
    metadata, generators as sources, the MK2 picture with live feedback
    (`design/gui.md` §4, §16, §17, mockups `gui-mockups/v4/`), settings view
-   stub, start wizard steps 1–4 against what exists. *Done when:* every new
+   stub, start wizard steps 1–4 against what exists; PRESS (`FxPress`),
+   effect presets and generator kinds from the catalog; the transport section
+   (state v2: modes, cues, beat loop, HIT layer). *Done when:* every new
    engine feature of wave 1 is reachable from the browser; killing / restarting
    `himmel_ui` mid-show changes nothing. *Owns:* `gui/`, `src/ui_bridge/`,
    `tests/ui_bridge/`, `docs/agents/handoff/gui.md`.
@@ -86,7 +94,9 @@ expect conflicts in `src/engine/`; resolve keeping both, rebuild, retest).
    reaction code by agreement with ENGINE (small, in `src/engine/src/reactions*`).
 
 ### Wave 3 (after wave 2)
-MEDIA M7 ingest · ENGINE M6 outputs / curtains / displays by identity ·
+MEDIA M7 ingest · ENGINE M6 outputs / curtains / displays by identity
+(+ fix: the MAIN preview came out 480×90 for one 960×540 output — preview
+aspect, reported by FX 2026-11-16) ·
 CONTROL M9 Lightpad (then M13 OSC). Then M10 NuVJ, M12 QA soak rig.
 
 ## Start here tomorrow (2026-11-15 evening)
