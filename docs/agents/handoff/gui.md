@@ -17,7 +17,7 @@ screens, pressed buttons, knobs, pad pressure) and SETTINGS (stub: status, produ
   `GET /fxmeta`, `GET /weapons/<id>.weapon.json`; `--watch` (read-only). `ui_bridge_tests` 246 checks.
 - `fake_engine` keeps a transport section (settings, cues per clip, clock, HIT, PRESS) so the page works without the
   real engine.
-- Page: see "State". Docs: `docs/getting-started.md` "The rest of the web GUI (M11)", D109 PROPOSED.
+- Page: see "State". Docs: `docs/getting-started.md` "The rest of the web GUI (M11)", D120 PROPOSED.
 - Checked in the browser (1440 × 900) with `himmel_ui --watch` against the stack that was running on this PC
   (control-mk2-input build, state v1): the MK2 view mirrors the real MK2 (both screens, group and pad LEDs); START
   step 2 shows the MK2 as CONNECTED; PERFORM shows "ENGINE VERSION MISMATCH" as it should for a v1 engine.
@@ -49,7 +49,7 @@ screens, pressed buttons, knobs, pad pressure) and SETTINGS (stub: status, produ
   `fake_engine`; the TAKE ring is computed from `crossfader` + `program_deck`; clicking a strip sends `Focus`.
 
 ## Open questions for the owner
-- D100 (slice layout) and D109 (M11 layout: CLIP tab vs. a pop-out drawer, effect browser as cards) — PROPOSED.
+- D100 (slice layout) and D120 (M11 layout: CLIP tab vs. a pop-out drawer, effect browser as cards) — PROPOSED.
 
 ## How to build / run / test this track
 - Build: `cmake --build build --config Release --target himmel_ui fake_engine ui_bridge_tests`
