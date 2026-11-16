@@ -55,6 +55,18 @@ likely touches the uber-shader / effect catalog that ENGINE also touches:
 expect conflicts in `src/engine/`; resolve keeping both, rebuild, retest).
 
 ### Wave 2 — **ready to start** (wave 1 is merged)
+
+**Wave 2 number ranges (LEAD, 2026-11-17).** These stop the parallel branches colliding:
+
+| Track | CommandType | Producer slot | Decisions |
+|---|---|---|---|
+| SHOW | 25–39 | 4 = Show | D109–D119 |
+| AUDIO | 40–49 | 5 = Audio, if needed | D130–D139 |
+| GUI | 50–59 | — | D120–D129 |
+
+- SHOW adds `Local\HimmelShow`, specified in `docs/interfaces/show-block.md`.
+- AUDIO either bumps the state block to v3 or uses its own block.
+- SHOW and AUDIO both hook the render_main drain loop and frame tick, so the LEAD merges those by hand.
 Rules for every wave-2 agent (add to each brief): **one Himmel stack per
 machine** — before starting `himmel.exe` / `himmel_render.exe` / a test
 renderer, check `tasklist`; never leave one running when you stop (two
