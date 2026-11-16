@@ -104,18 +104,33 @@ void ClipPlayer::request(int64_t frame, int dir) {
 
 const uint8_t* ClipPlayer::acquire(int64_t frame) {
     if (!current_) return nullptr;
-    for (auto& s : current_->slots) {
-        if (s.frame.load(std::memory_order_acquire) != frame) continue;
+    auto try_slot = [&](ClipSlot& s) -> const uint8_t* {
+        if (s.frame.load(std::memory_order_acquire) != frame) return nullptr;
         uint32_t expected = ClipSlot::Ready;
-        if (!s.state.compare_exchange_strong(expected, ClipSlot::Reading)) continue;
+        if (!s.state.compare_exchange_strong(expected, ClipSlot::Reading)) return nullptr;
         if (s.frame.load(std::memory_order_acquire) != frame) {  // rewritten in between
             s.state.store(ClipSlot::Ready);
-            continue;
+            return nullptr;
         }
         reading_ = &s;
         return s.data.data();
-    }
+    };
+    for (auto& s : current_->slots)
+        if (const uint8_t* d = try_slot(s)) return d;
+    for (auto& s : current_->warm)  // a jump to a cue point / slice
+        if (const uint8_t* d = try_slot(s)) return d;
     return nullptr;
+}
+
+void ClipPlayer::set_warm(const int64_t (&frames)[kWarmSlots]) {
+    if (!current_) return;
+    const int64_t n = static_cast<int64_t>(current_->track.frames());
+    bool changed = false;
+    for (int k = 0; k < kWarmSlots; ++k) {
+        const int64_t f = frames[k] >= 0 && frames[k] < n ? frames[k] : -1;
+        if (current_->warm_want[k].exchange(f) != f) changed = true;
+    }
+    if (changed) SetEvent(static_cast<HANDLE>(wake_));
 }
 
 void ClipPlayer::release() {
@@ -158,6 +173,7 @@ LoadedClip* ClipPlayer::open_clip(const std::string& path) {
     c->tex_bytes = media::hap_texture_bytes(c->texture, c->track.width, c->track.height);
     c->row_pitch = media::hap_row_pitch(c->texture, c->track.width);
     for (auto& s : c->slots) s.data.resize(c->tex_bytes);
+    for (auto& w : c->warm_want) w.store(-1);
 
     D3D11_TEXTURE2D_DESC td{};
     td.Width = static_cast<UINT>(c->tex_w);
@@ -188,6 +204,10 @@ bool ClipPlayer::fill_one(LoadedClip& c) {
             const uint32_t st = s.state.load();
             if (s.frame.load() == f && (st == ClipSlot::Ready || st == ClipSlot::Reading)) have = true;
         }
+        for (auto& s : c.warm) {  // a warm frame inside the window is not decoded twice
+            const uint32_t st = s.state.load();
+            if (s.frame.load() == f && (st == ClipSlot::Ready || st == ClipSlot::Reading)) have = true;
+        }
         if (have) continue;
         // A victim: a free slot, or a ready one outside the window.
         ClipSlot* slot = nullptr;
@@ -209,25 +229,50 @@ bool ClipPlayer::fill_one(LoadedClip& c) {
             }
         if (!slot) return false;  // everything is in use; wait for the renderer
 
-        const auto t0 = std::chrono::steady_clock::now();
-        slot->frame.store(f);
-        const size_t i = static_cast<size_t>(f);
-        bool ok = read_at(static_cast<HANDLE>(c.file), c.track.offsets[i], read_buf_.data(), c.track.sizes[i]);
-        if (ok) {
-            const auto r = media::hap_decode(read_buf_.data(), c.track.sizes[i], slot->data.data(), slot->data.size());
-            ok = r.ok && r.bytes == c.tex_bytes;
+        return decode_into(c, *slot, f);
+    }
+    return false;
+}
+
+// Worker: `slot` is in state Writing. Reads + decodes frame f into it, then marks it Ready.
+bool ClipPlayer::decode_into(LoadedClip& c, ClipSlot& slot, int64_t f) {
+    const auto t0 = std::chrono::steady_clock::now();
+    if (slot.data.size() != c.tex_bytes) slot.data.resize(c.tex_bytes);  // warm slots: sized on first use (worker)
+    slot.frame.store(f);
+    const size_t i = static_cast<size_t>(f);
+    bool ok = read_at(static_cast<HANDLE>(c.file), c.track.offsets[i], read_buf_.data(), c.track.sizes[i]);
+    if (ok) {
+        const auto r = media::hap_decode(read_buf_.data(), c.track.sizes[i], slot.data.data(), slot.data.size());
+        ok = r.ok && r.bytes == c.tex_bytes;
+    }
+    if (!ok) {  // a broken frame shows black instead of stopping the clip
+        std::memset(slot.data.data(), 0, slot.data.size());
+        stats_.errors.fetch_add(1);
+    }
+    slot.state.store(ClipSlot::Ready, std::memory_order_release);
+    const auto us = static_cast<uint32_t>(
+        std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count());
+    uint32_t prev = stats_.decode_us_max.load();
+    while (us > prev && !stats_.decode_us_max.compare_exchange_weak(prev, us)) {
+    }
+    stats_.decoded.fetch_add(1);
+    return true;
+}
+
+// Worker: one warm frame (cue point / slice) that is not decoded yet, after the play window is full.
+bool ClipPlayer::fill_warm(LoadedClip& c) {
+    for (int k = 0; k < kWarmSlots; ++k) {
+        const int64_t want = c.warm_want[k].load();
+        ClipSlot& s = c.warm[k];
+        const uint32_t st = s.state.load();
+        if (want < 0 || (s.frame.load() == want && (st == ClipSlot::Ready || st == ClipSlot::Reading))) continue;
+        uint32_t expected = ClipSlot::Free;
+        if (!s.state.compare_exchange_strong(expected, ClipSlot::Writing)) {
+            expected = ClipSlot::Ready;
+            if (!s.state.compare_exchange_strong(expected, ClipSlot::Writing)) continue;  // being read: next time
         }
-        if (!ok) {  // a broken frame shows black instead of stopping the clip
-            std::memset(slot->data.data(), 0, slot->data.size());
-            stats_.errors.fetch_add(1);
-        }
-        slot->state.store(ClipSlot::Ready, std::memory_order_release);
-        const auto us = static_cast<uint32_t>(
-            std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count());
-        uint32_t prev = stats_.decode_us_max.load();
-        while (us > prev && !stats_.decode_us_max.compare_exchange_weak(prev, us)) {
-        }
-        stats_.decoded.fetch_add(1);
+        decode_into(c, s, want);
+        stats_.warm_decoded.fetch_add(1);
         return true;
     }
     return false;
@@ -248,7 +293,7 @@ void ClipPlayer::run() {
             }
         }
         for (auto& r : retired_) delete r.exchange(nullptr);
-        if (newest_ && fill_one(*newest_)) continue;
+        if (newest_ && (fill_one(*newest_) || fill_warm(*newest_))) continue;
         WaitForSingleObject(static_cast<HANDLE>(wake_), 5);
     }
 }

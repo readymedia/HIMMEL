@@ -1,141 +1,166 @@
 # ENGINE handoff
-Updated: 2026-11-15 by the S1 ENGINE session · Branch: `claude/engine-slice-decks` · Last commit: see `git log` on the branch
+Updated: 2026-11-16 by the ENGINE M2 session · Branch: `claude/engine-m2-transport` · Last commit: see `git log` on the branch
 
 ## State in one paragraph
-`himmel_render.exe` is now the **slice engine** (roadmap §0a, task S1): a pure
-deck model (2 decks × 4 layers, FX slots on layer / deck / master, crossfader,
-TAKE / CUT / black / focus) fed only by validated commands from
-`Local\HimmelCommands` (slots 1–7) and the in-process MK2 Perform mapper (slot 0);
-the show on air goes out in `Local\HimmelState` (live + catalog, restored by clip
-name after a restart) and small pictures in `Local\HimmelPreview`. Rendering:
-one ClipPlayer worker per layer (8), blend modes + opacity, an 8-effect
-uber-shader usable in any slot, A/B linear crossfade into MAIN, master FX, black,
-span / mirror outputs. The old renderer (test card, camera + latency test, Touch
-FX, Entrancer, weapon knob pages) is **parked** as `himmel_render_legacy.exe`
-(`himmel.exe --legacy`). Tested with `himmel_cmd`, the MK2 simulator and the S3
-GUI bridge (which was already sending real commands to this engine on the dev
-laptop); 30-minute soak in `docs/measurements/2026-11-15-slice-engine-soak.md`:
-60 fps, 0 crashes, CPU 1.7 ms / GPU 1.3 ms per frame, but **6 late frames**
-(single missed vsyncs); an idle control run with no commands had 7 in 10 min,
-so they come from the windowed laptop setup, not the engine. Not yet proven:
-0 late frames fullscreen on a quiet machine.
+`himmel_render.exe` is the **slice engine** (S1, 2026-11-15) plus the **M2 clip
+transport** (2026-11-16, `design/clips-and-playback.md` §2–3, §10). The pure
+deck model (2 decks × 4 layers + a **HIT layer** on top of PROGRAM, FX slots on
+layer / deck / master, crossfader, TAKE / CUT / black / focus) now owns one
+`Playhead` per layer and an internal **beat clock** (tap / BPM / nudge / resync /
+grid). Every play mode works (loop, ping-pong, once · hold / eject / next,
+random, chop, step, scratch), with in / out, the 4-point inner loop, 16 cue
+points per clip (equal slices when unset), beat loops with catch-up, scratch
+hold (stay / snap back), REVERSE held with catch-up, FREE / BPM time base, speed
+glide, trigger styles (normal / toggle / piano / legato), start position
+(restart / continue), fade in / out, beat snap (PROGRAM waits, PREVIEW never),
+clip targets (own / free / HIT), autopilot (next / previous / random / same,
+ONCE · NEXT) and layer transitions (cut / fade / black-dip). All of it comes in
+through six new commands (`command-protocol.md` §4a) and goes out in the new
+transport section of the state block (`engine-state.md` v2). The decode worker
+keeps the 16 jump targets of every layer **warm**, and a jump holds its landing
+frame for that one frame, so a cue jump is on screen on the next present
+(measured: 160 / 160). Soak (`docs/measurements/2026-11-16-m2-transport-soak.md`):
+15 + 10 min with every transport feature cycling, 0 crashes; 10 late frames in
+the first (6 in its first 2 min, cold start), 2 in 10 min on the warm renderer =
+the S1 baseline rate. The supervisor's log file is now readable while Himmel
+runs (`_wfsopen` + `_SH_DENYWR`).
 
 ## Done (with commits)
-- `src/engine/include/himmel/engine/deck_model.h` + `src/deck_model.cpp`: the
-  model, `validate()` / `submit()` exactly as command-protocol.md §4–5 (refuse:
-  unknown type, bad target, bad id, NaN/inf/enum out of range, rate > 4000/s;
-  clamp: values in range-ish), per-producer `acked_seq` / `rejected` /
-  `last_reject`, one log line per producer per second, `restore()` by name.
-  Library `himmel_engine_model` (no Windows, no GPU).
-- `tests/engine/deck_tests.cpp` → `deck_tests.exe` (143 checks).
-- `fx_catalog.h/.cpp`: the 8 effects (Hue/Sat, Invert, Mirror, Kaleido, RGB
-  Split, RotoZoom, Strobe, Pixelate), up to 4 params each, defaults.
-- `clip_catalog.h/.cpp`: `media/` playlist → `Catalog.clip` (size, fps, length,
-  codec, placeholder = average colour of frame 1 from the BC end points).
-- `shm_block.h/.cpp`: open-or-create named blocks, header written last.
-  Library `himmel_engine_ipc`.
-- `log_ring.h`: frame-loop-safe logger (fixed-size lines in an SPSC ring, a
-  thread prints them).
-- `render/render_main.cpp` (new), `render/slice_shaders.h` (ps_source,
-  ps_layer, ps_fx, ps_mix, ps_blit, ps_down), `render/legacy_main.cpp` (old).
-- `tools/himmel_cmd_main.cpp` → `himmel_cmd.exe` (slot 3, every command, chains
-  with `--`, waits for the ack, prints the state; `flood N` = rate test).
-- `tools/preview_dump_main.cpp` → `preview_dump.exe [dir] [--rate]` (the reader
-  side of the preview block, PNGs + pictures/s).
-- Supervisor: starts `himmel_ui.exe` if it is next to it (`--no-ui`), restarts
-  it on exit, never waits on it; `--legacy`; children without a heartbeat block
-  are only watched for exit.
+- **M2 (this branch):**
+  - `transport.h/.cpp`: `BeatClock` (tap tempo over up to 8 taps, 2 s timeout,
+    every tap lands on a beat; set BPM keeps the phase), `grid_beats()`,
+    `Playhead` (main head = shadow playhead; overrides for beat loop / scratch /
+    reverse; inner-loop phases; glide; seeded xorshift for random / chop /
+    autopilot). Pure: no heap, no locks, no Windows.
+  - `deck_model.h/.cpp`: slot model (0..7 = deck × 4 + layer, 8 = HIT), the six
+    new commands validated + applied, `tick()` runs clock → waiting launches →
+    fades → transition progress → playheads → events (loops → autopilot,
+    ended → once rules) → status into `TransportSection`; cue points per clip
+    id; resume positions per clip; `warm_frames()`; `transition_gen()`;
+    `restore()` takes the old transport section (settings, cues, BPM, grid).
+  - `clip_player.h/.cpp`: 16 warm slots per clip (`set_warm()`, filled by the
+    worker after the play window, sized on first use in the worker),
+    `acquire()` looks in them too; `decode_into()` shared.
+  - `render_main.cpp`: 9 clip players (+ HIT), the playhead frame from the
+    model (the old in-renderer position code is gone), warm frames sent on
+    change, FADE transitions keep the old picture in a per-layer hold target
+    (`ps_trans`), opacity × fade gain, HIT composited on the PROGRAM deck, FX
+    `beats` from the beat clock (was a fake 120 BPM), transport section written
+    with `live`, restore reads it, STATS adds `late worst`, `jumps / next-frame /
+    worst`, `warm decodes`, `bpm`; a `JUMP` line for every late jump.
+  - `slice_shaders.h`: `ps_trans` appended (nothing else touched).
+  - `himmel_cmd`: `set`, `trigger`, `cue`, `beatloop`, `scratch`, `play
+    release|stop`, `tap`, `bpm`, `grid`, `resync`, `phase`, `cuebench`, `soak`;
+    `h` = the HIT layer; the state print shows the transport + clock.
+  - `tests/engine/transport_tests.cpp` → `transport_tests.exe` (1440 checks, no
+    GPU): clock, every mode, range, glide, BPM, ping-pong, once ×3, random
+    (seeded, deterministic), chop, step, scratch both ways, reverse hold, inner
+    loop, beat loop ± catch-up, cue points + warm frames == jump frames (also
+    one tick later), trigger styles, start position, fades, beat snap, targets
+    + HIT, autopilot (PREVIEW now, PROGRAM on the beat), transitions,
+    validation, restore. `deck_tests` 143 (one check updated: `PlayAction` 4 is
+    now `Release`).
+  - Supervisor: `_wfsopen(..., _SH_DENYWR)` for `logs\himmel-*.log`.
+- **S1 (2026-11-15, on main):** deck model, `fx_catalog`, `clip_catalog`,
+  `shm_block`, `log_ring`, `render_main.cpp`, `slice_shaders.h`, `himmel_cmd`,
+  `preview_dump`, supervisor starts `himmel_ui`, `--legacy`. 30-min soak in
+  `docs/measurements/2026-11-15-slice-engine-soak.md`.
 
 ## How the frame loop stays clean (rule 1)
-- Everything allocated at start-up: catalog, model, 8 ClipPlayers (+ worker
-  threads), Perform ring, shared blocks, texture pool (8 canvas targets +
-  per-preview targets + 3 staging textures per stream), shaders (compiled
-  once), queries. A window resize re-creates canvas targets (same as before;
-  never happens in a fullscreen show).
-- Per frame: ring pops (bounded: 1024 MK2 events, 256 commands per producer),
-  model updates (POD), `UpdateSubresource` of ready BC frames, `Map(DISCARD)` of
-  constant buffers, draws, `Map(DO_NOT_WAIT)` of staging textures (skipped when
-  busy), `GetData(DONOTFLUSH)` for GPU timestamps, seqlock memcpy into the
-  shared blocks. No `new`, no locks, no files.
-- Logging only through `LogRing::logf` (snprintf into a fixed slot; a full ring
-  drops the line and counts it). Startup logging before the loop is the same.
-- Known exception (old, unchanged): the supervisor's stdout pipe is written by
-  the log thread, not the render thread.
+- **Transport:** all state is fixed-size POD inside `DeckModel` (9 playheads,
+  9 pending launches, 9 fades, `cues_[256][16]`, `resume_[256]`), allocated once
+  with the model. `tick()` is bounded arithmetic: one pass over 9 slots, at most
+  4 step / random events per slot per frame, no loops over the catalog except
+  autopilot's O(1) pick. No `new`, no locks, no files, no Windows calls.
+- **Warm frames:** the render thread only does 16 atomic exchanges when the
+  targets change (compared with a cached copy first). The worker sizes a warm
+  slot's buffer on first use (allocation in the worker, never in the frame).
+- **Transitions:** the hold targets are made with the canvas (start-up / window
+  resize only); a transition costs one `ps_source` pass at its start and one
+  `ps_trans` pass per frame while it runs.
+- Everything else as in S1: ring pops bounded, `UpdateSubresource` of ready BC
+  frames, `Map(DISCARD)` of constant buffers, `DO_NOT_WAIT` / `DONOTFLUSH`
+  readbacks, seqlock memcpy into the shared blocks (now + the ~2 KB transport
+  section), logging through `LogRing` only.
 
 ## In progress
-Nothing half-done. Next step for the engine is in "Next up".
+Nothing half-done.
 
 ## Next up (ordered)
-0. **Late-frame proof:** log each late frame with its own numbers, then soak
-   fullscreen on a quiet machine (laptop screen fullscreen, later the 5090).
-1. **Off-air deck at thumbnail size** (design/engine.md §2): today both decks
-   render at canvas size every frame. Plan: per-deck viewport scale + uv scale in
-   ps_layer / ps_fx / ps_mix; full size from the frame a TAKE starts.
-2. Skip decoding for layers nobody sees (keep one warm frame), per engine.md §2.
-3. GPU meter per layer / effect, budget guard (half-res optional effects).
-4. Bring Touch FX + Entrancer back as a master-level pass in the deck engine
-   (it is self-contained: `touch_fx.cpp`, `entrancer_link.cpp`), then the
-   camera as a layer source; then drop `himmel_render_legacy.exe`.
-5. Generic weapons (Lightpad, NuVJ, LUMI, APC20) are **not read** by the deck
-   engine: their mappers should become `src/perform/` mappers like Mk2Perform
-   (CONTROL). Until then they only work in the legacy renderer.
-6. Crossfade curves, luma / chroma key blends, more effects (FX track, M5).
-7. The render graph built in a worker (design/engine.md §2.1) once there are more
-   than fixed decks; today the pass list is a fixed loop over the model.
+1. **Warm the next random / scratch target:** RANDOM and absolute scratch moves
+   land on frames that are not warm, so they show one frame late (counted as
+   `clip misses`). Pre-roll the next random target from the seeded RNG into a
+   warm slot; for chop the slice starts are already warm when slices divide 16.
+2. **Clip-level transport:** move per-layer settings to per-clip defaults with
+   per-use overrides once the library (M7) and show files (M3) exist (D104).
+   Save cue points to disk (M3 / M7 sidecar).
+3. **Phase-locked BPM loops:** today BPM time base is rate-based (the range lasts
+   n beats); lock the phase to the bar when the audio clock exists (M8).
+4. Off-air deck at thumbnail size; skip decoding of layers nobody sees (keep one
+   warm frame) — S1 items, still open. The warm slots raise RAM (9 × 16 × 1–2 MB
+   at 1080p); release them for layers nobody can jump on if RAM gets tight.
+5. More transition types (wipes, push, zoom, luma, noise, blur, flash: append to
+   `TransitionType`), chop patterns (1-1-3-4), loop crossfade (seam), frame
+   blending below ×0.5, the live sampler (§6), TIMECODE / TRACK time bases.
+6. S1 leftovers: late-frame proof fullscreen; Touch FX / Entrancer / camera
+   back as passes or sources; generic weapons as `src/perform/` mappers; render
+   graph in a worker.
 
 ## GUESSES
-- **Program flip rule** (deck_model.cpp `set_crossfader`): a manual fader flips
-  PROGRAM only at the ends. Medium confidence. PROPOSED D94.
-- **TAKE during TAKE finishes it now.** Low confidence. PROPOSED D95.
-- **Layer 1 = bottom**, TAKE clamped to 60 s. PROPOSED D96.
-- **Effect defaults** (fx_catalog.cpp) chosen to be visible but tasteful. Medium;
-  owner tunes after playing.
-- **Strobe / RotoZoom spin run on a fake 120 BPM clock** until the audio clock
-  (M8). Certain it is wrong later; harmless now.
-- **Grey (#404040) placeholder** for a file we cannot read at all. Low impact.
-- **A hung `himmel_ui` is not detected** by the supervisor (it has no heartbeat
-  block yet); a dead one is restarted. It cannot affect the outputs either way.
-- **Clip names must be unique** for restore-by-name; two files with the same
-  name in different folders restore to the first. Low impact for the slice.
-- Start-up probes every clip (reads frame 1). With hundreds of 4K clips this
-  could approach the supervisor's 8 s start grace. Not measured beyond 4 clips;
-  move the probe to a worker (or the ingest DB, M7) before big libraries.
+- **M2 (all listed in `decisions.md` D101–D104):** GRID off by default; plain
+  clip loads never wait and start at in; defaults (cut 0.5 s, fades 0, HIT
+  fade-out 0.2 s + ADD, chop 8, autopilot 4 loops, BPM range 4 beats, inner
+  loop 25–75 %); beat loop starts at the playhead; after an outro the intro
+  re-arms; unset cue pads = 16ths; random autopilot is uniform; velocity →
+  opacity only on HIT; settings per layer, cue points per clip; playhead in the
+  render thread. A stall > 250 ms is not played through (dt clamp).
+- Warm-slot RAM: 16 × 1–2 MB per 1080p clip and layer (renderer ~380 MB with 8
+  layers + HIT of 1080p test clips on the dev laptop). Fine on the show PC;
+  measure with a big 4K library.
+- S1 guesses (D94–D96, effect defaults, grey placeholder, hung `himmel_ui` not
+  detected, unique clip names, start-up probe time) are unchanged.
 
 ## Open questions for the owner
-- D94 / D95 / D96 in `docs/decisions.md` (PROGRAM flip rule, TAKE during TAKE,
-  layer order). LEAD to give them numbers.
+- D101–D103 (PROPOSED, defaults in use): GRID default, transport defaults,
+  behaviour guesses. Nothing blocks.
 
 ## How to build / run / test this track
 ```
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release --parallel 8
 build\bin\Release\deck_tests.exe            # 143 checks, no GPU
-build\bin\Release\protocol_tests.exe
+build\bin\Release\transport_tests.exe       # 1440 checks, no GPU
 python tools\make_test_clips.py             # media\test\*.mov (needs ffmpeg)
-python tools\mk2_live.py --sim              # MK2 simulator, http://127.0.0.1:8765
-build\bin\Release\himmel.exe --sim -- --outputs 2 --size 640x360
-build\bin\Release\himmel_cmd.exe clip a 1 0 -- clip b 1 3 -- fx m 1 kaleido -- take 1000
-build\bin\Release\himmel_cmd.exe            # the state; "catalog" lists ids
-build\bin\Release\preview_dump.exe tools\_screens\preview --rate
+build\bin\Release\himmel_render.exe --outputs 2 --size 640x360
+build\bin\Release\himmel_cmd.exe clip a 1 0 -- set a 1 mode pingpong -- cue a 1 5 set 0.5
+build\bin\Release\himmel_cmd.exe cuebench a 1 40 150   # STATS: jumps / next-frame / worst
+build\bin\Release\himmel_cmd.exe trigger h 1 3 0.8 -- trigger h 1 3 1 up   # a HIT
+build\bin\Release\himmel_cmd.exe soak 900              # transport soak driver
+build\bin\Release\himmel_cmd.exe            # the state incl. transport + clock
 ```
-MK2 stub mapping (the LEAD's stub until S2 lands): wheel = crossfader,
-PLAY = TAKE, RESTART = CUT. Output windows: `M` = span / mirror, `O` = overlay,
-`Esc` = quit (windowed). Every 5 s the renderer logs a `STATS` line (fps,
-interval, CPU, GPU, preview GPU, late frames, commands, previews, clip misses).
+Output windows: `M` = span / mirror, `O` = overlay, `Esc` = quit (windowed).
 
 ## Gotchas found
-- `small` is a macro in the Windows headers (rpcndr.h): never name a member
-  `small`.
-- The state block is kept alive by any reader (e.g. a running `himmel_ui`), so a
-  fresh renderer restores whatever was there — including a `fake_engine` show
-  (its clip names do not match, so those layers come back empty; logged).
-- `himmel_cmd` continues its `seq` from the engine's last ack for slot 3, so the
-  ack check is unambiguous across runs.
-- Git Bash turns `/m` into a path: build with `--parallel 8`, not `-- /m`.
+- The Bash tool's heredocs choke on some content (backticks); write helper
+  scripts with the Write tool instead.
+- A jump must not advance in the same tick, or it lands half a frame past the
+  warm frame and shows one frame late (fixed: `Playhead::landed_`).
+- `PlayAction` grew (`Release` 4, `Stop` 5): any test that used 4 as "out of
+  range" must use `PlayAction::Count`.
+- State block v2 is bigger: a still-running v1 `himmel_ui` keeps the old mapping
+  alive, and the new renderer cannot map it at the new size (runs without a
+  state block, logged). Restart everything after the upgrade.
+- From S1: `small` is a macro in the Windows headers; the state block is kept
+  alive by any reader; `himmel_cmd` continues its seq from the engine's ack; Git
+  Bash turns `/m` into a path (use `--parallel 8`).
 
 ## Interfaces touched
-None changed. The engine implements `command-protocol.md`, `engine-state.md`,
-`preview-block.md` as written (v1). Notes for the LEAD, no change requested:
-`PreviewStreamBlock.published` is never reset by the engine (keeps counting
-across restarts, readers only compare it); output streams 2–3 are inactive when
-there are fewer outputs.
+- `command-protocol.md` §4a (append-only): `LayerSet`, `LayerTrigger`,
+  `LayerCue`, `LayerBeatLoop`, `LayerScratch`, `Clock`; `PlayAction` Release /
+  Stop; `kHitDeck`, `kRelease`; enums `LayerParam`, `PlayMode`, `TimeBase`,
+  `TriggerStyle`, `StartPos`, `ClipTarget`, `AutopilotMode`, `TransitionType`,
+  `GridDiv`, `CueAction`, `ClockParam`. `kCommandVersion` unchanged.
+- `engine-state.md` → **version 2**: `TransportSection` (clock, per-layer
+  `LayerTransport`, HIT `LayerState` + transport) after the catalog with its own
+  seqlock. GUI / CONTROL: rebuild against the new header; the HIT layer and the
+  transport status are ready to show.
