@@ -1,5 +1,5 @@
 # LEAD handoff
-Updated: 2026-11-15 (end of day) by the LEAD session (Claude Code, main checkout) · Branch: main
+Updated: 2026-11-16 by the LEAD session (Claude Code, main checkout) · Branch: main
 
 ## State in one paragraph
 M0 is done (merged, built, tested, pushed; remote branches deleted). The owner's
@@ -33,9 +33,59 @@ Three agents run the slice: S1 ENGINE, S2 CONTROL, S3 GUI.
   screens. MK2 sim input: fixed by CONTROL (bba57af, merged 2026-11-15:
   newest simulator wins, resets ignored, no flapping; mk2_tests 4306). CONTROL
   checked groups / wheel / TAKE reaching the engine; the LEAD has not re-run it.
-- Open owner choices: D94–D100 (PROPOSED).
+- D94–D100: PROPOSED, defaults in use (LEAD 2026-11-16); the owner can still change them.
 - Soak: 6 late frames in 30 min windowed on the laptop (an idle run had 7 in
   10 min); a fullscreen soak on a quiet machine is still owed (S1 handoff).
+
+## Autonomous waves (owner 2026-11-16, `roadmap.md` §0b)
+The owner's session (local_84946746…) starts each wave's sessions; the LEAD
+merges each branch when green and writes the next wave here.
+
+### Wave 1 (running, started 2026-11-16)
+| Track · branch | Task | Merged |
+|---|---|---|
+| CONTROL · `claude/control-mk2-input` | MK2 sim + real MK2 drive the engine; e2e check; owner steps for the real MK2 | — |
+| ENGINE · `claude/engine-m2-transport` | M2 clip transport (`design/clips-and-playback.md` §2–3, §10); supervisor log read sharing | — |
+| FX · `claude/fx-m5-effects` | M5: metadata + default reaction, 16 tier-1 effects, 6 generators, PRESS / scopes, optional cap | — |
+
+Merge order: CONTROL first (unblocks playing), then ENGINE, then FX (FX
+likely touches the uber-shader / effect catalog that ENGINE also touches:
+expect conflicts in `src/engine/`; resolve keeping both, rebuild, retest).
+
+### Wave 2 (next, at most 3; start when wave 1 is merged)
+1. **SHOW · `claude/show-m3-projects`.** M3 (`build-v1.md`): projects
+   (`design/projects.md`: folder format, new / open / recent / save / save as,
+   `.himmelshow` export, atomic save worker, autosave journal + restore,
+   relink), show files (scenes, variations, kits with pad targets, macros,
+   songs, setlist), save / recall / morph, undo stack 64 + reset-to-scene,
+   dice / mutate / rotate v1 with locks. First write
+   `docs/interfaces/show-files.md` and append the needed commands (Save,
+   Recall, Undo, …) to `command-protocol.md` as a PR the LEAD approves.
+   *Done when:* round-trip tests; a 4-layer scene recall hitches < 1 frame;
+   kill the engine mid-save → autosave restores. *Owns:* `src/show/`,
+   `tests/show/`, `docs/interfaces/show-files.md`, `docs/agents/handoff/show.md`.
+2. **GUI · `claude/gui-m11-v1`.** M11 on what wave 1 delivered: clip editor
+   drawer (transport modes, in / out, cue points), effect browser with the FX
+   metadata, generators as sources, the MK2 picture with live feedback
+   (`design/gui.md` §4, §16, §17, mockups `gui-mockups/v4/`), settings view
+   stub, start wizard steps 1–4 against what exists. *Done when:* every new
+   engine feature of wave 1 is reachable from the browser; killing / restarting
+   `himmel_ui` mid-show changes nothing. *Owns:* `gui/`, `src/ui_bridge/`,
+   `tests/ui_bridge/`, `docs/agents/handoff/gui.md`.
+3. **AUDIO · `claude/audio-m8-reactions`.** M8 (`design/music.md` §3–5):
+   `himmel_audio.exe` (WASAPI mic / line in / loopback, auto gain, gate;
+   level, 3 bands, spectrum, kick / snare / hat onsets, energy; tap tempo, MIDI
+   clock in, internal clock, beat / bar phase), `docs/interfaces/audio-block.md`
+   first, reactions on every effect parameter in the engine (using FX's
+   default `reaction` metadata), supervisor starts it. *Done when:* mic and a
+   line in both drive zoom pulse on the kick on time; unplug / replug the input
+   during a soak. *Owns:* `src/audio/`, `tests/audio/`,
+   `docs/interfaces/audio-block.md`, `docs/agents/handoff/audio.md`; engine-side
+   reaction code by agreement with ENGINE (small, in `src/engine/src/reactions*`).
+
+### Wave 3 (after wave 2)
+MEDIA M7 ingest · ENGINE M6 outputs / curtains / displays by identity ·
+CONTROL M9 Lightpad (then M13 OSC). Then M10 NuVJ, M12 QA soak rig.
 
 ## Start here tomorrow (2026-11-15 evening)
 - The owner reported: **neither the MK2 simulator nor the real MK2 drives the
