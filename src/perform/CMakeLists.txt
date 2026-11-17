@@ -1,5 +1,5 @@
 # Weapon -> command mappers that run inside the render process (CONTROL track).
-add_library(himmel_perform STATIC src/mk2_perform.cpp src/lightpad_perform.cpp)
+add_library(himmel_perform STATIC src/mk2_perform.cpp src/lightpad_perform.cpp src/nuvj_perform.cpp)
 target_include_directories(himmel_perform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(himmel_perform PUBLIC himmel_protocol himmel_mk2)
 if(MSVC)
@@ -18,6 +18,13 @@ target_link_libraries(lightpad_tests PRIVATE himmel_perform)
 add_test(NAME lightpad_tests COMMAND lightpad_tests)
 if(MSVC)
     target_compile_options(lightpad_tests PRIVATE /W4 /permissive- /utf-8)
+endif()
+
+add_executable(nuvj_tests ${PROJECT_SOURCE_DIR}/tests/perform/nuvj_tests.cpp)
+target_link_libraries(nuvj_tests PRIVATE himmel_perform)
+add_test(NAME nuvj_tests COMMAND nuvj_tests)
+if(MSVC)
+    target_compile_options(nuvj_tests PRIVATE /W4 /permissive- /utf-8)
 endif()
 
 # The whole MK2 chain without hardware: UDP simulator -> controller -> ring 0 ->
