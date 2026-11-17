@@ -171,7 +171,20 @@ Read `docs/interfaces/engine-state.md` v2 (transport) and
 
 Merged main after wave 3: build clean, 16 test programs, every selftest, `mk2_e2e.py` PASS. A live `himmel.exe --sim` with `--show-root <temp>` was checked too: curtains + ingest + audio + render all up.
 
-**After wave 3 (wave 4 candidates):**
+### Wave 4 — **done 2026-11-17**
+- **GUI M11 part 2 merged** (a5a13cd → b349c44). It adds the SHOW, OUTPUTS, LIBRARY, AUDIO and OSC panels, all optional (a missing block hides the panel), and wizard steps 1–4 on real data. No protocol change. D121 is PROPOSED.
+- The supervisor now passes `--library` / `--no-library` to `himmel_ui`.
+- Gotcha: `himmel_ingest` has no `--selftest`. Run without arguments, it is a normal worker and creates `Documents\Himmel\Library`.
+
+**All 0.1 milestones are now built (M1–M13).** M10 and M12 are checked in sim and on the dev laptop only.
+
+What is left needs the owner and real hardware:
+- a song on the real MK2, Lightpad and NuVJ;
+- a real display cable pull with 2+ screens;
+- the 8 h soak and the show-PC run (`docs/qa/README.md`);
+- the open PROPOSED decisions.
+
+**Old wave 4 candidates (now done or folded in):**
 - GUI: the SHOW and AUDIO panels, the reaction editor and the wizard (rest of M11);
 - M9 / M13 if CONTROL did not reach them;
 - M10 NuVJ;

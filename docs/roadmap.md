@@ -65,7 +65,7 @@ default and stay PROPOSED (D94–D100 are run that way).
 | 1 | ENGINE · `claude/engine-m2-transport` | M2 clip transport; supervisor log read-sharing fix |
 | 1 | FX · `claude/fx-m5-effects` | M5 tier-1 effects + generators, metadata with default reaction, PRESS / scopes, optional cap |
 | 2 | SHOW · `claude/show-m3-projects` | M3 projects, scenes, kits, songs, undo — **merged 2026-11-17** |
-| 2 | GUI · `claude/gui-m11-v1` | M11 GUI v1 on the new engine features — **merged 2026-11-17** |
+| 2 | GUI · `claude/gui-m11-v1` | M11 GUI v1 on the new engine features — **merged 2026-11-17**; part 2 (show / outputs / library / audio / OSC panels, wizard 1–4) **merged 2026-11-17** |
 | 2 | AUDIO · `claude/audio-m8-reactions` | M8 audio-reactive everything — **merged 2026-11-17** |
 | 3 | MEDIA · `claude/media-m7-ingest` | M7 ingest — **merged 2026-11-17** |
 | 3 | ENGINE · `claude/engine-m6-outputs` | M6 outputs, curtains, displays by identity — **merged 2026-11-17** (Spout to follow) |
