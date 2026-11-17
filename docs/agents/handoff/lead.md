@@ -114,13 +114,13 @@ Read `docs/interfaces/engine-state.md` v2 (transport) and
    `docs/interfaces/audio-block.md`, `docs/agents/handoff/audio.md`; engine-side
    reaction code by agreement with ENGINE (small, in `src/engine/src/reactions*`).
 
-### Wave 3 — **in progress** (CONTROL M4 merged 2026-11-17)
+### Wave 3 — **done 2026-11-17** (M4, M6, M7 merged; CONTROL continues with M9)
 
 | Track | Branch | State |
 |---|---|---|
-| CONTROL M4 | `claude/control-m4-perform` | **merged** 2026-11-17 (b354cae → d93acb1). A whole song from the MK2 alone in `mk2_e2e.py` (song stage); input → glass median 32 ms, p90 38 ms (`docs/measurements/2026-11-17-control-m4-input-to-glass.md`). `Mk2Perform::set_context` hook in render_main. D160–D162 PROPOSED. M9 Lightpad not started |
-| MEDIA M7 | `claude/media-m7-ingest` | in progress. SQLite approved (agreed stack); fenced hooks in render_main / ClipPlayer / supervisor |
-| ENGINE M6 | `claude/engine-m6-outputs` | in progress. Types 70–73 + `Local\HimmelOutputs` approved; SpoutDX approved (agreed stack, BSD-2) |
+| CONTROL M4 → M9 | `claude/control-m4-perform` → `claude/control-m9-lightpad` | **merged** 2026-11-17 (b354cae → d93acb1). A whole song from the MK2 alone in `mk2_e2e.py` (song stage); input → glass median 32 ms, p90 38 ms (`docs/measurements/2026-11-17-control-m4-input-to-glass.md`). `Mk2Perform::set_context` hook in render_main. D160–D162 PROPOSED. M9 Lightpad in progress |
+| MEDIA M7 | `claude/media-m7-ingest` | **merged** 2026-11-17 (d3f9ad9 → 01bd059, hand merge with M6). 100 mixed files imported during a 3-layer show, 0 late frames (`docs/measurements/2026-11-17-ingest-during-show.md`). SQLite, `himmel_ingest.exe` supervisor child (off with `--no-show-files`), catalog append-only and grows live, D140–D147 PROPOSED. Follow-ups: MK2 BROWSE, ingest commands 60–69, SHOW worker keeps its start-up catalog copy, paged catalog |
+| ENGINE M6 | `claude/engine-m6-outputs` | **merged** 2026-11-17 (3e8d15b → dcc01f9). Outputs by identity, IDENTIFY, presets, 60/50/59.94 Hz, blend, places, black per output, **curtains** (kill → black at 0 ms, back in 1.0–1.6 s), commands 70–73, `Local\HimmelOutputs`, D150–D154 PROPOSED. MAIN preview aspect = GUI CSS, fixed (`object-fit: contain`). **Spout not in yet**: approved (SpoutDX, pinned hash), comes on a new branch. A real cable pull with 2+ displays needs the owner's hardware |
 
 
 **LEAD call:** CONTROL takes **M4** (MK2 Perform v4) before M9. Wave 2 delivered SHOW, so the MK2 can now play a whole song: scenes, REC, ERASE and ENTER. That is the shortest path to "a working version". M9 Lightpad and M13 OSC come next.
@@ -169,7 +169,9 @@ Read `docs/interfaces/engine-state.md` v2 (transport) and
    - *Done when:* a song is played from the MK2 alone in `himmel.exe --sim` (scripted in `mk2_e2e.py` or a sibling), and the input → glass time is measured.
    - *Owns:* `src/perform/`, `tests/perform/`, `tools/mk2_e2e.py`, `docs/agents/handoff/control.md`.
 
-**After wave 3:**
+Merged main after wave 3: build clean, 16 test programs, every selftest, `mk2_e2e.py` PASS. A live `himmel.exe --sim` with `--show-root <temp>` was checked too: curtains + ingest + audio + render all up.
+
+**After wave 3 (wave 4 candidates):**
 - GUI: the SHOW and AUDIO panels, the reaction editor and the wizard (rest of M11);
 - M9 / M13 if CONTROL did not reach them;
 - M10 NuVJ;

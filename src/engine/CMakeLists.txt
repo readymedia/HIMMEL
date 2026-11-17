@@ -6,7 +6,7 @@ add_subdirectory(fx)
 add_library(himmel_engine_shared STATIC src/engine_shared.cpp src/clip_player.cpp src/camera_capture.cpp src/touch_fx.cpp src/entrancer.cpp src/entrancer_link.cpp src/midi_in.cpp
             src/display_watch.cpp)
 target_include_directories(himmel_engine_shared PUBLIC include)
-target_link_libraries(himmel_engine_shared PUBLIC himmel_media himmel_protocol PRIVATE d3d11 mfplat mf mfreadwrite mfuuid ole32 ws2_32 winmm)
+target_link_libraries(himmel_engine_shared PUBLIC himmel_media himmel_protocol himmel_library PRIVATE d3d11 mfplat mf mfreadwrite mfuuid ole32 ws2_32 winmm)
 
 # The slice's show model (pure: no GPU, no Windows) - docs/interfaces/command-protocol.md.
 add_library(himmel_engine_model STATIC src/deck_model.cpp src/transport.cpp src/fx_catalog.cpp src/reactions.cpp
@@ -41,14 +41,14 @@ target_link_libraries(spout_probe PRIVATE himmel_spoutdx)
 # The slice engine (decks, FX, previews, MK2 Perform).
 add_executable(himmel_render render/render_main.cpp)
 target_link_libraries(himmel_render PRIVATE himmel_engine_shared himmel_engine_model himmel_engine_ipc himmel_perform
-                      himmel_mk2 himmel_fx_gpu himmel_show himmel_spout_out d3d11 dxgi d3dcompiler winmm dwmapi)
+                      himmel_mk2 himmel_fx_gpu himmel_show himmel_library himmel_spout_out d3d11 dxgi d3dcompiler winmm dwmapi)
 
 # PARKED pre-slice renderer: test card, camera + latency test, Touch FX, Entrancer, weapon knob pages.
 add_executable(himmel_render_legacy render/legacy_main.cpp)
 target_link_libraries(himmel_render_legacy PRIVATE himmel_engine_shared himmel_mk2 himmel_weapon d3d11 dxgi d3dcompiler winmm)
 
 add_executable(himmel supervisor/supervisor_main.cpp)
-target_link_libraries(himmel PRIVATE himmel_engine_shared himmel_engine_ipc himmel_mk2 himmel_weapon himmel_audio_block dwmapi)
+target_link_libraries(himmel PRIVATE himmel_engine_shared himmel_engine_ipc himmel_mk2 himmel_weapon himmel_audio_block himmel_library dwmapi)
 
 # Tools: commands from the command line (producer slot 3), preview block -> PNG.
 add_executable(himmel_cmd tools/himmel_cmd_main.cpp)

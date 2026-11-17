@@ -30,6 +30,10 @@
 #include "himmel/media/hap.h"
 #include "himmel/media/mov.h"
 
+namespace himmel::library {
+struct ClipTable;
+}
+
 struct ID3D11Device;
 struct ID3D11Texture2D;
 struct ID3D11ShaderResourceView;
@@ -79,6 +83,9 @@ class ClipPlayer {
 public:
     // The playlist is fixed at start-up, so asking for a clip never allocates.
     ClipPlayer(ID3D11Device* device, std::vector<std::string> playlist);
+    // MEDIA (M7): the playlist is the shared, append-only clip table (library clips join while
+    // the show runs; library/clip_table.h). It must outlive the player.
+    ClipPlayer(ID3D11Device* device, const library::ClipTable* table);
     ~ClipPlayer();
     ClipPlayer(const ClipPlayer&) = delete;
     ClipPlayer& operator=(const ClipPlayer&) = delete;
@@ -110,6 +117,9 @@ private:
 
     ID3D11Device* device_;
     std::vector<std::string> playlist_;
+    const library::ClipTable* table_ = nullptr;  // M7: when set, the playlist (append-only)
+    int playlist_size() const;
+    const std::string& playlist_path(int index) const;
     std::thread worker_;
     std::atomic<bool> stop_{false};
     void* wake_ = nullptr;  // HANDLE, auto-reset event

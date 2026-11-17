@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 #include "himmel/engine/clip_player.h"
+#include "himmel/library/clip_table.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -60,6 +61,18 @@ ClipPlayer::ClipPlayer(ID3D11Device* device, std::vector<std::string> playlist)
     worker_ = std::thread([this] { run(); });
 }
 
+ClipPlayer::ClipPlayer(ID3D11Device* device, const library::ClipTable* table) : device_(device), table_(table) {
+    wake_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    worker_ = std::thread([this] { run(); });
+}
+
+int ClipPlayer::playlist_size() const {
+    return table_ ? static_cast<int>(table_->size()) : static_cast<int>(playlist_.size());
+}
+const std::string& ClipPlayer::playlist_path(int index) const {
+    return table_ ? table_->path[static_cast<size_t>(index)] : playlist_[static_cast<size_t>(index)];
+}
+
 ClipPlayer::~ClipPlayer() {
     stop_.store(true);
     SetEvent(static_cast<HANDLE>(wake_));
@@ -73,7 +86,7 @@ ClipPlayer::~ClipPlayer() {
 }
 
 void ClipPlayer::load(int index) {
-    if (index < 0 || index >= static_cast<int>(playlist_.size())) return;
+    if (index < 0 || index >= playlist_size()) return;
     request_index_.store(index);
     request_seq_.fetch_add(1);
     SetEvent(static_cast<HANDLE>(wake_));
@@ -286,7 +299,7 @@ void ClipPlayer::run() {
         if (seq != seen_seq) {
             seen_seq = seq;
             const int index = request_index_.load();
-            if (LoadedClip* c = open_clip(playlist_[static_cast<size_t>(index)])) {
+            if (LoadedClip* c = open_clip(playlist_path(index))) {
                 delete pending_.exchange(c);  // an older one the renderer never took
                 newest_ = c;
                 loaded_index.store(index);

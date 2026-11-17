@@ -8,7 +8,7 @@ Writer: `himmel_render` only. Reader: the GUI bridge (and tools).
 
 Six streams of small BGRA8 pictures (top-down rows, stride = width × 4, at most
 480 × 270): `DeckA`, `DeckB`, `Main`, `Output1..3`. Each stream has `active`,
-`width` / `height` (the canvas aspect inside 480 × 270), `fps_target`
+`width` / `height` (the canvas aspect inside 480 × 270; a 3-screen span gives MAIN 480 × 90, and the GUI letterboxes it with `object-fit: contain`), `fps_target`
 (15–30), and 3 buffers with their own seqlock. ~9.3 MB in all.
 
 **Aspect (M6, 2026-11-17).** `DeckA`, `DeckB` and `Main` are sent at the

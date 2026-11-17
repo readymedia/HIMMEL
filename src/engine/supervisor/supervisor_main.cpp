@@ -18,6 +18,9 @@
 //          arguments, e.g. --audio "--loopback" or --audio "--device Focusrite --channels 1-2"
 //          (default: the Windows default capture device, auto gain on).
 //   --no-curtains: no black curtain windows behind the outputs (M6; on by default).
+//   --no-ingest: do not start himmel_ingest.exe (the library import, M7). It imports into the
+//          renderer's library (render args --library DIR, or --show-root DIR -> DIR\Library);
+//          with --no-show-files and no --library it is not started (test runs, M7).
 //   --legacy: run the parked pre-slice renderer (himmel_render_legacy.exe: test
 //          card, camera, Touch FX, Entrancer) instead of the deck engine.
 //
@@ -59,6 +62,7 @@
 #include "himmel/audio/block.h"
 #include "himmel/engine/engine_shared.h"
 #include "himmel/engine/shm_block.h"
+#include "himmel/library/library_block.h"
 #include "himmel/mk2/shared.h"
 #include "himmel/mk2/types.h"
 #include "himmel/protocol/commands.h"
@@ -342,7 +346,7 @@ int main(int argc, char** argv) {
     // Shared for reading (_SH_DENYWR), so the log can be read / tailed while Himmel runs.
     g_logfile = _wfsopen((dir / "logs" / name).c_str(), L"a", _SH_DENYWR);
 
-    bool with_controller = true, with_ui = true, with_audio = true, legacy = false, with_curtains = true;
+    bool with_controller = true, with_ui = true, with_audio = true, legacy = false, with_curtains = true, with_ingest = true;
     std::wstring render_args, ctl_args, audio_args;
     std::string weapons = "lightpad,lumi,nuvj,apc20";
     for (int i = 1; i < argc; ++i) {
@@ -356,10 +360,29 @@ int main(int argc, char** argv) {
         else if (a == "--audio" && i + 1 < argc) audio_args = widen(argv[++i]);
         else if (a == "--legacy") legacy = true;
         else if (a == "--no-curtains") with_curtains = false;
+        else if (a == "--no-ingest") with_ingest = false;  // MEDIA (M7)
         else if (a == "--") {
             for (++i; i < argc; ++i) render_args += widen(argv[i]) + L" ";
         }
     }
+
+    // ==== MEDIA (M7) hook 1/3: himmel_ingest.exe imports into the renderer's library ====
+    std::wstring ingest_args;
+    {
+        bool render_part = false, no_files = false, named = false;
+        for (int i = 1; i < argc; ++i) {
+            const std::string a = argv[i];
+            if (a == "--") render_part = true;
+            if (!render_part) continue;
+            if (a == "--no-show-files") no_files = true;
+            else if (a == "--library" && i + 1 < argc) ingest_args = L"--library \"" + widen(argv[++i]) + L"\"", named = true;
+            else if (a == "--show-root" && i + 1 < argc && !named)
+                ingest_args = L"--library \"" + (fs::path(widen(argv[++i])) / L"Library").wstring() + L"\"", named = true;
+            else if (a == "--no-library") with_ingest = false;
+        }
+        if (no_files && !named) with_ingest = false;  // a test run: never the owner's library
+    }
+    // ==== end MEDIA hook 1/3 ====
 
     HANDLE job = CreateJobObjectW(nullptr, nullptr);
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION jl{};
@@ -450,6 +473,37 @@ int main(int argc, char** argv) {
     std::vector<Child*> children = {&ctl};
     for (auto& w : weapon_children) children.push_back(w.get());
     if (with_audio) children.push_back(&aud);
+    // ==== MEDIA (M7) hook 2/3: the import worker (lowers its own priority; heartbeat in Local\HimmelLibrary) ====
+    struct LibShm {
+        HANDLE mapping = nullptr;
+        himmel::library::LibraryBlock* b = nullptr;
+        himmel::library::LibraryBlock* get() {
+            if (b) return b;
+            mapping = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, himmel::library::kLibraryShmName);
+            if (!mapping) return nullptr;
+            b = static_cast<himmel::library::LibraryBlock*>(
+                MapViewOfFile(mapping, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(himmel::library::LibraryBlock)));
+            if (!b) CloseHandle(mapping), mapping = nullptr;
+            return b;
+        }
+        ~LibShm() {
+            if (b) UnmapViewOfFile(b);
+            if (mapping) CloseHandle(mapping);
+        }
+    } lshm;
+    Child ing{"ingest", (dir / "himmel_ingest.exe").wstring(), ingest_args};
+    if (with_ingest && !fs::exists(ing.exe, ec)) {
+        log("ingest: %s not found - running without the library import", fs::path(ing.exe).filename().string().c_str());
+        with_ingest = false;
+    }
+    ing.ctx = &lshm;
+    ing.heartbeat = [](void* p) -> uint64_t {
+        auto* b = static_cast<LibShm*>(p)->get();
+        return b ? b->heartbeat_us.load() : 0;
+    };
+    if (with_ingest) children.push_back(&ing);
+    else log("ingest: off");
+    // ==== end MEDIA hook 2/3 ====
     children.push_back(&ren);
     if (with_ui) children.push_back(&ui);
     // ==== ENGINE (M6): keep the blocks open, curtains ====
@@ -524,6 +578,8 @@ int main(int argc, char** argv) {
     stop_child(ui, 1000);  // after the renderer: the outputs never wait for the GUI
     if (auto* b = ashm.get()) b->status.stop_request.store(1);
     stop_child(aud, 2000);
+    if (auto* b = lshm.get()) b->stop_request.store(1);  // MEDIA (M7) hook 3/3
+    stop_child(ing, 3000);
     // The drivers put their devices back (config, LEDs) first. They got the console Ctrl+C
     // too; the stop request also reaches them when the window was closed instead.
     for (auto& shm : weapon_shm)

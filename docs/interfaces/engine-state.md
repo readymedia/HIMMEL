@@ -57,6 +57,10 @@ their own rate (30 Hz is plenty) and diff.
 - `ClockState::source`: 0 = internal, 1 = tapped, 2 = an external MIDI clock
   leads (M8, D130; Tap / Bpm commands are ignored meanwhile). Additive, no
   version bump.
+- **The catalog grows while the show runs (M7, MEDIA, 2026-11-17):** library
+  clips that turn ready are appended (ids of existing clips never change);
+  `catalog_seq` changes each time. Re-read the catalog on every change
+  ([`library-db.md`](library-db.md) §8). Additive, no version bump.
 - After a restart the renderer restores the transport settings, cue points,
   BPM and grid from a version 2 block (the HIT layer is never restored).
 

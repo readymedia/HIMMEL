@@ -15,6 +15,7 @@ copied into this repository except their license texts in [`licenses/`](licenses
 | [nlohmann/json](https://github.com/nlohmann/json) by Niels Lohmann | 3.11.3 | MIT | Reading `maschine_mk2_map.json` (later: shows, presets) | [`licenses/nlohmann-json-LICENSE.MIT`](licenses/nlohmann-json-LICENSE.MIT) |
 | [Snappy](https://github.com/google/snappy) by Google | 1.2.1 | BSD-3-Clause | HAP's second-stage decompression (`src/media/src/hap.cpp`) | [`licenses/snappy-COPYING.txt`](licenses/snappy-COPYING.txt) |
 | [Spout 2](https://github.com/leadedge/Spout2) (SpoutDX) by Lynn Jarvis (spout.zeal.co) | 2.007h (commit `7d32b05`) | BSD-2-Clause | Spout out: MAIN as a DX11 Spout sender (`himmel_render --spout NAME`, `src/engine/src/spout_out.cpp`). Only SpoutDX and the SpoutGL helper files it includes are compiled (no OpenGL part); fetched by CMake, never stored in this repo | [`licenses/spout2-LICENSE.txt`](licenses/spout2-LICENSE.txt) |
+| [SQLite](https://sqlite.org) by D. Richard Hipp and the SQLite developers | 3.47.2 (amalgamation) | **Public domain** | The library index `himmel-library.db` (`src/library/`, `himmel_ingest.exe`, the renderer's library feed) | [`licenses/sqlite-PUBLIC-DOMAIN.txt`](licenses/sqlite-PUBLIC-DOMAIN.txt) |
 
 If you ship Himmel binaries, ship these license texts with them (the BSD and
 MIT licenses ask for that).
@@ -30,6 +31,7 @@ from them is included in this repository.
 | Media Foundation (`mfplat`, `mf`, `mfreadwrite`, `mfuuid`) | Webcam capture |
 | Win32 (file I/O, shared memory, job objects, `winmm` timer resolution and MIDI for the weapon drivers) | Processes, IPC, supervisor |
 | Windows Runtime C++ Template Library (WRL): `Microsoft::WRL::ComPtr` | COM pointers |
+| Direct2D (`d2d1`, SVG documents), Windows Imaging Component (`windowscodecs`), Shell (`shlwapi`, `shell32`) | Rasterising SVG files to PNG on import; finding the Documents folder (`himmel_ingest.exe`) |
 
 Build tools: Microsoft Visual Studio 2022 Build Tools (MSVC) and CMake (the
 copy bundled with Build Tools). Both are used, not redistributed.
@@ -81,7 +83,7 @@ checked everything on real hardware.
 
 | Tool | License | Used for |
 |---|---|---|
-| [FFmpeg](https://ffmpeg.org) (`ffmpeg.exe`, e.g. a [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) "full" build) | LGPL-2.1+ / GPL-2+ depending on the build | Making HAP test clips (`-c:v hap`) and, later, the import pipeline. Himmel runs it as a separate program and does **not** link FFmpeg libraries (decision 2026-11-10). |
+| [FFmpeg](https://ffmpeg.org) (`ffmpeg.exe`, e.g. a [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) "full" build) | LGPL-2.1+ / GPL-2+ depending on the build | Making HAP test clips (`-c:v hap`) and the library import (`himmel_ingest.exe`: `ffprobe` to probe, `ffmpeg` to convert to HAP, make thumbnails and the analysis proxy). Himmel runs it as a separate program and does **not** link FFmpeg libraries (decision 2026-11-10). |
 
 ## 6. Fonts in the design mockups
 
