@@ -95,6 +95,14 @@ const char* const kIngestModeNames[] = {"Idle", "Full", "Background", "High", "H
 const char* const kIngestCmdNames[] = {"Import", "Rescan", "Remove", "Relink", "Reanalyse", "Retry", "Mode", "Unwatch",
                                        "ClearQueue", "Library"};   // v3: 68, 69
 static_assert(std::size(kIngestCmdNames) == library::kIngestLast - library::kIngestFirst + 1);
+// MEDIA's second range in the library block (100..119, LEAD wave 7): index = type - kIngestFirst2.
+const char* const kIngestCmdNames2[] = {"SetReserve"};   // 100
+std::string ingest_type_name(int type) {
+    const int a = type - library::kIngestFirst, b = type - library::kIngestFirst2;
+    if (a >= 0 && a < static_cast<int>(std::size(kIngestCmdNames))) return kIngestCmdNames[a];
+    if (b >= 0 && b < static_cast<int>(std::size(kIngestCmdNames2))) return kIngestCmdNames2[b];
+    return "?";
+}
 const char* const kIngestReqNames[] = {"Auto", "Full", "Background", "Hold"};
 const char* const kIngestStatusNames[] = {"Ok", "Accepted", "UnknownType", "BadId", "BadPath", "Mismatch",
                                           "Duplicate", "Failed", "Interrupted", "BadValue", "NoSpace", "Busy"};   // v3: 10, 11
@@ -980,7 +988,8 @@ json panels_names() {
     j["signals"] = names_of(kSigNames);
     j["input_modes"] = names_of(kInputModeNames);
     j["verdicts"] = names_of(kVerdictNames);
-    j["ingest"] = names_of(kIngestCmdNames);        // GUI w7: the page shows only the ingest buttons this bridge can send
+    j["ingest"] = names_of(kIngestCmdNames);
+    j["ingest"].push_back(kIngestCmdNames2[0]);   // SetReserve (100)        // GUI w7: the page shows only the ingest buttons this bridge can send
     j["ingest_modes"] = names_of(kIngestReqNames);
     j["scene_pads"] = kScenePads;
     j["max_outputs"] = kMaxOutputs;
@@ -1037,7 +1046,17 @@ bool ingest_command_from_json(const json& j, library::IngestCommand& c, std::str
     if (t != j.end() && t->is_string())
         for (size_t k = 0; k < std::size(kIngestCmdNames); ++k)
             if (ieq(t->get<std::string>(), kIngestCmdNames[k])) idx = static_cast<int>(k);
-    if (idx < 0) { error = "\"type\" must be one of " + list_of(kIngestCmdNames); return false; }
+    // v3 second range: SetReserve (100), i = GB the disk guard keeps free (0 = the default rule, 1..10000).
+    if (idx < 0 && t != j.end() && t->is_string() && ieq(t->get<std::string>(), "SetReserve")) {
+        auto it = j.find("gb");
+        if (it == j.end() || !it->is_number_integer() || it->get<int64_t>() < 0 || it->get<int64_t>() > 10000) {
+            error = "SetReserve needs \"gb\": 0 (the default) or 1..10000";
+            return false;
+        }
+        library::make_ingest(c, IngestCommandType::SetReserve, 0, nullptr, 0, static_cast<int32_t>(it->get<int64_t>()));
+        return true;
+    }
+    if (idx < 0) { error = "\"type\" must be one of " + list_of(kIngestCmdNames) + " or SetReserve"; return false; }
     const auto type = static_cast<IngestCommandType>(library::kIngestFirst + idx);
     int64_t clip = 0;
     if (auto it = j.find("clip"); it != j.end() && !it->is_null()) {
@@ -1110,9 +1129,8 @@ bool ingest_command_from_json(const json& j, library::IngestCommand& c, std::str
 json ingest_reply_to_json(const library::IngestReply& r) {
     size_t n = 0;
     while (n < sizeof(r.message) && r.message[n]) ++n;
-    const int t = static_cast<int>(r.type) - library::kIngestFirst;
     return {{"seq", r.seq},
-            {"type", t >= 0 && t < static_cast<int>(std::size(kIngestCmdNames)) ? kIngestCmdNames[t] : "?"},
+            {"type", ingest_type_name(r.type)},
             {"status", name_or(kIngestStatusNames, r.status)},
             {"ok", r.status <= 1},
             {"count", r.count},

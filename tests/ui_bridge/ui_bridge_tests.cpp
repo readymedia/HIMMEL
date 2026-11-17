@@ -918,7 +918,15 @@ static void test_wave7() {
         CHECK(command_to_json(r1.cmd)["type"] == "LayerClipLib");
     }
     json nm = panels_names();
-    CHECK(nm["ingest"].size() == 10 && nm["ingest"][8] == "ClearQueue" && nm["ingest"][9] == "Library");
+    CHECK(nm["ingest"].size() == 11 && nm["ingest"][8] == "ClearQueue" && nm["ingest"][9] == "Library" && nm["ingest"][10] == "SetReserve");
+    // SetReserve (100, MEDIA's second range): i = GB, 0 = the default.
+    CHECK(ingest_command_from_json(json{{"type", "SetReserve"}, {"gb", 15}}, ic, err) && ic.type == 100 && ic.i == 15);
+    CHECK(ingest_command_from_json(json{{"type", "SetReserve"}, {"gb", 0}}, ic, err) && ic.type == 100 && ic.i == 0);
+    CHECK(!ingest_command_from_json(json{{"type", "SetReserve"}}, ic, err));
+    CHECK(!ingest_command_from_json(json{{"type", "SetReserve"}, {"gb", -1}}, ic, err));
+    CHECK(!ingest_command_from_json(json{{"type", "SetReserve"}, {"gb", 20000}}, ic, err));
+    rep.type = 100; rep.status = 0;
+    CHECK(ingest_reply_to_json(rep)["type"] == "SetReserve");
 }
 
 int main() {
