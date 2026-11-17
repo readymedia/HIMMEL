@@ -57,6 +57,16 @@ void BeatClock::resync(uint64_t now_us) {
     anchor_us_ = now_us;
 }
 
+void BeatClock::follow(double bpm, double beat_target, bool phase, uint64_t now_us, double dt_s) {
+    if (!(bpm >= kMinBpm && bpm <= kMaxBpm)) return;  // also refuses NaN
+    set_bpm(bpm, now_us);
+    if (!phase || !std::isfinite(beat_target)) return;
+    double err = beat_target - anchor_beat_;           // anchor_us_ == now_us after set_bpm
+    err -= 4.0 * std::round(err / 4.0);                // bar-aligned, within +-2 beats
+    const double k = std::clamp(dt_s * bpm / 60.0 / 2.0, 0.0, 1.0);  // 2-beat glide
+    anchor_beat_ += err * k;
+}
+
 void BeatClock::tap(uint64_t now_us) {
     if (tap_n_ > 0 && (now_us < tap_us_[tap_n_ - 1] || now_us - tap_us_[tap_n_ - 1] > kTapTimeoutUs)) tap_n_ = 0;
     if (tap_n_ == 8) {

@@ -791,8 +791,11 @@ Reject DeckModel::apply(const Command& c, uint64_t now_us) {
         }
         case CommandType::Clock:
             switch (static_cast<ClockParam>(c.param)) {
-                case ClockParam::Tap: clock_.tap(now_us); break;
+                case ClockParam::Tap:
+                    if (!clock_external_) clock_.tap(now_us);  // MIDI clock leads: ignored (audio-block.md §4)
+                    break;
                 case ClockParam::Bpm: {
+                    if (clock_external_) break;
                     const float cur = static_cast<float>(clock_.bpm());
                     clock_.set_bpm(with_delta(cur, c), now_us);
                     break;
@@ -905,7 +908,12 @@ void DeckModel::tick_transport(uint64_t now_us) {
     cs.beat = in.beat1;
     cs.time_us = now_us;
     cs.taps = clock_.taps();
-    cs.source = clock_.tapped() ? 1 : 0;
+    cs.source = clock_external_ ? 2 : clock_.tapped() ? 1 : 0;
+}
+
+void DeckModel::follow_clock(bool active, double bpm, double beat, bool phase, uint64_t now_us, double dt_s) {
+    clock_external_ = active;
+    if (active) clock_.follow(bpm, beat, phase, now_us, dt_s);
 }
 
 void DeckModel::set_position(int deck, int layer, float pos01) { live_.deck[deck].layer[layer].position = pos01; }

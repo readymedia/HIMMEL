@@ -24,6 +24,11 @@ flowchart LR
     SUP -- "start, restart,<br/>kill if hung" --> CTL
     SUP -- "start, restart,<br/>kill if hung" --> REN
     SUP -- "start, restart,<br/>kill if hung" --> WPN
+    AUD["himmel_audio.exe<br/>music in"]
+    SHM4[/"Local\HimmelAudio<br/>signals, MIDI clock"/]
+    SUP -- "start, restart,<br/>kill if hung" --> AUD
+    AUD --> SHM4
+    SHM4 --> REN
     WPN <--> DEV
     WPN <--> SHM3
     REN <--> SHM3
@@ -43,6 +48,7 @@ flowchart LR
 | `himmel.exe` | Starts the others in a job object, watches their heartbeats, restarts them (0.25 s, doubling to 10 s if they keep dying), kills one that has been silent for 2 s, logs everything. | The job object closes all children; start it again. (Run it from a service or a watchdog for unattended installs.) |
 | `mk2_controller.exe` | Owns the MK2: reads it at ~750 Hz, publishes events, sends LEDs and screens, reconnects when the cable is pulled. | The renderer keeps playing; it shows "MK2 OFF" and picks the controller up again when it is back (~0.3 s). |
 | `weapon_blocks.exe lightpad\|lumi`, `weapon_nuvj.exe`, `weapon_apc20.exe` | One per weapon (`weapons/README.md`): owns the device over WinMM, publishes events, sends LEDs / pixels / LCD, reconnects. Lets go of the device (settings back, LEDs off) on Ctrl+C or the supervisor's stop request. | The renderer keeps playing and picks the weapon up again. |
+| `himmel_audio.exe` | Music in (M8, `interfaces/audio-block.md`): WASAPI mic / line in / loopback, auto gain, gate, level / bands / spectrum / kick / snare / hat / energy every 5 ms, MIDI clock in; writes `Local\HimmelAudio`. Reopens a lost device by name every second. | The renderer's reactions glide to rest over 1 s and the picture keeps playing; the supervisor restarts it and they come back. |
 | `himmel_render.exe` | The deck engine: model (2 × 4 layers, FX slots, crossfader, TAKE), command ring in, state + preview blocks out, MK2 Perform, outputs. (`himmel_render_legacy.exe`: the parked test card / camera / Touch FX renderer.) | The supervisor restarts it within a second; it restores the show from `Local\HimmelState`. |
 | Later: GUI, workers, bridges | Operator GUI (Dear ImGui), import/analysis workers, sync bridges (Ableton Link, Pro DJ Link). | Same rule: the output keeps going. |
 
