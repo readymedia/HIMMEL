@@ -173,3 +173,36 @@ button.primary.bad { background: var(--live); border-color: var(--live); color: 
 .quitBtn { min-height: 32px; font-weight: 800; border-color: #5a1714; color: #ff8a80; }
 .quitBtn:hover { background: #5a1714; color: #fff; }
 .setlib { display: flex; flex-direction: column; gap: 10px; max-width: 900px; } .setdisk { margin-left: 0; } .setres input { width: 80px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 3px 4px; font-family: var(--mono); }
+
+/* ---- wave 8: PERFORM fits every screen from 1280×720 to 2560×1440 ----
+   The top row (monitors + 4 layer strips) never draws over the bottom panel: the monitor gives up height
+   first (it letterboxes), the 4 strips always keep theirs, and the bottom panel (CLIP / LAYER FX …) is capped
+   so both rows fit the window. Below 1450 px wide the strip columns get narrower. */
+#perform { grid-template-rows: minmax(0, 1fr) minmax(0, auto); }
+.side { overflow: hidden; }
+.side .monitor { flex: 1 1 0; min-height: 64px; max-height: 42vh; aspect-ratio: auto; }
+.side .strips { flex: none; }
+.side .monhead { flex: none; }
+.inspector { max-height: min(48vh, calc(100vh - 42px - 24px - 290px)) !important; }
+@media (max-height: 800px) {
+  .strip { min-height: 36px; padding: 2px 4px; }
+  .strip button { min-height: 28px; }
+  .clip { height: 30px; } .clip .sw { width: 26px; height: 26px; }
+}
+@media (max-width: 1450px) {
+  #perform { grid-template-columns: minmax(0, 1fr) 132px minmax(0, 1fr) 210px; gap: 6px; }
+  .strip { grid-template-columns: 22px minmax(70px, 1fr) 62px 66px 28px 28px 44px; gap: 3px; }
+  .strip .op span { display: none; }
+  .takeBtn { width: 104px; height: 104px; }
+}
+.take { min-height: 0; overflow-y: auto; overflow-x: hidden; }
+/* The top bar fits 1280 px with the project bar, BLACK and QUIT visible (wave 8). */
+@media (max-width: 1450px) {
+  .brand { letter-spacing: .12em; font-size: 12px; margin-right: 0; }
+  #viewTabs button { padding: 0 5px; font-size: 11px; }
+  #top { gap: 6px; padding: 0 6px; }
+  .quitBtn .ql { display: none; }
+  .quitBtn { padding: 0 9px; }
+}
+@media (max-width: 1360px) { #audMeter { display: none !important; } .clock #resyncBtn { display: none; } }
+#viewTabs button { white-space: nowrap; }

@@ -68,7 +68,11 @@
     const fin = l.ready_total + l.failed_total;
     const pg = l.progress;
     if (pg && pg.total > 0) {
-      return { done: pg.done, total: pg.total, eta: pg.eta_s, busy: pg.done < pg.total || !!pg.file, file: pg.file, fileP: pg.file_progress, error: pg.error, v3: true };
+      const busy = pg.done < pg.total || !!pg.file;
+      // A finished batch stays on screen for 15 s ("Imported n of n"), then the bar goes away.
+      if (busy) LB.doneAt = 0; else if (!LB.doneAt) LB.doneAt = performance.now();
+      if (!busy && performance.now() - LB.doneAt > 15000) return null;
+      return { done: pg.done, total: pg.total, eta: pg.eta_s, busy, file: pg.file, fileP: pg.file_progress, error: pg.error, v3: true };
     }
     if (busy > 0 && !LB.batch) LB.batch = { start: fin, t0: performance.now(), lastFin: fin, lastAt: performance.now() };
     if (!LB.batch) return null;
@@ -265,7 +269,13 @@
           const j = await sendImport(base, { dry_run: true });
           if (!j.ok) { info.textContent = j.error || 'refused'; return; }
           const t0 = performance.now();
-          const poll = () => { if (LB.estimate) { info.textContent = '≈ ' + LB.estimate.text; info.classList.toggle('bad', !!(LB.estimate.pl && !LB.estimate.pl.fits)); } else if (performance.now() - t0 < 20000 && md.isConnected) setTimeout(poll, 300); else info.textContent = 'No estimate (the worker is busy); try again.'; };
+          const poll = () => {
+            if (!md.isConnected) return;
+            const e = estimateOf(j.seq);
+            if (e) { info.textContent = ''; info.append(e.node); info.classList.toggle('bad', !e.fits); return; }
+            if (performance.now() - t0 < 30000) setTimeout(poll, 250);
+            else info.textContent = 'No answer from the import worker in 30 s (it may be busy with a file). Try ESTIMATE again.';
+          };
           poll();
         });
         opts.append(el('span', 'lbl', 'options'), sz, q, k, cf, est);
@@ -341,6 +351,34 @@
     if (j.ok) LB.imports[j.seq] = cmd;
     return j;
   }
+  // The worker's plan for Import `seq` (library block v3 §11.1), in words: "N clips, ~X GB, Y GB free after,
+  // reserve Z GB". Null until the reply for `seq` is in.
+  function planFor(seq) {
+    const l = S.library, r = (l?.cmd?.replies || []).find(x => x.seq === seq);
+    if (!r) return null;
+    const pl = l.plan && l.plan.mine && l.plan.seq === seq ? l.plan : null;
+    return { r, pl };
+  }
+  function planWords(pl, r) {
+    if (!pl) return { text: r.message || r.status, fits: r.ok };
+    const after = pl.free_bytes - pl.queue_bytes - pl.need_bytes;
+    const fits = !!pl.fits;
+    const clips = `${pl.clips} new clip${pl.clips === 1 ? '' : 's'}${pl.known ? ` (${pl.known} already in the library)` : ''}`;
+    const queue = pl.queue_bytes ? ` (plus ${gb(pl.queue_bytes)} for the files still in the queue)` : '';
+    let text;
+    if (fits) text = `✓ ${clips} need about ${gb(pl.need_bytes)}${queue}. That leaves ${gb(after)} free on the disk; Himmel keeps ${gb(pl.reserve_bytes)} free.`;
+    else text = `✗ ${clips} need about ${gb(pl.need_bytes)}${queue}. That would leave ${after >= 0 ? gb(after) : 'less than nothing'} free, but Himmel keeps ${gb(pl.reserve_bytes)} free` +
+      ` (free ${gb(pl.reserve_bytes - after)} more, or keep less free)` + (pl.fit_clips ? `. ${pl.fit_clips} of them would fit.` : '. None of them fits now.');
+    return { text, fits };
+  }
+  function estimateOf(seq) {
+    const p = planFor(seq);
+    if (!p) return null;
+    const w = planWords(p.pl, p.r);
+    const node = el('span', null, w.text);
+    if (!w.fits) { const a = btn('KEEP FREE ON DISK…', 'Settings → Library: how much space Himmel keeps free', () => openReserve()); a.classList.add('chip2'); node.append(' ', a); }
+    return { node, fits: w.fits };
+  }
   function afterImport(cmd, r) {
     const plan = S.library?.plan;
     const pl = plan && plan.mine && plan.seq === r.seq ? plan : null;
@@ -348,14 +386,19 @@
     if (r.status !== 'NoSpace') return;
     const md = el('div', 'modal'), box = el('div', 'mbox askbox');
     const close = () => md.remove();
-    box.append(el('div', 'lbl', 'NOT ENOUGH DISK SPACE'),
-      el('div', null, pl?.message || r.message),
-      el('div', 'dim', 'Nothing was imported. Himmel keeps a reserve free so the show and Windows keep running. You can import only the clips that fit, choose a smaller size (720p) in the import options, move the library to a bigger disk, or free some space.'));
+    const w = planWords(pl, r);
+    box.append(el('div', 'cfhead', 'Not enough free disk space: nothing was imported'),
+      el('div', null, w.text),
+      el('div', 'dim', `Himmel always keeps ${pl ? gb(pl.reserve_bytes) : 'some space'} free on the library's disk, so Windows and the show keep running. What you can do:`),
+      el('div', null, '• Free some space on the disk (empty the recycle bin, delete or move big files), then import again.'),
+      el('div', null, '• Lower "Keep free on disk" in Settings → Library (not below a few GB).'),
+      el('div', null, '• Move the library to a disk with more room (MOVE LIBRARY…).'),
+      el('div', null, '• Import fewer clips, or a smaller size (max 720p in the import options).'));
     const row = el('div', 'askrow');
     row.append(el('div', 'spacer'), btn('Cancel', null, close));
     if (pl && pl.fit_clips > 0) row.append(btn(`IMPORT THE ${pl.fit_clips} THAT FIT`, 'Queue the clips that fit above the reserve, in the order found', () => { close(); const c = { ...cmd }; delete c.dry_run; sendImport({}, { ...c, fit: true }); }, 'primary'));
     row.append(btn('MOVE LIBRARY…', 'Move the library to another folder or disk', () => { close(); moveDialog(); }));
-    row.append(btn('KEEP FREE ON DISK…', 'How much space Himmel keeps free (Settings → Library)', () => { close(); openReserve(); }));
+    row.append(btn('KEEP FREE ON DISK…', 'How much space Himmel keeps free (Settings → Library)', () => { close(); openReserve(); }, 'primary'));
     box.append(row); md.append(box); document.body.append(md);
     md.addEventListener('click', e => { if (e.target === md) close(); });
   }
@@ -426,7 +469,9 @@
     }
     const s = LB.status; s.textContent = '';
     if (has(l)) {
-      const word = !l.alive ? 'IMPORT WORKER NOT ANSWERING' : l.mode === 'Hold' ? 'IMPORT ON HOLD' : l.paused ? 'IMPORT PAUSED · the show needs the PC' : (l.queued + l.working) ? `IMPORTING · ${String(l.mode).toUpperCase()}` : 'IMPORT IDLE';
+      // Plain words: the chips next to it show the setting (AUTO …), this says what the worker does now.
+      const how = { Full: 'full speed', Background: 'gently, a show is running', High: 'fast', Idle: 'full speed' }[l.mode] || String(l.mode).toLowerCase();
+      const word = !l.alive ? 'IMPORT WORKER NOT ANSWERING' : l.mode === 'Hold' ? 'IMPORT ON HOLD' : l.disk_low ? 'IMPORT WAITS · DISK LOW' : l.paused ? 'IMPORT PAUSED · the show needs the PC' : (l.queued + l.working) ? `IMPORTING · ${how}` : 'IMPORT IDLE';
       s.append(el('span', 'chip ' + (!l.alive ? 'bad' : l.mode === 'Hold' || l.paused ? 'warn' : 'ok'), word));
       s.append(el('span', 'mono dim', `${l.ready_total} ready · ${l.queued} waiting · ${l.working} working · ${l.failed_total} failed`));
       if (l.catalog_full) s.append(el('span', 'chip warn', `CATALOG FULL · ${l.catalog_full} ready clips cannot play yet (256 max in 0.1)`));
@@ -465,7 +510,7 @@
       LB.progTxt.append(el('b', null, p.busy ? `Importing ${Math.min(p.total, p.done + 1)} of ${p.total}` : `Imported ${p.done} of ${p.total}`));
       if (p.busy && (p.file || job.name)) LB.progTxt.append(el('span', null, ` · ${p.file || job.name} · ${job.stage || ''} ${Math.round(((p.v3 ? p.fileP : job.progress) || 0) * 100)}%`));
       if (p.busy) LB.progTxt.append(el('span', 'dim', ` · ${p.eta < 0 ? 'estimating time…' : 'about ' + dur(p.eta) + ' left'}`));
-      if (l.paused) LB.progTxt.append(el('span', 'warn', ' · paused while the show is busy'));
+      if (l.paused) LB.progTxt.append(el('span', 'warn', ' · waiting a moment: the outputs come first'));
       if (p.error || job.last_error) LB.progTxt.append(el('span', 'bad', ' · ⚠ ' + (p.error || job.last_error)));
       if (l.disk_low) LB.progTxt.append(el('span', 'bad', ' · DISK LOW: the import waits (free space, remove clips, or CLEAR QUEUE)'));
       LB.hold.textContent = l.mode === 'Hold' ? 'RESUME' : 'PAUSE';
@@ -473,22 +518,30 @@
       LB.clear.classList.toggle('hidden', !supports('ClearQueue'));
       LB.clear.disabled = !ingestOk() || !l.queued;
     }
-    // replies → toasts (once each), the newest under the bar
+    // the newest reply under the bar (the replies themselves are handled by pollReplies on every view)
     const cmd = l?.cmd;
     if (cmd) {
       const top = cmd.replies[0];
       if (!LB.upl) LB.reply.textContent = top ? `${top.type}: ${top.message || top.status}` : '';
       LB.reply.className = 'lbreply ' + (top && !top.ok ? 'bad' : 'dim');
-      for (const r of [...cmd.replies].reverse()) {
-        if (r.seq <= LB.seenReply) continue;
-        LB.seenReply = r.seq;
-        if (r.seq > (LB.startSeq ?? 0)) toast(`${r.type}: ${r.message || r.status}`, r.ok ? '' : 'bad');
-        const op = LB.imports[r.seq];
-        if (op && r.type === 'Import') afterImport(op, r);
-        const rl = LB.relink[r.seq];
-        if (rl && r.status === 'Mismatch') H.confirm(`${rl.path} has other content than the clip.\nImport the clip again from this file (same name, new analysis)?`, 'IMPORT AGAIN').then(ok => ok && ingest({ ...rl, force: true }));
-        F().loadRows(true);
-      }
+    }
+  }
+  // Wave 8: the ingest replies are handled wherever the user is (START wizard, LIBRARY, Settings): a toast each,
+  // the NoSpace / estimate follow-ups, relink mismatches. Replies that were there before this page loaded are
+  // only marked seen (no old toasts after a reload).
+  function pollReplies() {
+    const cmd = S.library?.cmd;
+    if (!cmd) return;
+    if (LB.startSeq == null) { LB.startSeq = cmd.sent; LB.seenReply = Math.max(LB.seenReply, ...(cmd.replies || []).map(r => r.seq), 0); return; }
+    for (const r of [...cmd.replies].reverse()) {
+      if (r.seq <= LB.seenReply) continue;
+      LB.seenReply = r.seq;
+      const op = LB.imports[r.seq];
+      if (!(op && op.dry_run)) toast(`${r.type}: ${r.message || r.status}`, r.ok ? '' : 'bad');
+      if (op && r.type === 'Import') afterImport(op, r);
+      const rl = LB.relink[r.seq];
+      if (rl && r.status === 'Mismatch') H.confirm(`${rl.path} has other content than the clip.\nImport the clip again from this file (same name, new analysis)?`, 'IMPORT AGAIN').then(ok => ok && ingest({ ...rl, force: true }));
+      F().loadRows(true);
     }
   }
 
@@ -522,7 +575,8 @@
     box.append(go);
   }
 
-  function selectedRows() { const list = F().rows(); return list?.ok ? list.clips.filter(c => LB.sel.has(c.id)) : []; }
+  // In the order they were clicked (a Set keeps insertion order): the first one clicked goes on the first layer.
+  function selectedRows() { const list = F().rows(); if (!list?.ok) return []; const byId = new Map(list.clips.map(c => [c.id, c])); return [...LB.sel].map(id => byId.get(id)).filter(Boolean); }
   function selectedIds() { return selectedRows().map(c => F().refOf(c)).filter(i => (typeof i === 'object' ? i.lib > 0 : i >= 0)); }
 
   function renderBulk() {
@@ -554,7 +608,6 @@
 
   function render() {
     if (!LB.built) build();
-    if (LB.startSeq == null && S.library?.cmd) { LB.startSeq = S.library.cmd.sent; LB.seenReply = Math.max(LB.seenReply, ...(S.library.cmd.replies || []).map(r => r.seq), 0); }
     renderStatus();
     renderDock();
     const list = F().rows();
@@ -606,7 +659,10 @@
     k.append(th);
     k.append(el('div', 'lbname', c.name));
     const hz = { Hz60: 60, Hz50: 50, Hz59_94: 60, Hz30: 30, Hz25: 25 }[S.outputs?.refresh] || 0;
-    const jud = hz ? c.judder.filter(x => x === hz) : c.judder;
+    // Judder only matters for the show's own refresh, and only when frame smoothing is Off (ENGINE's Auto
+    // smooths 24 / 25 fps on 60 Hz; LEAD wave 7).
+    const smoothOff = S.outputs?.frame_smooth === 'Off';
+    const jud = smoothOff ? (hz ? c.judder.filter(x => x === hz) : c.judder) : [];
     k.append(el('div', 'dim mono lbmeta', `${c.kind} · ${c.size[0]}×${c.size[1]} · ${c.fps} fps · ${c.seconds} s` + (c.alpha ? ' · α' : '')));
     if (jud.length) { const jb = el('div', 'warn lbjud', `⚠ judders on ${jud.join('/')} Hz outputs`); jb.title = 'The frame rate does not divide the refresh: motion steps a little. Import with "conform" for a smooth copy.'; k.append(jb); }
     if (a) {
@@ -735,6 +791,8 @@
   }
 
   window.Lib = {
+    tick() { pollReplies(); },
+    gb,
     settings,
     openReserve,
     render() { if (S.view === 'library') render(); },

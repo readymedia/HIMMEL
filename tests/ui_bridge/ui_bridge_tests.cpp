@@ -574,6 +574,10 @@ static void test_panel_json() {
     CHECK(j["outputs"][0]["state"] == "Ok" && j["outputs"][0]["display"]["maker"] == "DEL");
     CHECK(j["outputs"][1]["state"] == "Lost" && j["outputs"][1]["black"] == true && j["outputs"][1]["preset"] == "P2160");
     CHECK(j["identify_left_ms"] == 4250 && j["places"].size() == 9 && j["places"][8]["place"] == "Free");
+    CHECK(j["frame_smooth"] == "Auto");   // wave 8: the global frame smoothing (judder badge only when Off)
+    os->frame_smooth = 1;
+    CHECK(outputs_to_json(*os)["frame_smooth"] == "Off");
+    os->frame_smooth = 0;
     os->count = 99;   // a wild count never reads past the table
     CHECK(outputs_to_json(*os)["outputs"].size() == static_cast<size_t>(kMaxOutputs));
 
