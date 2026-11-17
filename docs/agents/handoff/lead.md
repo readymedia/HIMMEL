@@ -267,6 +267,13 @@ All three branches start from main 7ea64c6. Rules as in wave 7: the stack lock `
 
 **Done when:** all three merged and green (build, tests, selftests, `mk2_e2e.py` including the 300+ clip stage, `quit_check.py`, `gui_flow_e2e.py`). The LEAD reruns the first-user flow (`docs/qa/2026-11-17-wave7-first-user-flow.md`) at the default size **and at 1600×900**, then tells the parent session that main is ready for the owner's test.
 
+**Wave 8 — done 2026-11-17.** Merged in `claude/lead-wave8`, fast-forwarded to main. Green after a clean build: 20 test programs, every selftest, `mk2_e2e.py` 99 checks (incl. 300+ library clips), `quit_check.py` 1.60 s, `gui_flow_e2e.py` 46 checks. **Done-when met:** the LEAD walked the first-user flow at 1600×900 with the default reserve (`docs/qa/2026-11-17-wave8-first-user-flow-1600x900.md`). **main is ready for the owner's test.**
+- GUI 35cdfcb: layout 1280×720 to 2560×1440, ESTIMATE shows the plan, real sizes, NoSpace → Keep free on disk.
+- CONTROL e1609a0: MK2 BROWSE + CLIPS pads + NuVJ on catalog v3, LayerClipLib, ENERGY order (D202: `ClipInfo.reserved[0]` = energy); `mk2_e2e.py` takes the stack lock itself; D200 / D201 PROPOSED.
+- SHOW 41f5738: looks / scenes / kits bind by library id → hash → name; file format v2, journal v3; show_crash_test flake fixed; D210 PROPOSED.
+- Incident: a stale `himmel_ingest --help` from CONTROL's old build ran for ~3 min; it imported nothing (only ingest.log and the SQLite -shm changed).
+- Open: thumbnails for the media/test HAP clips are grey placeholders; stb_image for MK2 thumbs is the owner's call (CONTROL handoff); NuVJ "SCRATCH holds the playhead" and the gui_flow dry-run reply flaked once each.
+
 **Old wave 4 candidates (now done or folded in):**
 - GUI: the SHOW and AUDIO panels, the reaction editor and the wizard (rest of M11);
 - M9 / M13 if CONTROL did not reach them;
