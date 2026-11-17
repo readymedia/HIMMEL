@@ -79,6 +79,9 @@ default and stay PROPOSED (D94–D100 are run that way).
 | 7 | GUI · `claude/gui-w7-flows` | library → layer, library at scale, clip drawer, wizard 5+, help (D170–D179) — **merged 2026-11-17** |
 | 7 | MEDIA · `claude/media-w7-import` | disk guard, HOLD / AUTO, queue, import options, library move (D180–D189) — **merged 2026-11-17** |
 | 7 | ENGINE · `claude/engine-w7-catalog` | catalog v3 paging, load by library id, smooth 24/30 on 60 Hz (D190–D199) — **merged 2026-11-17** |
+| 8 | GUI · `claude/gui-w8-polish` | layer rows at ≤ 1600×900, ESTIMATE, library size, real-disk walk |
+| 8 | CONTROL · `claude/control-w8-browse` | MK2 BROWSE + CLIPS pads on catalog v3, 300+ clips (D200+) |
+| 8 | SHOW · `claude/show-w8-libids` | looks / scenes / kits by library id (D210+) |
 
 ## 1. What we have to build on
 

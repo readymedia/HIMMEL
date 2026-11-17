@@ -256,6 +256,17 @@ Open for wave 8:
 - CONTROL: MK2 BROWSE on catalog v3 (`set_clips`, LayerClipLib).
 - SHOW: look_ops finds clips by name only in ids < 256; store library ids in looks.
 
+### Wave 8 — started 2026-11-17 (owner: "Runde 8 først"; he tests after this wave)
+All three branches start from main 7ea64c6. Rules as in wave 7: the stack lock `%TEMP%\himmel_stack.lock`, no builds in the main checkout, never stop a Himmel process you did not start. The LEAD merges in its own worktree.
+
+| Track · session · branch | Task | Decisions |
+|---|---|---|
+| GUI · gui-w7 (local_210ce077) · `claude/gui-w8-polish` | layer rows D / H at 1600×900 and smaller (checked from 1280×720 up to 1440p); ESTIMATE DISK shows the plan; the library size after import; a first-user walk on the owner's real disk shape (~6 GB free, 20 GB reserve), where the refusal says what to do | D170–D179 (continue) |
+| CONTROL · control-m4 (local_22fd69d2) · `claude/control-w8-browse` | MK2 BROWSE and CLIPS pads on catalog v3 / `LayerClipLib`, past 256 (`Mk2Perform::set_clips`); a `mk2_e2e.py` stage with 300+ clips | D200+ |
+| SHOW · show-m3 (local_e0456340) · `claude/show-w8-libids` | looks / scenes / kits store the library id, with hash and name as fallbacks; missing is marked; old files are upgraded | D210+ |
+
+**Done when:** all three merged and green (build, tests, selftests, `mk2_e2e.py` including the 300+ clip stage, `quit_check.py`, `gui_flow_e2e.py`). The LEAD reruns the first-user flow (`docs/qa/2026-11-17-wave7-first-user-flow.md`) at the default size **and at 1600×900**, then tells the parent session that main is ready for the owner's test.
+
 **Old wave 4 candidates (now done or folded in):**
 - GUI: the SHOW and AUDIO panels, the reaction editor and the wizard (rest of M11);
 - M9 / M13 if CONTROL did not reach them;
