@@ -29,6 +29,14 @@ flowchart LR
     SUP -- "start, restart,<br/>kill if hung" --> AUD
     AUD --> SHM4
     SHM4 --> REN
+    ING["himmel_ingest.exe<br/>library import"]
+    LIB[("library: HAP, stills,<br/>sidecars, SQLite")]
+    FFM["ffmpeg.exe / ffprobe.exe<br/>(external tools)"]
+    SUP -- "start, restart,<br/>kill if hung" --> ING
+    ING --> FFM
+    ING --> LIB
+    LIB -- "feed worker<br/>(read-only)" --> REN
+    SHM2 -. "late frames = pause" .-> ING
     WPN <--> DEV
     WPN <--> SHM3
     REN <--> SHM3
@@ -50,7 +58,8 @@ flowchart LR
 | `weapon_blocks.exe lightpad\|lumi`, `weapon_nuvj.exe`, `weapon_apc20.exe` | One per weapon (`weapons/README.md`): owns the device over WinMM, publishes events, sends LEDs / pixels / LCD, reconnects. Lets go of the device (settings back, LEDs off) on Ctrl+C or the supervisor's stop request. | The renderer keeps playing and picks the weapon up again. |
 | `himmel_audio.exe` | Music in (M8, `interfaces/audio-block.md`): WASAPI mic / line in / loopback, auto gain, gate, level / bands / spectrum / kick / snare / hat / energy every 5 ms, MIDI clock in; writes `Local\HimmelAudio`. Reopens a lost device by name every second. | The renderer's reactions glide to rest over 1 s and the picture keeps playing; the supervisor restarts it and they come back. |
 | `himmel_render.exe` | The deck engine: model (2 × 4 layers, FX slots, crossfader, TAKE), command ring in, state + preview blocks out, MK2 Perform, outputs. (`himmel_render_legacy.exe`: the parked test card / camera / Touch FX renderer.) | The supervisor restarts it within a second; it restores the show from `Local\HimmelState`. |
-| Later: GUI, workers, bridges | Operator GUI (Dear ImGui), import/analysis workers, sync bridges (Ableton Link, Pro DJ Link). | Same rule: the output keeps going. |
+| `himmel_ingest.exe` | The library import (M7, `interfaces/library-db.md`): watches folders, converts with `ffmpeg.exe` to HAP, thumbnails, analysis v1, sidecar + SQLite; writes `Local\HimmelLibrary`. While a show runs it works at idle / background priority and suspends ffmpeg on any late frame. The renderer's library feed (a worker thread) appends READY clips to the catalog. | Nothing on screen changes; unfinished imports resume where they stopped when the supervisor restarts it. |
+| Later: GUI, bridges | Operator GUI, sync bridges (Ableton Link, Pro DJ Link). | Same rule: the output keeps going. |
 
 ## Shared memory
 
@@ -191,7 +200,10 @@ src/controller/   himmel_mk2 library: map, input parsing + pad tracker, LED/scre
                   himmel_weapon library (src/weapon/): weapon shared block, MIDI links,
                   driver run loop, BLOCKS codec + session, NuVJ codec + session
                   app/: weapon_blocks, weapon_nuvj, weapon_apc20, weapon_monitor
-src/media/        himmel_media: MOV reader, HAP decoder; tools/hap_probe
+src/media/        himmel_media: MOV reader, HAP decoder; tools/hap_probe;
+                  ingest/ (himmel_ingest_core + himmel_ingest.exe: watch, ffmpeg, SVG, throttle)
+src/library/      himmel_library: SQLite index, sidecars, analysis v1, clip table + library feed
+                  (tests in tests/library/)
 src/show/         himmel_show_model (show model, looks -> commands, dice), himmel_show
                   (files, journal, zip, ShowRuntime + save worker); tools/show_cmd;
                   tests in tests/show/ (show_tests, show_crash_test)

@@ -9,6 +9,7 @@
 //                 [--flash-cap HZ] [--test-signal] [--ticker "TEXT"]   (effects: src/engine/fx/, M5)
 //                 [--project FOLDER|FILE.himmelshow] [--no-show-files] [--show-root DIR]   (show: src/show/, M3)
 //                 [--av-offset MS] [--no-audio]   (music: Local\HimmelAudio from himmel_audio.exe, M8)
+//                 [--library DIR] [--no-library]   (library clips join the catalog live, M7)
 //
 // * Show model: DeckModel (2 decks x 4 layers, FX slots on layer / deck / master,
 //   crossfader, TAKE / CUT / black / focus). Every change comes in as a Command:
@@ -78,6 +79,8 @@
 #include "himmel/engine/shm_block.h"
 #include "himmel/fx/fx_gpu.h"
 #include "himmel/fx/signals.h"
+#include "himmel/library/clip_table.h"
+#include "himmel/library/feed.h"
 #include "himmel/mk2/output.h"
 #include "himmel/mk2/shared.h"
 #include "himmel/mk2/types.h"
@@ -136,6 +139,8 @@ struct Config {
     std::string project;            // M3: a project to open (default: the most recent one)
     bool show_files = true;         // M3: --no-show-files = no project, no autosave (tests)
     std::string show_root;          // M3: --show-root DIR = projects in DIR/Projects, recent + untitled in DIR/App (tests)
+    std::string library;            // M7: --library DIR (default Documents\Himmel\Library; DIR/Library with --show-root)
+    bool use_library = true;        // M7: --no-library (also off with --no-show-files unless --library is given)
 };
 
 Config parse_args(int argc, char** argv) {
@@ -169,6 +174,8 @@ Config parse_args(int argc, char** argv) {
                       : hz == 30 ? proto::RefreshRate::Hz30 : hz == 25 ? proto::RefreshRate::Hz25 : proto::RefreshRate::Hz60;
         } else if (a == "--blend") c.blend_px = std::clamp(std::atoi(next().c_str()), 0, 1024);
         else if (a == "--blend-gamma") c.blend_gamma = std::clamp(static_cast<float>(std::atof(next().c_str())), 1.0f, 3.0f);
+        else if (a == "--library") c.library = next();
+        else if (a == "--no-library") c.use_library = false;
         else if (a == "--preview-fps") c.preview_fps = std::clamp(std::atoi(next().c_str()), 15, 30);
         else if (a == "--size") {
             const std::string s = next();
@@ -178,6 +185,8 @@ Config parse_args(int argc, char** argv) {
         // Legacy flags (camera, Entrancer, MIDI) are accepted and ignored: those parts are parked.
     }
     if (!overlay_set) c.overlay = !c.fullscreen;
+    // Test runs never read the owner's library unless they name one (docs/interfaces/library-db.md §8).
+    if (c.library.empty() && !c.show_files && c.show_root.empty()) c.use_library = false;
     return c;
 }
 
@@ -855,6 +864,25 @@ int main(int argc, char** argv) {
     std::memset(catalog.get(), 0, sizeof(proto::Catalog));
     const std::vector<std::string> playlist = cfg.clips.empty() ? himmel::engine::find_media_clips() : cfg.clips;
     himmel::engine::fill_clip_catalog(*catalog, playlist);
+    // ==== MEDIA (M7) hook 1/3: one append-only clip table (playlist + catalog entries) for every
+    // player; the library feed adds READY library clips to it, now and while the show runs ====
+    auto clip_table = std::make_unique<himmel::library::ClipTable>();
+    for (uint32_t i = 0; i < catalog->clip_count; ++i) clip_table->append(playlist[i], catalog->clip[i]);
+    himmel::library::LibraryFeed library_feed;
+    if (cfg.use_library) {
+        const auto root = !cfg.library.empty() ? himmel::show::files::from_utf8(cfg.library)
+                        : !cfg.show_root.empty() ? himmel::show::files::from_utf8(cfg.show_root) / "Library"
+                                                 : himmel::library::default_library_root();
+        const int lib = library_feed.load_initial(root, *clip_table);
+        for (uint32_t i = catalog->clip_count; i < clip_table->size(); ++i) catalog->clip[i] = clip_table->info[i];
+        catalog->clip_count = clip_table->size();
+        library_feed.start();
+        const auto root_u8 = root.u8string();
+        LOG("library: %s, %d ready clip(s) added; new ones join while running", reinterpret_cast<const char*>(root_u8.c_str()), lib);
+    } else {
+        LOG("library: off");
+    }
+    // ==== end MEDIA hook 1/3 ====
     himmel::engine::fx::fill_catalog(*catalog);
     LOG("catalog: %u clips%s, %u effects", catalog->clip_count,
         playlist.empty() ? " (put .mov files under media/ or pass --clip)" : "", catalog->effect_count);
@@ -1114,7 +1142,7 @@ int main(int argc, char** argv) {
 
     // ---- clip layers: one player (worker thread) per layer, all made now
     LayerRuntime layers[kLayerSlots];  // 0..7 = deck * 4 + layer, 8 = the HIT layer
-    for (auto& l : layers) l.player = std::make_unique<himmel::engine::ClipPlayer>(g.dev.Get(), playlist);
+    for (auto& l : layers) l.player = std::make_unique<himmel::engine::ClipPlayer>(g.dev.Get(), clip_table.get());  // MEDIA (M7) hook 2/3
     LOG("clip players: %d (one per layer + the HIT layer)", kLayerSlots);
     uint64_t jumps = 0, jumps_next_frame = 0, jump_worst = 0;
 
@@ -1416,7 +1444,7 @@ int main(int argc, char** argv) {
                 rt.shown = clip;
                 rt.uploaded = -1;
                 rt.current_is_requested =
-                    clip && rt.requested >= 0 && clip->path == playlist[static_cast<size_t>(rt.requested)];
+                    clip && rt.requested >= 0 && clip->path == clip_table->path[static_cast<size_t>(rt.requested)];
             }
             if (rt.requested >= 0 && !rt.current_is_requested && rt.player->load_failed.load() != rt.fail_seen)
                 rt.missing = true;
@@ -1714,6 +1742,21 @@ int main(int argc, char** argv) {
             outputs_blk->status.heartbeat_us.store(t_done);
         }
 
+        // ==== MEDIA (M7) hook 3/3: library clips that turned ready join the catalog. Ids are
+        // append-only, so nothing on air moves; no I/O, no allocation (fixed table) ====
+        if (const uint32_t lib_n = std::min<uint32_t>(clip_table->size(), proto::kMaxClips); lib_n > catalog->clip_count) {
+            const uint32_t before = catalog->clip_count;
+            for (uint32_t i = before; i < lib_n; ++i) catalog->clip[i] = clip_table->info[i];
+            catalog->clip_count = lib_n;
+            if (state.blk) proto::seq_write(state.blk->catalog_seq, state.blk->catalog, *catalog);
+            LOG("library: %u new clip(s) in the catalog, %u in all", lib_n - before, lib_n);
+        }
+        if (static bool full_logged = false; !full_logged && library_feed.catalog_full.load(std::memory_order_relaxed)) {
+            full_logged = true;  // once: the clips stay in the library (a paged catalog is a later protocol change)
+            LOG("library: the catalog is full (%d clips) - new library clips stay in the library", proto::kMaxClips);
+        }
+        // ==== end MEDIA hook 3/3 ====
+
         // 10. Stats + heartbeat.
         if (mk2link.earliest_event_us && mk2link.earliest_event_us <= t_done) {
             lat_sum += static_cast<double>(t_done - mk2link.earliest_event_us);
@@ -1731,6 +1774,7 @@ int main(int argc, char** argv) {
         if (es) {
             es->heartbeat_us.store(t_done);
             es->frames.store(frames);
+            es->late_frames.store(late);  // every frame: himmel_ingest pauses on a late frame (M7)
         }
         if (t_done - stats_start >= 5000000) {
             const double period = (t_done - stats_start) / 1e6;
