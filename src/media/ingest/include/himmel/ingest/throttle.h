@@ -14,6 +14,7 @@ struct EngineSample {
     uint32_t late_frames = 0;    // total since the renderer started
     uint64_t frames = 0;
     uint32_t fps_x100 = 0;
+    uint32_t pid = 0;            // v3: the renderer's process id (a restarted renderer has another)
 };
 
 class Throttle {

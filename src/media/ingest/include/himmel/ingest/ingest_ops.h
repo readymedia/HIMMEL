@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "himmel/ingest/guard.h"
 #include "himmel/ingest/scan.h"
 #include "himmel/library/library_block.h"
 #include "himmel/library/library_db.h"
@@ -27,12 +28,27 @@ public:
     virtual void unqueue(int64_t id) = 0;    // drop from the work queue
     virtual void rescan_now() = 0;           // forget what was seen; scan the watch folders at once
     virtual void set_mode(library::IngestModeRequest m) = 0;
+    // ---- v3 (wave 7). The defaults suit a host with no disk check (unit tests override them).
+    // The estimated library bytes of one new clip with these options (a quick ffprobe).
+    // False = could not probe (the estimate is then kSideBytes; the import still fails later).
+    virtual bool estimate(const Candidate&, const library::ImportOptions&, int64_t& bytes) {
+        bytes = kSideBytes;
+        return false;
+    }
+    virtual DiskSpace disk() { return {}; }                  // the library's disk
+    virtual uint64_t reserve(uint64_t total) { return reserve_for(total); }
+    virtual bool moving() { return false; }                  // a library move runs: most commands are Busy
+    virtual void on_plan(const library::IngestPlan&) {}      // publish an Import's estimate
+    // Library (69): switch / move. The worker does it (it owns the DB handle).
+    virtual library::IngestReply library_command(const library::IngestCommand& c);
 };
 
 struct EnqueueResult {
     int64_t id = 0;
     bool queued = false;    // new row, revived tombstone, or queued again
     bool known = false;     // the content was already in the library
+    bool no_space = false;  // v3: a new clip the disk guard left out
+    int64_t est_bytes = 0;  // v3: its estimate
 };
 
 class IngestOps {
@@ -43,7 +59,13 @@ public:
     library::IngestReply apply(const library::IngestCommand& c);
 
     // Building blocks the worker uses too.
-    EnqueueResult enqueue(const Candidate& c, bool revive_removed);
+    EnqueueResult enqueue(const Candidate& c, bool revive_removed, const library::ImportOptions* opts = nullptr);
+    // v3: the watch-folder scan's enqueue, with the disk guard (default options).
+    EnqueueResult enqueue_scanned(const Candidate& c);
+    // v3: estimated bytes the queue still has to write (rows not converted yet).
+    uint64_t queue_need();
+    // v3: the stored mode (meta 'mode'), Auto when none.
+    static library::IngestModeRequest stored_mode(library::LibraryDb& db);
     std::vector<fs::path> watch_folders();          // fixed + stored (meta 'watch')
     std::vector<fs::path> skip_folders() const;     // the library's own folders
     int retry_pending_deletes();                    // files that were busy at Remove time
@@ -62,6 +84,8 @@ private:
     library::IngestReply reanalyse(int64_t id, bool thumbs);
     library::IngestReply retry(int64_t id);
     library::IngestReply unwatch(const fs::path& p);
+    library::IngestReply clear_queue();
+    bool gather(const library::IngestCommand& c, const fs::path& p, std::vector<Candidate>& out, std::string& why);
 
     int check_source(library::ClipRecord& r);       // 1 = source_missing changed
     void delete_derived(const library::ClipRecord& r);

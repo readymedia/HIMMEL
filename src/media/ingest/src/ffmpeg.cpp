@@ -87,7 +87,12 @@ std::vector<std::string> convert_args(const ConvertSpec& s) {
         a.insert(a.end(), {"-framerate", num(s.fps > 0 ? s.fps : 25.0), "-start_number", std::to_string(s.seq_start)});
     a.insert(a.end(), {"-i", s.input, "-map", "0:v:0", "-an", "-sn", "-dn"});
     const bool still = s.kind == Kind::Still || s.kind == Kind::Vector;
-    std::string vf = still ? fit(s.max_w, s.max_h) + "," + kRound4 : kRound4;
+    std::string vf;
+    if (still) vf = fit(s.max_w, s.out_max_h > 0 ? std::min(s.max_h, s.out_max_h) : s.max_h) + ",";
+    else if (s.out_max_h > 0) vf = fit(16384, s.out_max_h) + ",";
+    // v3: frame-rate conform with blended in-between frames (D181, PROPOSED).
+    if (!still && s.conform_fps > 0) vf += "framerate=fps=" + num(s.conform_fps) + ",";
+    vf += kRound4;
     a.insert(a.end(), {"-vf", vf});
     if (still) a.insert(a.end(), {"-frames:v", "1"});
     if (s.kind == Kind::Animation && s.fps > 0) a.insert(a.end(), {"-r", num(s.fps)});
@@ -95,8 +100,22 @@ std::vector<std::string> convert_args(const ConvertSpec& s) {
     a.insert(a.end(), {"-c:v", "hap", "-format", s.format});
     if (s.chunks > 1) a.insert(a.end(), {"-chunks", std::to_string(s.chunks)});
     if (s.threads > 0) a.insert(a.end(), {"-threads", std::to_string(s.threads)});
+    if (s.progress) a.insert(a.end(), {"-progress", "pipe:1", "-nostats"});
     a.insert(a.end(), {"-f", "mov", s.output});
     return a;
+}
+
+void ProgressParser::feed(const uint8_t* p, size_t n) {
+    for (size_t i = 0; i < n; ++i) {
+        const char ch = static_cast<char>(p[i]);
+        if (ch != '\n' && ch != '\r') {
+            if (line_.size() < 256) line_.push_back(ch);
+            continue;
+        }
+        if (line_.rfind("frame=", 0) == 0) frame = std::atoll(line_.c_str() + 6);
+        else if (line_.rfind("total_size=", 0) == 0) total_size = std::atoll(line_.c_str() + 11);
+        line_.clear();
+    }
 }
 
 std::vector<std::string> still_png_args(const std::string& input, const std::string& out, int max_w, int max_h) {

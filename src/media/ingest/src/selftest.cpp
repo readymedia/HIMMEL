@@ -45,6 +45,19 @@ struct TestHost : OpsHost {
     void unqueue(int64_t id) override { q.erase(std::remove(q.begin(), q.end(), id), q.end()); }
     void rescan_now() override { ++rescans; }
     void set_mode(library::IngestModeRequest m) override { mode = m; }
+    // v3: a fake disk and a fixed estimate per new clip (library-db.md §11.1).
+    DiskSpace fake{};
+    int64_t per_clip = kSideBytes;
+    bool busy = false;
+    library::IngestPlan plan{};
+    int plans = 0;
+    bool estimate(const Candidate&, const library::ImportOptions&, int64_t& bytes) override {
+        bytes = per_clip;
+        return true;
+    }
+    DiskSpace disk() override { return fake; }
+    bool moving() override { return busy; }
+    void on_plan(const library::IngestPlan& p) override { plan = p, ++plans; }
 };
 
 void write_file(const fs::path& p, uint32_t seed, size_t n = 4096) {
@@ -72,6 +85,132 @@ void fake_ready(library::LibraryDb& db, const fs::path& root, int64_t id) {
     r.analysis.version = library::kAnalysisVersion;
     library::write_sidecar(root / "meta" / (r.hash + ".json"), r);
     db.upsert(r);
+}
+
+// ---- v3 (wave 7): the stored mode, the disk guard on a fake small disk, options, Clear queue ----
+template <class Send, class Check>
+void run_v3(library::LibraryDb& db, IngestOps& ops, TestHost& host, const fs::path& root, const fs::path& tmp, Send&& send, Check&& check) {
+    auto ck = [&](bool ok, const std::string& what) { check(ok, "v3: " + what); };  // `check` counts the failures
+    auto st = [](const IngestReply& r) { return static_cast<IngestStatus>(r.status); };
+
+    // The stored mode survives a reopen (a worker restart).
+    IngestReply r = send(IngestCommandType::Mode, 0, {}, 0, static_cast<int32_t>(library::IngestModeRequest::Hold));
+    ck(st(r) == IngestStatus::Ok && IngestOps::stored_mode(db) == library::IngestModeRequest::Hold, "Mode Hold is stored");
+    {
+        library::LibraryDb again;
+        again.open(root / library::kDbFile, true);
+        ck(IngestOps::stored_mode(again) == library::IngestModeRequest::Hold, "a restarted worker reads Hold back");
+    }
+    send(IngestCommandType::Mode, 0, {}, 0, static_cast<int32_t>(library::IngestModeRequest::Background));
+    ck(IngestOps::stored_mode(db) == library::IngestModeRequest::Background, "Mode Background is stored");
+
+    // Clear queue first, so the guard tests start from an empty queue.
+    r = send(IngestCommandType::ClearQueue, 0, {});
+    host.q.clear();  // ids the worker would have taken already (earlier steps faked their conversions)
+    auto unfinished = [&] {
+        int n = 0;
+        for (State s : {State::Queued, State::Probing, State::Converting, State::Analysing}) n += db.count(static_cast<int>(s));
+        return n;
+    };
+    ck(st(r) == IngestStatus::Ok && unfinished() == 0 && ops.queue_need() == 0,
+       "Clear queue leaves nothing unfinished (" + std::to_string(unfinished()) + "): " + r.message);
+    const int ready_before = db.count(static_cast<int>(State::Ready));
+
+    // A fake small disk: 100 GB, 15 GB free -> reserve 10 GB, room for 5 GB. 2 GB per clip.
+    host.fake = {15 * kGB, 100 * kGB, true};
+    host.per_clip = static_cast<int64_t>(2 * kGB);
+    const fs::path batch = tmp / "batch";
+    for (int k = 0; k < 4; ++k) write_file(batch / ("clip" + std::to_string(k) + ".mp4"), 100 + k, 5000 + k);
+    const int rows_before = db.count();
+    r = send(IngestCommandType::Import, 0, batch);
+    ck(st(r) == IngestStatus::NoSpace && db.count() == rows_before && host.q.empty(),
+       "an import that would overflow is refused, nothing queued (" + std::to_string(db.count() - rows_before) + " rows, " +
+           std::to_string(host.q.size()) + " queued)");
+    ck(host.plan.refused == 1 && host.plan.clips == 4 && host.plan.fit_clips == 2 && host.plan.need_bytes == 8 * kGB &&
+           host.plan.reserve_bytes == 10 * kGB && host.plan.free_bytes == 15 * kGB,
+       "the plan: 4 clips, 8 GB, 2 fit, reserve 10 GB");
+    ck(std::string(r.message).find("needs ~8.0 GB for 4 clips") != std::string::npos, std::string("the refusal says why: ") + r.message);
+    r = send(IngestCommandType::Import, 0, batch, library::kIngestDryRun);
+    ck(st(r) == IngestStatus::Ok && r.count == 4 && host.plan.dry_run == 1 && db.count() == rows_before, "a dry run only estimates");
+    r = send(IngestCommandType::Import, 0, batch, library::kIngestFit);
+    ck(st(r) == IngestStatus::Accepted && r.count == 2 && host.q.size() == 2 && ops.queue_need() == 4 * kGB,
+       "kIngestFit queues the 2 that fit (4 GB in the queue): " + std::to_string(r.count) + ", " + std::to_string(host.q.size()) +
+           ", " + std::to_string(ops.queue_need()));
+    write_file(tmp / "one_more.mp4", 200, 7000);
+    r = send(IngestCommandType::Import, 0, tmp / "one_more.mp4");
+    ck(st(r) == IngestStatus::NoSpace, "the queue counts: one more 2 GB clip is refused");
+    // The watch-folder scan uses the same guard.
+    Candidate cm;
+    candidate_from_path(tmp / "one_more.mp4", cm);
+    const auto es = ops.enqueue_scanned(cm);
+    ck(es.no_space && es.id == 0, "the scan leaves out a file that does not fit");
+    host.fake.known = false;
+    r = send(IngestCommandType::Import, 0, tmp / "one_more.mp4", library::kIngestDryRun);
+    ck(st(r) == IngestStatus::Ok && host.plan.fits == 1, "an unknown disk is not guarded (dry run fits)");
+    host.fake.known = true;
+
+    // Clear queue: queued clips become tombstones, ready ones stay.
+    r = send(IngestCommandType::ClearQueue, 0, {});
+    ck(st(r) == IngestStatus::Ok && r.count == 2 && host.q.empty() && ops.queue_need() == 0 &&
+           db.count(static_cast<int>(State::Ready)) == ready_before && unfinished() == 0,
+       std::string("Clear queue: ") + r.message);
+    r = send(IngestCommandType::Import, 0, batch, library::kIngestFit);
+    ck(st(r) == IngestStatus::Accepted && r.count == 2, "after Clear queue an explicit Import brings them back");
+    send(IngestCommandType::ClearQueue, 0, {});
+    r = send(IngestCommandType::Import, 0, batch, library::kIngestFit | library::kIngestSkipKnown);
+    ck(st(r) == IngestStatus::Accepted && r.count == 2 && host.plan.known == 2,
+       "skip known: the 2 cleared ones are skipped, the other 2 queued");
+    send(IngestCommandType::ClearQueue, 0, {});
+
+    // Options are validated and stored per clip (they survive in the sidecar column).
+    host.fake = {500 * kGB, 1000 * kGB, true};
+    write_file(tmp / "opts.mov", 300, 9000);
+    r = send(IngestCommandType::Import, 0, tmp / "opts.mov", 0, 100);
+    ck(st(r) == IngestStatus::BadValue, "max height 100: BadValue");
+    {
+        IngestCommand c;
+        make_ingest(c, IngestCommandType::Import, 0, u8path(tmp / "opts.mov").c_str(), library::kIngestHapQ, 720);
+        c.conform_hz = 30;
+        library::IngestReply bad = ops.apply(c);
+        ck(st(bad) == IngestStatus::BadValue, "conform 30 Hz: BadValue");
+        c.conform_hz = 60;
+        library::IngestReply good = ops.apply(c);
+        ClipRecord o;
+        ck(st(good) == IngestStatus::Accepted && db.get(good.clip, o) && o.import.max_h == 720 && o.import.codec == "hap_q" &&
+               o.import.conform_hz == 60 && o.import.est_bytes == host.per_clip,
+           "720 / HAP Q / conform 60 are stored with the clip");
+    }
+    // A selection: a list file with one new file, one missing, a comment.
+    write_file(tmp / "sel_a.mp4", 400, 3000);
+    {
+        std::ofstream lf(tmp / "list.txt", std::ios::binary);
+        lf << "# my selection\r\n" << u8path(tmp / "sel_a.mp4") << "\r\n" << u8path(tmp / "missing.mp4") << "\r\n\r\n";
+    }
+    r = send(IngestCommandType::Import, 0, tmp / "list.txt", library::kIngestList);
+    ck(st(r) == IngestStatus::Accepted && r.count == 1, std::string("import only a selection (list file): ") + r.message);
+    r = send(IngestCommandType::Import, 0, tmp / "list.txt", library::kIngestList | library::kIngestWatch);
+    ck(st(r) == IngestStatus::BadPath, "a list cannot be watched");
+
+    // While the library moves, commands are Busy (Mode still works).
+    host.busy = true;
+    r = send(IngestCommandType::Import, 0, tmp / "sel_a.mp4");
+    ck(st(r) == IngestStatus::Busy, "Import during a move: Busy");
+    r = send(IngestCommandType::ClearQueue, 0, {});
+    ck(st(r) == IngestStatus::Busy, "Clear queue during a move: Busy");
+    r = send(IngestCommandType::Mode, 0, {}, 0, 0);
+    ck(st(r) == IngestStatus::Ok, "Mode during a move: Ok");
+    host.busy = false;
+    r = send(IngestCommandType::Library, 0, tmp / "elsewhere");
+    ck(st(r) == IngestStatus::Failed, "Library goes to the worker (this host has none)");
+    // Touches: Clear queue and Library cancel the running job and wait for it.
+    {
+        IngestCommand c;
+        bool cancel = false;
+        make_ingest(c, IngestCommandType::ClearQueue);
+        ck(IngestOps::touches(c, 5, cancel) && cancel, "Clear queue cancels the running job");
+        ck(!IngestOps::touches(c, 0, cancel), "Clear queue with no job runs at once");
+    }
+    send(IngestCommandType::ClearQueue, 0, {});
 }
 
 }  // namespace
@@ -276,8 +415,8 @@ int run_command_selftest(const fs::path& tmp, const std::function<void(const std
     check(st(r) == IngestStatus::Ok && host.mode == library::IngestModeRequest::Hold, "Mode = hold");
     r = send(IngestCommandType::Mode, 0, {}, 0, 9);
     check(st(r) == IngestStatus::BadValue, "Mode 9: BadValue");
-    r = send(static_cast<IngestCommandType>(68), 0, {});
-    check(st(r) == IngestStatus::UnknownType, "68 (free): UnknownType");
+    r = send(static_cast<IngestCommandType>(70), 0, {});
+    check(st(r) == IngestStatus::UnknownType, "70 (not MEDIA's): UnknownType");
     {
         IngestCommand c;
         make_ingest(c, IngestCommandType::Import);
@@ -322,6 +461,8 @@ int run_command_selftest(const fs::path& tmp, const std::function<void(const std
         make_ingest(c, IngestCommandType::Mode, 0, nullptr, 0, 3);
         check(!IngestOps::touches(c, 5, cancel), "Mode is applied at once");
     }
+
+    run_v3(db, ops, host, root, tmp, send, check);
 
     db.close();
     fs::remove_all(tmp, ec);

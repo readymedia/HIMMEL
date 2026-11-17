@@ -2,6 +2,7 @@
 // Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 #include "himmel/library/library_db.h"
 
+#include <cstdio>
 #include <cstring>
 
 #include <nlohmann/json.hpp>
@@ -157,6 +158,7 @@ ClipRecord read_row(sqlite3_stmt* s) {
 }  // namespace
 
 bool LibraryDb::exec(const char* sql) {
+    if (!db_) return false;  // v3: closed while the library moves
     char* msg = nullptr;
     if (sqlite3_exec(db_, sql, nullptr, nullptr, &msg) != SQLITE_OK) {
         err_ = msg ? msg : "sqlite error";
@@ -198,12 +200,24 @@ bool LibraryDb::open(const std::filesystem::path& file, bool read_only, std::str
         ok = v && sqlite3_step(v.s) == SQLITE_ROW;
         if (!ok) err_ = sqlite3_errmsg(db_);
     }
+    if (ok && !read_only && meta_get("uid").empty()) {
+        // v3: a random id per library, so the engine's feed can tell a moved library
+        // (same uid) from another library (a switch).
+        uint64_t a = 0, b = 0;
+        sqlite3_randomness(sizeof(a), &a);
+        sqlite3_randomness(sizeof(b), &b);
+        char t[40];
+        std::snprintf(t, sizeof(t), "%016llx%016llx", static_cast<unsigned long long>(a), static_cast<unsigned long long>(b));
+        meta_set("uid", t);
+    }
     if (!ok) {
         if (err) *err = err_;
         close();
     }
     return ok;
 }
+
+bool LibraryDb::checkpoint() { return db_ && !read_only_ && exec("PRAGMA wal_checkpoint(TRUNCATE);"); }
 
 void LibraryDb::close() {
     if (db_) sqlite3_close_v2(db_);

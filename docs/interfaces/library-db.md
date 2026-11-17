@@ -3,6 +3,9 @@
 Status: **version 1, written by MEDIA 2026-11-17 (M7)**, before the code.
 **Version 2 (2026-11-17, wave 5): commands to the ingest worker (§10)**, the
 `removed` state, `source_missing`, stored watch folders. All additive.
+**Version 3 (2026-11-17, wave 7): the disk guard, the stored mode, progress,
+import options, Clear queue and the library location / move (§11).** All
+appended; the block version is 3.
 Writers: `himmel_ingest.exe` only. Readers: the render process (its library
 feed worker), the GUI bridge, SHOW (relink by name), tools. Change rules as
 in [`command-protocol.md`](command-protocol.md): append-only; a layout or
@@ -169,7 +172,7 @@ value per proxy frame (`proxy.fps`). The rules and thresholds that write
 `src/library/analysis.cpp` (`AnalysisRules`, defaults listed in the handoff);
 `library-rules.json` will make them tunable (later).
 
-## 6. The library block (`Local\HimmelLibrary`, magic `HMLB`, version 2)
+## 6. The library block (`Local\HimmelLibrary`, magic `HMLB`, version 3)
 
 Written by `himmel_ingest` (creates it; header last), read by anyone.
 Plain atomics plus one seqlock section.
@@ -184,6 +187,7 @@ Plain atomics plus one seqlock section.
 | `queued`, `working`, `ready_total`, `failed_total` | counts |
 | `job` (seqlock) | the current file: name, stage, progress 0..1, `last_error` |
 | `catalog_full` | written by the renderer's feed (its only field): ready clips left out of the catalog because it holds 256 (`kMaxClips`). They stay in the library; the GUI shows "catalog full"; the renderer logs it once |
+| v3: `stored_mode`, `disk_low`, `disk_*`, `library_bytes`, `queue_bytes`, `progress`, `plan`, `root` | §11 |
 
 ## 7. Throttling (show-safe)
 
@@ -300,16 +304,17 @@ slots are numbered like `protocol::Producer`: Perform 0, **Gui 1**, Osc 2,
 | 63 | `Relink` | `clip` = id + `path` = a file; or `clip` = 0 + `path` = a folder; `kIngestForce` | **One clip:** hashes `path`. Same content → `source` = `path` and `source_missing` is cleared; nothing is imported again. Other content → `Mismatch`, unless `kIngestForce` is set: then the clip is imported again from `path` under the same id and name, with a new hash, a new HAP file and a new `ready_order`, so the engine catalog gets a new entry and the old entry shows "missing". **A folder:** for every clip with `source_missing`, searches the folder recursively for a file with the same name, then the same size, and relinks it when the hash matches ("Find missing clips", projects.md §4). | `Ok`, `count` = clips relinked; `Mismatch`; `Duplicate` (the forced content already is clip `clip`); `BadId`, `BadPath` |
 | 64 | `Reanalyse` | `clip` = id, or 0 = every ready clip; `kIngestThumbs` | Runs the analysis again, for example after new rules. The clip **stays playable** and keeps its `ready_order`, so there is no duplicate catalog entry. Meanwhile the row shows `analysing`; then it turns `ready` with the new tags and `ready_seq` bumps. The HAP file is not converted again. | `Accepted`, `count` = rows queued; `BadId` |
 | 65 | `Retry` | `clip` = id, or 0 = every failed clip | Queues a `failed` clip again from the start. | `Accepted`, `count`; `BadId` (not failed) |
-| 66 | `Mode` | `i` = `IngestModeRequest`: 0 auto, 1 full, 2 background, 3 hold | Auto (the default) = background while a show runs. Full = full speed even during a show; the GUI should warn that this is not show-safe. Hold = start no new work and suspend the running ffmpeg; any other mode resumes. The mode is not stored, so a restarted worker is in Auto. `LibraryBlock::mode` shows the result (4 = hold). | `Ok`; `BadValue` |
+| 66 | `Mode` | `i` = `IngestModeRequest`: 0 auto, 1 full, 2 background, 3 hold | Auto (the default) = background while a show runs. Full = full speed even during a show; the GUI should warn that this is not show-safe. Hold = start no new work and suspend the running ffmpeg; any other mode resumes. v3: **the mode is stored in the DB** (`meta.mode`) and a restarted worker starts in it (a stored Hold stays on hold); `LibraryBlock::stored_mode` shows it. `LibraryBlock::mode` shows the result (4 = hold). | `Ok`; `BadValue` |
 | 67 | `Unwatch` | `path` = a folder | Removes a folder that was added with `Import` + `kIngestWatch`. Its clips stay in the library. The default `originals/` folder and `--watch` folders cannot be removed. | `Ok`; `BadPath` (not in the list) |
-| 68–69 | free | | (stars / tags, Prepare Show priority) | |
+| 68 | `ClearQueue` | — | v3, §11.3 | `Ok`, `count` = clips taken out of the queue |
+| 69 | `Library` | `path` = a folder; `kIngestMove`, `kIngestForce` | v3, §11.5 | `Accepted` (a move runs), `Ok`, `NoSpace`, `Busy`, `BadPath` |
 
 ### 10.4 `IngestReply` (128 bytes)
 
 | Field | Meaning |
 |---|---|
 | `seq`, `type` | the command's |
-| `status` | `IngestStatus`: 0 `Ok` (done), 1 `Accepted` (queued; follow the rows in the DB and `job`), 2 `UnknownType`, 3 `BadId`, 4 `BadPath`, 5 `Mismatch`, 6 `Duplicate`, 7 `Failed`, 8 `Interrupted`, 9 `BadValue` |
+| `status` | `IngestStatus`: 0 `Ok` (done), 1 `Accepted` (queued; follow the rows in the DB and `job`), 2 `UnknownType`, 3 `BadId`, 4 `BadPath`, 5 `Mismatch`, 6 `Duplicate`, 7 `Failed`, 8 `Interrupted`, 9 `BadValue`; v3: 10 `NoSpace`, 11 `Busy` |
 | `count` | rows changed / queued / relinked |
 | `clip` | the clip it is about (`Duplicate`: the clip that already has this content) |
 | `message` | one English line for a toast and the log, e.g. `relinked 3 of 5 missing clips` |
@@ -323,3 +328,174 @@ Every command gets exactly one reply. After a command that changed rows,
 under `%TEMP%` (deleted afterwards; never `Documents`). It uses an in-memory
 block (not the shared one), needs no ffmpeg, and prints `SELFTEST PASS`. `library_tests.exe`
 covers the command logic (`ingest_ops`) for each command.
+
+## 11. Version 3 (wave 7): disk guard, stored mode, progress, options, location
+
+Why: on 2026-11-17 the owner imported 89 AI videos (1080p, 24 / 30 fps) with
+7.3 GB free on C:. The 86 new clips needed about 17 GB of HAP, and nothing
+warned or stopped it. Hold had to be set by hand, it was not stored, and the
+queue had to be emptied one clip at a time. Header: `library_block.h`. The v3
+fields come after `channels`. `IngestCommand::reserved` is now `conform_hz`;
+old producers leave it at 0, which means off.
+
+### 11.1 The disk guard
+
+- **Estimate.** A new clip's HAP size is `w × h × frames × bytes per pixel`
+  of the *output*. The output size is taken after the size options and after
+  rounding to a multiple of 4, and frames after a frame-rate conform.
+  - **HAP: 0.5 byte / px. HAP Q and HAP Alpha: 1 byte / px.** Add 64 KB for
+    the thumbnails and the sidecar.
+  - Width, height, fps and duration come from a quick `ffprobe` per file at
+    Import time (no frame count). A still counts one frame plus its PNG
+    (`w × h × 4`).
+  - Measured on the owner's 14 clips: HAP is really 0.33 byte / px, so the
+    estimate errs on the safe side. GUESS (high): Snappy saves less on noisy
+    footage.
+- **The reserve** is the space the guard always leaves free on the library's
+  disk: `max(10 GB, 10 % of the disk)` by default. `--reserve-gb N` overrides it.
+- **At Import.** If `free − (what the queue still needs) − (this import) <
+  reserve`, the Import is **refused** with `NoSpace` and nothing is queued.
+  - The reply message and the `plan` section give the space needed, the space
+    free and how many clips would fit, e.g. `needs ~17.2 GB for 86 clips;
+    7.3 GB free, 10.0 GB kept free; 0 fit`.
+  - `kIngestFit` queues the clips that fit, in the order found, and leaves out
+    the rest. Reply `Accepted`, `count` = queued.
+  - `kIngestDryRun` only fills `plan` and replies `Ok`. Nothing is queued or
+    refused.
+  - The watch-folder scan uses the same check. A file that does not fit is not
+    queued and is logged once. It is tried again on the next Rescan or when
+    the worker restarts.
+- **While running.**
+  - Before each file the worker checks that the file's own estimate still fits
+    above the reserve. If it does not, the worker sets `disk_low = 1`, logs
+    "disk low", keeps the clip `queued` and waits. It checks again every 2 s;
+    Clear queue, Remove, a move or more free space let it go on.
+  - During a conversion it checks the free space every 0.5 s. If the free space
+    falls below the reserve (something else filled the disk), **the conversion
+    stops, its `work/` file is deleted and the clip goes back to `queued`**.
+    There is never a half file, and lack of space never marks a clip `failed`.
+  - An ffmpeg "No space left on device" is handled the same way.
+- **The block** shows `disk_free`, `disk_total`, `disk_reserve`,
+  `library_bytes` (hap/, stills/, thumbs/, meta/ and the DB; counted at start,
+  then kept up to date) and `queue_bytes` (what the queue still needs).
+
+### 11.2 The stored mode
+
+`Mode` (66) stores its value in `meta.mode` (`auto`, `full`, `background`,
+`hold`). A worker that starts reads it, whether after a crash, a restart of
+Himmel, or with `--once`. So **Hold survives a restart**. `--mode` on the
+command line is used only while the stored mode is Auto. `stored_mode` shows
+the value.
+
+### 11.3 `ClearQueue` (68)
+
+- Every row that is `queued`, `probing`, `converting` or `analysing` and has
+  **never been ready** becomes `removed`. That is a tombstone (§10): the scan
+  does not import it again, and an explicit Import brings it back. Its partial
+  files are deleted.
+- The running conversion of such a clip is cancelled, as with Remove.
+- A ready clip that is only being re-analysed goes back to `ready` with its old
+  analysis.
+- `ready` and `failed` rows are not touched.
+- Reply `Ok`, `count` = rows taken out, message `cleared 72 clips from the queue`.
+
+### 11.4 Import options (60, v3)
+
+| Field | Meaning |
+|---|---|
+| `i` | The largest output height. 0 = keep the source size (default); 720 = "1080p → 720p". The width follows the aspect ratio, both are rounded down to a multiple of 4, and a clip is never scaled up. Allowed: 0 or 144–4320, else `BadValue` |
+| `flags & kIngestHapQ` | HAP Q (better colour, about 2 × the disk) instead of HAP. A source with alpha is always HAP Alpha |
+| `conform_hz` | 0 = off (default). 50 / 60 = conform the frame rate to that refresh (§11.6). Anything else is `BadValue` |
+| `flags & kIngestSkipKnown` | Content already in the library is skipped, **removed clips too**. Without it, an Import brings a removed clip back (§10) |
+| `flags & kIngestList` | "Import only this selection": `path` is a UTF-8 text file with one absolute path per line (files or folders; `#` comments and blank lines are ignored; at most 10 000 lines). The GUI writes it to `%TEMP%` |
+| `flags & kIngestDryRun` | Estimate only (§11.1) |
+| `flags & kIngestFit` | Queue what fits instead of refusing (§11.1) |
+
+- The options are stored with each clip (sidecar key `"import"`, which is also
+  in the DB's `sidecar` column, so no new column). A resumed import after a
+  restart uses the same options.
+- A clip that is already in the library keeps its files; the options apply to
+  new clips only.
+- With no options, the defaults are as in v2 (`--quality` and the source size).
+
+### 11.5 `Library` (69): where the library lives
+
+- **Saved location.** `Documents\Himmel\library-location.json`
+  (`{"format": "himmel-library-location/1", "root": "E:\\Himmel Library"}`) is
+  read by `default_library_root()`. So the supervisor, the renderer, the GUI
+  bridge and the worker all open the same folder at their next start.
+  - The file is written only when the worker runs on the default library (no
+    `--library`).
+  - With `--library DIR` (tests), a switch or a move lasts for this run only,
+    and a move leaves a redirect in `DIR` (see below).
+- **Switch** (`kIngestMove` not set): the worker closes the DB and opens or
+  creates the library in `path`.
+  - If `path` already holds a library, `kIngestForce` is needed; without it the
+    reply is `BadPath`, "there is already a library there".
+  - The block's `root` changes, `root_seq` moves and `ready_seq` bumps.
+- **Move** (`kIngestMove`): needs an empty or missing folder on a disk with room
+  for the library plus the reserve, else `NoSpace`. Reply `Accepted`; the move
+  runs on the worker:
+  1. The queue is held and the DB is checkpointed.
+  2. Every file is copied to `<path>`. Progress is in `root`: `move_state`,
+     `move_progress` and the bytes.
+  3. Sizes are compared.
+  4. The worker switches to the new folder and saves the location.
+  - **The old copy is not deleted while the renderer that loaded it still
+    runs**, because its catalog has the old paths. It is deleted at the first
+    scan after that renderer restarted or stopped.
+  - A file `himmel-library-moved.json` (`{"to": "<path>"}`) is left in the old
+    folder, so a process started with `--library <old>` finds the new one
+    (`resolve_library_root()`; the redirect wins even before the old copy is
+    deleted).
+  - A failed copy deletes the half copy and keeps the old library
+    (`move_state` = Failed, with the reason).
+  - While a move runs, Import, Remove, Relink, ClearQueue and Library reply
+    `Busy`.
+- **Readers follow `root`.**
+  - The renderer's feed reopens the DB in the new folder when `root_seq`
+    changes. A move keeps the same DB, so no clip is added twice; a switch to
+    another library appends that library's ready clips.
+  - The GUI bridge should open the DB and the thumbnails under `root.path`, not
+    under the folder it was started with.
+
+### 11.6 Judder and frame-rate conform
+
+PROPOSED (D181, with ENGINE); see `docs/decisions.md`. In short:
+- 30 fps on 60 Hz and 25 fps on 50 Hz are already smooth (each frame shows for
+  2 refreshes) and need nothing. `judder` still lists every refresh a clip
+  judders on; the GUI should badge only the show's own refresh.
+- For 24 / 25 fps clips on 60 Hz, the conform option renders a 60 fps HAP with
+  blended in-between frames (ffmpeg `framerate` filter). It is smooth, costs
+  2.5 × the disk, and is done once at import. Conform is off by default.
+
+### 11.7 Progress
+
+`progress` (seqlock `progress_seq`) holds:
+- `done` of `total` files in this batch, and the current `file` and `clip`;
+- `file_progress` 0..1 over all stages: probe 2 %, convert 80 %, thumbnails
+  3 %, analysis 15 %. The convert part follows ffmpeg's frame counter;
+- `eta_s`: the work left (the queue's estimated bytes plus the rest of the
+  current file) divided by the speed so far in estimated bytes per second
+  (−1 until the first file is done; 0 when the queue is empty);
+- `bytes_written`;
+- the last failed clip and its error **in plain words**. The same sentence
+  goes in the clip's `error` column; the technical detail stays in
+  `ingest.log`.
+
+`job` (§6) is still written as before.
+
+### 11.8 Testing
+
+- `library_tests` covers the guard with a fake small disk, the stored mode,
+  Clear queue, the progress and ETA maths, and the options.
+- `himmel_ingest --selftest` runs them against a temp library.
+- `himmel_ingest --send import PATH [dry] [fit] [720 | max=H] [hapq] [skip]
+  [conform50 | conform60]`, `--send import-list FILE ...`, `--send clear` and
+  `--send library DIR [move] [force]` talk to a running worker;
+  `--send progress` prints the v3 block fields (disk, progress, last plan,
+  library folder).
+- Test only: the environment variable `HIMMEL_LIBRARY_SHM=<name>` gives a
+  `himmel_ingest` (worker and `--send`) its own block `Local\<name>`, so a
+  temp-library check can run while another Himmel stack owns
+  `Local\HimmelLibrary`. Nothing else reads that block.

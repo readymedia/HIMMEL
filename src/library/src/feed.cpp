@@ -17,16 +17,19 @@
 
 #include "himmel/library/library_block.h"
 #include "himmel/library/library_db.h"
+#include "himmel/library/location.h"
 
 namespace himmel::library {
 
 std::filesystem::path default_library_root() {
+    // v3 (D182): the location saved by the Library command wins, then moved-library redirects.
+    if (auto saved = read_location(location_file()); !saved.empty()) return resolve_library_root(saved);
     PWSTR docs = nullptr;
     std::filesystem::path p;
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Documents, 0, nullptr, &docs)) && docs) p = docs;
     CoTaskMemFree(docs);
     if (p.empty()) p = std::filesystem::temp_directory_path();
-    return p / "Himmel" / "Library";
+    return resolve_library_root(p / "Himmel" / "Library");
 }
 
 namespace {
@@ -75,6 +78,10 @@ int LibraryFeed::poll_once() {
         std::error_code ec;
         const auto file = root_ / kDbFile;
         if (!std::filesystem::exists(file, ec) || !db->open(file, true)) return 0;
+        // v3: a library with another uid (a switch, not a move) starts the cursor again.
+        const std::string uid = db->meta_get("uid");
+        if (!uid_.empty() && uid != uid_) last_order_ = 0;
+        uid_ = uid;
     }
     polls.fetch_add(1, std::memory_order_relaxed);
     int made = 0;
@@ -99,7 +106,7 @@ int LibraryFeed::poll_once() {
 }
 
 int LibraryFeed::load_initial(const std::filesystem::path& root, ClipTable& table) {
-    root_ = root;
+    root_ = resolve_library_root(root);  // v3: a moved library left a redirect (D182)
     table_ = &table;
     int total = 0;
     for (int made; (made = poll_once()) > 0;) total += made;
@@ -117,6 +124,7 @@ void LibraryFeed::run(int poll_ms) {
     HANDLE map = nullptr;
     LibraryBlock* blk = nullptr;
     uint64_t seen_seq = 0;
+    uint32_t seen_root = 0;
     ULONGLONG next_poll = 0;
     while (!stop_.load()) {
         if (!blk) {
@@ -131,6 +139,25 @@ void LibraryFeed::run(int poll_ms) {
             const uint64_t s = blk->ready_seq.load(std::memory_order_acquire);
             if (s != seen_seq) seen_seq = s, due = true;
             blk->catalog_full.store(catalog_full.load(std::memory_order_relaxed), std::memory_order_relaxed);
+            // v3 (library-db.md §11.5): follow the library folder when the worker switches or moves it.
+            if (blk->header.version >= 3) {
+                const uint32_t rs = blk->root_seq.load(std::memory_order_acquire);
+                if (rs != seen_root && !(rs & 1)) {
+                    LibraryRoot lr;
+                    if (protocol::seq_read(blk->root_seq, blk->root, lr)) {
+                        seen_root = rs;
+                        lr.path[sizeof(lr.path) - 1] = 0;
+                        const std::string u8 = lr.path;
+                        const std::filesystem::path np(std::u8string(u8.begin(), u8.end()));
+                        if (!u8.empty() && np != root_) {
+                            if (auto* db = static_cast<LibraryDb*>(db_)) db->close();
+                            root_ = np;
+                            root_changes.fetch_add(1, std::memory_order_relaxed);
+                            due = true;
+                        }
+                    }
+                }
+            }
         }
         if (due) {
             int made;
