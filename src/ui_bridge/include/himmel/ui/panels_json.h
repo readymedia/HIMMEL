@@ -83,4 +83,11 @@ std::vector<float> downsample_curve(const std::vector<float>& curve, int n);
 // Returns {"ok": false, "error"} for anything that is not a himmel-show/1 document.
 nlohmann::json show_doc_for_page(const nlohmann::json& doc);
 
+// POST /library/cmd (MEDIA, library-db.md §10): {"type": "Import" | "Rescan" | "Remove" | "Relink" |
+// "Reanalyse" | "Retry" | "Mode" | "Unwatch", "clip": library id (0 = all), "path": absolute,
+// "watch" / "force" / "thumbs": true, "mode": "Auto" | "Full" | "Background" | "Hold"} -> an IngestCommand
+// (seq is stamped when it is pushed). False with `error` for anything the worker would refuse anyway.
+bool ingest_command_from_json(const nlohmann::json& j, library::IngestCommand& c, std::string& error);
+nlohmann::json ingest_reply_to_json(const library::IngestReply& r);
+
 }  // namespace himmel::ui

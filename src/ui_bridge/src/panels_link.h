@@ -49,4 +49,8 @@ std::string panels_library_root();
 // is older or missing. Read-only; {"ok": false, "error"} when there is no show block or project.
 nlohmann::json panels_show_document();
 
+// POST /library/cmd (MEDIA, library-db.md §10): one ingest command into the GUI's channel of the
+// library block. {"ok": true, "seq"} when queued; the reply comes back in the "library" event ("cmd").
+nlohmann::json panels_ingest_command(const nlohmann::json& body);
+
 }  // namespace himmel::ui

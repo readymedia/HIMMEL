@@ -77,7 +77,9 @@ struct Panels {
     Link audio{audio::kBlockName, sizeof(audio::AudioBlock), audio::kMagic, audio::kVersion, true, {}};
     Link osc{osc::kOscShmName, sizeof(osc::OscBlock), osc::kOscMagic, osc::kOscVersion, false, {}};
     Link library{library::kLibraryShmName, sizeof(library::LibraryBlock), library::kLibraryMagic,
-                 library::kLibraryVersion, false, {}};
+                 library::kLibraryVersion, true, {}};   // v2: the bridge writes its ingest command channel (Gui = 1)
+    uint32_t ingest_seq = 0;        // the bridge's running ingest seq (under write_m)
+    json ingest_replies = json::array();   // the last replies, newest first (under write_m)
     std::mutex write_m;        // the bridge's own writes (text box, audio config): one writer
     uint64_t weapon_beat[weapon::kMaxSlots + 1] = {};   // last heartbeat per weapon slot (alive = it moved in 1 s)
 
@@ -100,7 +102,7 @@ void panels_init(bool watch, const fs::path& library_root, const fs::path& exe_d
     g->watch = watch;
     g->library_root = library_root;
     g->exe_dir = exe_dir;
-    if (watch) g->show.writable = g->audio.writable = false;
+    if (watch) g->show.writable = g->audio.writable = g->library.writable = false;
 }
 
 void panels_close() {
@@ -198,6 +200,21 @@ PanelJson panels_poll(uint64_t now_us, bool retry) {
         if (!seq_read(b->job_seq, b->job, job)) job = library::IngestJob{};
         json j = library_block_to_json(c, job);
         j["alive"] = g->library.alive(b->heartbeat_us.load(std::memory_order_acquire), now);
+        // v2: the ingest replies to this bridge (the GUI slot); drained here, kept for the page.
+        {
+            std::lock_guard wl(g->write_m);
+            if (g->library.writable) {
+                auto& ch = const_cast<library::LibraryBlock*>(b)->channels[static_cast<int>(Producer::Gui)];
+                library::IngestReply rep{};
+                while (ch.replies.pop(rep)) {
+                    g->ingest_replies.insert(g->ingest_replies.begin(), ingest_reply_to_json(rep));
+                    if (g->ingest_replies.size() > 8) g->ingest_replies.erase(g->ingest_replies.end() - 1);
+                }
+                j["cmd"] = {{"sent", g->ingest_seq}, {"done", ch.done_seq.load()}, {"rejected", ch.rejected.load()},
+                            {"applying", ch.applying_seq.load()}, {"replies", g->ingest_replies}};
+            }
+            j["writable"] = g->library.writable;
+        }
         j["root"] = utf8(g->library_root);
         out.library = dump(j);
     } else {
@@ -431,6 +448,26 @@ fs::file_time_type mtime(const fs::path& p) {
     return ec ? fs::file_time_type::min() : t;
 }
 }  // namespace
+
+json panels_ingest_command(const json& body) {
+    if (!g) return {{"ok", false}, {"error", "not started"}};
+    library::IngestCommand c;
+    std::string err;
+    if (!ingest_command_from_json(body, c, err)) return {{"ok", false}, {"error", err}};
+    std::shared_lock vl(g->views);
+    if (!g->library.writable) return {{"ok", false}, {"error", "read-only bridge (--watch)"}};
+    if (g->library.st != ShmStatus::Ok) return {{"ok", false}, {"error", "the import worker is not running (no library block v2)"}};
+    auto* b = g->library.view.as<library::LibraryBlock>();
+    // library-db.md §10.1: no live worker (heartbeat older than 2 s) = do not send.
+    const uint64_t beat = b->heartbeat_us.load(std::memory_order_acquire);
+    if (!g->library.seen || steady_us() - g->library.beat_seen_us > 2000000 || beat == 0)
+        return {{"ok", false}, {"error", "the import worker does not answer (no heartbeat for 2 s)"}};
+    std::lock_guard wl(g->write_m);
+    const uint32_t seq = ++g->ingest_seq;
+    if (!library::push_ingest(b->channels[static_cast<int>(Producer::Gui)], c, seq, GetCurrentProcessId(), steady_us()))
+        return {{"ok", false}, {"error", "the import worker's queue is full, try again"}};
+    return {{"ok", true}, {"seq", seq}};
+}
 
 json panels_show_document() {
     if (!g) return {{"ok", false}, {"error", "not started"}};

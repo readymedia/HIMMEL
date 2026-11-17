@@ -94,3 +94,37 @@ button.bad { color: var(--live); }
 
 /* The BUILD tab makes the top bar ~20 px wider: tighten the view tabs a little so BLACK stays on screen. */
 @media (max-width: 1700px) { #viewTabs button { padding: 0 6px; } #fpsChip { display: none; } }
+
+/* ---- the reaction ear + knob ghost + editor (gui/react.js, AUDIO D131) ---- */
+.prm.hasear { position: relative; grid-template-columns: 62px 1fr 30px 20px; }
+.ear { min-height: 18px; height: 18px; width: 20px; padding: 0; font: 900 12px var(--mono); border-radius: 9px; color: var(--text-dim); background: transparent; border: 1px solid var(--line); flex: none;
+  box-shadow: 0 0 calc(var(--env, 0) * 10px) calc(var(--env, 0) * 2px) #30d15899; }
+.ear.dflt { color: var(--text); border-color: var(--text-dim); }
+.ear.custom { color: #000; background: var(--preview); border-color: var(--preview); }
+.ear.off { text-decoration: line-through; opacity: .6; }
+.kghost { position: absolute; top: 3px; bottom: 3px; width: 2px; margin-left: -1px; background: var(--preview); border-radius: 1px; pointer-events: none; opacity: .85; }
+.rxbox { width: min(1040px, 96vw); }
+.rxtitle { font-weight: 800; }
+.rxbody { display: grid; grid-template-columns: 190px 340px 1fr; gap: 12px; padding: 10px; overflow: auto; }
+@media (max-width: 900px) { .rxbody { grid-template-columns: 1fr; } }
+.rxsigs { display: flex; flex-direction: column; gap: 2px; }
+.rxsig { display: grid; grid-template-columns: 70px 1fr; align-items: center; gap: 6px; min-height: 22px; font-size: 11px; font-weight: 700; text-align: left; background: transparent; border-color: transparent; }
+.rxsig.on { border-color: var(--preview); background: var(--panel-2); }
+.rxm { height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+.rxm i { display: block; height: 100%; background: var(--preview); }
+.rxgraph { width: 320px; height: 200px; border-radius: 6px; border: 1px solid var(--line); }
+.rxnote { font-size: 11px; margin-top: 4px; }
+.rxctl { display: flex; flex-direction: column; gap: 8px; }
+.rxsl { display: grid; grid-template-columns: 70px 1fr 70px; align-items: center; gap: 6px; }
+.rxrange { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.rxrange input { width: 110px; }
+.rxtrig { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--line); padding-top: 6px; }
+.rxtrig.dimmed { opacity: .5; }
+
+/* ---- LIBRARY: ingest commands (MEDIA, library-db.md §10) ---- */
+.lbacts { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.lbacts button:disabled, .lbacts select:disabled, .lbcardacts button:disabled { opacity: .45; cursor: not-allowed; }
+.lbreply { font-size: 11px; max-width: 520px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lbreply.bad { color: var(--live); }
+.lbcardacts { display: flex; gap: 3px; flex-wrap: wrap; margin-top: 4px; }
+.lbcardacts button { min-height: 20px; padding: 0 5px; font-size: 10px; }

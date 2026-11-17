@@ -12,7 +12,7 @@
 //   GET  /state        everything as one JSON (debugging)
 //   M11 part 2 (optional blocks, panel hidden when missing): SSE "show", "outputs", "audio", "osc",
 //   "library"; GET /audio/devices, POST /audio/config, GET /library/clips, GET /library/thumb/<file>
-//   M11 part 3: GET /show/document (kits, macros, songs for the BUILD view)
+//   M11 part 3: GET /show/document (kits, macros, songs for the BUILD view), POST /library/cmd (ingest commands)
 //
 // Rules (docs/interfaces/*.md, gui.md §1.5): the bridge never blocks the
 // engine and never takes it down. Engine absent / restarted / wrong version
@@ -91,8 +91,9 @@ struct Hub {
     std::string live, catalog, bridge, transport, mk2;
     uint64_t live_ver = 0, catalog_ver = 0, bridge_ver = 0, transport_ver = 0, mk2_ver = 0;
     // M11 part 2: the optional panels, sent as SSE events of these names.
-    static constexpr int kExtra = 6;
-    static constexpr const char* kExtraNames[kExtra] = {"show", "outputs", "audio", "osc", "library", "weapons"};
+    static constexpr int kExtra = 8;
+    // "react" = the reaction table's settings (sent when its gen changes), "reactlive" = [env, value] per knob (~15 Hz).
+    static constexpr const char* kExtraNames[kExtra] = {"show", "outputs", "audio", "osc", "library", "weapons", "react", "reactlive"};
     std::string extra[kExtra];
     uint64_t extra_ver[kExtra] = {};
 
@@ -312,6 +313,10 @@ void poller() {
     auto live = std::make_unique<LiveState>();
     auto cat = std::make_unique<Catalog>();
     auto trans = std::make_unique<TransportSection>();
+    auto react = std::make_unique<ReactionSection>();
+    uint32_t last_react_gen = ~0u;
+    uint32_t last_react_epoch = ~0u;
+    auto last_react_live = std::chrono::steady_clock::time_point{};
     uint64_t frame = 0;
     float fps = 0;
     uint32_t engine_pid = 0;
@@ -395,6 +400,16 @@ void poller() {
                         tj["clock"]["beat"] = himmel::ui::clock_to_json(trans->clock, now_us())["beat"];
                         g_hub.set(g_hub.transport, g_hub.transport_ver, dump(tj));
                     }
+                    // State v3 (AUDIO, D131): the reaction table. Settings when gen moved, live values ~15 Hz.
+                    if (now - last_react_live >= std::chrono::milliseconds(66) && seq_read(sb->react_seq, sb->react, *react)) {
+                        last_react_live = now;
+                        if (react->gen != last_react_gen || live->epoch != last_react_epoch) {
+                            last_react_gen = react->gen;
+                            last_react_epoch = live->epoch;
+                            g_hub.set(g_hub.extra[6], g_hub.extra_ver[6], dump(himmel::ui::react_to_json(*react, false)));
+                        }
+                        g_hub.set(g_hub.extra[7], g_hub.extra_ver[7], dump(himmel::ui::react_to_json(*react, true)));
+                    }
                     const uint32_t cs = sb->catalog_seq.load(std::memory_order_acquire);
                     if (cs != last_catalog_seq || live->epoch != last_epoch) {
                         if (seq_read(sb->catalog_seq, sb->catalog, *cat)) {
@@ -421,8 +436,8 @@ void poller() {
             const bool retry = now - last_panel_try >= std::chrono::seconds(1);
             if (retry) last_panel_try = now;
             const himmel::ui::PanelJson pj = himmel::ui::panels_poll(now_us(), retry);
-            const std::string* texts[Hub::kExtra] = {&pj.show, &pj.outputs, &pj.audio, &pj.osc, &pj.library, &pj.weapons};
-            for (int k = 0; k < Hub::kExtra; ++k)
+            const std::string* texts[] = {&pj.show, &pj.outputs, &pj.audio, &pj.osc, &pj.library, &pj.weapons};
+            for (int k = 0; k < static_cast<int>(std::size(texts)); ++k)
                 if (!texts[k]->empty()) g_hub.set(g_hub.extra[k], g_hub.extra_ver[k], *texts[k]);
         }
 
@@ -761,6 +776,16 @@ void connection(SOCKET s) {
                 ok = respond(s, 200, "OK", "application/json",
                              dump(cfg_in.is_discarded() ? json{{"ok", false}, {"error", "the body is not valid JSON"}}
                                                     : himmel::ui::panels_audio_config(cfg_in)),
+                             keep);
+            }
+        } else if (req.method == "POST" && req.path == "/library/cmd") {
+            if (req.content_type.find("application/json") != 0) {
+                ok = respond(s, 415, "Unsupported Media Type", "text/plain", "send application/json", keep);
+            } else {
+                const json cj = json::parse(body, nullptr, false);
+                ok = respond(s, 200, "OK", "application/json",
+                             dump(cj.is_discarded() ? json{{"ok", false}, {"error", "the body is not valid JSON"}}
+                                                    : himmel::ui::panels_ingest_command(cj)),
                              keep);
             }
         } else if (req.method == "GET" && req.path == "/show/document") {

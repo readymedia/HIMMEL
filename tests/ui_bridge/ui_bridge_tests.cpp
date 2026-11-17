@@ -727,6 +727,95 @@ static void test_part3() {
     CHECK(r.ok && r.cmd.i == 128);
     r = P(R"({"type":"Project","param":"New","value":3})");
     CHECK(r.ok && r.cmd.i == 3);
+
+    // FxReact (AUDIO D131, command 40): the reaction editor's commands.
+    r = P(R"({"type":"FxReact","deck":1,"layer":2,"slot":0,"param":1,"op":"Set","signal":"Kick","mode":"Trigger","curve":"Soft","quantise":"Quarter","hold":4,"f":[0.6,5,300,0.2]})");
+    CHECK(r.ok && r.cmd.type == CommandType::FxReact && r.cmd.deck == 1 && r.cmd.layer == 2 && r.cmd.slot == 0 && r.cmd.param == 1);
+    {
+        const ReactArgs a = unpack_react(r.cmd.i);
+        CHECK(a.op == ReactOp::Set && a.signal == ReactSignal::Kick && a.mode == ReactMode::Trigger && a.curve == ReactCurve::Soft &&
+              a.quantise == ReactQuantise::Quarter && a.hold_q == 4 && react_args_ok(r.cmd.i));
+        CHECK(r.cmd.f[0] == 0.6f && r.cmd.f[1] == 5.0f && r.cmd.f[2] == 300.0f && r.cmd.f[3] == 0.2f);
+    }
+    r = P(R"({"type":"FxReact","deck":"master","slot":2,"param":0,"op":"Set","signal":"Bass","f":[2,9999,-5,3]})");   // clamped
+    CHECK(r.ok && r.cmd.deck == kMasterDeck && r.cmd.layer == kNone && r.cmd.f[0] == 1.0f && r.cmd.f[1] == kReactMaxMs &&
+          r.cmd.f[2] == 0.0f && r.cmd.f[3] == 1.0f);
+    r = P(R"({"type":"FxReact","deck":0,"slot":1,"param":3,"op":"Amount","f":-0.1,"relative":true})");
+    CHECK(r.ok && (r.cmd.flags & kRelative) && unpack_react(r.cmd.i).op == ReactOp::Amount && r.cmd.f[0] == -0.1f);
+    r = P(R"({"type":"FxReact","deck":0,"layer":0,"slot":0,"param":0,"op":"Range","f":[0.8,0.2]})");
+    CHECK(r.ok && r.cmd.f[0] == 0.8f && r.cmd.f[1] == 0.2f);
+    r = P(R"({"type":"FxReact","deck":0,"layer":0,"slot":0,"param":0,"op":"Range","f":[-1,0]})");
+    CHECK(r.ok && r.cmd.f[0] < 0);
+    r = P(R"({"type":"FxReact","deck":0,"layer":0,"slot":0,"op":"Default"})");
+    CHECK(r.ok && r.cmd.param == kNone && unpack_react(r.cmd.i).op == ReactOp::Default);
+    r = P(R"({"type":"FxReact","deck":0,"layer":0,"slot":0,"param":2,"op":"Off"})");
+    CHECK(r.ok && r.cmd.param == 2);
+    r = P(R"({"type":"FxReact","deck":0,"layer":0,"slot":0,"param":2,"op":"Signal","signal":"Drop"})");
+    CHECK(r.ok && unpack_react(r.cmd.i).signal == ReactSignal::Drop);
+    CHECK(!P(R"({"type":"FxReact","deck":0,"slot":0,"op":"Set","signal":"Kick","f":[1,1,1,1]})").ok);   // Set needs a knob
+    CHECK(!P(R"({"type":"FxReact","deck":0,"slot":0,"param":4,"op":"Off"})").ok);
+    CHECK(!P(R"({"type":"FxReact","deck":0,"slot":0,"param":0,"op":"Set","signal":"Kick","f":[1,1]})").ok);   // 4 numbers
+    CHECK(!P(R"({"type":"FxReact","deck":0,"slot":0,"param":0,"op":"Signal"})").ok);
+    CHECK(!P(R"({"type":"FxReact","deck":0,"slot":0,"param":0,"op":"Set","signal":"Wobble","f":[1,1,1,1]})").ok);
+    CHECK(!P(R"({"type":"FxReact","deck":0,"slot":0,"param":0,"op":"Set","hold":17,"f":[1,1,1,1]})").ok);
+    CHECK(!P(R"({"type":"FxReact","deck":0,"slot":0,"param":0,"op":"Range","f":[0.1,0.2],"relative":true})").ok);
+    CHECK(!P(R"({"type":"FxReact","deck":0,"slot":0,"param":0,"op":"Nope"})").ok);
+    {
+        json cj = command_to_json(P(R"({"type":"FxReact","deck":1,"layer":2,"slot":0,"param":1,"op":"Set","signal":"Kick","f":[0.6,5,300,0.2]})").cmd);
+        CHECK(cj["op"] == "Set" && cj["signal"] == "Kick" && cj["param"] == 1 && cj["slot"] == 0);
+    }
+    {
+        auto rs = std::make_unique<ReactionSection>();
+        std::memset(rs.get(), 0, sizeof(ReactionSection));
+        rs->gen = 7;
+        ReactionEntry& e = rs->layer[1][2][0].p[1];
+        e.source = static_cast<uint8_t>(ReactSource::Custom);
+        e.signal = static_cast<uint8_t>(ReactSignal::Kick);
+        e.amount = 0.6f;
+        e.range_hi = 1.0f;
+        e.env = 0.25f;
+        e.value = 0.5f;
+        json rj = react_to_json(*rs, false);
+        CHECK(rj["gen"] == 7 && rj["layer"].size() == 2 && rj["layer"][1].size() == 4 && rj["layer"][1][2].size() == 4);
+        CHECK(rj["layer"][1][2][0][1]["signal"] == "Kick" && rj["layer"][1][2][0][1]["source"] == "Custom" &&
+              rj["layer"][1][2][0][1]["amount"] == 0.6);
+        CHECK(rj["deck"][0].size() == 4 && rj["master"].size() == 4 && rj["master"][0][0]["signal"] == "None");
+        json lj = react_to_json(*rs, true);
+        CHECK(lj["layer"][1][2][0][1][0] == 0.25 && lj["layer"][1][2][0][1][1] == 0.5);
+    }
+
+    // MEDIA ingest commands (library-db.md §10): the LIBRARY view's buttons.
+    {
+        namespace lib = himmel::library;
+        lib::IngestCommand ic;
+        std::string err;
+        CHECK(ingest_command_from_json(json{{"type", "Import"}, {"path", "D:\\Clips\\Set 1"}, {"watch", true}}, ic, err));
+        CHECK(ic.type == static_cast<uint16_t>(lib::IngestCommandType::Import) && (ic.flags & lib::kIngestWatch) &&
+              std::string(ic.path) == "D:\\Clips\\Set 1" && ic.clip == 0);
+        CHECK(ingest_command_from_json(json{{"type", "rescan"}}, ic, err) && ic.type == 61 && ic.clip == 0);
+        CHECK(ingest_command_from_json(json{{"type", "Remove"}, {"clip", 42}}, ic, err) && ic.type == 62 && ic.clip == 42);
+        CHECK(ingest_command_from_json(json{{"type", "Relink"}, {"clip", 7}, {"path", "\\\\nas\\v\\a.mov"}, {"force", true}}, ic, err) &&
+              ic.type == 63 && (ic.flags & lib::kIngestForce));
+        CHECK(ingest_command_from_json(json{{"type", "Reanalyse"}, {"clip", 0}, {"thumbs", true}}, ic, err) && (ic.flags & lib::kIngestThumbs));
+        CHECK(ingest_command_from_json(json{{"type", "Retry"}}, ic, err) && ic.type == 65);
+        CHECK(ingest_command_from_json(json{{"type", "Mode"}, {"mode", "Hold"}}, ic, err) && ic.type == 66 && ic.i == 3);
+        CHECK(ingest_command_from_json(json{{"type", "Unwatch"}, {"path", "C:/x"}}, ic, err) && ic.type == 67);
+        CHECK(!ingest_command_from_json(json{{"type", "Import"}}, ic, err));                         // no path
+        CHECK(!ingest_command_from_json(json{{"type", "Import"}, {"path", "relative\\x"}}, ic, err)); // not absolute
+        CHECK(!ingest_command_from_json(json{{"type", "Remove"}}, ic, err));                         // no clip
+        CHECK(!ingest_command_from_json(json{{"type", "Remove"}, {"clip", -3}}, ic, err));
+        CHECK(!ingest_command_from_json(json{{"type", "Mode"}, {"mode", "Turbo"}}, ic, err));
+        CHECK(!ingest_command_from_json(json{{"type", "Delete"}}, ic, err));
+        CHECK(!ingest_command_from_json(json{{"type", "Import"}, {"path", "C:\\" + std::string(1200, 'a')}}, ic, err));
+        lib::IngestReply rep{};
+        rep.seq = 5;
+        rep.type = 62;
+        rep.status = static_cast<uint8_t>(lib::IngestStatus::BadId);
+        rep.clip = 9;
+        std::snprintf(rep.message, sizeof rep.message, "no clip 9");
+        json rj = ingest_reply_to_json(rep);
+        CHECK(rj["seq"] == 5 && rj["type"] == "Remove" && rj["status"] == "BadId" && rj["ok"] == false && rj["message"] == "no clip 9");
+    }
 }
 
 int main() {

@@ -78,7 +78,8 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const clipName = ci => ci.name.replace(/\.mov$/i, '');
 const groupOf = (d, l) => GROUPS[d === progDeck() ? 'prog' : 'prev'][l];
-window.H = { send, sendT, hold, setVal, el, toast: (...a) => toast(...a), invalidate: () => invalidate(), clipInfo, fxInfo, fxMeta, rgb, setTab: t => setTab(t) };
+window.H = { send, sendT, hold, setVal, el, toast: (...a) => toast(...a), invalidate: () => invalidate(), clipInfo, fxInfo, fxMeta, rgb, setTab: t => setTab(t),
+  beatNow: () => (CLK.bpm > 0 ? CLK.beat + (performance.now() - CLK.at) / 60000 * CLK.bpm : 0) };
 
 function toast(msg, kind) {
   const t = el('div', 'toast' + (kind === 'bad' ? ' bad' : ''), msg);
@@ -402,13 +403,15 @@ function renderFxSlots() {
         if (m && m.main && m.main.includes(pm?.id)) name.classList.add('main');
         if (m && m.press && m.press.param === pm?.id) name.classList.add('ptarget');
         row.append(name, inp, pv);
+        // The reaction ear "~" + knob ghost on knobs 1-4 (gui/react.js, AUDIO D131).
+        const rx = p < 4 && window.Reacts ? window.Reacts.attach(row, inp, k, p, fxTarget) : null;
         hold(inp);
         inp.addEventListener('input', () => { pv.textContent = fmtParam(pm, +inp.value); sendT('fx' + k + '/' + p, { type: 'FxParam', ...fxTarget(), slot: k, param: p, value: +inp.value }); });
         inp.addEventListener('dblclick', () => send({ type: 'FxParam', ...fxTarget(), slot: k, param: p, value: info.defaults[p] ?? 0 }));
         inp.title = pn + (pm ? ` (${pm.min}..${pm.max} ${pm.unit || ''})` : '') + ' · double-click = default' +
           (m?.press?.param === pm?.id ? ' · PRESS target' : '') + (m?.main?.includes(pm?.id) ? ' · main param (knobs 1–2)' : '');
         u.params.append(row);
-        u.rows.push({ inp, pv, pm });
+        u.rows.push({ inp, pv, pm, rx });
       });
       if (m && m.presets) {
         for (const pr of m.presets) {
@@ -439,6 +442,7 @@ function renderFxSlots() {
       u.rows.forEach((r, p) => {
         setVal(r.inp, f.param[p]);
         if (performance.now() >= (r.inp._hold || 0)) r.pv.textContent = fmtParam(r.pm, f.param[p]);
+        if (r.rx) r.rx.update();
       });
       u.pressBar.style.width = Math.round((f.press || 0) * 100) + '%';
       const pt = m?.press ? m.params.find(x => x.id === m.press.param) : null;
@@ -1016,6 +1020,7 @@ function render() {
   if (window.Panels) window.Panels.render();
   if (window.Views) window.Views.render();
   if (window.Build) window.Build.render();
+  if (window.Reacts) window.Reacts.update();
   if (S.view !== 'perform' || !S.live || !S.cat) return;
   renderMonitors(); renderStrips(); renderTake(); renderLibrary(); renderInspector(); renderHit();
 }
@@ -1075,6 +1080,9 @@ function connect() {
   for (const name of ['show', 'outputs', 'osc', 'library', 'weapons'])
     es.addEventListener(name, e => { S[name] = JSON.parse(e.data); invalidate(); });
   es.addEventListener('audio', e => { S.audio = JSON.parse(e.data); invalidate(); });
+  // M11 part 3: the reaction table (state v3, AUDIO D131): settings on change, [env, value] per knob ~15 Hz.
+  es.addEventListener('react', e => { S.react = JSON.parse(e.data); invalidate(); });
+  es.addEventListener('reactlive', e => { S.reactlive = JSON.parse(e.data); if (S.view === 'perform') invalidate(); });
   // A bridge that hangs without closing the socket: no "bridge" event for 3 s = offline.
   setInterval(() => { if (S.sse && performance.now() - S.lastBridgeMs > 3000) { S.sse = false; invalidate(); es.close(); setTimeout(connect, 500); } }, 1000);
 }

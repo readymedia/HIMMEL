@@ -55,6 +55,9 @@ nlohmann::json catalog_to_json(const protocol::Catalog& c);
 // the playhead status, the HIT layer. Enums as names (the same names LayerSet accepts).
 // The running beat is left out (it changes every frame); see clock_to_json.
 nlohmann::json transport_to_json(const protocol::TransportSection& t);
+// State v3 (AUDIO, D131): the reaction table. `live_only` = only [env, value] per knob (the ~15 Hz
+// "knob ghost" stream); else every setting per knob (sent when `gen` changes).
+nlohmann::json react_to_json(const protocol::ReactionSection& r, bool live_only);
 // {"beat": the running beat at now_us, extrapolated from the engine's sample}
 nlohmann::json clock_to_json(const protocol::ClockState& c, uint64_t now_us);
 // Every name the page needs to build the transport controls (LayerParam list with kinds and

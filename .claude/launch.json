@@ -33,6 +33,17 @@
       "url": "http://127.0.0.1:8790"
     },
     {
+      "name": "himmel-ui-test",
+      "runtimeExecutable": "build/bin/Release/himmel_ui.exe",
+      "runtimeArgs": [
+        "--port",
+        "8792",
+        "--no-library"
+      ],
+      "port": 8792,
+      "url": "http://127.0.0.1:8792"
+    },
+    {
       "name": "himmel-ui-watch",
       "runtimeExecutable": "build/bin/Release/himmel_ui.exe",
       "runtimeArgs": [
