@@ -21,6 +21,8 @@
 //   --no-ingest: do not start himmel_ingest.exe (the library import, M7). It imports into the
 //          renderer's library (render args --library DIR, or --show-root DIR -> DIR\Library);
 //          with --no-show-files and no --library it is not started (test runs, M7).
+//   --no-osc: do not start himmel_osc.exe (OSC in on UDP 7000, M13). --osc "ARGS": its
+//          arguments, e.g. --osc "--port 9000 --allow 192.168.1.0/24" (default: this PC only).
 //   --legacy: run the parked pre-slice renderer (himmel_render_legacy.exe: test
 //          card, camera, Touch FX, Entrancer) instead of the deck engine.
 //
@@ -347,7 +349,8 @@ int main(int argc, char** argv) {
     g_logfile = _wfsopen((dir / "logs" / name).c_str(), L"a", _SH_DENYWR);
 
     bool with_controller = true, with_ui = true, with_audio = true, legacy = false, with_curtains = true, with_ingest = true;
-    std::wstring render_args, ctl_args, audio_args;
+    bool with_osc = true;  // CONTROL (M13)
+    std::wstring render_args, ctl_args, audio_args, osc_args;
     std::string weapons = "lightpad,lumi,nuvj,apc20";
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -361,6 +364,8 @@ int main(int argc, char** argv) {
         else if (a == "--legacy") legacy = true;
         else if (a == "--no-curtains") with_curtains = false;
         else if (a == "--no-ingest") with_ingest = false;  // MEDIA (M7)
+        else if (a == "--no-osc") with_osc = false;        // CONTROL (M13)
+        else if (a == "--osc" && i + 1 < argc) osc_args = widen(argv[++i]);
         else if (a == "--") {
             for (++i; i < argc; ++i) render_args += widen(argv[i]) + L" ";
         }
@@ -504,6 +509,15 @@ int main(int argc, char** argv) {
     if (with_ingest) children.push_back(&ing);
     else log("ingest: off");
     // ==== end MEDIA hook 2/3 ====
+    // ==== CONTROL (M13): OSC in. Only restarted when it exits (GUESS: like the UI, a hung
+    // himmel_osc cannot hurt the show; it writes its heartbeat in Local\HimmelOsc for the GUI) ====
+    Child osc{"osc", (dir / "himmel_osc.exe").wstring(), osc_args};
+    if (with_osc && !fs::exists(osc.exe, ec)) {
+        log("osc: %s not found - running without OSC in", fs::path(osc.exe).filename().string().c_str());
+        with_osc = false;
+    }
+    if (with_osc) children.push_back(&osc);
+    // ==== end CONTROL (M13) ====
     children.push_back(&ren);
     if (with_ui) children.push_back(&ui);
     // ==== ENGINE (M6): keep the blocks open, curtains ====
