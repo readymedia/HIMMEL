@@ -7,7 +7,9 @@ MK2 end-to-end check (no hardware)
 Plays a simulated MK2 (tools/mk2_sim.py, the same code the live view's
 Simulate button uses) into a running Himmel and checks that the engine's state
 changes, and that the engine's Perform screens and LEDs come back to the panel.
-Then it plays **a whole song from the MK2 alone** (M4) and **measures input ->
+Then it plays **a whole song from the MK2 alone** (M4), the Lightpad (M9), OSC in
+(M13: GO / scenes / macros / BLACK / TAKE over UDP 7000, plus garbage that must
+never reach the engine) and **measures input ->
 glass** (the time from the MK2 report to the output window's pixels changing on
 the composed desktop).
 
@@ -26,6 +28,7 @@ Run (it starts and stops its own stack unless --attach):
   python tools/mk2_e2e.py --runs N        latency samples (default 20)
   python tools/mk2_e2e.py --no-lightpad   no Lightpad (M9) stage, and no weapon drivers
   python tools/mk2_e2e.py --lightpad-only only the Lightpad stage
+  python tools/mk2_e2e.py --no-osc        skip the OSC in (M13) stage (himmel_osc.exe on UDP 7000)
 
 The song needs clips: media/*.mov (python tools/make_test_clips.py makes them).
 --no-show-files: the run never opens or writes the owner's project or autosave.
@@ -519,6 +522,86 @@ def lightpad(bin_dir, sim, check):
         pad.close()
 
 
+# ------------------------------------------------------------------------------------- OSC in (M13)
+def osc_producer(st):
+    m = re.search(r"osc(\*?) ack (\d+) rej (\d+)", st["raw"])
+    return (m.group(1) == "*", int(m.group(2)), int(m.group(3))) if m else (False, 0, 0)
+
+
+def osc(bin_dir, check):
+    """OSC in on UDP 7000 (himmel_osc.exe): GO / scenes / macros / BLACK / TAKE from a lighting desk or
+    Companion, and garbage that must never reach the engine. Run after the song (scenes exist)."""
+    import socket
+
+    def send(*args):
+        r = subprocess.run([os.path.join(bin_dir, "himmel_osc.exe"), "--send"] + [str(a) for a in args],
+                           capture_output=True, text=True, timeout=5)
+        time.sleep(0.15)
+        return r.returncode == 0
+
+    def osc_status():
+        r = subprocess.run([os.path.join(bin_dir, "himmel_osc.exe"), "--status"], capture_output=True, text=True, timeout=5)
+        return r.stdout if r.returncode == 0 else ""
+
+    got = wait_for(lambda: osc_producer(state(bin_dir))[0], timeout=5)
+    check(bool(got), "the engine sees himmel_osc (producer 'osc' alive)")
+    st0 = state(bin_dir)
+    _, _, rej0 = osc_producer(st0)
+    progd = lambda: state(bin_dir)["program"]  # noqa: E731
+    prevd = lambda: "B" if progd() == "A" else "A"  # noqa: E731
+
+    def on_deck(deck, pad):
+        s = show(bin_dir)
+        return s and s["deck"].get(deck, (-1, -1, ""))[1] == pad
+
+    send("/himmel/scene", 2)
+    check(bool(wait_for(lambda: on_deck(progd(), 2), timeout=3)), "/himmel/scene 2: scene 2 live")
+    send("/himmel/go")
+    check(bool(wait_for(lambda: on_deck(progd(), 3), timeout=3)), "/himmel/go: the next scene (3) live")
+    send("/himmel/scene/preview", 1)
+    check(bool(wait_for(lambda: on_deck(prevd(), 1), timeout=3)), "/himmel/scene/preview 1: scene 1 into PREVIEW")
+    send("/himmel/macro/1", 0.25)
+    got = wait_for(lambda: (lambda s: s if s["macros"] and abs(s["macros"][0] - 0.25) < 0.01 else None)(show(bin_dir)))
+    check(bool(got), "/himmel/macro/1 0.25 sets INTENSITY")
+    send("/himmel/black", 1)
+    check(bool(wait_for(lambda: state(bin_dir)["black"], timeout=2)), "/himmel/black 1 = black")
+    send("/himmel/black", 0)
+    check(bool(wait_for(lambda: not state(bin_dir)["black"], timeout=2)), "/himmel/black 0 = picture back")
+    p0 = progd()
+    send("/himmel/take", 500)
+    got = wait_for(lambda: (lambda s: s if s["program"] != p0 and not s["take"] else None)(state(bin_dir)), timeout=4)
+    check(bool(got), "/himmel/take 500: PROGRAM %s -> %s" % (p0, "B" if p0 == "A" else "A"))
+    check(bool(wait_for(lambda: on_deck(progd(), 1), timeout=2)), "the taken PREVIEW scene (1) is live")
+
+    # Garbage and nonsense: random datagrams, a mangled message, an unknown address, bad arguments.
+    st1 = state(bin_dir)
+    _, ack1, _ = osc_producer(st1)
+    u = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    import random
+    rnd = random.Random(13)
+    for _ in range(300):
+        n = rnd.choice([0, 1, 3, 4, 8, 12, 16, 33, 64, 200])
+        b = bytes(rnd.randrange(256) for _ in range(n))
+        if b and rnd.random() < 0.5:
+            b = b"/" + b[1:]
+        u.sendto(b, ("127.0.0.1", 7000))
+    u.sendto(b"/himmel/scene\x00\x00\x00,i\x00\x00\x00\x00", ("127.0.0.1", 7000))  # truncated int
+    u.close()
+    send("/himmel/nothing")
+    send("/himmel/scene", 99)
+    send("/himmel/macro/1", "nan")
+    time.sleep(0.5)
+    st2 = state(bin_dir)
+    _, ack2, rej2 = osc_producer(st2)
+    check(rej2 == rej0, "no OSC command refused by the engine (garbage stopped in himmel_osc)", "rej %d -> %d" % (rej0, rej2))
+    check(st2["program"] == st1["program"] and not st2["black"], "the garbage changed nothing on the outputs")
+    status = osc_status()
+    m = re.search(r"garbage (\d+)", status)
+    check(bool(m) and int(m.group(1)) >= 250, "himmel_osc counted the garbage", m.group(0) if m else "no status")
+    check("unknown address" in status and "bad arguments" in status, "the last-messages list says why")
+    print("  " + "\n  ".join(status.splitlines()[:6]))
+
+
 # ------------------------------------------------------------------------------------- input -> glass
 class Glass:
     """Reads the output window from the composed desktop (GDI StretchBlt of the whole client
@@ -696,6 +779,9 @@ def main():
             if "--no-lightpad" not in args:
                 print("Lightpad (M9)")
                 lightpad(bin_dir, sim, check)
+            if "--no-osc" not in args:
+                print("OSC in (M13)")
+                osc(bin_dir, check)
             if "--no-latency" not in args:
                 print("input -> glass")
                 result = latency(bin_dir, sim, check, runs)
