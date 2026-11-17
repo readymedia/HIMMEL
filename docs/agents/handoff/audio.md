@@ -1,5 +1,5 @@
 # AUDIO handoff
-Updated: 2026-11-17 by the AUDIO wave-2 agent · Branch: `claude/audio-m8-reactions` · Last commit: see `git log` (after 950c92f)
+Updated: 2026-11-17 by the AUDIO wave-2 agent · Branch: `claude/audio-m8-reactions` (rebased on main b236400) · Last commit: see `git log`
 
 ## State in one paragraph
 M8 core is built and tested without a renderer: `himmel_audio.exe` (WASAPI mic /
@@ -16,11 +16,11 @@ macro, the MK2 reaction / SAMPLING pages, the AV offset flash test, audio BPM
 tracking (0.2), build / drop / section (0.2), ASIO, Link.
 
 ## Done (with commits)
-- d67575f: audio block v1 (`src/audio/include/himmel/audio/block.h`), the
+- 1b33218: audio block v1 (`src/audio/include/himmel/audio/block.h`), the
   analysis (`analyzer.*`), MIDI clock tracker (`midi_clock.*`), WASAPI input
   (`wasapi.*`), WinMM MIDI clock port (`midi_port.*`), `himmel_audio.exe`,
   engine feed (`src/engine/src/reactions*.cpp`), supervisor child.
-- 950c92f: snare / hat decided on a full hop (fixes a hop-alignment bug found
+- 8925e23: snare / hat decided on a full hop (fixes a hop-alignment bug found
   with a real capture), `--play-drums`, `--record`, `--analyse`.
 - Last commit: single-instance mutex, `audio_probe.exe`, docs, measurements
   (`docs/measurements/2026-11-17-audio-m8.md`), this handoff.
@@ -75,18 +75,18 @@ Nothing half-done. Next step is on hardware with the owner (below).
   QPC). Used only for `Signals::time_us` (age); a wrong value is clamped to now.
 - GUESS: MIDI clock confidence: jitter 5 % = still fine; leads at ≥ 0.5.
   Never tried with real gear.
-- GUESS: no MIDI clock port by default (a port held by himmel_audio cannot be
+- GUESS (D132): no MIDI clock port by default (a port held by himmel_audio cannot be
   held by a weapon driver). Owner: is that right, or open "any port that sends clock"?
 - GUESS: `--record` assumes 48 kHz for the length.
 
-## Open questions for the owner (PROPOSED, need D numbers from the LEAD)
-- **PROPOSED (AUDIO): `FxReact` command** (append after 24): deck / layer / slot,
+## Open questions for the owner (PROPOSED rows D130–D132 in docs/decisions.md)
+- **D131 PROPOSED: `FxReact` = command 40** (AUDIO range 40–49): deck / layer / slot,
   `param` = knob 0..3, `i` = signal | mode << 8 | curve << 16, `f[0]` amount,
   `f[1]` attack ms, `f[2]` release ms, `f[3]` threshold (quantise / hold / range
   in a second message or packed) — plus a per-slot reaction table in the state
   block, so every parameter can carry its own reaction (music.md §4). Until then
   only the effect's default reaction moves.
-- **PROPOSED (AUDIO): MIDI clock leads tap.** While MIDI clock runs, Tap / set
+- **D130 PROPOSED: MIDI clock leads tap** (and the own audio block). While MIDI clock runs, Tap / set
   BPM are ignored (music.md §2 order); `SHIFT + TEMPO` override comes later.
 - **PROPOSED (AUDIO): device list in the block** for the GUI (now only `--list`).
 
@@ -117,3 +117,11 @@ Nothing half-done. Next step is on hardware with the owner (below).
   `docs/interfaces/README.md`).
 - `ClockState::source` = 2 (MIDI): new value; `engine-state.md` not updated (LEAD owns it).
 - `docs/architecture.md`: the himmel_audio row and diagram node.
+
+## Not verified (one-stack rule)
+Another Himmel stack ran on the machine the whole session, so `himmel_render`
+and `himmel.exe` were **not started** with these changes: the render-loop
+wiring, `--av-offset`, the MIDI lead in a live renderer and the supervisor's
+`audio` child are compiled and unit-tested only. First thing to run when the
+machine is free: `himmel.exe --audio "--device \"CABLE Output\" --channels 1-2"`
+with `--play-drums "CABLE Input"` and zoom pulse on a layer.
