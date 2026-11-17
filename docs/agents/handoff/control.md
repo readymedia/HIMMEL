@@ -1,8 +1,8 @@
 # CONTROL handoff
-Updated: 2026-11-17 by the CONTROL wave-3 session (M4 + M9 merged; M13 OSC in) · Branch: claude/control-m13-osc · Last commit: see git log
+Updated: 2026-11-17 by the CONTROL wave-3 session (M4, M9, M13 merged; MK2 BROWSE + M10 NuVJ) · Branch: claude/control-m10-nuvj · Last commit: see git log
 
 ## State in one paragraph
-MK2: verified map, C++ controller (`src/controller`, shared memory `Local\HimmelMk2`, LEDs, screens, reconnect, `--sim` over UDP 8766), screen pages (`pages.cpp`), Python live view + simulator + games. Generic weapon block + drivers for Lightpad / LUMI / NuVJ / APC20 (`weapons/README.md`). **New (M4, 2026-11-17): `himmel::perform::Mk2Perform` plays Perform v4** (`src/perform/`, `docs/design/perform.md`, `hardware-mapping.md` §3): focus PREP / PLAY with double-tap, wheel = TAKE, Top buttons (locks, FREEZE / STROBE / BLACK / ASSIST), knob pages PLAY / CLIP / LAYER / FX / MIX, knobs 5–8 = the PROGRAM scene's macros, pads CLIPS / SLICE / LOOKS / FX PADS (+ MOODS stub), pad targets, PRESS, HIT, `REC` / `ERASE` / `ENTER`, both screens. 219 unit checks in `perform_tests.exe`. **A whole song is played from the MK2 alone** in `himmel.exe --sim` (`python tools/mk2_e2e.py`: build 3 scenes with pads + REC, LOOKS recall, wheel TAKE, ENTER × 3, macro, BLACK, FX PAD, PLAY-focus edit + variation, ERASE undo, SOLO HIT; PASS) and **input → glass is measured: median 32 ms, p90 38 ms, max 40 ms** (`docs/measurements/2026-11-17-control-m4-input-to-glass.md`). **M9 (2026-11-17): `himmel::perform::LightpadPerform`** plays the Block next to the MK2: TOUCH (Touch FX on PROGRAM), MIX (a real crossfader with soft takeover against the wheel, top row TAKE, bottom row CUT) and SCRUB, with its 15 × 15 LEDs; `himmel_render` reads the Lightpad's weapon slot itself. 50 checks in `lightpad_tests.exe`; `mk2_e2e.py` has a Lightpad stage against the simulated Block (`weapon_blocks.exe lightpad --sim`). **M13 (2026-11-17): OSC in** — `himmel_osc.exe` (UDP 7000, started by the supervisor) turns `/himmel/go`, `/himmel/scene n`, macros, BLACK, TAKE ... into commands on producer slot 2, behind an allow list and a strict parser; garbage never reaches the engine (200 000-packet fuzz in `osc_tests.exe`); `Local\HimmelOsc` keeps the last 32 messages. Address map: `docs/interfaces/osc.md`.
+MK2: verified map, C++ controller (`src/controller`, shared memory `Local\HimmelMk2`, LEDs, screens, reconnect, `--sim` over UDP 8766), screen pages (`pages.cpp`), Python live view + simulator + games. Generic weapon block + drivers for Lightpad / LUMI / NuVJ / APC20 (`weapons/README.md`). **New (M4, 2026-11-17): `himmel::perform::Mk2Perform` plays Perform v4** (`src/perform/`, `docs/design/perform.md`, `hardware-mapping.md` §3): focus PREP / PLAY with double-tap, wheel = TAKE, Top buttons (locks, FREEZE / STROBE / BLACK / ASSIST), knob pages PLAY / CLIP / LAYER / FX / MIX, knobs 5–8 = the PROGRAM scene's macros, pads CLIPS / SLICE / LOOKS / FX PADS (+ MOODS stub), pad targets, PRESS, HIT, `REC` / `ERASE` / `ENTER`, both screens. 219 unit checks in `perform_tests.exe`. **A whole song is played from the MK2 alone** in `himmel.exe --sim` (`python tools/mk2_e2e.py`: build 3 scenes with pads + REC, LOOKS recall, wheel TAKE, ENTER × 3, macro, BLACK, FX PAD, PLAY-focus edit + variation, ERASE undo, SOLO HIT; PASS) and **input → glass is measured: median 32 ms, p90 38 ms, max 40 ms** (`docs/measurements/2026-11-17-control-m4-input-to-glass.md`). **M9 (2026-11-17): `himmel::perform::LightpadPerform`** plays the Block next to the MK2: TOUCH (Touch FX on PROGRAM), MIX (a real crossfader with soft takeover against the wheel, top row TAKE, bottom row CUT) and SCRUB, with its 15 × 15 LEDs; `himmel_render` reads the Lightpad's weapon slot itself. 50 checks in `lightpad_tests.exe`; `mk2_e2e.py` has a Lightpad stage against the simulated Block (`weapon_blocks.exe lightpad --sim`). **M13 (2026-11-17): OSC in** — `himmel_osc.exe` (UDP 7000, started by the supervisor) turns `/himmel/go`, `/himmel/scene n`, macros, BLACK, TAKE ... into commands on producer slot 2, behind an allow list and a strict parser; garbage never reaches the engine (200 000-packet fuzz in `osc_tests.exe`); `Local\HimmelOsc` keeps the last 32 messages. Address map: `docs/interfaces/osc.md`. **MK2 BROWSE** (2026-11-17): the catalog as a list on the MK2 screens, wheel / knob 1 scroll, push / ENTER load into the focused layer, "catalog full" shown. **M10 (2026-11-17): `himmel::perform::NuvjPerform`** plays the NuVJ as a main weapon (perform.md §5.2) through its weapon slot: the crossfader decides PROGRAM (soft takeover), wheels BEND / SCRATCH / FX WHEEL, trims, SYNC loops, INSTA / auto fade, LEDs and LCD; 60 checks in `nuvj_tests.exe`, an e2e stage against the simulated NuVJ. **Not yet checked on the owner's NuVJ** (steps below).
 
 ## Perform mapping (M4)
 `docs/design/perform.md` v4 wins; owner choices are PROPOSED D160–D162 in `docs/decisions.md`. Focus is a **role** (PREP = the PREVIEW deck, PLAY = the PROGRAM deck) + a layer; after a TAKE the rows keep meaning prepare / live, and the mapper re-sends `Focus` for the deck that now has the role. A focus set by the GUI is adopted.
@@ -70,14 +70,64 @@ Contract and address map: **`docs/interfaces/osc.md`**. Code: `src/osc/` (`himme
 - Try it: `build\bin\Release\himmel_osc.exe --send /himmel/go`, `--send /himmel/scene 3`, `--send /himmel/macro/1 0.5`; `himmel_osc.exe --status` = counters + the last messages with the reason.
 - Not built: OSC out, song by name, master dimmer (no engine dimmer), patterns, the Settings › Remote page (GUI), a heartbeat check in the supervisor.
 
+## MK2 BROWSE (MEDIA M7 follow-up)
+| Control | In BROWSE |
+|---|---|
+| `BROWSE` | On / off (LED lit while on). The selection starts at the focused layer's clip |
+| Wheel / knob 1 | Scroll the list (1 detent / 50 raw units = one clip); **nothing is crossfaded** |
+| Wheel push / `ENTER` | Load the selected clip into the focused layer (`LayerClip`); the screen says "LOADED > B1". `GUESS:` ENTER loads instead of GO while browsing |
+| Groups | Still pick the focus (= where it loads); `PLAY` is still TAKE |
+| Screens | Left: "LIBRARY 6/40" and the list (LIVE / PREV tags); right: "LOAD > B1 PREVIEW", name, size, fps, length, codec, and "CATALOG FULL: +n / IN THE LIBRARY ONLY" when the library feed left clips out (`set_library()`, from `LibraryFeed::catalog_full`) |
+
+Not built: library pages beyond the 256-clip catalog (needs a protocol change, library-db.md §8), thumbnails, search / sort.
+
+## NuVJ mapping (M10)
+`docs/design/perform.md` §5.2; PROPOSED D165. Code: `src/perform/include/himmel/perform/nuvj_perform.h`. `himmel_render` finds the weapon slot whose header says `nuvj` (the Lightpad's link, generalised), drains ring 0 into the mapper, writes `led[]` and the LCD `display` (on change, ≤ 30 Hz; the driver resends every 2 s). The mapper never asks for SysEx `7B`.
+
+| Control | Does |
+|---|---|
+| Crossfader | **Decides PROGRAM**: sent absolute (0 = A, 1 = B), after soft takeover (the fader catches the engine's crossfader by touching or crossing it; the MK2 wheel / a TAKE / INSTA makes it let go) |
+| Pads 1–9 (per deck) | Clip `bank × 9 + pad − 1` on the deck's selected layer (the engine's focus layer if the focus is on that deck, else layer 1), `LayerTrigger` (release sent for piano styles); LED = the clip is on the deck |
+| BANK turn / push | Bank ± (clamped) / dice the deck (`Dice` Roll), unless LATCH |
+| PMTR 1 / 2 | Param 1 / 2 of the selected layer's FX slot 1 (relative) |
+| LATCH / AUTO / SYNC | LATCH = no dice on this deck (LED); AUTO = dice, held ≥ 0.6 s = mutate; SYNC tap = BPM time base on / off (LED); **hold SYNC + wheel** = beat loop 1 beat, then ×2 / ÷2 per tick (1/16 … 4), release = loop off |
+| SPEED fader | Clip speed 0..2× (centre = 1×) of the selected layer |
+| Wheel, BEND (SCRATCH LED off) | Nudge the speed ±2 % per tick while turning (max ±50 %), back to the speed it had after 120 ms still; on a paused clip it scrubs |
+| Wheel, SCRATCH (LED lit) | Drag the playhead (0.03 s per tick); let go = plays on (catch-up per the layer's ScratchSnap) |
+| Wheel, FX WHEEL (LED blinking) | Sweep the selected layer's FX slot 1 mix; springs back on let go |
+| Hold a pad + wheel | Trim: in and out move together (0.5 % per tick) |
+| INSTA A / B | Fade to that deck at the AUTO FADE speed (`Take` i = ms; INSTANT = `Cut`); nothing if it is already on air. LEDs = the tally (the deck on air) |
+| AUTO FADE SPEED | 0..127 = INSTANT .. 8 s |
+| INSTA BLACK | `Black` toggle (LED) |
+| MASTER FX select / button / FX LEVEL / Master PMTR 1–2 | Choose the master effect (slot 1) / bypass toggle / its mix / its params |
+| BPM TAP | Tap (LED flashes on the beat) |
+| FADER START (switch) | On: leaving one end of the crossfader restarts the other deck's clip |
+| FADER MODE, CONTRAST, BRIGHT | Stubs (no crossfader curve, output contrast or brightness in the engine yet) |
+| LCD | Text row: a mode message for 1.2 s ("SCRATCH", "LATCHED"), else the PROGRAM deck's clip; 16-segment row: "A LIVE BND" (PROGRAM deck, BLACK / TAKE, the last deck's wheel mode); BPM digits; PRESET = the last deck's bank; LAST ramp = the crossfader, DATA ramp = the fade speed; box A / B = PROGRAM |
+
+Not built (M10 follow-ups): scenes on the NuVJ (hold LATCH + pad = scene 1–9 into that deck), FX WHEEL beat-locked steps, SCRATCH "from here" setting, the crossfader curve (FADER MODE), the start-up light show in C++.
+
+### Owner: check the real NuVJ (step by step)
+1. Close NuVJ Live (or set it to Simulate) and any NI / Numark software: WinMM lets two programs open the NuVJ.
+2. Plug in the NuVJ (USB `15e4:0020`). Start `build\bin\Release\himmel.exe --weapons nuvj -- --no-show-files` (no MK2 needed; add `lightpad` etc. if you like). The log says "nuvj found in weapon slot 5" and "NuVJ connected".
+3. **LEDs / LCD:** the LCD shows "HIMMEL" (or the live clip) and "A LIVE BND"; INSTA A is lit (deck A on air), BPM TAP blinks on the beat.
+4. **Pads:** press A pad 1, 2, 3: deck A plays clips 0, 1, 2 (`himmel_cmd state`); the pad's LED lights. Turn A BANK one step and press pad 1: clip 9. Same on deck B.
+5. **Crossfader:** move it slowly from the A end to the B end: the picture fades from A to B, INSTA B lights, the LCD box moves to B. Move the MK2 wheel (or `himmel_cmd xfade 0.2`), then the NuVJ fader: nothing happens until the fader passes the new position, then it follows.
+6. **INSTA:** set AUTO FADE SPEED to about a quarter, press INSTA A: a ~2 s fade to A. Fully left, press INSTA B: a cut.
+7. **Wheels:** with a clip playing on deck A: turn A's wheel: the clip speeds up / slows down while you turn and comes back when you stop (BEND). Press SCRATCH (LED on): the wheel drags the picture back and forth; stop: it plays on. Press SCRATCH again (LED blinks): with an effect on the layer (the GUI or the MK2 FX page), the wheel sweeps it and it springs back. Press SCRATCH again: BEND (LED off).
+8. **Trim / loops:** hold A pad 1 and turn A's wheel: the clip's loop moves. Hold A SYNC and turn the wheel: a beat loop (1 beat, shorter / longer per tick); let go of SYNC: it plays on. Tap SYNC: the SYNC LED (BPM time base) toggles.
+9. **INSTA BLACK:** black and back; its LED follows.
+10. Note what feels wrong (wheel speed, bend amount, fade range) and send `build\bin\Release\logs\himmel-<date>.log`. Settle D165.
+
 ## Done (with commits)
+- **MK2 BROWSE + M10 (2026-11-17, branch `claude/control-m10-nuvj`):** BROWSE in `Mk2Perform` (+14 checks, `perform_tests --dump-browse`), `NuvjPerform` + `nuvj_tests` (60 checks), the NuVJ slot in `render_main.cpp` (ENGINE file: the Lightpad link generalised, ~45 lines; `perform->set_library(...)`), `mk2_e2e.py` BROWSE + NuVJ stages (the stack now runs `--weapons lightpad,nuvj`; `--no-nuvj`), D165.
 - **M13 (2026-11-17, branch `claude/control-m13-osc`):** `src/osc/` + `osc_tests` + `docs/interfaces/osc.md` (+ a row in `docs/interfaces/README.md`), supervisor starts `himmel_osc.exe` (ENGINE file, +16 lines), `mk2_e2e.py` OSC stage (`--no-osc` skips it), D164.
 - **M9 (2026-11-17, branch `claude/control-m9-lightpad`):** `LightpadPerform` + `lightpad_tests` (50 checks), the Lightpad slot in `render_main.cpp` (ENGINE file: `LightpadLink`, ~45 lines, `himmel_render` links `himmel_weapon`), `mk2_e2e.py` Lightpad stage (the stack now starts with `--weapons lightpad`; `--no-lightpad` = the old way), D163.
 - **M4 (2026-11-17, branch `claude/control-m4-perform`):** the mapper above, `set_context(ShowStatus*, TransportSection*)` (one call in `render_main.cpp`), 219 unit checks, `mk2_chain_tests` updated (knob 1 opacity now on the LAYER page), `tools/mk2_e2e.py` = basic + song + input → glass, measurement doc, D160–D162.
 - S2 slice mapper (branch `claude/control-slice-perform`). Earlier history: `CLAUDE.md` "Next steps" and `docs/roadmap.md`.
 
 ## In progress
-- Nothing. M4 and M9 merged; M13 ready to merge.
+- Nothing. M4, M9, M13 merged; MK2 BROWSE + M10 ready to merge. The real NuVJ check is the owner's (steps above).
 
 ## Done 2026-11-16: MK2 input end to end (owner: "neither the sim nor the MK2 drives the engine")
 - **Measured, not guessed.** On main (35e662e) with exactly ONE simulator, the whole chain works: scripted `SimMk2`, the live view over HTTP, and clicks in the browser page all reached the engine (every group, 12 quick presses, knob 1, wheel +6 = 0.200, PLAY TAKE), and the engine's Perform screens / LEDs showed on the page.
@@ -110,6 +160,7 @@ Contract and address map: **`docs/interfaces/osc.md`**. Code: `src/osc/` (`himme
 - The input → glass number covers UDP + engine + DWM, not USB and not the panel (see the measurement doc).
 
 ## Open questions for the owner
+- PROPOSED D165 (NuVJ: deck A/B = engine A/B, the selected layer = the focus layer on that deck, else layer 1; SPEED fader 0..2×; BEND ±2 % per tick; AUTO FADE 0..8 s; LATCH = no dice; ENTER loads while the MK2 browses).
 - PROPOSED D164 (OSC: UDP 7000, this PC only by default, out-of-range values refused, the extra addresses `/himmel/back`, `/go/preview`, `/xfade`, `/undo`, `/redo`, `/beat` = a tap).
 - PROPOSED D163 (Lightpad: MIX absolute A ↔ B with soft takeover, TOUCH zones = the first 5 effects in master FX slot 2, Mode tap = hold / double-tap = next mode).
 - PROPOSED D160 (knob pages, knobs 5–8 always macros), D161 (stand-ins for FREEZE / STROBE / FX PADS / PANIC / NOTE REPEAT / GRID / dice buttons), D162 (session pad targets, REC / ERASE on release, LOOKS fires on the hit) in `docs/decisions.md`.
