@@ -4,7 +4,11 @@
 // slot 3 "Tool", docs/interfaces/command-protocol.md) and print the live state.
 //
 //   himmel_cmd state                       the show on air (default)
-//   himmel_cmd catalog                     clips and effects
+//   himmel_cmd catalog                     clips (ids 0..255) and effects
+//   himmel_cmd clips [FROM [N]]            catalog v3: every clip by id, with library id and state (wave 7)
+//   himmel_cmd cliplib D L LIBID           load a library clip by its library id (LayerClipLib 75)
+//   himmel_cmd smooth auto|off|blend|even  global frame smoothing; per layer: set D L smooth auto|off|blend|even|global
+//   himmel_cmd playback                    frame smoothing + cadence (judder) per layer
 //   himmel_cmd take [ms] | cut | black [on|off|toggle]
 //   himmel_cmd xfade V | nudge DELTA       crossfader 0 (A) .. 1 (B)
 //   himmel_cmd clip D L ID                 D = a|b|0|1, L = 1..4, ID = clip id or -1
@@ -66,6 +70,7 @@
 #include "himmel/engine/deck_model.h"
 #include "himmel/engine/shm_block.h"
 #include "himmel/fx/fx.h"
+#include "himmel/protocol/clip_pages.h"
 #include "himmel/protocol/commands.h"
 #include "himmel/protocol/outputs.h"
 #include "himmel/protocol/state.h"
@@ -85,7 +90,8 @@ uint64_t now_us() {
 void usage() {
     std::printf(
         "himmel_cmd: send commands to himmel_render (producer slot 3) and print the state\n"
-        "  state | catalog | watch [s]\n"
+        "  state | catalog | clips [from [n]] | playback | watch [s]\n"
+        "  cliplib D L LIBID | smooth auto|off|blend|even\n"
         "  take [ms] | cut | black [on|off|toggle] | xfade V | nudge DELTA\n"
         "  clip D L ID | opacity D L V | speed D L V | jump D L V | blend D L MODE\n"
         "  mute D L [on|off|toggle] | play D L pause|play|toggle|restart | focus D L\n"
@@ -125,6 +131,7 @@ const char* const kAutopilotNames[] = {"off", "next", "previous", "random", "sam
 const char* const kTransitionNames[] = {"cut", "fade", "blackdip", nullptr};
 const char* const kGridNames[] = {"off", "1/4", "1", "bar", "2bar", "4bar", nullptr};
 const char* const kDirNames[] = {"fwd", "back", nullptr};
+const char* const kSmoothNames[] = {"auto", "off", "blend", "even", nullptr};  // FrameSmooth (wave 7)
 const char* const kPhaseNames[] = {"empty", "play", "pause", "hold", "intro", "inner", "outro"};
 const ParamName kParams[] = {
     {"mode", LayerParam::Mode, false, kModeNames},          {"dir", LayerParam::Direction, false, kDirNames},
@@ -141,7 +148,7 @@ const ParamName kParams[] = {
     {"apcount", LayerParam::AutopilotCount, false, nullptr}, {"transition", LayerParam::Transition, false, kTransitionNames},
     {"ttime", LayerParam::TransitionTime, true, nullptr},    {"catchup", LayerParam::CatchUp, false, nullptr},
     {"scratchsnap", LayerParam::ScratchSnap, false, nullptr}, {"reverse", LayerParam::ReverseHold, false, nullptr},
-    {"seed", LayerParam::Seed, false, nullptr},
+    {"seed", LayerParam::Seed, false, nullptr},              {"smooth", LayerParam::Smooth, false, kSmoothNames},
 };
 int name_index(const char* const* names, const std::string& v) {
     for (int k = 0; names && names[k]; ++k)
@@ -433,6 +440,12 @@ int run_one(Engine& e, const std::vector<std::string>& a, const Catalog& cat) {
     if (c == "nudge") return e.send(make(CommandType::Crossfader, kNone, kNone, 0, f(1), kRelative));
     if (c == "hello") return e.send(make(CommandType::Hello, kNone, kNone, static_cast<int32_t>(GetCurrentProcessId())));
     if (c == "clip") return layer_cmd(CommandType::LayerClip, n(3), 0);
+    if (c == "cliplib") return layer_cmd(CommandType::LayerClipLib, n(3), 0);  // wave 7: by library id
+    if (c == "smooth") {  // wave 7: the global frame smoothing
+        const int v = a.size() > 1 ? name_index(kSmoothNames, a[1]) : -1;
+        if (v < 0) return 1;
+        return out_cfg(OutputParam::FrameSmooth, kNone, v, 0);
+    }
     if (c == "opacity") return layer_cmd(CommandType::LayerOpacity, 0, f(3));
     if (c == "speed") return layer_cmd(CommandType::LayerSpeed, 0, f(3));
     if (c == "jump") return layer_cmd(CommandType::LayerJump, 0, f(3));
@@ -462,7 +475,7 @@ int run_one(Engine& e, const std::vector<std::string>& a, const Catalog& cat) {
         for (const auto& p : kParams) {
             if (a[3] != p.name) continue;
             int iv = p.values ? name_index(p.values, a[4]) : -1;
-            if (p.p == LayerParam::Snap && a[4] == "global") iv = -1;
+            if ((p.p == LayerParam::Snap || p.p == LayerParam::Smooth) && a[4] == "global") iv = -1;
             else if (iv < 0) iv = a[4] == "on" ? 1 : a[4] == "off" ? 0 : a[4] == "toggle" ? 2 : n(4);
             return e.send(layer_set(D, L, p.p, iv, p.is_float ? f(4) : 0.0f));
         }
@@ -705,6 +718,37 @@ int main(int argc, char** argv) {
             std::printf("  layer %c%d  %s%s  rect %.3f %.3f %.3f %.3f\n", i == 8 ? 'H' : 'A' + i / 4, i == 8 ? 1 : i % 4 + 1,
                         p.place < 4 ? pl[p.place] : "?", p.place == 1 ? (std::string(" ") + std::to_string(p.out + 1)).c_str() : "",
                         p.rect[0], p.rect[1], p.rect[2], p.rect[3]);
+        }
+        return 0;
+    }
+    if (args[0] == "clips" || args[0] == "playback") {  // wave 7: catalog v3 pages / frame smoothing
+        if (!e->state) return 2;
+        if (args[0] == "playback") {
+            PlaybackSection pb{};
+            if (!seq_read(e->state->playback_seq, e->state->playback, pb)) return 2;
+            const char* sm[] = {"auto", "off", "blend", "even"};
+            std::printf("frame smoothing %s, refresh %.2f Hz\n", sm[pb.smooth & 3], pb.out_hz);
+            for (int s = 0; s < kDecks * kLayersPerDeck + 1; ++s) {
+                const auto& l = pb.layer[s];
+                if (l.clip_fps <= 0) continue;
+                std::printf("  layer %c%d  %s -> %s%s  %.3f fps  %.3f refreshes/frame  judder %.3f  irregular %u\n",
+                            s == 8 ? 'H' : 'A' + s / 4, s == 8 ? 1 : s % 4 + 1, l.smooth == kSmoothFollow ? "global" : sm[l.smooth & 3],
+                            sm[l.in_use & 3], l.loading ? " (loading)" : "", l.clip_fps, l.refreshes_per_frame, l.judder,
+                            l.irregular);
+            }
+            return 0;
+        }
+        auto copy = std::make_unique<ClipPagesCopy>();
+        const int pages = read_clip_pages(e->state->clips, e->state->clip_page, *copy);
+        const uint32_t from = args.size() > 1 ? static_cast<uint32_t>(std::max(0, std::atoi(args[1].c_str()))) : 0;
+        const uint32_t n = args.size() > 2 ? static_cast<uint32_t>(std::max(1, std::atoi(args[2].c_str()))) : 64;
+        const char* st[] = {"-", "ready", "MISSING", "REMOVED", "BUSY"};
+        std::printf("%u clips (capacity %u, %d pages read, %u could not be taken), showing %u..%u:\n", copy->count,
+                    e->state->clips.capacity, pages, copy->full, from, std::min(copy->count, from + n));
+        for (uint32_t i = from; i < copy->count && i < from + n; ++i) {
+            const auto& c = copy->entry(i);
+            std::printf("  %4u  lib %-6lld %-32s %4ux%-4u %6.2f fps %7.1f s  %s\n", i, static_cast<long long>(c.library_id),
+                        c.info.name, c.info.width, c.info.height, c.info.fps, c.info.seconds, c.state < 5 ? st[c.state] : "?");
         }
         return 0;
     }

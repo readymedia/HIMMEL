@@ -22,4 +22,8 @@ std::vector<std::string> find_media_clips();
 // placeholder and marks the layer missing.
 void fill_clip_catalog(protocol::Catalog& catalog, const std::vector<std::string>& paths);
 
+// Catalog v3 (wave 7): the entry of one clip file (name from the file name + probe), for any number of clips.
+void clip_info_for(const std::string& path, protocol::ClipInfo& info);
+void probe_clip(const std::string& path, protocol::ClipInfo& info);
+
 }  // namespace himmel::engine

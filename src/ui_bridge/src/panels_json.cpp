@@ -73,7 +73,7 @@ const char* const kPresetNames[] = {"P720", "P1080", "P1440", "P2160", "Custom"}
 const char* const kRefreshNames[] = {"Hz60", "Hz50", "Hz59_94", "Hz30", "Hz25"};
 const char* const kCanvasNames[] = {"Span", "Mirror"};
 const char* const kPlaceNames[] = {"FillAll", "Out", "Fit", "Free"};
-const char* const kOutParamNames[] = {"Resolution", "Refresh", "BlendWidth", "BlendGamma", "Mode", "Adopt", "SimLost"};
+const char* const kOutParamNames[] = {"Resolution", "Refresh", "BlendWidth", "BlendGamma", "Mode", "Adopt", "SimLost", "FrameSmooth"};
 const char* const kIdentifyNames[] = {"Off", "5s", "Hold"};
 static_assert(std::size(kOutStateNames) == static_cast<size_t>(OutputState::Count));
 static_assert(std::size(kPresetNames) == static_cast<size_t>(ResolutionPreset::Count));

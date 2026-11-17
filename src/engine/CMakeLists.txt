@@ -4,13 +4,13 @@
 add_subdirectory(fx)
 
 add_library(himmel_engine_shared STATIC src/engine_shared.cpp src/clip_player.cpp src/camera_capture.cpp src/touch_fx.cpp src/entrancer.cpp src/entrancer_link.cpp src/midi_in.cpp
-            src/display_watch.cpp)
+            src/display_watch.cpp src/clip_watch.cpp)
 target_include_directories(himmel_engine_shared PUBLIC include)
 target_link_libraries(himmel_engine_shared PUBLIC himmel_media himmel_protocol himmel_library PRIVATE d3d11 mfplat mf mfreadwrite mfuuid ole32 ws2_32 winmm)
 
 # The slice's show model (pure: no GPU, no Windows) - docs/interfaces/command-protocol.md.
 add_library(himmel_engine_model STATIC src/deck_model.cpp src/transport.cpp src/fx_catalog.cpp src/reactions.cpp
-            src/output_model.cpp)
+            src/output_model.cpp src/clip_directory.cpp)
 target_include_directories(himmel_engine_model PUBLIC include)
 target_link_libraries(himmel_engine_model PUBLIC himmel_protocol himmel_fx himmel_audio_block)
 
@@ -65,9 +65,12 @@ add_test(NAME transport_tests COMMAND transport_tests)
 add_executable(output_tests ${PROJECT_SOURCE_DIR}/tests/engine/output_tests.cpp)
 target_link_libraries(output_tests PRIVATE himmel_engine_model)
 add_test(NAME output_tests COMMAND output_tests)
+add_executable(catalog_tests ${PROJECT_SOURCE_DIR}/tests/engine/catalog_tests.cpp)  # wave 7: catalog v3, smoothing
+target_link_libraries(catalog_tests PRIVATE himmel_engine_model himmel_engine_shared)
+add_test(NAME catalog_tests COMMAND catalog_tests)
 
 foreach(t himmel_engine_shared himmel_engine_model himmel_engine_ipc himmel_spout_out himmel_render himmel_render_legacy himmel himmel_cmd
-          preview_dump deck_tests transport_tests output_tests)
+          preview_dump deck_tests transport_tests output_tests catalog_tests)
     if(MSVC)
         target_compile_options(${t} PRIVATE /W4 /permissive- /utf-8)
     endif()

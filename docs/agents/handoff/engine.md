@@ -1,7 +1,50 @@
 # ENGINE handoff
-Updated: 2026-11-17 by the ENGINE M6 session · Branch: `claude/engine-m6-spout` (M6 itself merged on main) · Last commit: see `git log` on the branch
+Updated: 2026-11-17 by the ENGINE wave 7 session · Branch: `claude/engine-w7-catalog` · Last commit: see `git log` on the branch
 
 ## State in one paragraph
+**WAVE 7 (2026-11-17, branch `claude/engine-w7-catalog`): import -> load -> play.**
+Catalog v3: the engine holds up to 8192 clips (`kMaxCatalogClips`), and
+`Local\HimmelState` v4 appends **clip pages** (64 clips per page, one seqlock
+each, `ClipEntry` = ClipInfo + library id + `ClipState`) and a **playback
+section**; the `catalog` section is unchanged and is the window of ids 0..255.
+`ClipDirectory` (pure, in `himmel_engine_model`) is the renderer's list of
+every clip, kept in step with the clip table and a low-priority **file watch**
+(`ClipWatch`: Ready / Missing / Busy). **`LayerClipLib` (75)** loads by library
+id (refused `NotReady` / `Missing`). **Pre-roll:** the decode worker decodes
+the start frame (+4) before it hands a new clip over, the old picture stays
+until then, the playhead waits. **Frame smoothing** (`FrameSmooth`: Auto /
+Off / Blend / Even; global `OutputConfig` 7, per layer `LayerSet` 29): the
+playheads step on the display's refresh grid (Even), and Blend mixes the two
+nearest frames from a second texture per clip. Auto = Even when the refresh is
+a whole multiple of the clip fps, else Blend. Cadence is measured per layer
+(`CADENCE` log lines every 5 s, `judder` / `irregular` in the playback
+section, `himmel_cmd playback`). Tests: `catalog_tests.exe`. D190–D193 PROPOSED
+(LEAD approved the interface; judder agreed with MEDIA, D181: playback-side
+Auto is the default, import conform is MEDIA's option, off by default).
+
+**Measured (wave 7, `docs/measurements/2026-11-17-engine-w7-catalog-cadence.md`).**
+- 327 clips in the catalog (323 library clips, ids up to 326).
+- 151 `LayerClipLib` loads of random clips and of every id >= 256: 0 refused, 0 late frames,
+  0 clip misses.
+- Judder before / after, 1080p on 60 Hz:
+
+  | Clip | Off (before) | Auto (after) |
+  |---|---|---|
+  | 30 fps | irregular holds 2 in a period | 0, judder 0.003 |
+  | 24 fps | 3-2 cadence | Blend (motion every refresh) |
+  | 25 fps | 3-2 cadence | Blend (motion every refresh) |
+
+  The 3-2 cadence of 24 / 25 fps is inherent; Even keeps it strictly regular.
+- Unit test: 30 @ 60 with 3 ms jitter has 18 / 298 wrong holds with Off, 0 with Even.
+- Blend costs about 0.1–0.2 ms GPU for three 1080p layers.
+
+**Hooks for wave 8 (not used yet):**
+- `Mk2Perform::set_clips(const engine::ClipDirectory*)` is set once in render_main (CONTROL BROWSE
+  past id 255). Use `count()`, `info(id)`, `entry(id).library_id`, `state(id)`.
+- SHOW: `model.clips()->find_library(lib_id)` / `find_name(name)` cover every id.
+  `look_ops.cpp:237` searches only the first 256 today, so a recalled look whose clip id is >= 256
+  comes back empty.
+
 **QUIT (2026-11-17, branch `claude/engine-quit`).** `SystemQuit` (74) with
 `f[0]` = 1 (confirmed; only from Perform, Gui or Tool) sets `quit_request` in
 `EngineStatus` (v2). The supervisor then runs the Ctrl+C stop (renderer, GUI,
@@ -38,6 +81,25 @@ when its producer goes quiet (LEAD condition). The first M6 commit (3e8d15b) is
 merged on main (dcc01f9); Spout + the IDENTIFY release are the follow-up.
 
 ## Done (with commits)
+- **Wave 7 (`claude/engine-w7-catalog`):**
+  - `protocol/state.h` v4 (`ClipState`, `ClipEntry`, `ClipPage*`, `FrameSmooth`,
+    `PlaybackSection`), `protocol/clip_pages.h` (reader), commands.h
+    (`LayerClipLib` 75, `LayerParam::Smooth` 29, `Reject::NotReady` / `Missing`),
+    outputs.h (`OutputParam::FrameSmooth` 7, `frame_smooth`).
+  - `clip_directory.h/.cpp` (paging writer, window mirror, find by library id /
+    name), `clip_watch.h/.cpp` (file states), `DeckModel`: `set_clips()`, ids up
+    to 8192 (cues / resume on the heap, allocated once), `LayerClipLib`,
+    restore by library id from the old block's pages, refresh grid + frame bias,
+    `smooth_in_use()`, `blend_frames()`, `set_loading()`.
+  - `ClipPlayer::load(index, start_frame, dir)` pre-roll, a second texture per
+    clip; `slice_shaders.h`: `hap_decode()`, `tex4` + `l_blend.y` blend.
+  - `render_main.cpp`: directory + watch at start-up, media/ beyond 256 clips
+    (`clip_info_for`), pages published on change, old picture during load,
+    two-texture uploads, cadence measurement, playback section, `CADENCE` lines.
+  - `himmel_cmd`: `clips [from [n]]`, `cliplib D L LIBID`, `smooth MODE`,
+    `set D L smooth MODE|global`, `playback`.
+  - Library (MEDIA's files, minimal): `ClipTable` capacity 8192 + `find()`, the
+    feed does not append a clip that turned ready again twice.
 - **M6 (this branch, `claude/engine-m6-outputs`):**
   - `protocol/outputs.h` (new block, enums), commands 70–73 appended to
     `commands.h` (`Count` = 74); `protocol_tests` asserts the wave-3 ranges.
@@ -125,6 +187,13 @@ merged on main (dcc01f9); Spout + the IDENTIFY release are the follow-up.
 Nothing half-done.
 
 ## Next up (ordered)
+- **Wave 7 leftovers:**
+  - GUI: send `LayerClipLib` and read the clip pages (`clip_pages.h`); show NotReady / Missing.
+  - CONTROL / SHOW: use the hooks above (wave 8).
+  - A `Removed` state needs the library DB (the file watch only sees Missing).
+  - Measure judder in full screen on the show PC at 50 Hz, where 30 fps -> Blend and 25 fps -> Even.
+  - Smooth settings are not saved in the show / restored over a renderer restart (GUESS: global
+    Auto is enough for 0.1).
 0. **M6 leftovers:** Spout per output (only MAIN now) and Spout in; check a real cable pull and a 50 Hz switch on the show PC (only simulated
    / one display here); save display identities + places in the project
    (SHOW); per-output test pattern / crosshair (mapping, later); GUI Outputs
@@ -149,6 +218,15 @@ Nothing half-done.
    graph in a worker.
 
 ## GUESSES
+- **Wave 7:**
+  - Auto picks Even within 1 % of a whole refresh multiple, else Blend.
+  - The frame bias of 1e-6 frames on the refresh grid.
+  - The playhead holds its start frame while a clip loads (pre-roll).
+  - The file watch sweeps 64 clips every 125 ms at the lowest priority, and checks a clip at once
+    when a layer loads it.
+  - An empty or locked file is Busy, a gone one is Missing.
+  - `LayerClip` of a Missing id still loads (placeholder), only `LayerClipLib` refuses.
+  - The feed's name dedupe is O(n²) at start-up for very big libraries (MEDIA told).
 - **M6 (D150–D154 in `decisions.md`):** windowed outputs report the first
   display's Hz; black per output is a cut; IDENTIFY darkens by 60 %; the
   blend is smoothstep ^ (1/γ); render restart back-off cap 0.5 s; identity
@@ -176,7 +254,9 @@ Nothing half-done.
 
 ## How to build / run / test this track
 ```
-build\bin\Release\output_tests.exe          # 111 checks, no GPU
+build\bin\Release\output_tests.exe          # 131 checks, no GPU
+build\bin\Release\catalog_tests.exe         # wave 7: 1323 checks - paging (8192 ids), LayerClipLib, restore, cadence, file watch
+build\bin\Release\himmel_cmd.exe clips 250 20 -- cliplib a 1 LIBID -- smooth auto -- playback
 build\bin\Release\himmel.exe --no-controller --no-weapons --no-ui --no-audio -- --outputs 3 --size 640x360 --no-show-files
 build\bin\Release\himmel_cmd.exe clip a 1 0 -- outputs
 python src\engine\tools\curtain_check.py --runs 6 --gap 6   # kill -> black -> back
@@ -196,6 +276,13 @@ build\bin\Release\himmel_cmd.exe            # the state incl. transport + clock
 Output windows: `M` = span / mirror, `O` = overlay, `Esc` = quit (windowed).
 
 ## Gotchas found
+- Wave 7: after a protocol header change, MSBuild kept objects compiled during an edit. show_tests
+  failed 51 checks (a DeckModel layout mismatch) until every .cpp was touched and rebuilt. Rebuild
+  clean after header changes.
+- Wave 7: the supervisor's log does not hold the renderer's lines (STATS / CADENCE); run
+  `himmel_render` with stdout to a file for measurements.
+- Wave 7: stacks are sequenced with the `%TEMP%\himmel_stack.lock` directory (LEAD rule):
+  `mkdir` it, at most 15 min, never while the owner's himmel.exe runs.
 - M6 Spout: `SpoutDX::SendTexture` waits on Spout's named mutex - never call it
   on the render thread. `LogRing` has one writer (the render thread): the Spout
   worker prints its lines straight to stdout.
@@ -221,6 +308,13 @@ Output windows: `M` = span / mirror, `O` = overlay, `Esc` = quit (windowed).
   Bash turns `/m` into a path (use `--parallel 8`).
 
 ## Interfaces touched
+- Wave 7 (LEAD approved):
+  - `engine-state.md` -> **version 4**: playback section + clip pages appended after `react`;
+    `catalog` unchanged (the window of ids 0..255).
+  - `command-protocol.md` §4f: `LayerClipLib` 75 (76–79 free), `LayerParam::Smooth` 29,
+    `OutputParam::FrameSmooth` 7, `Reject` NotReady 6 / Missing 7.
+  - `outputs-block`: `frame_smooth` (was reserved[0]).
+  - `library-db.md` §8: capacity 8192, no duplicate on ready-again.
 - M6: new `outputs-block.md` (`Local\HimmelOutputs` v1); `command-protocol.md`
   §4c (types 70–73, additive, `kCommandVersion` stays 1);
   `interfaces/README.md` row. State block unchanged (v2).
