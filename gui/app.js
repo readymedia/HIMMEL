@@ -123,7 +123,9 @@ function buildStrips() {
       const sw = el('div', 'sw'), nm = el('div', 'nm empty', 'empty'), miss = el('span', 'miss hidden', 'MISSING');
       const badge = el('span', 'badge hidden');
       const pos = el('div', 'pos'); pos.append(el('i'));
-      clip.append(sw, nm, miss, badge, pos);
+      // GUI w7: the clip cell has a button into the clip picker (an "empty" cell asks for a clip).
+      const pick = el('button', 'pickc', '+'); pick.title = 'Choose a clip for this layer (opens the clip picker)';
+      clip.append(sw, nm, miss, badge, pos, pick);
       const op = el('label', 'op'); const opIn = el('input'); opIn.type = 'range'; opIn.min = 0; opIn.max = 1; opIn.step = 0.01; opIn.title = 'Opacity';
       const opV = el('span', null, '100'); op.append(opIn, opV);
       const blend = el('select', 'blend'); blend.title = 'Blend mode';
@@ -156,14 +158,15 @@ function buildStrips() {
       s.addEventListener('dragleave', () => s.classList.remove('dropover'));
       s.addEventListener('drop', e => {
         s.classList.remove('dropover');
-        const id = parseInt(e.dataTransfer.getData('text/x-himmel-clip'), 10);
+        const ids = window.Flows.dragIds(e);
         const gen = parseInt(e.dataTransfer.getData('text/x-himmel-gen'), 10);
         e.preventDefault();
-        if (id >= 0) send({ type: 'LayerClip', ...t(), value: id });
-        else if (gen >= 0) putGenerator(t(), gen);
-        send({ type: 'Focus', ...t() });
+        if (ids.length) window.Flows.load(ids, t());
+        else if (gen >= 0) { putGenerator(t(), gen); send({ type: 'Focus', ...t() }); }
       });
-      strips[side].push({ s, sw, nm, miss, badge, pos: pos.firstChild, opIn, opV, blend, mute, play, fx });
+      pick.addEventListener('click', e => { e.stopPropagation(); send({ type: 'Focus', ...t() }); window.Flows.picker(t()); });
+      nm.addEventListener('click', e => { if (S.armed < 0 && nm.classList.contains('empty')) { e.stopPropagation(); send({ type: 'Focus', ...t() }); window.Flows.picker(t()); } });
+      strips[side].push({ s, sw, nm, miss, badge, pos: pos.firstChild, opIn, opV, blend, mute, play, fx, pick });
     }
   }
 }
@@ -185,11 +188,14 @@ function renderStrips() {
       const ls = L.deck[d].layer[row];
       const tr = S.tr ? S.tr.layer[d][row] : null;
       const src = layerSource(ls);
-      u.sw.style.background = src ? src.color : '#000';
+      u.sw.style.backgroundColor = src ? src.color : '#000';
+      // GUI w7: the library thumbnail when the clip came from the library.
+      const tu = src && src.ci ? window.Flows.thumbUrl(window.Flows.rowOf(ls.clip)) : '';
+      if (u.sw.dataset.t !== tu) { u.sw.dataset.t = tu; u.sw.style.backgroundImage = tu ? `url(${tu})` : ''; u.sw.style.backgroundSize = 'cover'; u.sw.style.backgroundPosition = 'center'; }
       u.sw.classList.toggle('gen', !!src && src.kind === 'gen');
-      u.nm.textContent = src ? src.name : (ls.clip >= 0 ? 'clip ' + ls.clip : 'empty');
+      u.nm.textContent = src ? src.name : (ls.clip >= 0 ? 'clip ' + ls.clip : 'empty · + clip');
       u.nm.classList.toggle('empty', !src);
-      u.nm.title = src && src.ci ? `${src.ci.name} · ${src.ci.width}×${src.ci.height} · ${src.ci.fps} fps · ${src.ci.seconds.toFixed(1)} s` : src ? 'generator (the layer has no clip)' : '';
+      u.nm.title = src && src.ci ? `${src.ci.name} · ${src.ci.width}×${src.ci.height} · ${src.ci.fps} fps · ${src.ci.seconds.toFixed(1)} s` : src ? 'generator (the layer has no clip)' : 'Empty layer: click to choose a clip, or drag one here from the clip list';
       u.miss.classList.toggle('hidden', !ls.missing);
       u.pos.style.width = (src && src.ci ? ls.position * 100 : 0) + '%';
       // A small badge: the transport mode / beat loop / a launch waiting for the snap.
@@ -250,18 +256,31 @@ function buildLibrary() {
     }
     return;
   }
-  $('libFoot').textContent = 'Click a clip, then a layer. Or drag it onto a layer. Double-click = into the focused layer. Alt + click = fire it on the HIT layer.';
+  $('libFoot').textContent = 'Drag a clip onto a layer (or onto a monitor = its next free layer) · double-click = the focused layer · ⋯ or right-click = Load to… · Alt + click = HIT.';
+  if (!S.cat.clips.length) {
+    const e = el('div', 'empty');
+    e.append(el('div', null, 'No clips yet.'), el('div', 'dim', 'Import a folder of videos or pictures in LIBRARY. Clips appear here as soon as they are ready, while the rest keeps importing.'));
+    const b = el('button', 'primary', '+ IMPORT CLIPS…'); b.title = 'Open LIBRARY and pick a folder to import';
+    b.addEventListener('click', () => { setView('library'); if (window.Lib) window.Lib.importDialog('folder'); });
+    e.append(b); list.append(e);
+  }
   for (const c of S.cat.clips) {
     if (f && !c.name.toLowerCase().includes(f)) continue;
     const it = el('div', 'ci');
     it.draggable = true;
     const sw = el('div', 'sw'); sw.style.background = `linear-gradient(135deg, #000, ${rgb(c.thumb_rgb)})`;
+    const lrow = window.Flows.rowOf(c.id), tu = window.Flows.thumbUrl(lrow);
+    if (tu) { const img = el('img'); img.loading = 'lazy'; img.src = tu; img.alt = ''; img.onerror = () => img.remove(); sw.append(img); }
     const tags = el('div', 'tags'); sw.append(tags);
     const txt = el('div', 'txt');
     txt.append(el('div', 'nm', clipName(c)),
       el('div', 'meta', `${c.width}×${c.height} · ${Math.round(c.fps)} · ${c.seconds.toFixed(0)}s · ${CODEC[c.codec] || '?'}`));
     it.append(sw, txt);
-    it.title = c.name + '\nClick, then click a layer. Drag onto a layer. Double-click = into the focused layer. Alt + click = HIT.';
+    it.title = c.name + '\nDrag onto a layer or a monitor · double-click = into the focused layer · right-click or ⋯ = Load to… · click, then click a layer · Alt + click = HIT';
+    const more = el('button', 'more', '⋯'); more.title = 'Load to… (PREVIEW A–D, PROGRAM E–H, HIT)';
+    more.addEventListener('click', e => { e.stopPropagation(); window.Flows.menu(e, c.id); });
+    it.append(more);
+    it.addEventListener('contextmenu', e => window.Flows.menu(e, c.id));
     it.addEventListener('click', e => {
       if (e.altKey) { fireHit(c.id); return; }
       arm(S.armed === c.id ? -1 : c.id);
@@ -269,10 +288,10 @@ function buildLibrary() {
     it.addEventListener('dblclick', () => {
       const L = S.live;
       if (!L || L.focus_deck < 0) { toast('No layer has the focus: click a layer first'); return; }
-      send({ type: 'LayerClip', deck: L.focus_deck, layer: L.focus_layer, value: c.id });
+      window.Flows.load(c.id, 'focus');
       arm(-1);
     });
-    it.addEventListener('dragstart', e => { e.dataTransfer.setData('text/x-himmel-clip', String(c.id)); e.dataTransfer.effectAllowed = 'copy'; });
+    it.addEventListener('dragstart', e => window.Flows.setDrag(e, c.id));
     list.append(it);
     clipEls.push({ id: c.id, it, tags });
   }
@@ -283,13 +302,12 @@ function renderLibrary() {
   for (const c of clipEls) {
     c.it.classList.toggle('armed', S.armed === c.id);
     if (!L) continue;
-    let inPrev = false, inProg = false;
-    L.deck.forEach((dk, d) => dk.layer.forEach(l => { if (l.clip === c.id) { if (d === L.program_deck) inProg = true; else inPrev = true; } }));
-    const want = (inPrev ? 'p' : '') + (inProg ? 'l' : '');
+    // GUI w7: which layers the clip is on, by group letter (green = PREVIEW, red = PROGRAM).
+    const w = window.Flows.where(c.id);
+    const want = w.map(x => x.group).join(',');
     if (c.tags.dataset.k !== want) {
       c.tags.dataset.k = want; c.tags.textContent = '';
-      if (inPrev) c.tags.append(el('i', 'p'));
-      if (inProg) c.tags.append(el('i', 'l'));
+      for (const x of w) c.tags.append(el('b', 'wt ' + x.side, x.group));
     }
   }
 }
@@ -560,7 +578,7 @@ function buildClipEditor() {
   const head = el('div', 'cehead');
   CE.title = el('span', 'cetitle', '–'); CE.phase = el('span', 'chip ph', '–'); CE.info = el('span', 'dim mono ceinfo', '');
   head.append(CE.title, CE.phase, CE.info);
-  const tl = el('div', 'timeline'); tl.title = 'Click = jump · drag the brackets = in / out (thin = inner loop) · Alt + drag = scratch';
+  const tl = el('div', 'timeline'); tl.title = 'Click = jump · drag the brackets = in / out (they snap to cuts; Alt = no snap; thin = inner loop) · Shift + drag = move in and out together · Alt + drag = scratch';
   CE.slices = el('div', 'slices'); for (let i = 0; i < 16; i++) CE.slices.append(el('i'));
   CE.range = el('div', 'range'); CE.inner = el('div', 'inner'); CE.bl = el('div', 'beatloop');
   CE.cues = el('div', 'cues');
@@ -570,25 +588,90 @@ function buildClipEditor() {
   tl.append(CE.slices, CE.range, CE.inner, CE.bl, CE.cues, CE.ph, hIn, hOut, hLi, hLo);
   CE.tl = tl; CE.h = { In: hIn, Out: hOut, LoopIn: hLi, LoopOut: hLo };
   const frac = e => { const r = tl.getBoundingClientRect(); return Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)); };
+  // GUI w7: brackets snap to the analysed cuts (within 1 % of the clip); hold Alt for no snap.
+  const snapF = (e, f) => {
+    if (e.altKey) return f;
+    const cuts = libRowOf(clipInfo(S.live?.deck[focusTarget().deck].layer[focusTarget().layer].clip))?.cuts || [];
+    let best = f, bd = 0.01;
+    for (const c of [0, 1, ...cuts]) if (Math.abs(c - f) < bd) { bd = Math.abs(c - f); best = c; }
+    return best;
+  };
   for (const [param, h] of Object.entries(CE.h)) {
     h.addEventListener('pointerdown', e => {
       e.stopPropagation(); h.setPointerCapture(e.pointerId); h._drag = true; CE.dragging = param;
     });
-    h.addEventListener('pointermove', e => { if (h._drag) { h.style.left = frac(e) * 100 + '%'; setPT(param, frac(e)); } });
-    const end = e => { if (!h._drag) return; h._drag = false; CE.dragging = null; setP(param, frac(e)); };
+    h.addEventListener('pointermove', e => { if (h._drag) { const f = snapF(e, frac(e)); h.style.left = f * 100 + '%'; setPT(param, f); } });
+    const end = e => { if (!h._drag) return; h._drag = false; CE.dragging = null; setP(param, snapF(e, frac(e))); };
     h.addEventListener('pointerup', end); h.addEventListener('pointercancel', end);
   }
-  let scr = false;
+  let scr = false, mv = null;
   tl.addEventListener('pointerdown', e => {
     if (e.target.closest('.hdl')) return;
     const t = focusTarget();
+    const tr0 = curTransport();
+    if (e.shiftKey && tr0) { mv = { x: frac(e), a: tr0.in, b: tr0.out }; tl.setPointerCapture(e.pointerId); CE.dragging = 'range'; return; }
     if (e.altKey) { scr = true; tl.setPointerCapture(e.pointerId); send({ type: 'LayerScratch', ...t, value: 1, pos: frac(e) }); }
     else if (e.target.closest('.cue')) { const q = +e.target.closest('.cue').dataset.q; send({ type: 'LayerCue', ...t, cue: q, value: 'Jump' }); }
     else send({ type: 'LayerJump', ...t, value: frac(e) });
   });
-  tl.addEventListener('pointermove', e => { if (scr) sendT('scratch', { type: 'LayerScratch', ...focusTarget(), value: 1, pos: frac(e) }); });
+  tl.addEventListener('pointermove', e => {
+    if (scr) sendT('scratch', { type: 'LayerScratch', ...focusTarget(), value: 1, pos: frac(e) });
+    if (mv) {
+      const w = mv.b - mv.a, d = Math.min(1 - mv.b, Math.max(-mv.a, frac(e) - mv.x));
+      CE.h.In.style.left = (mv.a + d) * 100 + '%'; CE.h.Out.style.left = (mv.a + d + w) * 100 + '%';
+      mv.d = d;
+    }
+  });
+  const mvEnd = () => {
+    if (!mv) return;
+    const d = mv.d || 0, t = focusTarget();
+    // Out first when moving right (in never passes out), in first when moving left.
+    const a = { type: 'LayerSet', ...t, param: 'In', value: mv.a + d }, b = { type: 'LayerSet', ...t, param: 'Out', value: mv.b + d };
+    send(d > 0 ? [b, a] : [a, b]);
+    mv = null; CE.dragging = null;
+  };
+  tl.addEventListener('pointerup', mvEnd); tl.addEventListener('pointercancel', mvEnd);
   const scrEnd = e => { if (!scr) return; scr = false; send({ type: 'LayerScratch', ...focusTarget(), value: 0, pos: frac(e) }); };
   tl.addEventListener('pointerup', scrEnd); tl.addEventListener('pointercancel', scrEnd);
+
+  // Row 1c (GUI w7): in / out as numbers, set them at the playhead, the speed, TRY.
+  const row0 = el('div', 'cerow cetime');
+  const secBox = (label, param, title) => {
+    const w = el('label', 'nb'); w.title = title;
+    const inp = el('input'); inp.type = 'number'; inp.min = 0; inp.step = 0.01;
+    w.append(el('span', 'lbl', label), inp, el('span', 'u', 's'));
+    hold(inp);
+    inp.addEventListener('change', () => {
+      const ci = clipInfo(S.live?.deck[focusTarget().deck].layer[focusTarget().layer].clip);
+      const v = +inp.value;
+      if (ci && ci.seconds > 0 && Number.isFinite(v)) setP(param, Math.min(1, Math.max(0, v / ci.seconds)));
+      inp.blur();
+    });
+    return { w, inp };
+  };
+  CE.inS = secBox('in', 'In', 'IN point in seconds from the start of the clip');
+  CE.outS = secBox('out', 'Out', 'OUT point in seconds from the start of the clip');
+  CE.lenS = el('span', 'dim mono celen', '');
+  const atPh = (label, param, title) => { const b = el('button', 'chip2', label); b.title = title; b.addEventListener('click', () => { const t = focusTarget(); setP(param, S.live.deck[t.deck].layer[t.layer].position); }); return b; };
+  const resetIO = el('button', 'chip2', 'FULL'); resetIO.title = 'In = start, out = end';
+  resetIO.addEventListener('click', () => { const t = focusTarget(); send([{ type: 'LayerSet', ...t, param: 'In', value: 0 }, { type: 'LayerSet', ...t, param: 'Out', value: 1 }]); });
+  const spW = el('label', 'nb cespeed'); spW.title = 'Speed (−4..4; negative = backwards; double-click = 1x). Same as the speed in the bar above.';
+  CE.spIn = el('input'); CE.spIn.type = 'range'; CE.spIn.min = -4; CE.spIn.max = 4; CE.spIn.step = 0.01; hold(CE.spIn);
+  CE.spV = el('span', 'mono u', '1.00x');
+  CE.spIn.addEventListener('input', () => { CE.spV.textContent = (+CE.spIn.value).toFixed(2) + 'x'; sendT('speed', { type: 'LayerSpeed', ...focusTarget(), value: +CE.spIn.value }); });
+  CE.spIn.addEventListener('dblclick', () => send({ type: 'LayerSpeed', ...focusTarget(), value: 1 }));
+  spW.append(el('span', 'lbl', 'speed'), CE.spIn, CE.spV);
+  const spQuick = el('div', 'cg');
+  for (const v of [0.5, 1, 2]) { const b = el('button', 'chip2', v + 'x'); b.title = 'Speed ' + v + 'x'; b.addEventListener('click', () => send({ type: 'LayerSpeed', ...focusTarget(), value: v })); spQuick.append(b); }
+  CE.tryB = el('button', 'chip2 try', 'TRY ON PREVIEW');
+  CE.tryB.title = 'This layer is on air. TRY loads the same clip on the same PREVIEW layer and opens it here, so you can edit it off air and TAKE it.';
+  CE.tryB.addEventListener('click', () => {
+    const t = focusTarget(), L = S.live, id = L.deck[t.deck].layer[t.layer].clip, pd = 1 - L.program_deck;
+    if (id < 0) return;
+    send([{ type: 'LayerClip', deck: pd, layer: t.layer, value: id }, { type: 'Focus', deck: pd, layer: t.layer }]);
+    toast('TRY: the clip is on PREVIEW ' + GROUPS.prev[t.layer] + ' now');
+  });
+  row0.append(CE.inS.w, atPh('IN ◂ playhead', 'In', 'Set IN where the playhead is now'), CE.outS.w, atPh('OUT ◂ playhead', 'Out', 'Set OUT where the playhead is now'), resetIO, CE.lenS, spW, spQuick, CE.tryB);
 
   // Row 2: cue pads + beat loop + direction / reverse.
   const row2 = el('div', 'cerow');
@@ -674,7 +757,7 @@ function buildClipEditor() {
   CE.fxrow = el('div', 'cefx');
   CE.none = el('div', 'cenone dim', '');
   CE.body = el('div', 'cebody');
-  CE.body.append(tl, CE.film, row2, row3, row4, row5, CE.fxrow);
+  CE.body.append(tl, CE.film, row0, row2, row3, row4, row5, CE.fxrow);
   box.append(head, CE.none, CE.body);
 }
 // The library row of a catalog clip (by file name), for the drawer's filmstrip. Refreshed every 15 s
@@ -755,7 +838,11 @@ function renderClipEditor() {
   $('inspector').classList.toggle('progframe', onProg && S.tab === 'clip');
   CE.title.textContent = `${onProg ? 'PROGRAM' : 'PREVIEW'} ${groupOf(t.deck, t.layer)} · deck ${deckLetter(t.deck)}: ${ci ? clipName(ci) : 'no clip'}`;
   CE.title.className = 'cetitle ' + (onProg ? 'prog' : 'prev');
-  CE.none.textContent = !tr ? 'This engine does not publish the transport section (state v2).' : !ci ? 'Load a clip on this layer to edit its transport (the settings stay with the layer).' : '';
+  const noneMsg = !tr ? 'This engine does not publish the transport section (state v2).' : !ci ? `${onProg ? 'PROGRAM' : 'PREVIEW'} ${groupOf(t.deck, t.layer)} has no clip. Drag one onto the layer, or ` : '';
+  if (CE.none.dataset.k !== noneMsg) {
+    CE.none.dataset.k = noneMsg; CE.none.textContent = noneMsg;
+    if (tr && !ci) { const b = el('button', 'primary', 'CHOOSE A CLIP…'); b.title = 'Open the clip picker for this layer'; b.addEventListener('click', () => window.Flows.picker(focusTarget())); CE.none.append(b); }
+  }
   CE.none.classList.toggle('hidden', !!(tr && ci));
   CE.body.classList.toggle('noclip', !ci);
   if (!tr) return;
@@ -773,6 +860,14 @@ function renderClipEditor() {
   if (CE.dragging !== 'LoopIn') CE.h.LoopIn.style.left = pct(tr.loop_in);
   if (CE.dragging !== 'LoopOut') CE.h.LoopOut.style.left = pct(tr.loop_out);
   CE.ph.style.left = pct(ls.position);
+  if (ci) {
+    setVal(CE.inS.inp, +(tr.in * ci.seconds).toFixed(2)); setVal(CE.outS.inp, +(tr.out * ci.seconds).toFixed(2));
+    CE.inS.inp.max = CE.outS.inp.max = ci.seconds.toFixed(2);
+    CE.lenS.textContent = `= ${((tr.out - tr.in) * ci.seconds).toFixed(2)} s of ${ci.seconds.toFixed(1)} s`;
+  }
+  setVal(CE.spIn, ls.speed);
+  if (performance.now() >= (CE.spIn._hold || 0)) CE.spV.textContent = ls.speed.toFixed(2) + 'x';
+  CE.tryB.classList.toggle('hidden', !onProg || !ci);
   renderFilm(ci, ls.position);
   renderDrawerFx(ls);
   CE.bl.classList.toggle('hidden', !tr.beat_loop);
@@ -1023,6 +1118,7 @@ let dirty = false;
 function invalidate() { if (!dirty) { dirty = true; requestAnimationFrame(render); } }
 function render() {
   dirty = false;
+  if (window.Flows) window.Flows.tick();
   renderTop();
   renderClock();
   if (window.Panels) window.Panels.render();
@@ -1177,8 +1273,14 @@ function wire() {
   });
 }
 
+window.addEventListener('himmel-librows', () => { if (S.lib === 'clips') buildLibrary(); });
 window.addEventListener('hashchange', () => { const v = location.hash.slice(1); if (VIEWS.includes(v) && v !== S.view) setView(v); });
 buildStrips(); buildSlots(); wire(); connect(); loadStatic();
+// GUI w7 (flows.js loads after this file): a monitor takes a dropped clip onto its deck's next free layer.
+window.addEventListener('DOMContentLoaded', () => {
+  window.Flows.dropTarget($('monPrev'), () => ({ deck: 1 - progDeck() }));
+  window.Flows.dropTarget($('monProg'), () => ({ deck: progDeck() }));
+});
 setView(VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'perform');
 setTab('clip');
 streams.forEach(pull);

@@ -375,168 +375,8 @@
   }
 
   // ================================================================ LIBRARY
-  const LB = { key: '', list: null, loading: false, at: 0, seq: -1, filter: '', state: 'all' };
-  async function loadLibrary(force) {
-    if (LB.loading || (!force && performance.now() - LB.at < 2000)) return;
-    LB.loading = true;
-    try { const r = await fetch('/library/clips'); LB.list = await r.json(); } catch (e) { LB.list = { ok: false, error: 'himmel_ui is not reachable', clips: [] }; }
-    LB.loading = false; LB.at = performance.now(); LB.key = ''; window.H.invalidate();
-  }
-  function buildLibraryView() {
-    const head = $('libHead'); head.textContent = '';
-    LB.status = el('div', 'lbstatus');
-    const f = el('input'); f.type = 'search'; f.placeholder = 'filter (name, kind, mood, loop style)'; f.addEventListener('input', () => { LB.filter = f.value.toLowerCase(); LB.key = ''; window.H.invalidate(); });
-    f.addEventListener('keydown', e => e.stopPropagation());
-    const st = el('select');
-    for (const s of ['all', 'ready', 'working', 'failed']) { const o = el('option', null, s.toUpperCase()); o.value = s; st.append(o); }
-    st.addEventListener('change', () => { LB.state = st.value; LB.key = ''; window.H.invalidate(); });
-    head.append(LB.status, f, st, btn('↻', 'Read the library again', () => loadLibrary(true)));
-    // M11 part 3: the ingest commands (MEDIA, library-db.md §10). Greyed out while the worker does not answer.
-    LB.acts = el('div', 'lbacts');
-    LB.acts.append(
-      btn('+ IMPORT…', 'Import a file or a folder (recursive). The originals stay where they are; nothing is copied.', () => importDialog()),
-      btn('RESCAN ALL', 'Scan the watch folders now and check every original', () => ingest({ type: 'Rescan', clip: 0 })),
-      btn('RETRY FAILED', 'Queue every failed clip again', () => ingest({ type: 'Retry', clip: 0 })),
-      btn('REANALYSE ALL', 'Run the analysis again on every ready clip (they stay playable)', () => confirm('Analyse every ready clip again? They stay playable meanwhile.') && ingest({ type: 'Reanalyse', clip: 0 })),
-      btn('FIND MISSING…', 'Search a folder for every clip whose original is missing (by name, then size; relinked when the content matches)', async () => {
-        const d = await ask('FIND MISSING ORIGINALS · folder to search', '', 'An absolute folder path, e.g. D:\\Clips. Searched with its subfolders.');
-        if (d) ingest({ type: 'Relink', clip: 0, path: d });
-      }));
-    LB.mode = el('select'); LB.mode.title = 'How hard the import works. AUTO = in the background while a show runs. FULL is not show-safe. HOLD = start nothing new.';
-    for (const m of ['Auto', 'Background', 'Full', 'Hold']) { const o = el('option', null, m.toUpperCase()); o.value = m; LB.mode.append(o); }
-    LB.mode.addEventListener('change', () => {
-      const m = LB.mode.value;
-      if (m === 'Full' && !confirm('FULL speed even while a show runs: the import may cost frames on the outputs. Go on?')) { LB.mode.value = 'Auto'; return; }
-      ingest({ type: 'Mode', mode: m });
-    });
-    LB.acts.append(el('span', 'lbl', 'speed'), LB.mode);
-    LB.reply = el('span', 'dim lbreply', '');
-    LB.acts.append(LB.reply);
-    head.after(LB.acts);
-    LB.built = true;
-  }
-  // One ingest command through the bridge (POST /library/cmd). The reply comes back in the library event.
-  async function ingest(cmd) {
-    try {
-      const r = await fetch('/library/cmd', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cmd) });
-      const j = await r.json();
-      if (!j.ok) toast(j.error || 'refused', 'bad');
-      else { LB.wait = j.seq; if (cmd.type === 'Relink' && cmd.clip) (LB.relink = LB.relink || {})[j.seq] = cmd; }
-    } catch (e) { toast('himmel_ui is not reachable', 'bad'); }
-  }
-  async function importDialog() {
-    const p = await ask('IMPORT · a file or a folder', '', 'An absolute path, e.g. D:\\Clips\\Club. Folders are imported with their subfolders; the originals are referenced, never copied. Add "+" at the end to keep watching the folder.');
-    if (!p) return;
-    const watch = /\+\s*$/.test(p);
-    ingest({ type: 'Import', path: p.replace(/\s*\+\s*$/, '').trim(), watch });
-  }
-  // New replies -> a toast each (once), the newest one on the action bar.
-  function renderIngestReplies(lib) {
-    const cmd = lib?.cmd;
-    const ok = has(lib) && lib.alive && lib.writable !== false && !!cmd;
-    for (const b of LB.acts.querySelectorAll('button, select')) b.disabled = !ok;
-    LB.acts.title = ok ? '' : (!has(lib) ? 'The import worker is not running.' : !cmd ? 'This import worker is older (library block v1): no commands.' : 'The import worker does not answer.');
-    if (has(lib) && document.activeElement !== LB.mode) LB.mode.value = lib.mode === 'Hold' ? 'Hold' : LB.mode.value;
-    if (!cmd) { LB.reply.textContent = ok ? '' : LB.acts.title; return; }
-    const top = cmd.replies[0];
-    LB.reply.textContent = top ? `${top.type}: ${top.message || top.status}${cmd.done < cmd.sent ? ` · ${cmd.sent - cmd.done} waiting` : ''}` : (cmd.done < cmd.sent ? `${cmd.sent - cmd.done} waiting` : '');
-    LB.reply.className = 'lbreply ' + (top && !top.ok ? 'bad' : 'dim');
-    for (const r of [...cmd.replies].reverse()) {
-      if (r.seq <= (LB.seenReply || 0)) continue;
-      LB.seenReply = r.seq;
-      toast(`${r.type}: ${r.message || r.status}`, r.ok ? '' : 'bad');
-      const rl = LB.relink?.[r.seq];
-      if (rl && r.status === 'Mismatch' && confirm(`${rl.path} has other content than the clip.
-Import the clip again from this file (same name, new analysis)?`))
-        ingest({ ...rl, force: true });
-      LB.at = 0;   // re-read the clip list
-    }
-  }
-  function renderLibraryView() {
-    if (!LB.built) buildLibraryView();
-    const lib = S.library;
-    renderIngestReplies(lib);
-    if (has(lib) && lib.ready_seq !== LB.seq) { LB.seq = lib.ready_seq; loadLibrary(true); }
-    else if (!LB.list || performance.now() - LB.at > 5000) loadLibrary(false);
-    // Ingest status line.
-    const s = LB.status; s.textContent = '';
-    if (has(lib)) {
-      s.append(el('span', 'chip ' + (lib.alive ? 'ok' : 'warn'), lib.alive ? `INGEST ${lib.mode.toUpperCase()}${lib.paused ? ' · PAUSED (show busy)' : ''}` : 'INGEST NOT RUNNING'),
-        el('span', 'mono dim', `${lib.queued} queued · ${lib.working} working · ${lib.ready_total} ready · ${lib.failed_total} failed`));
-      if (lib.job.name) {
-        const bar = el('span', 'lbjob'); const fill = el('i'); fill.style.width = (lib.job.progress * 100) + '%'; bar.append(fill);
-        s.append(el('span', null, `${lib.job.name} · ${lib.job.stage}`), bar);
-      }
-      if (lib.job.last_error) s.append(el('span', 'bad', '⚠ ' + lib.job.last_error));
-      if (lib.catalog_full) s.append(el('span', 'chip warn', `CATALOG FULL · ${lib.catalog_full} ready clips not playable (256 max)`));
-    } else {
-      s.append(el('span', 'chip warn', lib?.state === 'version' ? 'INGEST: other version' : 'INGEST NOT RUNNING'), el('span', 'dim', 'New files are imported while himmel_ingest runs (started by himmel.exe).'));
-    }
-    const root = lib?.root || LB.list?.root || '';
-    if (root) s.append(el('span', 'dim mono', 'drop files in ' + root + '\\originals'));
-    // The clip grid (rebuilt only when the list or the filter changed).
-    const list = LB.list;
-    const inCat = new Set((S.cat?.clips || []).map(c => c.name.replace(/ \(lib\)$/, '')));
-    const key = JSON.stringify([LB.at, LB.filter, LB.state, inCat.size]);
-    if (key === LB.key) return;
-    LB.key = key;
-    const g = $('libGrid'); g.textContent = '';
-    if (!list) { g.append(el('div', 'empty', 'Reading the library…')); return; }
-    if (!list.ok) { g.append(el('div', 'empty', list.error || 'No library.')); return; }
-    const want = c => (LB.state === 'all' || (LB.state === 'ready' ? c.state === 'ready' : LB.state === 'failed' ? c.state === 'failed' : !['ready', 'failed'].includes(c.state))) &&
-      (!LB.filter || [c.name, c.kind, c.analysis?.loop_style, ...Object.entries(c.analysis?.mood || {}).filter(([, v]) => v > 0.5).map(([k]) => k)].join(' ').toLowerCase().includes(LB.filter));
-    // MEDIA §10: `removed` rows are tombstones, never shown.
-    const shown = list.clips.filter(c => c.state !== 'removed').filter(want);
-    $('libCount').textContent = `${shown.length} of ${list.clips.length} clips`;
-    for (const c of shown.slice(0, 600)) g.append(libCard(c, inCat.has(c.name)));
-    if (!shown.length) g.append(el('div', 'empty', list.clips.length ? 'Nothing matches the filter.' : 'The library is empty: drop clips into the originals folder.'));
-  }
-  function libCard(c, inCat) {
-    const a = c.analysis;
-    const card = el('div', 'lbcard st-' + c.state);
-    const th = el('div', 'lbthumb');
-    if (a) th.style.background = a.avg_rgb;
-    if (c.thumb) { const img = el('img'); img.loading = 'lazy'; img.src = `/library/thumb/${c.hash}.jpg`; img.alt = ''; img.onerror = () => img.remove(); th.append(img); }
-    if (c.state !== 'ready') th.append(el('span', 'lbstate', c.state.toUpperCase()));
-    if (inCat) th.append(el('span', 'lbin', 'IN SHOW'));
-    card.append(th);
-    card.append(el('div', 'lbname', c.name));
-    card.append(el('div', 'dim mono lbmeta', `${c.kind} · ${c.size[0]}×${c.size[1]} · ${c.fps} fps · ${c.seconds} s` + (c.alpha ? ' · α' : '') + (c.judder.length ? ` · judders at ${c.judder.join('/')} Hz` : '')));
-    if (a) {
-      const chips = el('div', 'lbchips');
-      chips.append(el('span', 'chip2', `E${a.energy}`), el('span', 'chip2', a.loop_style.toUpperCase()));
-      if (a.flicker !== 'ok') chips.append(el('span', 'chip2 warn', 'FLICKER ' + a.flicker.toUpperCase()));
-      const pal = el('span', 'lbpal');
-      for (const [h, w] of a.palette) { const i = el('i'); i.style.background = h; i.style.flex = String(Math.max(0.05, w)); pal.append(i); }
-      chips.append(pal);
-      card.append(chips);
-      const mood = el('div', 'lbmood');
-      for (const [k, ab] of [['chill', 'CH'], ['groove', 'GR'], ['techno', 'TE'], ['crazy', 'CR']]) {
-        const v = a.mood[k] || 0, m = el('span', null); m.title = `${k} ${Math.round(v * 100)}%`;
-        const b = el('i'); b.style.width = (v * 100) + '%'; m.append(el('b', null, ab), b); mood.append(m);
-      }
-      card.append(mood);
-    }
-    if (c.state === 'failed' && c.error) card.append(el('div', 'bad lberr', c.error));
-    if (c.source_missing) card.append(el('div', 'bad lberr', 'ORIGINAL MISSING · RELINK… or FIND MISSING… (the clip still plays)'));
-    card.title = c.source;
-    // Per-clip ingest commands (library id = c.id, not the engine catalog id).
-    const ca = el('div', 'lbcardacts');
-    const nm = c.name;
-    ca.append(btn('↻', 'Rescan: check this clip\'s original', () => ingest({ type: 'Rescan', clip: c.id })));
-    if (c.state === 'ready') ca.append(btn('ANALYSE', 'Analyse again (the clip stays playable)', () => ingest({ type: 'Reanalyse', clip: c.id, thumbs: true })));
-    if (c.state === 'failed') ca.append(btn('RETRY', 'Import it again from the start', () => ingest({ type: 'Retry', clip: c.id })));
-    ca.append(btn('RELINK…', 'Point this clip at its original in a new place', async () => {
-      const p = await ask(`RELINK · ${nm}`, c.source || '', 'The file\'s new absolute path. Other content is refused unless you confirm it.');
-      if (!p) return;
-      ingest({ type: 'Relink', clip: c.id, path: p });
-    }));
-    ca.append(btn('✕', 'Remove from the library (the original file is never touched)', () => {
-      if (confirm(`Remove "${nm}" from the library?\nThe HAP copy, still and thumbnails are deleted; the original file stays.${inCat ? '\nThe engine keeps it until it restarts.' : ''}`)) ingest({ type: 'Remove', clip: c.id });
-    }, 'bad'));
-    card.append(ca);
-    return card;
-  }
+  // GUI wave 7: the LIBRARY view moved to gui/library.js (window.Lib): filters, sort, multi-select,
+  // the layer dock, import progress, disk space, the path dialog.
 
   // ================================================================ AUDIO: the top-bar meter
   const AM = {};
@@ -734,11 +574,11 @@ Import the clip again from this file (same name, new analysis)?`))
       renderAudioMeter();
       renderScenes();
       if (S.view === 'outputs') renderOutputs();
-      if (S.view === 'library') renderLibraryView();
+      if (S.view === 'library' && window.Lib) window.Lib.render();
     },
     shown(v) {
       if (v === 'outputs') O.key = '';
-      if (v === 'library') { LB.key = ''; loadLibrary(true); }
+      if (v === 'library' && window.Lib) window.Lib.shown();
     },
     tabShown(tab) { if (tab === 'scenes') { SC.key = ''; renderScenes(); } },
     settings: renderSettingsPage,

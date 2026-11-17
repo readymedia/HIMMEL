@@ -796,6 +796,15 @@ void connection(SOCKET s) {
             const std::string img = himmel::ui::panels_library_thumb(req.path.substr(15));
             ok = img.empty() ? respond(s, 404, "Not Found", "text/plain", "no such thumbnail", keep)
                              : respond(s, 200, "OK", "image/jpeg", img, keep);
+        } else if (req.method == "POST" && req.path == "/library/open-originals") {
+            ok = respond(s, 200, "OK", "application/json", dump(himmel::ui::panels_open_originals()), keep);
+        } else if (req.method == "GET" && req.path == "/library/disk") {
+            ok = respond(s, 200, "OK", "application/json", dump(himmel::ui::panels_library_disk()), keep);
+        } else if (req.method == "GET" && req.path == "/fs/list") {
+            // GUI wave 7: the import path dialog. Read-only; local pages only (checked above).
+            const std::string p = himmel::ui::url_decode(himmel::ui::query_param(req.query, "path"));
+            const bool all = himmel::ui::query_param(req.query, "all") == "1";
+            ok = respond(s, 200, "OK", "application/json", dump(himmel::ui::panels_fs_list(p, all)), keep);
         } else if (req.method == "GET" && req.path == "/fxmeta") {
             ok = respond(s, 200, "OK", "application/json", fx_meta_json(), keep);
         } else if (req.method == "GET" && req.path.rfind("/weapons/", 0) == 0) {

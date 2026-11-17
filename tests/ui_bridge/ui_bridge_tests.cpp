@@ -823,6 +823,25 @@ static void test_part3() {
     }
 }
 
+// GUI wave 7: the import path dialog and the queue ETA (pure helpers).
+static void test_wave7() {
+    using namespace himmel::ui;
+    CHECK(import_kind_of("a.MOV") == "video" && import_kind_of("x.mp4") == "video" && import_kind_of("clip.webm") == "video");
+    CHECK(import_kind_of("p.PNG") == "still" && import_kind_of("p.jpeg") == "still" && import_kind_of("logo.svg") == "vector");
+    CHECK(import_kind_of("g.gif") == "animation" && import_kind_of("notes.txt").empty() && import_kind_of("noext").empty());
+    CHECK(import_kind_of(".mov") == "video" && import_kind_of("trail.").empty());
+    CHECK(parent_dir_of(R"(C:\Clips\Club)") == R"(C:\Clips)");
+    CHECK(parent_dir_of(R"(C:\Clips\Club\)") == R"(C:\Clips)");
+    CHECK(parent_dir_of(R"(C:\Clips)") == R"(C:\)");
+    CHECK(parent_dir_of(R"(C:\)").empty() && parent_dir_of("C:").empty() && parent_dir_of("").empty());
+    CHECK(parent_dir_of("D:/a/b") == "D:/a");
+    CHECK(parent_dir_of(R"(\\srv\share)").empty() && parent_dir_of(R"(\\srv\share\x)") == R"(\\srv\share)");
+    CHECK(eta_seconds(0, 3.0) == 0 && eta_seconds(4, 2.5) == 10 && eta_seconds(3, 0) == -1 && eta_seconds(3, -1) == -1);
+    CHECK(eta_seconds(100000, 10.0) == 86400 && eta_seconds(2, 1e9) == -1);
+    CHECK(url_decode("C%3A%5CClips%5CMy+Club") == R"(C:\Clips\My Club)");
+    CHECK(url_decode("%E2%9C%93") == "\xE2\x9C\x93" && url_decode("100%") == "100%" && url_decode("%zz") == "%zz");
+}
+
 int main() {
     test_layer_commands();
     test_fx_commands();
@@ -835,6 +854,7 @@ int main() {
     test_panel_json();
     test_http();
     test_part3();
+    test_wave7();
     std::printf("\n%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

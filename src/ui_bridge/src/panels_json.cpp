@@ -3,6 +3,7 @@
 #include "himmel/ui/panels_json.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -956,6 +957,8 @@ json panels_names() {
     j["signals"] = names_of(kSigNames);
     j["input_modes"] = names_of(kInputModeNames);
     j["verdicts"] = names_of(kVerdictNames);
+    j["ingest"] = names_of(kIngestCmdNames);        // GUI w7: the page shows only the ingest buttons this bridge can send
+    j["ingest_modes"] = names_of(kIngestReqNames);
     j["scene_pads"] = kScenePads;
     j["max_outputs"] = kMaxOutputs;
     return j;
@@ -1067,6 +1070,47 @@ json ingest_reply_to_json(const library::IngestReply& r) {
             {"count", r.count},
             {"clip", r.clip},
             {"message", std::string(r.message, n)}};
+}
+
+std::string import_kind_of(const std::string& file_name) {
+    const size_t dot = file_name.rfind('.');
+    if (dot == std::string::npos || dot + 1 >= file_name.size()) return {};
+    std::string e = file_name.substr(dot + 1);
+    for (char& ch : e) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    static const char* const video[] = {"mov", "mp4", "m4v", "mkv", "avi", "webm", "mxf", "mpg", "mpeg", "wmv"};
+    static const char* const still[] = {"png", "jpg", "jpeg", "webp", "tif", "tiff", "bmp", "tga"};
+    for (const char* x : video)
+        if (e == x) return "video";
+    for (const char* x : still)
+        if (e == x) return "still";
+    if (e == "gif" || e == "apng") return "animation";
+    if (e == "svg") return "vector";
+    return {};
+}
+
+std::string parent_dir_of(const std::string& path) {
+    const auto sep = [](char ch) { return ch == '\\' || ch == '/'; };
+    std::string p = path;
+    while (p.size() > 3 && sep(p.back())) p.pop_back();
+    if (p.size() >= 2 && p.size() <= 3 && p[1] == ':') return {};   // a drive root -> the drive list
+    if (p.size() >= 2 && sep(p[0]) && sep(p[1])) {                  // \\server\share[\...]
+        int parts = 0;
+        for (size_t k = 2; k < p.size(); ++k)
+            if (sep(p[k]) && !sep(p[k - 1])) ++parts;
+        if (parts <= 1) return {};
+    }
+    size_t k = p.size();
+    while (k > 0 && !sep(p[k - 1])) --k;
+    if (k == 0) return {};
+    if (k == 3 && p[1] == ':') return p.substr(0, 3);   // C:\x -> C:\ (keep the separator)
+    return p.substr(0, k - 1);
+}
+
+int eta_seconds(int left, double per_item_s) {
+    if (left <= 0) return 0;
+    if (!(per_item_s > 0) || per_item_s > 86400) return -1;
+    const double s = left * per_item_s;
+    return s >= 86400 ? 86400 : static_cast<int>(s + 0.5);
 }
 
 }  // namespace himmel::ui

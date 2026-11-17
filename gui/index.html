@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="m11.css">
 <link rel="stylesheet" href="panels.css">
 <link rel="stylesheet" href="build.css">
+<link rel="stylesheet" href="flows.css">
 </head>
 <body>
 <header id="top">
@@ -121,8 +122,10 @@
 <main id="start" class="view hidden">
   <div class="wizbar" id="wizBar">
     <button data-step="0" class="hidden" title="The start screen: new / open / recent project, autosave, health"><b>0</b> PROJECT</button>
-    <button data-step="1"><b>1</b> CLIPS</button><button data-step="2"><b>2</b> WEAPON</button>
-    <button data-step="3"><b>3</b> OUTPUTS</button><button data-step="4"><b>4</b> PLAY</button>
+    <button data-step="1" title="Import clips"><b>1</b> CLIPS</button><button data-step="2" title="The controller(s) you play with"><b>2</b> WEAPON</button>
+    <button data-step="3" title="Where the picture goes: outputs, resolution, IDENTIFY"><b>3</b> OUTPUTS</button><button data-step="4" title="Sound in and the health check"><b>4</b> SOUND</button>
+    <button data-step="5" title="Put clips on the PREVIEW layers"><b>5</b> LAYERS</button><button data-step="6" title="TAKE: PREVIEW goes on air; add an effect"><b>6</b> TAKE + FX</button>
+    <button data-step="7" title="Save a scene and the project"><b>7</b> SAVE</button>
   </div>
   <div class="wizbody" id="wizBody"></div>
 </main>
@@ -143,8 +146,9 @@
 <!-- ====================================================================== LIBRARY -->
 <main id="library" class="view hidden">
   <div class="pagewrap">
-    <div class="libtop"><h2>Library</h2><span class="dim" id="libCount"></span></div>
-    <div class="libhead" id="libHead"></div>
+    <div class="libtop"><h2>Library</h2><span class="dim" id="libCount"></span>
+      <span class="dim lbhelp">Import clips, then drag them onto a layer below (or double-click = the focused layer, LOAD ▾ = choose).</span></div>
+    <div class="libhead2" id="libHead"></div>
     <div class="libgrid" id="libGrid"></div>
   </div>
 </main>
@@ -187,6 +191,8 @@
 <div id="toasts"></div>
 <template id="cvTpl"><canvas width="480" height="270"></canvas></template>
 <script src="app.js"></script>
+<script src="flows.js"></script>
+<script src="library.js"></script>
 <script src="panels.js"></script>
 <script src="views.js"></script>
 <script src="build.js"></script>

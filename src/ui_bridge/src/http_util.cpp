@@ -126,4 +126,18 @@ bool origin_is_local(std::string_view origin) {
     return false;
 }
 
+std::string url_decode(std::string_view s) {
+    std::string out;
+    out.reserve(s.size());
+    auto hex = [](char c) { return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1; };
+    for (size_t k = 0; k < s.size(); ++k) {
+        if (s[k] == '+') out.push_back(' ');
+        else if (s[k] == '%' && k + 2 < s.size() && hex(s[k + 1]) >= 0 && hex(s[k + 2]) >= 0) {
+            out.push_back(static_cast<char>(hex(s[k + 1]) * 16 + hex(s[k + 2])));
+            k += 2;
+        } else out.push_back(s[k]);
+    }
+    return out;
+}
+
 }  // namespace himmel::ui

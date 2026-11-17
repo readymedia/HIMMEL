@@ -90,4 +90,15 @@ nlohmann::json show_doc_for_page(const nlohmann::json& doc);
 bool ingest_command_from_json(const nlohmann::json& j, library::IngestCommand& c, std::string& error);
 nlohmann::json ingest_reply_to_json(const library::IngestReply& r);
 
+// GUI wave 7 (the import path dialog, GET /fs/list): what a file name would import as
+// (library-db.md §2): "video" | "still" | "vector" | "animation", or "" when it is not importable.
+// Case-insensitive on the extension.
+std::string import_kind_of(const std::string& file_name);
+// The folder above `path` for the dialog's "up" button: "C:\Clips\Club" -> "C:\Clips",
+// "C:\Clips" -> "C:\", "C:\" -> "" (= the drive list), "\\srv\share" -> "" too.
+std::string parent_dir_of(const std::string& path);
+// The import queue's ETA: `left` items at `per_item_s` seconds each, in whole seconds (capped at
+// 24 h); 0 when nothing is left, -1 when the rate is unknown.
+int eta_seconds(int left, double per_item_s);
+
 }  // namespace himmel::ui

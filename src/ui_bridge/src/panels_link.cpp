@@ -2,6 +2,11 @@
 // Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 #include "panels_link.h"
 
+#include <windows.h>
+#include <shellapi.h>
+#include <shlobj.h>
+
+#include <algorithm>
 #include <chrono>
 #include <cstring>
 #include <fstream>
@@ -378,6 +383,9 @@ json panels_library_clips() {
         const auto& a = r.analysis;
         json c;
         c["id"] = r.id;
+        c["order"] = r.ready_order;      // GUI w7: the catalog id is found by ready order + name
+        c["added"] = r.added_unix;
+        c["ready_unix"] = r.ready_unix;
         c["hash"] = r.hash;
         c["name"] = r.name;
         c["kind"] = library::kind_name(r.kind);
@@ -537,5 +545,132 @@ std::string panels_library_thumb(const std::string& file) {
 }
 
 std::string panels_library_root() { return g ? utf8(g->library_root) : std::string(); }
+
+// ---- GUI wave 7: the import path dialog and the disk line ----
+namespace {
+fs::path path_of_utf8(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
+json known_place(const char* name, REFKNOWNFOLDERID id) {
+    PWSTR w = nullptr;
+    json j;
+    if (SUCCEEDED(SHGetKnownFolderPath(id, 0, nullptr, &w)) && w) j = {{"name", name}, {"path", utf8(fs::path(w))}};
+    if (w) CoTaskMemFree(w);
+    return j;
+}
+}  // namespace
+
+json panels_fs_list(const std::string& path_utf8, bool all_files) {
+    json out = {{"ok", false}, {"path", path_utf8}, {"parent", parent_dir_of(path_utf8)},
+                {"dirs", json::array()}, {"files", json::array()}};
+    if (path_utf8.empty()) {
+        // The start of the dialog: drives + a few places (the library's own originals folder first).
+        json drives = json::array();
+        wchar_t buf[512];
+        const DWORD n = GetLogicalDriveStringsW(511, buf);
+        for (const wchar_t* d = buf; n && n < 511 && *d; d += wcslen(d) + 1) {
+            const UINT t = GetDriveTypeW(d);
+            if (t == DRIVE_NO_ROOT_DIR || t == DRIVE_CDROM) continue;
+            ULARGE_INTEGER fr{}, tot{};
+            json dj = {{"name", utf8(fs::path(d))}, {"path", utf8(fs::path(d))},
+                       {"kind", t == DRIVE_REMOVABLE ? "removable" : t == DRIVE_REMOTE ? "network" : "fixed"}};
+            if (GetDiskFreeSpaceExW(d, &fr, &tot, nullptr)) { dj["free"] = fr.QuadPart; dj["total"] = tot.QuadPart; }
+            drives.push_back(std::move(dj));
+        }
+        json places = json::array();
+        if (g && !g->library_root.empty()) places.push_back({{"name", "Library originals"}, {"path", utf8(g->library_root / "originals")}});
+        for (auto& p : {known_place("Videos", FOLDERID_Videos), known_place("Pictures", FOLDERID_Pictures),
+                        known_place("Desktop", FOLDERID_Desktop), known_place("Downloads", FOLDERID_Downloads),
+                        known_place("Documents", FOLDERID_Documents)})
+            if (!p.is_null()) places.push_back(p);
+        out["drives"] = std::move(drives);
+        out["places"] = std::move(places);
+        out["ok"] = true;
+        return out;
+    }
+    const fs::path p = path_of_utf8(path_utf8);
+    std::error_code ec;
+    if (!p.is_absolute() || !fs::is_directory(p, ec)) {
+        out["error"] = "not a folder: " + path_utf8;
+        return out;
+    }
+    int count = 0, importable = 0;
+    uint64_t bytes = 0;
+    std::vector<std::pair<std::string, json>> dirs, files;
+    for (fs::directory_iterator it(p, fs::directory_options::skip_permission_denied, ec), end; !ec && it != end; it.increment(ec)) {
+        if (++count > 5000) { out["truncated"] = true; break; }
+        const auto& e = *it;
+        const std::string name = utf8(e.path().filename());
+        if (name.empty() || name[0] == '.' || name[0] == '$') continue;
+        std::error_code e2;
+        if (e.is_directory(e2)) {
+            dirs.emplace_back(name, json{{"name", name}});
+        } else if (e.is_regular_file(e2)) {
+            const std::string kind = import_kind_of(name);
+            if (kind.empty() && !all_files) continue;
+            const uint64_t sz = e.file_size(e2);
+            if (!kind.empty()) { ++importable; bytes += sz; }
+            files.emplace_back(name, json{{"name", name}, {"size", sz}, {"kind", kind}});
+        }
+    }
+    auto by_name = [](const auto& a, const auto& b) { return _stricmp(a.first.c_str(), b.first.c_str()) < 0; };
+    std::sort(dirs.begin(), dirs.end(), by_name);
+    std::sort(files.begin(), files.end(), by_name);
+    for (auto& d : dirs) out["dirs"].push_back(std::move(d.second));
+    for (auto& f : files) out["files"].push_back(std::move(f.second));
+    out["importable"] = importable;
+    out["importable_bytes"] = bytes;
+    out["path"] = utf8(p);
+    ULARGE_INTEGER fr{}, tot{};
+    if (GetDiskFreeSpaceExW(p.c_str(), &fr, &tot, nullptr)) { out["free"] = fr.QuadPart; out["total"] = tot.QuadPart; }
+    out["ok"] = true;
+    return out;
+}
+
+json panels_open_originals() {
+    if (!g || g->library_root.empty()) return {{"ok", false}, {"error", "no library in this run"}};
+    if (g->watch) return {{"ok", false}, {"error", "read-only bridge (--watch)"}};
+    const fs::path d = g->library_root / "originals";
+    std::error_code ec;
+    if (!fs::is_directory(d, ec)) fs::create_directories(d, ec);   // the ingest worker creates it too
+    if (!fs::is_directory(d, ec)) return {{"ok", false}, {"error", "no originals folder: " + utf8(d)}};
+    // Explorer on this PC (the bridge only answers local pages). Never a file, only this folder.
+    const auto r = reinterpret_cast<intptr_t>(ShellExecuteW(nullptr, L"explore", d.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
+    if (r <= 32) return {{"ok", false}, {"error", "Explorer did not open (" + std::to_string(r) + ")"}, {"path", utf8(d)}};
+    return {{"ok", true}, {"path", utf8(d)}};
+}
+
+json panels_library_disk() {
+    json out = {{"ok", false}};
+    if (!g || g->library_root.empty()) return out;
+    static std::mutex m;
+    static json cached;
+    static std::chrono::steady_clock::time_point at{};
+    std::lock_guard lk(m);
+    if (!cached.is_null() && std::chrono::steady_clock::now() - at < std::chrono::seconds(5)) return cached;
+    std::error_code ec;
+    uint64_t bytes = 0, files = 0;
+    // What Himmel itself stores in the library (HAP copies, stills, thumbnails, the DB); never the originals.
+    for (const char* sub : {"hap", "stills", "thumbs", "meta", "work"}) {
+        const fs::path d = g->library_root / sub;
+        if (!fs::is_directory(d, ec)) continue;
+        for (fs::recursive_directory_iterator it(d, fs::directory_options::skip_permission_denied, ec), end;
+             !ec && it != end; it.increment(ec)) {
+            std::error_code e2;
+            if (it->is_regular_file(e2)) { bytes += it->file_size(e2); ++files; }
+        }
+    }
+    for (const char* f : {library::kDbFile}) {
+        std::error_code e2;
+        const auto sz = fs::file_size(g->library_root / f, e2);
+        if (!e2) bytes += sz;
+    }
+    out = {{"ok", true}, {"library_bytes", bytes}, {"library_files", files}, {"root", utf8(g->library_root)}};
+    ULARGE_INTEGER fr{}, tot{};
+    fs::path probe = g->library_root;
+    while (!probe.empty() && !fs::exists(probe, ec) && probe.has_parent_path() && probe.parent_path() != probe) probe = probe.parent_path();
+    if (GetDiskFreeSpaceExW(probe.c_str(), &fr, &tot, nullptr)) { out["free"] = fr.QuadPart; out["total"] = tot.QuadPart; }
+    cached = out;
+    at = std::chrono::steady_clock::now();
+    return out;
+}
 
 }  // namespace himmel::ui
