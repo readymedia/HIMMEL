@@ -37,6 +37,7 @@
 //   himmel_cmd outputs                     the outputs block (slots, displays, canvas, places)
 //   himmel_cmd outblack N|all [on|off|toggle]   black per output
 //   himmel_cmd identify [on|hold|off]      IDENTIFY: 5 s (on), until off (hold)
+//   himmel_cmd quit --confirm              quit the whole of Himmel (SystemQuit 74, command-protocol.md §4e)
 //   himmel_cmd place D L fill|fit|out N|free X Y W H   the layer's place (canvas 0..1)
 //   himmel_cmd outres 720p|1080p|1440p|4k|custom [N]   resolution preset (all outputs, or N)
 //   himmel_cmd refresh 60|50|59.94|30|25 | blendw PX | blendgamma G | outmode span|mirror
@@ -96,7 +97,7 @@ void usage() {
         "  tap | bpm V | grid off|1/4|1|bar|2bar|4bar | resync | phase BEATS | cuebench D L N [MS] | soak S\n"
         "  outputs | outblack N|all [on|off|toggle] | identify [on|hold|off] | place D L fill|fit|out N|free X Y W H\n"
         "  outres 720p|1080p|1440p|4k|custom [N] | refresh HZ | blendw PX | blendgamma G | outmode span|mirror\n"
-        "  adopt N | simlost N on|off\n"
+        "  adopt N | simlost N on|off | quit --confirm (stop the whole of Himmel cleanly)\n"
         "  D = a|b, L = 1..4, T = a1..b4 (layer) | a | b (deck) | m (master), S = 1..4, P = 1..8\n"
         "  chain with --:  himmel_cmd clip a 1 0 -- clip a 2 1 -- take\n");
 }
@@ -369,6 +370,13 @@ int run_one(Engine& e, const std::vector<std::string>& a, const Catalog& cat) {
         Command x = make(CommandType::OutputBlack, kNone, kNone, a.size() > 2 ? toggle_of(a[2]) : kToggle);
         x.slot = static_cast<uint8_t>(sl);
         return e.send(x);
+    }
+    if (c == "quit") {  // ENGINE (quit): never by accident - the tool's confirm is --confirm
+        if (a.size() < 2 || a[1] != "--confirm") {
+            std::fprintf(stderr, "quit stops the whole of Himmel: run 'himmel_cmd quit --confirm'\n");
+            return 1;
+        }
+        return e.send(make(CommandType::SystemQuit, kNone, kNone, 0, 1.0f));
     }
     if (c == "identify") {
         const std::string m = a.size() > 1 ? a[1] : "on";

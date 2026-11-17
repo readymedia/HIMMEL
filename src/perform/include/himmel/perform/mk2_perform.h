@@ -70,6 +70,12 @@ public:
     const char* flash() const { return flash_; }
     bool browsing() const { return browse_; }
     int browse_selected() const { return browse_sel_; }
+    // ==== ENGINE (quit): the SYSTEM menu (SHIFT + wheel). QUIT HIMMEL = push and hold the wheel
+    // for kQuitHoldUs, with a countdown; letting go earlier cancels (command-protocol.md §4e). ====
+    static constexpr uint64_t kQuitHoldUs = 2000000;
+    bool system_menu() const { return sys_; }
+    bool quit_sent() const { return quit_sent_; }
+    // ==== end ENGINE (quit) ====
 
 private:
     // Implementation state (fixed size). CONTROL may change these freely.
@@ -156,6 +162,12 @@ private:
     void browse_load(const protocol::LiveState& s, const protocol::Catalog& cat, CommandSink& sink, uint64_t now_us);
     void draw_browse(uint64_t now_us, const protocol::LiveState& s, const protocol::Catalog& cat,
                      uint8_t screens[2][mk2::kScreenBytes]);
+    // ==== ENGINE (quit) ====
+    bool sys_ = false;            // the SYSTEM menu is open
+    uint64_t quit_hold_us_ = 0;   // the wheel was pushed down in the menu at this time, 0 = not held
+    bool quit_sent_ = false;      // SystemQuit went out (once)
+    void draw_system(uint64_t now_us, uint8_t screens[2][mk2::kScreenBytes]);
+    // ==== end ENGINE (quit) ====
 };
 
 }  // namespace himmel::perform

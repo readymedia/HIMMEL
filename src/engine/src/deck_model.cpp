@@ -303,6 +303,9 @@ Reject DeckModel::validate(const Command& c) const {
         case CommandType::LayerPlace:
         case CommandType::OutputConfig:
             return outputs_ ? outputs_->validate(c, c.type == CommandType::LayerPlace ? slot : -1) : Reject::UnknownType;
+        // ---- ENGINE: quit (command-protocol.md §4e) ----
+        case CommandType::SystemQuit:
+            return c.f[0] == 1.0f ? Reject::None : Reject::BadValue;  // only a confirmed quit
         default:
             return Reject::UnknownType;
     }
@@ -316,6 +319,11 @@ Reject DeckModel::submit(int producer, const Command& c, uint64_t now_us) {
         rate_count_[producer] = 0;
     }
     Reject r = ++rate_count_[producer] > kMaxCommandsPerSecond ? Reject::RateLimited : validate(c);
+    // SystemQuit only from a person at the rig (a weapon, the GUI, a local tool): never from OSC
+    // (the network) or the show runtime (a look or a scene file), so a show can never quit itself.
+    if (r == Reject::None && c.type == CommandType::SystemQuit && producer != static_cast<int>(Producer::Perform) &&
+        producer != static_cast<int>(Producer::Gui) && producer != static_cast<int>(Producer::Tool))
+        r = Reject::BadTarget;
     submitting_ = producer;
     if (r == Reject::None) r = apply(c, now_us);
     submitting_ = -1;
@@ -877,6 +885,9 @@ Reject DeckModel::apply(const Command& c, uint64_t now_us) {
             if (!outputs_) return Reject::UnknownType;
             outputs_->apply(c, slot, now_us, submitting_);
             break;
+        case CommandType::SystemQuit:
+            if (quit_producer_ < 0) quit_producer_ = submitting_ < 0 ? kProducers : submitting_;
+            break;
         default: return Reject::UnknownType;
     }
     return Reject::None;
@@ -1166,6 +1177,7 @@ const char* command_name(CommandType t) {
         case CommandType::Identify: return "identify";
         case CommandType::LayerPlace: return "place";
         case CommandType::OutputConfig: return "outconfig";
+        case CommandType::SystemQuit: return "quit";
         default: break;
     }
     const auto i = static_cast<size_t>(t);

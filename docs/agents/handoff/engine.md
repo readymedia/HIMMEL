@@ -2,6 +2,15 @@
 Updated: 2026-11-17 by the ENGINE M6 session · Branch: `claude/engine-m6-spout` (M6 itself merged on main) · Last commit: see `git log` on the branch
 
 ## State in one paragraph
+**QUIT (2026-11-17, branch `claude/engine-quit`).** `SystemQuit` (74) with
+`f[0]` = 1 (confirmed; only from Perform, Gui or Tool) sets `quit_request` in
+`EngineStatus` (v2). The supervisor then runs the Ctrl+C stop (renderer, GUI,
+audio, ingest, weapon `stop_request`, controller, curtains) and exits 0; it
+also raises Ctrl+C in its console for the children without a stop request.
+MK2: SHIFT + wheel = SYSTEM menu, QUIT HIMMEL = hold the push 2 s.
+`himmel_cmd quit --confirm`; check: `src/engine/tools/quit_check.py`
+(starts a `--sim` stack, quits, checks every child is gone and exit 0).
+
 **M6 outputs (2026-11-17, this branch)** on top of S1 + M2 (below). Output
 slots (1..8) are windows onto one canvas, made by a pure `OutputModel`:
 resolution presets 720p / 1080p / 1440p / 4K / Custom, span (with an edge
