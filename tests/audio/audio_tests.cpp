@@ -20,6 +20,7 @@
 #include "himmel/engine/reactions.h"
 #include "himmel/engine/transport.h"
 #include "himmel/fx/fx.h"
+#include "himmel/fx/signals.h"
 
 using namespace himmel::audio;
 namespace eng = himmel::engine;
@@ -491,6 +492,200 @@ void test_zoom_pulse_on_the_kick() {
 
 }  // namespace
 
+
+// D131: FxReact (command 40) + the per-knob reaction table: validation, apply,
+// FxSet reset, restore, and what the resolver does with the table.
+void test_fx_react() {
+    std::printf("fx react (D131)\n");
+    const fx::Library& lib = fx::builtin();
+    static proto::Catalog cat{};
+    eng::fx::fill_catalog(cat);
+    static proto::SlotReactions defaults[proto::kMaxEffects];
+    eng::react_defaults(lib, defaults, proto::kMaxEffects);
+    const int zid = static_cast<int>(eng::fx::Effect::ZoomPulse);
+    const fx::EffectMeta& zm = lib.meta(zid);
+    const int dp = zm.reaction.param;          // the knob zoom pulse's default reaction moves
+    int other = -1;                             // a continuous knob with no default reaction
+    for (int p = 0; p < zm.params && other < 0; ++p)
+        if (p != dp && zm.param[p].steps < 2) other = p;
+    CHECK(other >= 0);
+    if (other < 0) return;
+
+    // The defaults row mirrors effect.json on its knob, and is "none" elsewhere.
+    const proto::ReactionEntry& de = defaults[zid].p[dp];
+    CHECK(de.source == static_cast<uint8_t>(proto::ReactSource::Default));
+    CHECK(de.signal == static_cast<uint8_t>(fx::Signal::Kick) && de.amount == zm.reaction.amount);
+    CHECK(de.range_lo == zm.reaction.range_lo && de.range_hi == zm.reaction.range_hi);
+    CHECK(defaults[zid].p[other].signal == 0);
+    CHECK(defaults[zid].p[other].range_lo == zm.param[other].good_lo && defaults[zid].p[other].range_hi == zm.param[other].good_hi);
+
+    // The Default row resolves exactly like the old single-reaction path, for every effect.
+    for (int id = 0; id < lib.count(); ++id) {
+        const fx::EffectMeta& m = lib.meta(id);
+        proto::FxSlotState slot{};
+        slot.effect = static_cast<int16_t>(id);
+        slot.mix = 1.0f;
+        for (int p = 0; p < m.params; ++p) slot.param[p] = m.param[p].def;
+        fx::Reaction rx[fx::kParams];
+        fx::reactions_from(defaults[id], rx);
+        fx::SlotRuntime ra, rb;
+        fx::Globals g;
+        bool same = true;
+        for (int f = 0; f < 240; ++f) {
+            fx::FrameCtx fc;
+            fc.time_s = f / 60.0;
+            fc.beats = fc.time_s * 2.0;
+            fc.dt = 1.0f / 60;
+            fc.sig = fx::TestSignal::at(fc.time_s, fc.beats);
+            const fx::Resolved a = fx::resolve(m, id, slot, ra, g, fc);
+            const fx::Resolved b = fx::resolve(m, id, slot, rb, g, fc, rx);
+            for (int p = 0; p < fx::kParams; ++p) same &= a.p[p] == b.p[p];
+        }
+        if (!same) std::printf("  effect %s: table path differs from the default path\n", m.id);
+        CHECK(same);
+    }
+
+    eng::DeckModel model(cat);
+    model.set_react_defaults(defaults, proto::kMaxEffects);
+    uint64_t now = 1000000;
+    uint32_t seq = 0;
+    auto send = [&](proto::Command c) {
+        c.seq = ++seq;
+        return model.submit(static_cast<int>(proto::Producer::Gui), c, now);
+    };
+    const uint8_t D = 0, L = 1, S = 2;
+    const auto& row = [&]() -> const proto::SlotReactions& { return model.reactions().layer[D][L][S]; };
+    proto::ReactArgs kick;
+    kick.signal = proto::ReactSignal::Kick;
+
+    // Empty slot: refused; FxSet fills the row with the effect's defaults.
+    CHECK(send(proto::make_react(D, L, S, 0, kick, 0.5f)) == proto::Reject::BadTarget);
+    const uint32_t g0 = model.reactions().gen;
+    CHECK(send(proto::make_fx(proto::CommandType::FxSet, D, L, S, proto::kNone, zid)) == proto::Reject::None);
+    CHECK(model.reactions().gen != g0);
+    CHECK(std::memcmp(&row(), &defaults[zid], sizeof(proto::SlotReactions)) == 0);
+
+    // Targets and values.
+    CHECK(send(proto::make_react(D, L, S, static_cast<uint8_t>(proto::kReactParams), kick)) == proto::Reject::BadTarget);
+    CHECK(send(proto::make_react(D, L, S, static_cast<uint8_t>(zm.params), kick)) == proto::Reject::BadTarget ||
+          zm.params >= proto::kReactParams);
+    CHECK(send(proto::make_react(D, L, S, proto::kNone, kick)) == proto::Reject::BadTarget);  // Set needs one knob
+    proto::Command bad = proto::make_react(D, L, S, 0, kick);
+    bad.i |= 1 << 30;
+    CHECK(send(bad) == proto::Reject::BadValue);
+    proto::ReactArgs badsig;
+    badsig.signal = proto::ReactSignal::Count;
+    CHECK(send(proto::make_react(D, L, S, 0, badsig)) == proto::Reject::BadValue);
+    CHECK(send(proto::make_react(D, L, S, 0, kick, NAN)) == proto::Reject::BadValue);
+    CHECK(send(proto::make_react(D, L, S, 0, kick, 0, 0, 0, INFINITY)) == proto::Reject::BadValue);
+    CHECK(std::memcmp(&row(), &defaults[zid], sizeof(proto::SlotReactions)) == 0);  // refusals change nothing
+
+    // Set on the knob with no default: snare, FOLLOW, soft, 1/8 quantise, 1 beat hold; values clamped.
+    proto::ReactArgs sn;
+    sn.signal = proto::ReactSignal::Snare;
+    sn.mode = proto::ReactMode::Follow;
+    sn.curve = proto::ReactCurve::Soft;
+    sn.quantise = proto::ReactQuantise::Eighth;
+    sn.hold_q = 4;
+    CHECK(send(proto::make_react(D, L, S, static_cast<uint8_t>(other), sn, 2.0f, 5.0f, 9000.0f, 0.25f)) ==
+          proto::Reject::None);
+    const proto::ReactionEntry& e = row().p[other];
+    CHECK(e.source == static_cast<uint8_t>(proto::ReactSource::Custom));
+    CHECK(e.signal == static_cast<uint8_t>(fx::Signal::Snare) && e.mode == 1 && e.curve == 1);
+    CHECK(e.amount == 1.0f && e.attack_ms == 5.0f && e.release_ms == proto::kReactMaxMs && e.threshold == 0.25f);
+    CHECK(e.quantise_beats == 0.5f && e.hold_beats == 1.0f);
+    CHECK(e.range_lo == defaults[zid].p[other].range_lo);  // Set keeps the range
+
+    // Amount (relative) on the default knob: becomes Custom, keeps the default's settings.
+    CHECK(send(proto::make_react(D, L, S, static_cast<uint8_t>(dp), proto::ReactArgs{proto::ReactOp::Amount}, -0.1f, 0, 0,
+                                 0, proto::kRelative)) == proto::Reject::None);
+    CHECK(row().p[dp].source == static_cast<uint8_t>(proto::ReactSource::Custom));
+    CHECK(std::fabs(row().p[dp].amount - (zm.reaction.amount - 0.1f)) < 1e-6f);
+    CHECK(row().p[dp].signal == static_cast<uint8_t>(fx::Signal::Kick));
+
+    // Range, then back to the default range.
+    CHECK(send(proto::make_react(D, L, S, static_cast<uint8_t>(dp), proto::ReactArgs{proto::ReactOp::Range}, 0.9f, 0.2f)) ==
+          proto::Reject::None);
+    CHECK(row().p[dp].range_lo == 0.9f && row().p[dp].range_hi == 0.2f && (row().p[dp].flags & proto::kReactRangeSet));
+    CHECK(send(proto::make_react(D, L, S, static_cast<uint8_t>(dp), proto::ReactArgs{proto::ReactOp::Range}, -1.0f)) ==
+          proto::Reject::None);
+    CHECK(row().p[dp].range_lo == de.range_lo && !(row().p[dp].flags & proto::kReactRangeSet));
+
+    // Default (one knob) and Off (all knobs).
+    CHECK(send(proto::make_react(D, L, S, static_cast<uint8_t>(dp), proto::ReactArgs{proto::ReactOp::Default})) ==
+          proto::Reject::None);
+    CHECK(std::memcmp(&row().p[dp], &de, sizeof(de)) == 0);
+    CHECK(send(proto::make_react(D, L, S, proto::kNone, proto::ReactArgs{proto::ReactOp::Off})) == proto::Reject::None);
+    for (int p = 0; p < proto::kReactParams; ++p) CHECK(row().p[p].source == static_cast<uint8_t>(proto::ReactSource::Off));
+    fx::Reaction rx[fx::kParams];
+    fx::reactions_from(row(), rx);
+    for (int p = 0; p < fx::kParams; ++p) CHECK(rx[p].signal == fx::Signal::None);
+    CHECK(send(proto::make_react(D, L, S, proto::kNone, proto::ReactArgs{proto::ReactOp::Default})) == proto::Reject::None);
+    CHECK(std::memcmp(&row(), &defaults[zid], sizeof(proto::SlotReactions)) == 0);
+
+    // Signal on a knob with no reaction yet: starts at amount 0.5 (GUESS in react_apply).
+    proto::ReactArgs sig;
+    sig.op = proto::ReactOp::Signal;
+    sig.signal = proto::ReactSignal::Bass;
+    CHECK(send(proto::make_react(D, L, S, static_cast<uint8_t>(other), sig)) == proto::Reject::None);
+    CHECK(row().p[other].signal == static_cast<uint8_t>(fx::Signal::Bass) && row().p[other].amount == 0.5f);
+
+    // Master and deck level slots have rows too.
+    CHECK(send(proto::make_fx(proto::CommandType::FxSet, proto::kMasterDeck, proto::kNone, 1, proto::kNone, zid)) ==
+          proto::Reject::None);
+    CHECK(send(proto::make_react(proto::kMasterDeck, proto::kNone, 1, static_cast<uint8_t>(other), kick, 0.3f)) ==
+          proto::Reject::None);
+    CHECK(model.reactions().master[1].p[other].signal == static_cast<uint8_t>(fx::Signal::Kick));
+    CHECK(send(proto::make_fx(proto::CommandType::FxSet, 1, proto::kNone, 3, proto::kNone, zid)) == proto::Reject::None);
+    CHECK(send(proto::make_react(1, proto::kNone, 3, static_cast<uint8_t>(dp), proto::ReactArgs{proto::ReactOp::Off})) ==
+          proto::Reject::None);
+    CHECK(model.reactions().deck[1][3].p[dp].source == static_cast<uint8_t>(proto::ReactSource::Off));
+
+    // Restore (a renderer restart): Custom / Off come back with the slot.
+    auto old_live = model.live();
+    auto old_react = model.reactions();
+    eng::DeckModel again(cat);
+    again.set_react_defaults(defaults, proto::kMaxEffects);
+    again.restore(old_live, cat, nullptr, &old_react);
+    CHECK(again.reactions().layer[D][L][S].p[other].signal == static_cast<uint8_t>(fx::Signal::Bass));
+    CHECK(again.reactions().layer[D][L][S].p[other].source == static_cast<uint8_t>(proto::ReactSource::Custom));
+    CHECK(again.reactions().master[1].p[other].signal == static_cast<uint8_t>(fx::Signal::Kick));
+    CHECK(again.reactions().deck[1][3].p[dp].source == static_cast<uint8_t>(proto::ReactSource::Off));
+    CHECK(again.reactions().layer[D][L][S].p[dp].source == static_cast<uint8_t>(proto::ReactSource::Default));
+
+    // FxSet (even the same effect) resets the row to Default.
+    CHECK(send(proto::make_fx(proto::CommandType::FxSet, D, L, S, proto::kNone, zid)) == proto::Reject::None);
+    CHECK(std::memcmp(&row(), &defaults[zid], sizeof(proto::SlotReactions)) == 0);
+
+    // The resolver: a knob with its own reaction moves with its signal, on its own envelope.
+    // Knob `other` follows the snare (FOLLOW, 0.2..0.8); the default knob keeps the kick.
+    CHECK(send(proto::make_react(D, L, S, static_cast<uint8_t>(other), sn, 1.0f, 0.0f, 100.0f, 0.0f)) ==
+          proto::Reject::None);
+    CHECK(send(proto::make_react(D, L, S, static_cast<uint8_t>(other), proto::ReactArgs{proto::ReactOp::Range}, 0.2f, 0.8f)) ==
+          proto::Reject::None);
+    proto::SlotReactions snare_row = row();
+    snare_row.p[other].mode = static_cast<uint8_t>(proto::ReactMode::Follow);
+    snare_row.p[other].quantise_beats = 0;  // FOLLOW ignores it anyway
+    fx::reactions_from(snare_row, rx);
+    const proto::FxSlotState& slot = model.live().deck[D].layer[L].fx[S];
+    fx::SlotRuntime rt;
+    fx::Globals g;
+    fx::FrameCtx fc;
+    fc.dt = 1.0f / 60;
+    fc.sig.v[static_cast<int>(fx::Signal::Snare)] = 1.0f;  // snare only
+    fx::Resolved r{};
+    for (int f = 0; f < 30; ++f) r = fx::resolve(zm, zid, slot, rt, g, fc, rx);
+    CHECK(std::fabs(r.p[other] - 0.8f) < 0.01f);             // FOLLOW + full snare -> range hi
+    CHECK(rt.react_env[other] > 0.99f && rt.react_env[dp] == 0.0f);
+    CHECK(std::fabs(r.p[dp] - slot.param[dp]) < 1e-6f);      // no kick: the default knob stays put
+    fc.sig = fx::Signals{};
+    fc.sig.v[static_cast<int>(fx::Signal::Kick)] = 1.0f;     // kick only
+    for (int f = 0; f < 60; ++f) r = fx::resolve(zm, zid, slot, rt, g, fc, rx);
+    CHECK(r.p[dp] > slot.param[dp] + 0.05f);                 // the default kick reaction still works
+    CHECK(std::fabs(r.p[other] - 0.2f) < 0.01f);             // the snare knob glided back to range lo
+    CHECK(rt.out[dp] == r.p[dp] && rt.out[other] == r.p[other]);  // the state block's "value"
+}
+
 int main() {
     std::printf("audio_tests\n");
     test_fft_and_filters();
@@ -504,6 +699,7 @@ int main() {
     test_feed();
     test_midi_lead_and_follow();
     test_zoom_pulse_on_the_kick();
+    test_fx_react();
     std::printf("%d checks, %d failed\n", g_checks, g_fail);
     return g_fail ? 1 : 0;
 }

@@ -390,7 +390,35 @@ static void test_identity() {
     }
 }
 
+// ENGINE (quit): SystemQuit (74) only when confirmed, only from a person at the rig, sticky.
+static void test_system_quit() {
+    auto cat = make_catalog();
+    auto dm = std::make_unique<DeckModel>(*cat);
+    uint32_t seq = 0;
+    auto send = [&](Producer p, float f0) {
+        Command c = himmel::protocol::make(CommandType::SystemQuit, kNone, kNone, 0, f0);
+        c.seq = ++seq;
+        return dm->submit(static_cast<int>(p), c, 1000 + seq);
+    };
+    CHECK(dm->quit_producer() == -1);
+    CHECK(send(Producer::Gui, 0.0f) == Reject::BadValue);   // not confirmed
+    CHECK(send(Producer::Gui, 0.5f) == Reject::BadValue);
+    CHECK(send(Producer::Osc, 1.0f) == Reject::BadTarget);  // the network can never quit
+    CHECK(send(Producer::Show, 1.0f) == Reject::BadTarget); // nor a look / scene file
+    CHECK(dm->quit_producer() == -1);
+    CHECK(send(Producer::Gui, 1.0f) == Reject::None);
+    CHECK(dm->quit_producer() == static_cast<int>(Producer::Gui));
+    CHECK(dm->live().acked_seq[static_cast<int>(Producer::Gui)] == seq);
+    CHECK(send(Producer::Perform, 1.0f) == Reject::None);   // acked, the first one is kept
+    CHECK(dm->quit_producer() == static_cast<int>(Producer::Gui));
+    auto dm2 = std::make_unique<DeckModel>(*cat);
+    Command c = himmel::protocol::make(CommandType::SystemQuit, kNone, kNone, 0, 1.0f);
+    CHECK(dm2->submit(static_cast<int>(Producer::Tool), c, 5) == Reject::None && dm2->quit_producer() == 3);
+    CHECK(std::strcmp(himmel::engine::command_name(CommandType::SystemQuit), "quit") == 0);
+}
+
 int main() {
+    test_system_quit();
     test_layout();
     test_blend();
     test_places();

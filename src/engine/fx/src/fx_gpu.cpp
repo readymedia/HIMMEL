@@ -245,7 +245,17 @@ int FxGpu::run_chain(ID3D11DeviceContext* ctx, const Target pair[2], int w, int 
             continue;
         }
         const EffectMeta& m = lib_->meta(s.effect);
-        const Resolved r = resolve(m, s.effect, s, rt_[chain][k], globals_, ctx_);
+        // D131: this slot's row of the reaction table (layers 0..7, decks 8..9, master 10).
+        const protocol::SlotReactions* row = nullptr;
+        if (react_) {
+            if (chain < chain_deck(0)) row = &react_->layer[chain / protocol::kLayersPerDeck][chain % protocol::kLayersPerDeck][k];
+            else if (chain < kChainMaster) row = &react_->deck[chain - chain_deck(0)][k];
+            else if (chain == kChainMaster) row = &react_->master[k];
+        }
+        Reaction reacts[kParams];
+        if (row) reactions_from(*row, reacts);
+        const Resolved r = resolve(m, s.effect, s, rt_[chain][k], globals_, ctx_, row ? reacts : nullptr);
+        rt_[chain][k].frame = frame_;
         if (r.mix <= 0.001f) continue;
         if (!ran) {
             ctx->VSGetShader(&prev_vs, nullptr, nullptr);

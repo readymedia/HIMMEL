@@ -28,6 +28,12 @@ layer places, black per output and IDENTIFY are in their own block,
 changed by commands 70–73 ([`command-protocol.md`](command-protocol.md) §4c).
 The state block stays at version 2.
 
+Quit (2026-11-17) is not in this block either: a confirmed `SystemQuit` (74)
+sets `quit_request` in the renderer's status block `Local\HimmelEngine`
+(`EngineStatus` in `src/engine/include/himmel/engine/engine_shared.h`,
+version 2), and the supervisor stops everything
+([`command-protocol.md`](command-protocol.md) §4e).
+
 `position` is written at frame rate while a clip plays; readers that only
 care about structure can compare everything else. GUIs should poll `live` at
 their own rate (30 Hz is plenty) and diff.

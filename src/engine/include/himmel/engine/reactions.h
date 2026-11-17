@@ -14,6 +14,8 @@
 #include "himmel/audio/block.h"
 #include "himmel/engine/shm_block.h"
 #include "himmel/fx/fx.h"
+#include "himmel/protocol/commands.h"
+#include "himmel/protocol/state.h"
 
 namespace himmel::engine {
 
@@ -45,6 +47,19 @@ struct ClockLead {
 // MIDI leads while it runs, is fresh (< 500 ms since a tick) and confidence >= 0.5.
 // `beat` is extrapolated to now_us.
 ClockLead midi_lead(const audio::ClockSource& c, uint64_t now_us);
+
+// ---- per-knob reactions (D131, FxReact = command 40; command-protocol.md §4d) ----
+// The defaults row of every effect in `lib` (ReactSource::Default per knob):
+// out[id] for id < lib.count(); the rest get an empty row. Start-up only.
+void react_defaults(const ::himmel::fx::Library& lib, protocol::SlotReactions* out, int count);
+// The row of an empty slot / unknown effect: Default, no signal, range 0..1.
+void react_empty_row(protocol::SlotReactions& row);
+// Value checks of one FxReact (packed fields, finite floats, param kNone only with
+// Default / Off). Targets (slot, effect, knob count) are the deck model's job.
+protocol::Reject react_check(const protocol::Command& c);
+// Applies one checked FxReact to a slot's row. `defaults` = the slot effect's
+// Default row (react_defaults). Never touches env / value.
+void react_apply(protocol::SlotReactions& row, const protocol::Command& c, const protocol::SlotReactions& defaults);
 
 // The renderer's view of Local\HimmelAudio (Windows; start-up maps it, frames only copy).
 class AudioLink {

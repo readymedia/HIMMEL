@@ -56,6 +56,11 @@ public:
     // acked like every command). Without one they are refused as UnknownType.
     void set_outputs(OutputModel* outputs) { outputs_ = outputs; }
 
+    // A confirmed SystemQuit (74, f[0] = 1) was applied: the producer slot that sent it
+    // (kProducers = local), -1 = none. Sticky: the renderer reports it in its status block
+    // (EngineStatus::quit_request) and the supervisor stops every process.
+    int quit_producer() const { return quit_producer_; }
+
     // Once per frame: advance a running TAKE (lands -> program_deck flips), the
     // beat clock, every playhead, fades, transitions, waiting launches, autopilot.
     void tick(uint64_t now_us);
@@ -110,8 +115,18 @@ public:
     // With `old_transport` (a version 2 block) the transport settings, cue points,
     // BPM and grid come back too. The HIT layer is never restored.
     // Returns the number of layers whose clip could not be found by name.
+    // With `old_react` (a version 3 block) each slot whose effect came back keeps its
+    // Custom / Off reactions (D131).
     int restore(const protocol::LiveState& old_live, const protocol::Catalog& old_catalog,
-                const protocol::TransportSection* old_transport = nullptr);
+                const protocol::TransportSection* old_transport = nullptr,
+                const protocol::ReactionSection* old_react = nullptr);
+
+    // ---- per-knob reactions (D131, FxReact) ----
+    // Start-up: each effect's Default row (engine::react_defaults), indexed by effect
+    // id; must outlive the model. Without it a fresh slot's rows have signal None.
+    void set_react_defaults(const protocol::SlotReactions* rows, int count);
+    // The table (settings; env / value are the renderer's). gen bumps on every change.
+    const protocol::ReactionSection& reactions() const { return react_; }
 
     const protocol::LiveState& live() const { return live_; }
     const protocol::Catalog& catalog() const { return catalog_; }
@@ -119,6 +134,7 @@ public:
 
 private:
     OutputModel* outputs_ = nullptr;
+    int quit_producer_ = -1;  // a confirmed SystemQuit came from this producer
     int submitting_ = -1;  // the producer of the command being applied (M6: who holds IDENTIFY)
     protocol::Reject apply(const protocol::Command& c, uint64_t now_us);
     protocol::FxSlotState* fx_slot(const protocol::Command& c);
@@ -126,6 +142,8 @@ private:
     void set_crossfader(float v);
     void land_take();
     void reset_fx(protocol::FxSlotState& s, int effect);
+    protocol::SlotReactions* react_row(const protocol::FxSlotState* s);  // nullptr: not a live slot (HIT)
+    const protocol::SlotReactions& react_default_row(int effect) const;
 
     // ---- transport (M2) ----
     enum class PendingKind : uint8_t { None, Launch, Jump };
@@ -171,6 +189,10 @@ private:
     const protocol::Catalog& catalog_;
     protocol::LiveState live_{};
     protocol::TransportSection transport_{};
+    protocol::ReactionSection react_{};
+    const protocol::SlotReactions* react_defaults_ = nullptr;
+    int react_default_count_ = 0;
+    protocol::SlotReactions react_empty_{};
     bool dirty_ = true;
     Playhead ph_[kLayerSlots];
     BeatClock clock_;

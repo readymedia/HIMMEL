@@ -15,7 +15,7 @@ namespace himmel::engine {
 
 inline constexpr wchar_t kEngineShmName[] = L"Local\\HimmelEngine";
 inline constexpr uint32_t kEngineMagic = 0x4C4D4948;  // "HIML"
-inline constexpr uint32_t kEngineVersion = 1;
+inline constexpr uint32_t kEngineVersion = 2;  // 2: quit_request
 
 struct EngineStatus {
     uint32_t magic;
@@ -33,6 +33,10 @@ struct EngineStatus {
     std::atomic<uint32_t> input_to_present_us; // avg: controller read -> Present() returned
     std::atomic<uint32_t> restarts_seen;      // written by the supervisor
     char message[128];
+    // ---- version 2 (append-only) ----
+    std::atomic<uint32_t> quit_request;       // renderer -> supervisor: a confirmed SystemQuit (74) came in;
+                                              // 0 = no, else the producer slot + 1. The supervisor stops everything.
+    std::atomic<uint32_t> reserved2;
 };
 
 // Tiny named shared-memory mapping of one POD-ish struct.

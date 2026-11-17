@@ -8,7 +8,8 @@ Status: **version 1, written by the LEAD 2026-11-15** for the playable slice;
 25–36, producer slot 4 = `Show`, flags `kVariation` / `kClear`, the new block
 `Local\HimmelShow`; additive like `FxPress`, so `kCommandVersion` stays 1);
 **M6 outputs appended by ENGINE 2026-11-17** (§4c: types 70–73, the new block
-`Local\HimmelOutputs`; additive, `kCommandVersion` stays 1)
+`Local\HimmelOutputs`; additive, `kCommandVersion` stays 1);
+**`SystemQuit` (74) appended by ENGINE 2026-11-17** (§4e; additive)
 (D90). Header: [`src/protocol/include/himmel/protocol/commands.h`](../../src/protocol/include/himmel/protocol/commands.h)
 (the header is the source of truth for field layout; this page is the why and
 the rules). Change it only with a PR to this page + the header, agreed by the
@@ -208,6 +209,33 @@ The ops (`f[]` values out of range are clamped; NaN / inf = `BadValue`):
 - Not in this version: the REACT macro (scales every reaction of a deck),
   spectrum-band signals, reactions on layer parameters (opacity, speed …)
   and on macros. They come as new ops / types in 41–49.
+
+## 4e. Quit (ENGINE, 2026-11-17)
+
+One way to close the whole of Himmel cleanly, from the GUI's QUIT button or
+the MK2 system menu (`SHIFT` + wheel → QUIT, push and hold 2 s).
+
+| Type | Targets | Argument | Notes |
+|---|---|---|---|
+| `SystemQuit` (74) | — | `f[0]` = 1 (confirmed) | anything else is refused (`BadValue`); only from producer `Perform`, `Gui` or `Tool` (`BadTarget` from `Osc` and `Show`, so the network or a show file can never quit) |
+
+Quit must never happen by accident, so the **producer asks first** and sends
+`f[0]` = 1 only after the person confirmed: the GUI asks "Quit Himmel?", the
+MK2 needs a 2 s push-and-hold with a countdown on the screen, `himmel_cmd quit`
+needs `--confirm`.
+
+What happens:
+1. The renderer acks it and sets `quit_request` (producer slot + 1) in its
+   status block `Local\HimmelEngine` (`EngineStatus`, version 2). It keeps
+   drawing the show until it is told to stop.
+2. The supervisor sees it within 50 ms and runs the same clean stop as
+   Ctrl+C: renderer (`stop_request`), GUI, audio, ingest, then every weapon
+   driver gets `stop_request` (the Lightpad gets config 13 back, LEDs off),
+   then the MK2 controller, then the curtains drop. `himmel.exe` exits 0.
+3. Without a supervisor (`himmel_render` on its own) the renderer quits by
+   itself when nobody has asked it to stop 3 s after `quit_request`.
+
+A renderer restart clears `quit_request` (the block is recreated).
 
 ## 5. Validation (the engine, before anything else)
 
