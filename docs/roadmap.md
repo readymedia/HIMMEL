@@ -68,7 +68,7 @@ default and stay PROPOSED (D94–D100 are run that way).
 | 2 | GUI · `claude/gui-m11-v1` | M11 GUI v1 on the new engine features — **merged 2026-11-17** |
 | 2 | AUDIO · `claude/audio-m8-reactions` | M8 audio-reactive everything — **merged 2026-11-17** |
 | 3 | MEDIA · `claude/media-m7-ingest` | M7 ingest |
-| 3 | ENGINE · `claude/engine-m6-outputs` | M6 outputs, curtains, displays by identity |
+| 3 | ENGINE · `claude/engine-m6-outputs` | M6 outputs, curtains, displays by identity — **merged 2026-11-17** (Spout to follow) |
 | 3 | CONTROL · `claude/control-m4-perform` | M4 MK2 Perform v4 (scenes now exist), then M9 Lightpad, M13 OSC — **M4 merged 2026-11-17** |
 
 ## 1. What we have to build on
@@ -77,7 +77,7 @@ default and stay PROPOSED (D94–D100 are run that way).
 |---|---|---|
 | Verified MK2 map, C++ controller (events ~750 Hz, LEDs, screens, reconnect), `--sim` over UDP | `main`: `src/controller`, `maschine_mk2_map.json` | The MK2 driver, unchanged; the Perform mapping is added in the input layer |
 | MK2 screen pages (pure drawing, knob-aligned) | `main`: `pages.cpp` | Every MK2 page in `design/hardware-mapping.md` §1.5 |
-| Supervisor (restarts < 1 s, heartbeats, logs) | `main`: `src/engine/supervisor` | The supervisor of every process; curtains to add |
+| Supervisor (restarts < 1 s, heartbeats, logs) | `main`: `src/engine/supervisor` | The supervisor of every process; curtains done (M6, 2026-11-17) |
 | D3D11 renderer, 1–8 outputs, span/mirror, waitable flip-model, input → present 8–12 ms | `main`: `src/engine/render` | The output stage of the render graph |
 | Own MOV reader + HAP decoder, ClipPlayer (4 frames ahead, BC upload) | `main`: `src/media`, `clip_player.cpp` | The clip source for every layer |
 | CameraCapture (Media Foundation, NV12, triple buffer, retry) + latency test | `main` | The camera / capture source; the latency test moves to the system menu |

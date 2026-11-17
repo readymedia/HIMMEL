@@ -318,8 +318,8 @@ integrations. The list below is the history of what is done on `main`.
      median/min/max on the MK2 screen and in the log ("LOOP" = Present() ->
      screen -> camera frame delivered). The dev laptop's LifeCam is built into
      the screen, so this needs an external webcam (or a mirror).
-   - Still to do: run the latency test; black "curtain" windows held by the
-     supervisor so a renderer restart shows black, not the desktop.
+   - Still to do: run the latency test. (Curtains are done: ENGINE M6,
+     2026-11-17. A renderer restart shows black, not the desktop, and is back in 1.0–1.6 s.)
    - Dev PC note: the owner's dev laptop is a GTX 1070 with one screen, so
      outputs are tested as windows there; the show PC is the RTX 5090.
 5. **Generic weapon driver (2026-11-11; checked with the simulators, and on the
