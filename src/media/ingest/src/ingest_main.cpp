@@ -108,6 +108,15 @@ void log(const char* fmt, ...) {
     }
 }
 
+// Test only: HIMMEL_LIBRARY_SHM=<name> gives this worker (and --send) its own library block, so a
+// temp-library test can run next to another Himmel stack without touching its Local\HimmelLibrary.
+std::wstring library_shm_name() {
+    wchar_t buf[128];
+    const DWORD n = GetEnvironmentVariableW(L"HIMMEL_LIBRARY_SHM", buf, 128);
+    if (n > 0 && n < 100) return std::wstring(L"Local\\") + buf;
+    return library::kLibraryShmName;
+}
+
 BOOL WINAPI on_console(DWORD) {
     g_stop.store(true);
     return TRUE;
@@ -212,7 +221,7 @@ struct Blocks {
 
     bool create_library() {
         lib_map = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, sizeof(library::LibraryBlock),
-                                     library::kLibraryShmName);
+                                     library_shm_name().c_str());
         if (!lib_map) return false;
         const bool existed = GetLastError() == ERROR_ALREADY_EXISTS;
         lib = static_cast<library::LibraryBlock*>(MapViewOfFile(lib_map, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(library::LibraryBlock)));
@@ -397,7 +406,7 @@ public:
         // Old temp files: never "ready", always safe to delete.
         for (auto it = fs::directory_iterator(cfg_.root / "work", ec); !ec && it != fs::directory_iterator(); it.increment(ec))
             fs::remove(it->path(), ec);
-        if (!blocks_.create_library()) log("cannot create %ls - no status for the engine / GUI", library::kLibraryShmName);
+        if (!blocks_.create_library()) log("cannot create %ls - no status for the engine / GUI", library_shm_name().c_str());
         if (blocks_.lib) {
             blocks_.lib->pid.store(GetCurrentProcessId());
             blocks_.lib->ready_seq.store(db_.ready_seq());
@@ -432,6 +441,7 @@ public:
                 scan(settle);
                 next_scan_ = now_us() + 2000000;
                 refresh_disk();
+                update_counts();
                 publish_progress();
             }
             if (!queue_.empty() && !hold()) {
@@ -461,6 +471,7 @@ public:
                 publish_progress();
                 continue;
             }
+            if (queue_.empty() && disk_low_) set_disk_low(false, 0);  // nothing waits for space any more
             if (cfg_.once && first_scan_done_ && settle_pending_ == 0 && (queue_.empty() || hold())) {
                 if (hold() && !queue_.empty()) log("--once: on hold with %zu queued, stopping", queue_.size());
                 break;
@@ -1203,9 +1214,41 @@ private:
 // | library DIR [move] [force]. OPTIONS (v3): dry fit skip hapq max=H (or 720) conform50 conform60.
 // Prints the reply; exit 0 = Ok/Accepted. `library DIR move` waits for the move and prints its end.
 // One --send at a time (the Tool slot has one writer).
+// himmel_ingest --send progress: the v3 block fields, once (library-db.md §11).
+int print_progress() {
+    HANDLE map = OpenFileMappingW(FILE_MAP_READ, FALSE, library_shm_name().c_str());
+    const auto* b = map ? static_cast<const library::LibraryBlock*>(MapViewOfFile(map, FILE_MAP_READ, 0, 0, sizeof(library::LibraryBlock))) : nullptr;
+    if (!b || b->header.magic != library::kLibraryMagic || b->header.version != library::kLibraryVersion ||
+        b->header.size != sizeof(library::LibraryBlock)) {
+        std::printf("no himmel_ingest (version %u) is running\n", library::kLibraryVersion);
+        return 3;
+    }
+    static const char* kModes[] = {"auto", "full", "background", "hold"};
+    std::printf("mode %u (stored %s), paused %u, disk_low %u, queued %u, working %u, ready %u, failed %u\n", b->mode.load(),
+                kModes[std::min(3u, b->stored_mode.load())], b->paused.load(), b->disk_low.load(), b->queued.load(), b->working.load(),
+                b->ready_total.load(), b->failed_total.load());
+    std::printf("disk: %s free of %s, %s kept free; library %s; queue needs %s\n", ingest::human_bytes(b->disk_free.load()).c_str(),
+                ingest::human_bytes(b->disk_total.load()).c_str(), ingest::human_bytes(b->disk_reserve.load()).c_str(),
+                ingest::human_bytes(b->library_bytes.load()).c_str(), ingest::human_bytes(b->queue_bytes.load()).c_str());
+    library::IngestProgress p{};
+    if (protocol::seq_read(b->progress_seq, b->progress, p))
+        std::printf("progress: %u of %u, file \"%s\" (clip %lld) %.0f %%, ETA %d s, written %s of ~%s; last error: %s%s\n", p.done, p.total,
+                    p.file, static_cast<long long>(p.clip), p.file_progress * 100.0, p.eta_s, ingest::human_bytes(p.bytes_written).c_str(),
+                    ingest::human_bytes(p.file_bytes).c_str(), p.error[0] ? p.error : "none",
+                    p.error_clip ? (" (clip " + std::to_string(p.error_clip) + ")").c_str() : "");
+    library::IngestPlan pl{};
+    if (protocol::seq_read(b->plan_seq, b->plan, pl) && pl.seq)
+        std::printf("last plan (seq %u%s%s): %s\n", pl.seq, pl.dry_run ? ", dry run" : "", pl.refused ? ", refused" : "", pl.message);
+    auto lr = std::make_unique<library::LibraryRoot>();
+    if (protocol::seq_read(b->root_seq, b->root, *lr))
+        std::printf("library: %s (move state %u%s%s)\n", lr->path, lr->move_state, lr->move_message[0] ? ": " : "", lr->move_message);
+    return 0;
+}
+
 int send_command(int argc, char** argv) {
     auto arg = [&](int k) -> std::string { return k < argc ? argv[k] : ""; };
     const std::string verb = arg(2);
+    if (verb == "progress") return print_progress();  // v3: read-only, no command
     library::IngestCommand c;
     auto id_at = [&](int k) { return static_cast<int64_t>(std::atoll(arg(k).c_str())); };
     auto abs_path = [&](int k) {
@@ -1265,7 +1308,7 @@ int send_command(int argc, char** argv) {
         return 2;
     }
     if (!ok) return std::printf("the path is too long\n"), 2;
-    HANDLE map = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, library::kLibraryShmName);
+    HANDLE map = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, library_shm_name().c_str());
     auto* b = map ? static_cast<library::LibraryBlock*>(MapViewOfFile(map, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(library::LibraryBlock))) : nullptr;
     if (!b || b->header.magic != library::kLibraryMagic || b->header.version != library::kLibraryVersion ||
         b->header.size != sizeof(library::LibraryBlock)) {

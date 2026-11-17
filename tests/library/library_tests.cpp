@@ -849,7 +849,7 @@ static void test_v3_location_and_move() {
     }
     // The redirect in the old folder: found once the old DB is gone.
     CHECK(write_moved_redirect(a, b));
-    CHECK(resolve_library_root(a) == a);  // the old DB is still there (renderer not restarted yet)
+    CHECK(resolve_library_root(a) == b);  // also while the old DB is still there (renderer not restarted yet)
     CHECK(delete_old_library(a) == 0);
     CHECK(!fs::exists(a / kDbFile, ec) && !fs::exists(a / "hap", ec) && !fs::exists(a / "work", ec));
     CHECK(fs::exists(a / "originals" / "mine.mp4", ec));  // originals are never deleted

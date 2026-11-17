@@ -21,8 +21,8 @@ std::filesystem::path read_location(const std::filesystem::path& file);
 // Writes `file` atomically (temp + rename). False on an I/O error.
 bool save_location(const std::filesystem::path& file, const std::filesystem::path& root);
 
-// Follows moved-library redirects (at most 8): a folder with no library DB and a
-// himmel-library-moved.json is replaced by its "to".
+// Follows moved-library redirects (at most 8): a folder with a himmel-library-moved.json
+// is replaced by its "to" (also while the old copy is not deleted yet).
 std::filesystem::path resolve_library_root(std::filesystem::path root);
 bool write_moved_redirect(const std::filesystem::path& old_root, const std::filesystem::path& to);
 

@@ -79,7 +79,9 @@ bool save_location(const fs::path& file, const fs::path& root) {
 fs::path resolve_library_root(fs::path root) {
     std::error_code ec;
     for (int hop = 0; hop < 8; ++hop) {
-        if (fs::exists(root / kDbFile, ec) || !fs::exists(root / kMovedFile, ec)) break;
+        // The redirect wins even while the old DB is still there (it is deleted only after the
+        // renderer that loaded it has restarted); it is written only after a complete move.
+        if (!fs::exists(root / kMovedFile, ec)) break;
         const auto j = read_json(root / kMovedFile);
         const fs::path to = j.is_object() ? from_utf8(j.value("to", std::string())) : fs::path();
         if (!to.is_absolute() || to == root) break;
