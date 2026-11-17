@@ -245,7 +245,7 @@
     const prodNames = ['Perform (MK2 mapper)', 'GUI (this page)', 'OSC', 'Tools', 'spare', 'spare', 'spare', 'spare'];
     if (P === 'status') {
       body.append(el('h2', null, 'Status'), kv([
-        ['engine', b.engine], ['engine pid', b.engine_pid], ['epoch', b.epoch], ['frame', b.frame], ['fps', b.fps],
+        ['engine', b.engine], ['engine pid', b.engine_pid], ['epoch', b.epoch], ['frame', b.frame], ['fps', (b.fps || 0).toFixed(1)],
         ['command block', b.commands], ['preview block', b.preview],
         ['protocol versions', b.versions ? `command v${b.versions.command} · state v${b.versions.state} · preview v${b.versions.preview}` : '–'],
         ['bridge pid', b.bridge_pid], ['commands pushed', b.pushed], ['commands dropped (ring full)', b.dropped],

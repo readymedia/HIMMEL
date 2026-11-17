@@ -22,15 +22,25 @@ screens, pressed buttons, knobs, pad pressure) and SETTINGS (stub: status, produ
   (control-mk2-input build, state v1): the MK2 view mirrors the real MK2 (both screens, group and pad LEDs); START
   step 2 shows the MK2 as CONNECTED; PERFORM shows "ENGINE VERSION MISMATCH" as it should for a v1 engine.
 
+- **Checked against the real v2 engine (2026-11-17, main with SHOW M3 + AUDIO M8 merged in, `himmel.exe --sim`,
+  machine free):**
+  - `LayerSet` Mode, `Clock` Bpm, `LayerCue` Set, and `LayerBeatLoop` all reach the engine.
+  - The effect browser puts Kaleido in slot 1 by click, and the "extreme" preset sets all four params.
+  - PRESS reads 1 while held and 0 after release.
+  - A Rings generator from the GENERATORS tab lands in the first free slot, and PROGRAM renders Kaleido + Rings.
+  - HIT fires clip 1, and release clears it.
+  - Kill / restart test: `taskkill` of `himmel_ui` mid-show. The supervisor restarted it with a new PID and the
+    engine PID stayed the same. `/state` before and after differs only in the GUI producer's `acked` counter. The
+    page reconnected without a reload, and the next command worked.
+  - `tools/mk2_e2e.py` PASS. ctest 16/16. The 7 Python selftests and `himmel_audio --selftest` pass.
+
 ## In progress
-- **Not yet checked against a v2 engine** (wave-1 `himmel_render` or `fake_engine`): another Himmel stack was running
-  (one-stack rule), so the CLIP editor, effect browser, PRESS, HIT and the kill / restart `himmel_ui` mid-show test
-  wait for a free machine. Steps: stop every Himmel process (`tasklist`), `build\bin\Release\himmel.exe --sim`
-  (or `fake_engine.exe`), launch config `himmel-ui` (or the supervisor's own), open http://127.0.0.1:8790, then kill
-  `himmel_ui` mid-show and compare `/state` before / after.
+- Nothing. Ready to merge.
 
 ## Next up (ordered)
-1. The check above, with screenshots.
+1. SHOW / AUDIO panels: read `Local\HimmelShow` (`docs/interfaces/show-block.md`) and `Local\HimmelAudio`
+   (`docs/interfaces/audio-block.md`) as optional blocks (hide the panel if missing / wrong version): project name +
+   save state, setlist / scenes, levels + BPM source, `FxReact` (command 40) per FX slot.
 2. 4 × 4 pad grid (CLIPS / SLICE / FX PADS) of the v4 mockup once kits exist (SHOW M3).
 3. Knob tiles 1–4 / 5–8 once the engine publishes pages / macros (state addition).
 4. Effect browser with live thumbnails (needs per-effect previews from the engine), scope badges (FxScope, D106).
@@ -76,6 +86,10 @@ screens, pressed buttons, knobs, pad pressure) and SETTINGS (stub: status, produ
   stack shares them. `fake_engine` refuses to start when another engine's heartbeat moves; `himmel_ui --watch` is safe
   next to anything.
 - The Bash tool on this PC chokes on some heredocs (quotes inside); write files with the editor tools instead.
+- The page draws on `requestAnimationFrame`, so a hidden tab (or a hidden Claude browser pane) draws nothing until it
+  is shown. The data (`S`) keeps updating. Call `Views.render()` by hand when you test in a hidden pane.
+- Seen 2026-11-17, probably the SHOW autosave (D109): a fresh `himmel.exe --sim` started with A1 at opacity 0.64.
+  That is exactly what `mk2_e2e.py` had just left. Expect earlier runs' state at start.
 - Space / Enter are TAKE / CUT only in the PERFORM view and never in text / number fields.
 
 ## Interfaces touched
