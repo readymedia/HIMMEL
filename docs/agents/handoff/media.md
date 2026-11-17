@@ -1,5 +1,5 @@
 # MEDIA handoff
-Updated: 2026-11-17 by the MEDIA wave-3 agent (M7) · Branch: `claude/media-m7-ingest` · Last commit: see `git log` (M7 commits on top of main 89d5d1d)
+Updated: 2026-11-17 by the MEDIA wave-3 agent (M7) · Branch: `claude/media-m7-ingest` · Merged main a9f6198 (CONTROL M4) · Green: build, 15 test programs, himmel_audio --selftest, 12 Python selftests, mk2_e2e.py PASS
 
 ## State in one paragraph
 M7 ingest works end to end. `himmel_ingest.exe` watches folders, probes with
