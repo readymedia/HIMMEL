@@ -35,7 +35,8 @@ enum class Producer : uint8_t {
     Gui = 1,       // himmel_ui bridge
     Osc = 2,       // OSC in (M13)
     Tool = 3,      // tests, scripts, himmel_cmd
-    Spare4, Spare5, Spare6, Spare7,
+    Show = 4,      // SHOW M3: commands the show runtime makes itself (recall, morph, undo, dice) - in-process
+    Spare5, Spare6, Spare7,
     Count
 };
 inline constexpr int kProducers = static_cast<int>(Producer::Count);
@@ -73,6 +74,19 @@ enum class CommandType : uint16_t {
     Clock = 23,         // param = ClockParam; i / f[0]
     // ---- effects (M5) ----     deck (or kMasterDeck), layer (kNone = deck level), slot
     FxPress = 24,       // f[0] 0..1 pressure on the slot's PRESS target (0 = released); docs/interfaces/effect-metadata.md §5
+    // ---- show (M3, SHOW track; enums + the Local\HimmelShow block in show.h, docs/interfaces/show-files.md) ----
+    SceneRecall = 25,   // deck; i = pad 0..15 of the page, kSceneNext / kScenePrev; slot = variation (kNone = main); f[0] = morph s (0 cut, < 0 the scene's)
+    SceneSave = 26,     // deck = source; i = pad 0..15, -1 = next free; flags kVariation = new variation of the deck's scene
+    Undo = 27,          // i = 0 undo, 1 redo (live edits, 64 deep)
+    SceneReset = 28,    // deck, layer (kNone = all): back to the scene as recalled; f[0] = glide s (0 = 1 beat)
+    Dice = 29,          // param = DiceVerb; deck; layer / slot = scope (kNone = deck); i = seed (0 = auto) or rotate step; f[0] = mutate amount
+    Locks = 30,         // param = LockOp; i = Lock bit mask
+    Project = 31,       // param = ProjectAction; i = argument; paths / names come from the producer's text box (show.h)
+    ShowSelect = 32,    // param = SelectWhat; i = index (Relative: delta)
+    KitSet = 33,        // deck (whose scene); slot = pad 0..15; param = PadKind; layer = PadTarget; i = id
+    MacroSet = 34,      // deck (whose scene); slot = macro 0..3; param = bind 0..7; layer = target layer (kNone = deck FX); i = fx slot * 16 + fx param; f[0] min, f[1] max; flags kClear
+    MacroValue = 35,    // slot = macro 0..3; f[0] 0..1 (Relative: delta); always the PROGRAM deck (knobs 5-8)
+    SongEdit = 36,      // param = SongAction; i = song; slot = position; f[0] = value
     Count
 };
 
@@ -144,6 +158,8 @@ enum ToggleValue : int32_t { kOff = 0, kOn = 1, kToggle = 2 };
 // Command.flags
 inline constexpr uint16_t kRelative = 1u << 0;   // f[0] is a delta, not an absolute value
 inline constexpr uint16_t kRelease = 1u << 1;    // LayerTrigger: the pad / key was let go
+inline constexpr uint16_t kVariation = 1u << 2;  // SceneSave: store as a new variation of the deck's scene (M3)
+inline constexpr uint16_t kClear = 1u << 3;      // MacroSet: remove the binding (M3)
 
 struct Command {
     CommandType type;   // 2

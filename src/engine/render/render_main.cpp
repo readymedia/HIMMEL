@@ -5,6 +5,7 @@
 //   himmel_render [--outputs N] [--fullscreen] [--size 640x360] [--mode span|mirror]
 //                 [--clip file.mov ...] [--no-overlay] [--preview-fps N] [--stats-csv]
 //                 [--flash-cap HZ] [--test-signal] [--ticker "TEXT"]   (effects: src/engine/fx/, M5)
+//                 [--project FOLDER|FILE.himmelshow] [--no-show-files] [--show-root DIR]   (show: src/show/, M3)
 //
 // * Show model: DeckModel (2 decks x 4 layers, FX slots on layer / deck / master,
 //   crossfader, TAKE / CUT / black / focus). Every change comes in as a Command:
@@ -22,6 +23,9 @@
 //   placeholder colour.
 // * The MK2: ring 0 of Local\HimmelMk2 -> himmel::perform::Mk2Perform; its LEDs
 //   and screens go back into the block.
+// * The show (M3, src/show/): show commands (types 25..36) go to himmel::show::ShowRuntime,
+//   which turns scenes / undo / dice into ordinary commands on slot 4 and keeps every
+//   file in its own worker thread (Local\HimmelShow, docs/interfaces/show-files.md).
 // * Parked (in himmel_render_legacy.exe): test card, camera + latency test,
 //   Touch FX / Entrancer, the generic-weapon knob pages.
 //
@@ -66,7 +70,10 @@
 #include "himmel/perform/mk2_perform.h"
 #include "himmel/protocol/commands.h"
 #include "himmel/protocol/preview.h"
+#include "himmel/protocol/show.h"
 #include "himmel/protocol/state.h"
+#include "himmel/show/files.h"
+#include "himmel/show/runtime.h"
 #include "slice_shaders.h"
 
 using Microsoft::WRL::ComPtr;
@@ -103,6 +110,9 @@ struct Config {
     float flash_cap = 0;       // D65: optional per-show flash cap (flashes/s), 0 = off (default)
     bool test_signal = false;  // feed the reactions the TestSignal until audio exists (M8)
     std::string ticker = "HIMMEL";  // GUESS: the text generator's text until shows carry it (M3)
+    std::string project;            // M3: a project to open (default: the most recent one)
+    bool show_files = true;         // M3: --no-show-files = no project, no autosave (tests)
+    std::string show_root;          // M3: --show-root DIR = projects in DIR/Projects, recent + untitled in DIR/App (tests)
 };
 
 Config parse_args(int argc, char** argv) {
@@ -121,6 +131,9 @@ Config parse_args(int argc, char** argv) {
         else if (a == "--flash-cap") c.flash_cap = std::clamp(static_cast<float>(std::atof(next().c_str())), 0.0f, 30.0f);
         else if (a == "--test-signal") c.test_signal = true;
         else if (a == "--ticker") c.ticker = next();
+        else if (a == "--project") c.project = next();
+        else if (a == "--no-show-files") c.show_files = false;
+        else if (a == "--show-root") c.show_root = next();
         else if (a == "--preview-fps") c.preview_fps = std::clamp(std::atoi(next().c_str()), 15, 30);
         else if (a == "--size") {
             const std::string s = next();
@@ -808,6 +821,38 @@ int main(int argc, char** argv) {
         }
     }
 
+    // ---- the show (M3): Local\HimmelShow + the runtime; its worker opens the last project
+    himmel::engine::ShmBlock show_shm;
+    proto::ShowBlock* show_blk = nullptr;
+    {
+        const auto r = show_shm.open_or_create(proto::kShowShmName, sizeof(proto::ShowBlock));
+        if (r == himmel::engine::ShmBlock::Result::Failed) {
+            LOG("show: cannot map %ls - running without a show block", proto::kShowShmName);
+        } else {
+            show_blk = static_cast<proto::ShowBlock*>(show_shm.data());
+            if (!himmel::engine::header_ok(show_blk->header, proto::kShowMagic, proto::kShowVersion,
+                                           static_cast<uint32_t>(sizeof(proto::ShowBlock)))) {
+                std::memset(static_cast<void*>(show_blk), 0, sizeof(proto::ShowBlock));
+                himmel::engine::write_header(show_blk->header, proto::kShowMagic, proto::kShowVersion,
+                                             static_cast<uint32_t>(sizeof(proto::ShowBlock)));
+            }
+        }
+    }
+    auto show = std::make_unique<himmel::show::ShowRuntime>();
+    {
+        himmel::show::RuntimeConfig sc;
+        sc.disk = cfg.show_files;
+        if (!cfg.project.empty()) sc.open = himmel::show::files::from_utf8(cfg.project);
+        if (!cfg.show_root.empty()) {
+            sc.projects_root = himmel::show::files::from_utf8(cfg.show_root) / "Projects";
+            sc.app_dir = himmel::show::files::from_utf8(cfg.show_root) / "App";
+        }
+        show->start(sc, *catalog, show_blk);
+        LOG("show: %s", cfg.show_files ? (cfg.project.empty() ? "opening the most recent project" : cfg.project.c_str())
+                                       : "no files (--no-show-files)");
+    }
+    uint32_t show_msg_seq = 0;
+
     // ---- GPU + outputs
     Gpu g;
     if (!init_gpu(g)) return 2;
@@ -937,7 +982,8 @@ int main(int argc, char** argv) {
         auto drain = [&](int slot, proto::CommandRing& ring) {
             proto::Command c;
             for (int k = 0; k < kDrainPerProducer && ring.pop(c); ++k) {
-                const proto::Reject r = model->submit(slot, c, t);
+                const proto::Reject r = proto::is_show_command(c.type) ? show->submit(slot, c, t, *model)
+                                                                        : model->submit(slot, c, t);
                 if (r == proto::Reject::None) {
                     ++applied;
                 } else {
@@ -953,6 +999,12 @@ int main(int argc, char** argv) {
         if (cmd.blk)
             for (int slot = 1; slot < proto::kProducers; ++slot) drain(slot, cmd.blk->rings[slot]);
         model->tick(t);
+        show->tick(*model, t);
+        if (show->status().message_seq != show_msg_seq) {
+            show_msg_seq = show->status().message_seq;
+            LOG("show: %s (last recall %u us, %d commands)", show->status().message, show->last_recall_us(),
+                show->last_recall_commands());
+        }
         if (t >= alive_next) {
             alive_next = t + 250000;
             model->set_producer_alive(0, mk2_alive);
@@ -1303,6 +1355,7 @@ int main(int argc, char** argv) {
     }
     if (preview.blk)
         for (auto& st : preview.blk->stream) st.active.store(0);
+    show->stop();  // flushes the autosave journal
     set_msg("stopped");
     timeEndPeriod(1);
     return exit_code;

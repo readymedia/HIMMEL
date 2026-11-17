@@ -259,7 +259,10 @@ Reject DeckModel::submit(int producer, const Command& c, uint64_t now_us) {
         rate_window_us_[producer] = now_us;
         rate_count_[producer] = 0;
     }
-    Reject r = ++rate_count_[producer] > kMaxCommandsPerSecond ? Reject::RateLimited : validate(c);
+    // Slot 4 (Show, M3) is exempt: the show runtime in this process sends whole scenes
+    // (recall, morph, undo) made from already validated data; every command is still validated.
+    const bool limited = producer != static_cast<int>(Producer::Show) && ++rate_count_[producer] > kMaxCommandsPerSecond;
+    Reject r = limited ? Reject::RateLimited : validate(c);
     if (r == Reject::None) r = apply(c, now_us);
     if (r == Reject::None) {
         live_.acked_seq[producer] = c.seq;
@@ -1046,7 +1049,10 @@ const char* command_name(CommandType t) {
                                              "speed", "jump",    "fx",      "param",    "bypass",  "mix",
                                              "xfade", "take",    "cut",     "black",    "focus",   "hello",
                                              "set",   "trigger", "cue",     "beatloop", "scratch", "clock",
-                                             "press"};
+                                             "press",
+                                             // show (M3)
+                                             "recall", "save", "undo", "reset", "dice", "locks", "project", "select",
+                                             "kit", "macroset", "macro", "song"};
     const auto i = static_cast<size_t>(t);
     return i < sizeof(kNames) / sizeof(kNames[0]) ? kNames[i] : "?";
 }
