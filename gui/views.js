@@ -163,7 +163,15 @@
       const bar = el('div', 'lbpbar'); const f = el('i'); f.style.width = (p.total ? p.done / p.total * 100 : 0) + '%'; bar.append(f);
       W.prog.append(el('div', null, p.busy ? `Importing ${Math.min(p.total, p.done + 1)} of ${p.total}${l?.job?.name ? ' · ' + l.job.name : ''}${p.eta >= 0 ? ' · about ' + (p.eta < 60 ? Math.round(p.eta) + ' s' : Math.round(p.eta / 60) + ' min') + ' left' : ''}` : `Imported ${p.done} of ${p.total}`), bar);
     }
-    if (d.free != null) W.prog.append(el('div', d.guard === 'low' ? 'bad' : 'dim', `Library drive: ${(d.free / 1e9).toFixed(1)} GB free · the library uses ${((d.lib || 0) / 1e9).toFixed(1)} GB`));
+    // Wave 8: sizes in the shared format (MB below 1 GB: a small library is never "0.0 GB").
+    const gb = window.Lib.gb;
+    if (d.free != null) {
+      const line = el('div', d.guard === 'low' ? 'bad' : 'dim', `Library drive: ${gb(d.free)} free · the library uses ${gb(d.lib || 0)}` + (d.reserve != null ? ` · Himmel keeps ${gb(d.reserve)} free` : ''));
+      if (d.guard === 'low' || (d.reserve != null && d.free < d.reserve)) {
+        const a = el('button', 'chip2', 'KEEP FREE ON DISK…'); a.title = 'Settings → Library'; a.addEventListener('click', () => window.Lib.openReserve()); line.append(' ', a);
+      }
+      W.prog.append(line);
+    }
   }
 
   // Step 5: clips onto layers. Drag a clip onto a PREVIEW layer, double-click = the next free layer.

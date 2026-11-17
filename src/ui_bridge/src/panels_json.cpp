@@ -209,6 +209,10 @@ json outputs_to_json(const OutputsSection& s) {
     j["count"] = s.count;
     j["mode"] = name_or(kCanvasNames, s.mode);
     j["refresh"] = name_or(kRefreshNames, s.refresh);
+    {   // wave 7 (ENGINE): the global frame smoothing for clips (Auto 0, Off 1, Blend 2, Even 3)
+        static const char* const kFrameSmoothNames[] = {"Auto", "Off", "Blend", "Even"};
+        j["frame_smooth"] = name_or(kFrameSmoothNames, s.frame_smooth);
+    }
     j["fullscreen"] = s.fullscreen != 0;
     j["identify"] = s.identify != 0;
     j["identify_left_ms"] = s.identify_ms_left / 250 * 250;   // coarse, so the hub sends ~4 Hz, not every frame

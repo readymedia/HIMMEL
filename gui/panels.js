@@ -575,6 +575,7 @@
       renderAudioMeter();
       renderScenes();
       if (S.view === 'outputs') renderOutputs();
+      if (window.Lib) window.Lib.tick();   // wave 8: ingest replies on every view
       if (S.view === 'library' && window.Lib) window.Lib.render();
     },
     shown(v) {

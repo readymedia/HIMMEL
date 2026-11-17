@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 ReadyMedia.no and Himmel contributors
-"""GUI wave 7 end-to-end: the first-time user's whole flow, through himmel_ui's HTTP API.
+"""GUI wave 7 + 8 end-to-end: the first-time user's whole flow, through himmel_ui's HTTP API.
+Wave 8 adds the owner's disk case: a reserve above the free space (SetReserve) -> ESTIMATE (the dry-run plan
+the page shows) -> a NoSpace refusal with its plan -> a lower reserve -> the import; and the library size.
 
 The owner's test (2026-11-17) stopped at "I found no way to get the clips onto layers". This script
 walks the same flow the web page does, with the same requests the page sends:
@@ -166,6 +168,9 @@ def make_sources(src):
 
 def main():
     args = sys.argv[1:]
+    if "--help" in args or "-h" in args or any(a not in ("--keep", "--port") and not a.isdigit() for a in args):
+        print(__doc__)
+        return 0 if ("--help" in args or "-h" in args) else 2
     port = int(args[args.index("--port") + 1]) if "--port" in args else 8790
     keep = "--keep" in args
     busy = himmel_processes()
@@ -194,8 +199,9 @@ def run(port, keep):
     n_src = make_sources(src)
     print("temp show root", tmp, "·", n_src, "source files")
     exe = os.path.join(BIN, "himmel.exe")
-    reserve = ["--reserve-gb", os.environ.get("HIMMEL_E2E_RESERVE_GB", "5")]   # a dev disk is often nearly full
-    stack = subprocess.Popen([exe, "--sim", "--no-weapons"] + reserve + ["--", "--show-root", tmp, "--size", "960x540"], cwd=ROOT,
+    # No --reserve-gb: the reserve is set through the GUI's own route (SetReserve, Settings -> Library), as the owner
+    # would (a --reserve-gb would override it for the whole run).
+    stack = subprocess.Popen([exe, "--sim", "--no-weapons", "--", "--show-root", tmp, "--size", "960x540"], cwd=ROOT,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                              creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
     ck = Check()
@@ -217,9 +223,41 @@ def run(port, keep):
         ck(top.get("ok") and len(top.get("drives", [])) > 0, "GET /fs/list without a path lists the drives")
         disk = br.get("/library/disk")
         ck(disk.get("ok") and disk.get("free", 0) > 0, "GET /library/disk: %.1f GB free" % (disk.get("free", 0) / 1e9))
+        def ingest_reply(seq, timeout=90):
+            return wait_for(lambda: next((x for x in ((br.event("library") or {}).get("cmd") or {}).get("replies", []) if x["seq"] == seq), None), timeout)
+
+        print("1a. the owner's disk: less free than the reserve (wave 8)")
+        free = (lib.get("disk") or {}).get("free", 0)
+        big = int(free / 1e9) + 20                    # like 6 GB free with 20 GB kept free
+        r = br.post("/library/cmd", {"type": "SetReserve", "gb": big})
+        rr = ingest_reply(r.get("seq"), 15)
+        ck(rr and rr["status"] == "Ok", "SetReserve %d GB (Settings -> Library): %s" % (big, rr and rr.get("message")))
+        ev = wait_for(lambda: (lambda e: e if e and abs((e.get("disk") or {}).get("reserve", 0) - big * (1 << 30)) < (1 << 30) or abs((e.get("disk") or {}).get("reserve", 0) - big * 1e9) < 1e9 else None)(br.event("library")), 10)
+        ck(bool(ev), "the block shows the new reserve (disk_reserve %.1f GB)" % (((ev or {}).get("disk") or {}).get("reserve", 0) / 1e9))
+        r = br.post("/library/cmd", {"type": "Import", "path": src, "dry_run": True})
+        rr = ingest_reply(r.get("seq"))
+        ev = br.event("library") or {}
+        pl = ev.get("plan") or {}
+        ck(rr and pl.get("seq") == r.get("seq") and pl.get("mine") and pl.get("dry_run"),
+           "ESTIMATE: the plan for this dry run is in the block (seq %s, mine, dry run)" % pl.get("seq"))
+        ck(pl.get("clips") == n_src and pl.get("need_bytes", 0) > 0 and pl.get("reserve_bytes", 0) > 0 and pl.get("free_bytes", 0) > 0,
+           "ESTIMATE has what the page shows: %s clips, ~%.0f MB, %.1f GB free, reserve %.1f GB" %
+           (pl.get("clips"), pl.get("need_bytes", 0) / 1e6, pl.get("free_bytes", 0) / 1e9, pl.get("reserve_bytes", 0) / 1e9))
+        ck(pl.get("fits") is False, "ESTIMATE says it does not fit")
+        r = br.post("/library/cmd", {"type": "Import", "path": src})
+        rr = ingest_reply(r.get("seq"))
+        pl = (br.event("library") or {}).get("plan") or {}
+        ck(rr and rr["status"] == "NoSpace" and pl.get("refused") and pl.get("seq") == r.get("seq"),
+           "the import is refused (NoSpace) with its plan: \"%s\"" % (rr and rr.get("message")))
+        rows0 = br.get("/library/clips").get("clips", [])
+        ck(len(rows0) == 0, "nothing was queued")
+        r = br.post("/library/cmd", {"type": "SetReserve", "gb": 2})
+        rr = ingest_reply(r.get("seq"), 15)
+        ck(rr and rr["status"] == "Ok", "keep free on disk lowered to 2 GB: %s" % (rr and rr.get("message")))
+
         r = br.post("/library/cmd", {"type": "Import", "path": src})
         ck(r.get("ok"), "Import accepted by the bridge (seq %s)" % r.get("seq"))
-        reply = wait_for(lambda: next((x for x in ((br.event("library") or {}).get("cmd") or {}).get("replies", []) if x["seq"] == r.get("seq")), None), 90)
+        reply = ingest_reply(r.get("seq"))
         print("  reply:", reply)
         guard = bool(reply) and reply["status"] == "NoSpace"
         if guard:
@@ -262,6 +300,11 @@ def run(port, keep):
             ck(len(seen_jobs) >= 2, "the current file was shown during the import (%d names seen)" % len(seen_jobs))
             pg = (last or {}).get("progress") or {}
             ck(pg.get("total", 0) >= n_src and pg.get("done") == pg.get("total"), "the worker's batch progress: %s of %s" % (pg.get("done"), pg.get("total")))
+            # wave 8: the library's size is real after an import (the START screen said "0.0 GB")
+            lb = wait_for(lambda: (lambda e: e if e and (e.get("disk") or {}).get("library_bytes", 0) > 0 else None)(br.event("library")), 10)
+            dk = br.get("/library/disk")
+            ck(bool(lb) and dk.get("library_bytes", 0) > 0, "the library's size: %.1f MB (block), %.1f MB (bridge)" %
+               ((((lb or {}).get("disk") or {}).get("library_bytes", 0)) / 1e6, dk.get("library_bytes", 0) / 1e6))
 
         print("3. library clips -> layers" if not guard else "3. clips -> layers (media/ test clips: nothing was imported)")
         st = wait_for(lambda: (lambda s: s if s and len(s["catalog"]["clips"]) >= n_cat0 + (0 if guard else n_src) else None)(br.state()), 15) or br.state()
