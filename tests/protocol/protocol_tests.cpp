@@ -127,11 +127,60 @@ static void test_show_block() {
     CHECK(!read_text(box, id, out));
 }
 
+// FxReact (D131): the packing of i round-trips, out-of-range fields are caught,
+// and the v3 reaction table sits after the transport section.
+static void test_react_packing() {
+    std::printf("react packing\n");
+    static_assert(static_cast<int>(CommandType::FxReact) == 40);
+    static_assert(sizeof(ReactionEntry) == 48);
+    static_assert(sizeof(ReactionSection) == (kDecks * kLayersPerDeck * kFxSlots + kDecks * kFxSlots + kFxSlots) *
+                                                 kReactParams * sizeof(ReactionEntry) + 8);
+    static_assert(offsetof(StateBlock, react) > offsetof(StateBlock, transport));
+    static_assert(kStateVersion == 3);
+    ReactArgs a;
+    a.op = ReactOp::Set;
+    a.signal = ReactSignal::Drop;
+    a.mode = ReactMode::Trigger;
+    a.curve = ReactCurve::Exp;
+    a.quantise = ReactQuantise::Bar;
+    a.hold_q = kReactHoldMax;
+    const int32_t i = pack_react(a);
+    CHECK(i == static_cast<int32_t>(0u | (13u << 4) | (2u << 12) | (4u << 16) | (5u << 20) | (16u << 24)));
+    const ReactArgs b = unpack_react(i);
+    CHECK(b.op == a.op && b.signal == a.signal && b.mode == a.mode && b.curve == a.curve && b.quantise == a.quantise &&
+          b.hold_q == a.hold_q);
+    CHECK(react_args_ok(i));
+    CHECK(pack_react(ReactArgs{}) == 0 && react_args_ok(0));
+    // every op round-trips
+    for (int op = 0; op < static_cast<int>(ReactOp::Count); ++op) {
+        ReactArgs c;
+        c.op = static_cast<ReactOp>(op);
+        c.signal = ReactSignal::Kick;
+        CHECK(unpack_react(pack_react(c)).op == c.op && unpack_react(pack_react(c)).signal == ReactSignal::Kick);
+    }
+    // out of range: op, signal, mode, curve, quantise, hold, reserved bits
+    CHECK(!react_args_ok(6));
+    CHECK(!react_args_ok(static_cast<int32_t>(14u << 4)));
+    CHECK(!react_args_ok(static_cast<int32_t>(3u << 12)));
+    CHECK(!react_args_ok(static_cast<int32_t>(5u << 16)));
+    CHECK(!react_args_ok(static_cast<int32_t>(6u << 20)));
+    CHECK(!react_args_ok(static_cast<int32_t>(17u << 24)));
+    CHECK(!react_args_ok(static_cast<int32_t>(1u << 29)));
+    CHECK(!react_args_ok(static_cast<int32_t>(0x80000000u)));
+    // make_react fills the targets and every float
+    const Command c = make_react(kMasterDeck, kNone, 2, 1, a, -0.5f, 5.f, 180.f, 0.2f, kRelative);
+    CHECK(c.type == CommandType::FxReact && c.deck == kMasterDeck && c.layer == kNone && c.slot == 2 && c.param == 1);
+    CHECK(c.i == i && c.f[0] == -0.5f && c.f[1] == 5.f && c.f[2] == 180.f && c.f[3] == 0.2f && c.flags == kRelative);
+    CHECK(kReactQuantiseBeats[static_cast<int>(ReactQuantise::Quarter)] == 1.f);
+    std::printf("  ReactionSection %zu B\n", sizeof(ReactionSection));
+}
+
 int main() {
     test_sizes();
     test_ring();
     test_seqlock();
     test_show_block();
+    test_react_packing();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

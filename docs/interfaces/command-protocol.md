@@ -150,8 +150,8 @@ runtime refuses it (`BadValue`) when the box holds another id
 Types 70–79 are ENGINE's range (LEAD, wave 3). They go through the deck
 model like every command (rate limit, validation, ack in `LiveState`), and
 the output model applies them. The result is shown in `Local\HimmelOutputs`.
-The enums are in `outputs.h`. Types 37–69 are not used yet and are refused as
-`UnknownType`.
+The enums are in `outputs.h`. Types 37–39 and 41–69 are not used yet and are
+refused as `UnknownType`.
 
 | Type | Targets | Argument | Notes |
 |---|---|---|---|
@@ -159,6 +159,55 @@ The enums are in `outputs.h`. Types 37–69 are not used yet and are refused as
 | `Identify` (71) | — | `i` = 0 off (fade out), 1 = 5 s, 2 = until 0 (held) | 0.5 s fade in / out; drawn over the show. A held IDENTIFY belongs to the producer that sent it; when that producer has no heartbeat for 2 s it is let go (fade out), so an output never sticks in IDENTIFY. `himmel_cmd identify hold` therefore lasts ~2 s after the tool exits |
 | `LayerPlace` (72) | deck (or `kHitDeck`), layer | `i` = `Place` (FillAll, Out, Fit, Free); `param` = output (Out); `f[0..3]` = x, y, w, h on the canvas 0..1 (Free; w, h > 0) | Out n with n ≥ the output count is refused (`BadTarget`) |
 | `OutputConfig` (73) | `slot` = output (`kNone` = all) | `param` = `OutputParam`: Resolution (`i` = preset; a setup action, rebuilds the canvas), Refresh (`i` = `RefreshRate`), BlendWidth (`i` px 0..1024), BlendGamma (`f[0]` 1..3, clamped), Mode (`i` = span / mirror), Adopt (`slot`; `i` = 1 take the new display), SimLost (`slot`; `i` = 1 act as if the cable was pulled, 0 back: tests on one screen) | |
+
+## 4d. Audio reactions (AUDIO, D131, 2026-11-17; `design/music.md` §4)
+
+Types 40–49 are AUDIO's range. `FxReact` gives any FX knob its own reaction
+(signal × amount × curve, attack / release, threshold, range, mode,
+quantise, hold). The table it edits is in the state block, version 3
+(`ReactionSection`, [`engine-state.md`](engine-state.md) §1). It goes
+through the deck model like every command (rate limit, validation, ack in
+`LiveState`). Packing helpers and enums: `commands.h` (`ReactArgs`,
+`pack_react`, `unpack_react`, `react_args_ok`, `make_react`).
+
+| Type | Targets | Argument | Notes |
+|---|---|---|---|
+| `FxReact` (40) | deck (or `kMasterDeck`), layer (`kNone` = deck level), slot, `param` = knob 0..3 (`kNone` only with Default / Off = all 4) | `i` = `pack_react(ReactArgs)`; `f[0..3]` per op (below) | the slot must hold an effect and the knob must exist (`param < param_count`), else `BadTarget` |
+
+`i`, bit by bit (unused bits must be 0, else `BadValue`):
+
+| Bits | Field | Values |
+|---|---|---|
+| 0–3 | `op` (`ReactOp`) | 0 Set, 1 Amount, 2 Signal, 3 Range, 4 Default, 5 Off |
+| 4–11 | `signal` (`ReactSignal`) | 0 none, 1 level, 2 bass, 3 mid, 4 high, 5 kick, 6 snare, 7 hat, 8 onset, 9 beat, 10 bar, 11 energy, 12 build, 13 drop (= `himmel::fx::Signal`) |
+| 12–15 | `mode` (`ReactMode`) | 0 ADD (on top of the knob), 1 FOLLOW (replaces it), 2 TRIGGER (fires on a rising edge over the threshold) |
+| 16–19 | `curve` (`ReactCurve`) | 0 linear, 1 soft, 2 hard, 3 steps, 4 exp |
+| 20–23 | `quantise` (`ReactQuantise`) | TRIGGER grid: 0 off, 1 = 1/16 (¼ beat), 2 = 1/8, 3 = 1/4 (1 beat), 4 = 1/2, 5 = 1 bar |
+| 24–28 | `hold` | TRIGGER hold in quarter beats, 0..16 (0..4 beats) |
+| 29–31 | — | 0 |
+
+The ops (`f[]` values out of range are clamped; NaN / inf = `BadValue`):
+
+| `op` | Uses | Does |
+|---|---|---|
+| Set (0) | every `i` field; `f[0]` amount −1..1, `f[1]` attack ms 0..2000, `f[2]` release ms 0..2000, `f[3]` threshold 0..1 | the whole reaction; the range stays as it was. Readers that change one setting (the GUI editor, the MK2 reaction page) read the entry from the state block, change it and send Set |
+| Amount (1) | `f[0]` −1..1 (`kRelative` = delta) | MK2 knob 6 (AUDIO). A Default entry becomes Custom with the default's other settings |
+| Signal (2) | `i`'s signal | `AUTO WRITE` + turn. As Amount, a Default entry keeps the default's other settings; on a knob with no reaction yet, the rest is ADD, amount 0.5, attack 10 ms, release 200 ms, linear (GUESS: owner to tune) |
+| Range (3) | `f[0]` lo, `f[1]` hi (knob positions 0..1; lo > hi is allowed and moves the other way); `f[0]` < 0 = back to the param's good range | |
+| Default (4) | — | back to the effect's default reaction (`param` = `kNone`: all 4 knobs) |
+| Off (5) | — | no reaction on this knob, not even the default (`param` = `kNone`: all 4) |
+
+- **FxSet** resets the slot's 4 entries to Default (the new effect's own
+  reaction). `FxParam` never touches the table.
+- An effect's default reaction is the one in its `effect.json`
+  ([`effect-metadata.md`](effect-metadata.md) §3); it lives on one knob, so
+  the other knobs of a fresh slot have no reaction (signal None).
+- The resolver runs each knob's reaction on its own envelope, in knob order,
+  after scope and PRESS (effect-metadata.md §4). A knob with scope MOVE
+  follows its reaction over the whole range.
+- Not in this version: the REACT macro (scales every reaction of a deck),
+  spectrum-band signals, reactions on layer parameters (opacity, speed …)
+  and on macros. They come as new ops / types in 41–49.
 
 ## 5. Validation (the engine, before anything else)
 

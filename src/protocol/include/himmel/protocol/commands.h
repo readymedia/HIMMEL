@@ -87,7 +87,10 @@ enum class CommandType : uint16_t {
     MacroSet = 34,      // deck (whose scene); slot = macro 0..3; param = bind 0..7; layer = target layer (kNone = deck FX); i = fx slot * 16 + fx param; f[0] min, f[1] max; flags kClear
     MacroValue = 35,    // slot = macro 0..3; f[0] 0..1 (Relative: delta); always the PROGRAM deck (knobs 5-8)
     SongEdit = 36,      // param = SongAction; i = song; slot = position; f[0] = value
-    // 37..69: SHOW (..39), AUDIO (40..49), GUI (50..59), MEDIA (60..69) - not used yet (refused as UnknownType)
+    // 37..39: SHOW (free). 40..49: AUDIO. 50..59: GUI, 60..69: MEDIA - not used yet (refused as UnknownType)
+    // ---- audio reactions (AUDIO, D131; docs/interfaces/command-protocol.md §4d) ----
+    //                          deck (or kMasterDeck), layer (kNone = deck level), slot, param = knob 0..3 (kNone: Default / Off on all 4)
+    FxReact = 40,       // i = pack_react(ReactArgs): op, signal, mode, curve, quantise, hold; f[0..3] per ReactOp
     // ---- outputs (M6, ENGINE; enums + the Local\HimmelOutputs block in outputs.h, docs/interfaces/outputs-block.md) ----
     OutputBlack = 70,   // slot = output 0..7 (kNone = every output); i = Toggle value
     Identify = 71,      // i = 0 off, 1 show for 5 s, 2 show until 0 (held); fades 0.5 s in / out
@@ -161,6 +164,70 @@ enum class ClockParam : uint8_t {
 };
 enum ToggleValue : int32_t { kOff = 0, kOn = 1, kToggle = 2 };
 
+// ---- audio reactions (FxReact = 40, D131; command-protocol.md §4d, design/music.md §4) ----
+// One reaction per FX knob (0..kReactParams-1) per slot; the table is in the state
+// block (ReactionSection, state.h). FxSet resets a slot's 4 entries to the new
+// effect's defaults (ReactSource::Default).
+inline constexpr int kReactParams = 4;      // knobs 1-4 of an FX page (himmel::fx::kParams)
+enum class ReactOp : uint8_t {
+    Set = 0,       // the whole reaction: i = signal, mode, curve, quantise, hold; f[0] amount -1..1,
+                   // f[1] attack ms 0..2000, f[2] release ms 0..2000, f[3] threshold 0..1. Keeps the range.
+    Amount = 1,    // f[0] amount -1..1 (kRelative: delta) - MK2 knob 6 (AUDIO); the rest stays
+    Signal = 2,    // i's signal only (AUTO WRITE + turn); the rest stays
+    Range = 3,     // f[0] lo, f[1] hi: knob positions 0..1 the param moves between; f[0] < 0 = back to the
+                   // param's good range (effect-metadata.md §1)
+    Default = 4,   // back to the effect's default reaction (param kNone = all 4 knobs)
+    Off = 5,       // no reaction on this knob, not even the default (param kNone = all 4)
+    Count
+};
+// Same numbering as himmel::fx::Signal (static_assert in the engine).
+enum class ReactSignal : uint8_t {
+    None = 0, Level, Bass, Mid, High, Kick, Snare, Hat, Onset, Beat, Bar, Energy, Build, Drop, Count
+};
+enum class ReactMode : uint8_t { Add = 0, Follow = 1, Trigger = 2, Count };            // = himmel::fx::ReactMode
+enum class ReactCurve : uint8_t { Linear = 0, Soft = 1, Hard = 2, Steps = 3, Exp = 4, Count };  // = himmel::fx::Curve
+// TRIGGER fires only on this grid: off, 1/16, 1/8, 1/4 (a beat), 1/2, 1 bar.
+enum class ReactQuantise : uint8_t { Off = 0, Sixteenth = 1, Eighth = 2, Quarter = 3, Half = 4, Bar = 5, Count };
+inline constexpr float kReactQuantiseBeats[static_cast<int>(ReactQuantise::Count)] = {0.f, 0.25f, 0.5f, 1.f, 2.f, 4.f};
+inline constexpr int kReactHoldMax = 16;    // hold in quarter beats: 0..16 = 0..4 beats
+inline constexpr float kReactMaxMs = 2000.f; // attack / release
+
+// FxReact.i, bit by bit (unused bits are 0):
+//   0-3 op | 4-11 signal | 12-15 mode | 16-19 curve | 20-23 quantise | 24-28 hold (quarter beats) | 29-31 0
+struct ReactArgs {
+    ReactOp op = ReactOp::Set;
+    ReactSignal signal = ReactSignal::None;
+    ReactMode mode = ReactMode::Add;
+    ReactCurve curve = ReactCurve::Linear;
+    ReactQuantise quantise = ReactQuantise::Off;
+    uint8_t hold_q = 0;  // quarter beats 0..kReactHoldMax
+};
+inline constexpr int32_t pack_react(const ReactArgs& a) {
+    const uint32_t u = (static_cast<uint32_t>(a.op) & 0xFu) | ((static_cast<uint32_t>(a.signal) & 0xFFu) << 4) |
+                       ((static_cast<uint32_t>(a.mode) & 0xFu) << 12) | ((static_cast<uint32_t>(a.curve) & 0xFu) << 16) |
+                       ((static_cast<uint32_t>(a.quantise) & 0xFu) << 20) | ((static_cast<uint32_t>(a.hold_q) & 0x1Fu) << 24);
+    return static_cast<int32_t>(u);
+}
+// Raw fields; the values may be out of range (>= Count): the engine validates them.
+inline constexpr ReactArgs unpack_react(int32_t i) {
+    const uint32_t u = static_cast<uint32_t>(i);
+    ReactArgs a;
+    a.op = static_cast<ReactOp>(u & 0xFu);
+    a.signal = static_cast<ReactSignal>((u >> 4) & 0xFFu);
+    a.mode = static_cast<ReactMode>((u >> 12) & 0xFu);
+    a.curve = static_cast<ReactCurve>((u >> 16) & 0xFu);
+    a.quantise = static_cast<ReactQuantise>((u >> 20) & 0xFu);
+    a.hold_q = static_cast<uint8_t>((u >> 24) & 0x1Fu);
+    return a;
+}
+// True when every field of a packed FxReact.i is in range (the engine refuses others as BadValue).
+inline constexpr bool react_args_ok(int32_t i) {
+    const ReactArgs a = unpack_react(i);
+    return (static_cast<uint32_t>(i) >> 29) == 0 && a.op < ReactOp::Count && a.signal < ReactSignal::Count &&
+           a.mode < ReactMode::Count && a.curve < ReactCurve::Count && a.quantise < ReactQuantise::Count &&
+           a.hold_q <= kReactHoldMax;
+}
+
 // Command.flags
 inline constexpr uint16_t kRelative = 1u << 0;   // f[0] is a delta, not an absolute value
 inline constexpr uint16_t kRelease = 1u << 1;    // LayerTrigger: the pad / key was let go
@@ -231,6 +298,15 @@ inline Command make_fx(CommandType t, uint8_t deck, uint8_t layer, uint8_t slot,
     Command c = make(t, deck, layer, i, f0, flags);
     c.slot = slot;
     c.param = param;
+    return c;
+}
+// FxReact (D131): `param` = knob 0..3 (kNone with Default / Off = all 4); f = per ReactOp.
+inline Command make_react(uint8_t deck, uint8_t layer, uint8_t slot, uint8_t param, const ReactArgs& a, float f0 = 0.f,
+                          float f1 = 0.f, float f2 = 0.f, float f3 = 0.f, uint16_t flags = 0) {
+    Command c = make_fx(CommandType::FxReact, deck, layer, slot, param, pack_react(a), f0, flags);
+    c.f[1] = f1;
+    c.f[2] = f2;
+    c.f[3] = f3;
     return c;
 }
 
