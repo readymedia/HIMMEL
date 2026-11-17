@@ -17,7 +17,9 @@
 #include <vector>
 
 #include "himmel/ingest/ffmpeg.h"
+#include "himmel/ingest/ingest_ops.h"
 #include "himmel/ingest/scan.h"
+#include "himmel/ingest/selftest.h"
 #include "himmel/ingest/svg.h"
 #include "himmel/ingest/throttle.h"
 #include "himmel/library/analysis.h"
@@ -573,6 +575,43 @@ static void test_ffmpeg_round_trip() {
     if (!err.empty()) std::printf("  svg: %s\n", err.c_str());
 }
 
+// Ingest commands 60..67 (library-db.md §10): every command through the real transport.
+static void test_ingest_commands() {
+    const fs::path d = temp_dir("commands");
+    int lines = 0, fails = 0;
+    const int f = ingest::run_command_selftest(d / "lib", [&](const std::string& line) {
+        ++lines;
+        if (line.rfind("  FAIL", 0) == 0) ++fails, std::printf("%s\n", line.c_str());
+    });
+    g_checks += lines;
+    g_failed += f;
+    CHECK(f == fails && lines > 50);
+    CHECK(!fs::exists(d / "lib"));  // the self-test cleans up
+
+    // v2 DB rules: ready_order is kept through re-analysis / removal; "removed" round-trips.
+    LibraryDb db;
+    CHECK(db.open(d / "x.db", false));
+    ClipRecord r;
+    r.hash = "0123456789abcdef", r.name = "r", r.source = "C:\\r.mp4", r.state = State::Ready, r.added_unix = 1;
+    CHECK(db.upsert(r) && r.ready_order == 1);
+    r.state = State::Analysing;
+    CHECK(db.upsert(r) && r.ready_order == 1);
+    r.state = State::Removed;
+    r.source_missing = true;
+    CHECK(db.upsert(r));
+    ClipRecord g;
+    CHECK(db.get(r.id, g) && g.state == State::Removed && g.source_missing && g.ready_order == 1);
+    CHECK(db.list_ready_after(0).empty());
+    CHECK(std::string(state_name(State::Removed)) == "removed");
+    CHECK(db.meta_set("watch", "[\"C:\\a\"]") && db.meta_get("watch") == "[\"C:\\a\"]");
+    // The block layout the GUI builds on.
+    static_assert(sizeof(IngestCommand) == 1024 && sizeof(IngestReply) == 128 && kLibraryVersion == 2);
+    IngestCommand c;
+    std::string long_path(1200, 'a');
+    CHECK(!make_ingest(c, IngestCommandType::Import, 0, long_path.c_str()));
+    CHECK(make_ingest(c, IngestCommandType::Remove, 7) && c.type == 62 && c.clip == 7 && c.path[0] == 0);
+}
+
 int main() {
     test_hash();
     test_judder();
@@ -583,6 +622,7 @@ int main() {
     test_throttle();
     test_ffmpeg_args();
     test_feed();
+    test_ingest_commands();
     test_ffmpeg_round_trip();
     std::printf("library_tests: %d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;

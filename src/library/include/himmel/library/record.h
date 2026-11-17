@@ -15,7 +15,8 @@ inline constexpr int kPaletteSize = 5;
 inline constexpr int kMaxSlices = 16;
 
 enum class Kind : uint8_t { Video, Still, Vector, Animation, Sequence };
-enum class State : uint8_t { Queued, Probing, Converting, Analysing, Ready, Failed };
+// Removed (v2, library-db.md §3): a tombstone, hidden by readers; the hash stops a re-import.
+enum class State : uint8_t { Queued, Probing, Converting, Analysing, Ready, Failed, Removed };
 
 // Resume bits (stage_done).
 inline constexpr uint32_t kStageProbe = 1, kStageConvert = 2, kStageAnalyse = 4, kStageThumbs = 8;
@@ -91,6 +92,7 @@ struct ClipRecord {
     int stars = 0;
     bool favourite = false;
     std::vector<std::string> user_tags;
+    bool source_missing = false;  // v2: the original is gone (a ready clip still plays); sidecar only
 };
 
 // Refresh rates (of 50 and 60 Hz) on which a clip of this fps judders:

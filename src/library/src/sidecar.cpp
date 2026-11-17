@@ -81,6 +81,9 @@ std::string sidecar_to_json(const ClipRecord& r) {
     j["stars"] = r.stars;
     j["favourite"] = r.favourite;
     j["user_tags"] = r.user_tags;
+    // v2 keys (library-db.md §5): absent = false.
+    if (r.source_missing) j["source_missing"] = true;
+    if (r.state == State::Removed) j["removed"] = true;
     return j.dump(1);
 }
 
@@ -101,6 +104,8 @@ bool sidecar_from_json(const std::string& text, ClipRecord& r, std::string* err)
     r.play_path = j.value("play", "");
     r.still_path = j.value("still", "");
     r.thumb_path = j.value("thumb", "");
+    r.source_missing = j.value("source_missing", false);
+    if (j.value("removed", false)) r.state = State::Removed;
     if (const auto p = j.find("probe"); p != j.end() && p->is_object()) {
         r.probe.codec = p->value("codec", "");
         r.probe.pix_fmt = p->value("pix_fmt", "");

@@ -8,7 +8,7 @@ namespace himmel::library {
 
 namespace {
 constexpr const char* kKinds[] = {"video", "still", "vector", "animation", "sequence"};
-constexpr const char* kStates[] = {"queued", "probing", "converting", "analysing", "ready", "failed"};
+constexpr const char* kStates[] = {"queued", "probing", "converting", "analysing", "ready", "failed", "removed"};
 }  // namespace
 
 const char* kind_name(Kind k) { return kKinds[static_cast<int>(k)]; }
@@ -20,7 +20,7 @@ bool kind_from(const std::string& s, Kind& out) {
     return false;
 }
 bool state_from(const std::string& s, State& out) {
-    for (int i = 0; i < 6; ++i)
+    for (int i = 0; i < 7; ++i)
         if (s == kStates[i]) return out = static_cast<State>(i), true;
     return false;
 }

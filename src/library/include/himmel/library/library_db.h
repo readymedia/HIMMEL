@@ -52,6 +52,12 @@ public:
     bool begin();
     bool commit();
 
+    // v2: the meta table ('watch', 'pending_delete': JSON arrays).
+    std::string meta_get(const std::string& key);
+    bool meta_set(const std::string& key, const std::string& value);
+    // The size / mtime last cached for a path (relink by size).
+    bool source_info(const std::string& path, int64_t& size, int64_t& mtime);
+
     // path -> hash cache, so a rescan does not re-hash unchanged files.
     bool cached_hash(const std::string& path, int64_t size, int64_t mtime, std::string& hash);
     void cache_hash(const std::string& path, int64_t size, int64_t mtime, const std::string& hash);

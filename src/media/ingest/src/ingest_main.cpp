@@ -9,12 +9,17 @@
 //
 //   himmel_ingest [--library DIR] [--watch DIR]... [--ffmpeg DIR] [--once]
 //                 [--mode auto|full|background] [--seq-fps N] [--canvas WxH]
-//                 [--quality hap|hap_q] [--rebuild] [--retry] [--status]
+//                 [--quality hap|hap_q] [--rebuild] [--retry] [--status] [--selftest]
 //
 //   --once     scan, import everything, then exit (tests, measurements)
 //   --rebuild  recreate the DB from meta/*.json, then exit
 //   --retry    put failed clips back in the queue
 //   --status   print the library counts and exit
+//   --send ... one command to the running worker (see send_command)
+//   --selftest run every ingest command against a temporary library (no ffmpeg) and exit
+//
+// Commands 60..67 (import, rescan, remove, relink, reanalyse, retry, mode, unwatch) arrive
+// in the library block's channels (docs/interfaces/library-db.md §10, ingest_ops.h).
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -34,6 +39,7 @@
 #include <deque>
 #include <functional>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <set>
 #include <string>
@@ -42,7 +48,9 @@
 
 #include "himmel/engine/engine_shared.h"
 #include "himmel/ingest/ffmpeg.h"
+#include "himmel/ingest/ingest_ops.h"
 #include "himmel/ingest/scan.h"
+#include "himmel/ingest/selftest.h"
 #include "himmel/ingest/svg.h"
 #include "himmel/ingest/throttle.h"
 #include "himmel/library/analysis.h"
@@ -53,6 +61,7 @@
 #include "himmel/library/sidecar.h"
 #include "himmel/media/hap.h"
 #include "himmel/media/mov.h"
+#include "himmel/protocol/commands.h"
 
 namespace fs = std::filesystem;
 using namespace himmel;
@@ -97,9 +106,9 @@ BOOL WINAPI on_console(DWORD) {
 
 struct Config {
     fs::path root;
-    std::vector<fs::path> watch;
+    std::vector<fs::path> watch;    // the default folder + --watch (commands add more, stored in the DB)
     fs::path ffmpeg_dir;
-    bool once = false, rebuild = false, retry = false, status = false;
+    bool once = false, rebuild = false, retry = false, status = false, selftest = false;
     int force_mode = 0;  // 0 auto, 1 full, 2 background
     double seq_fps = 25.0;
     int canvas_w = 1920, canvas_h = 1080;
@@ -120,6 +129,7 @@ Config parse_args(int argc, char** argv) {
         else if (a == "--rebuild") c.rebuild = true;
         else if (a == "--retry") c.retry = true;
         else if (a == "--status") c.status = true;
+        else if (a == "--selftest") c.selftest = true;
         else if (a == "--seq-fps") c.seq_fps = std::clamp(std::atof(next().c_str()), 1.0, 120.0);
         else if (a == "--canvas") sscanf_s(next().c_str(), "%dx%d", &c.canvas_w, &c.canvas_h);
         else if (a == "--quality") c.quality = next() == "hap_q" ? "hap_q" : "hap";
@@ -193,9 +203,20 @@ struct Blocks {
 };
 
 // ---- the worker ----
-class Ingest {
+class Ingest : public ingest::OpsHost {
 public:
     explicit Ingest(const Config& c) : cfg_(c) {}
+
+    // ---- ingest::OpsHost (called on the worker thread, from IngestOps) ----
+    void queue(int64_t id) override {
+        if (std::find(queue_.begin(), queue_.end(), id) == queue_.end()) queue_.push_back(id);
+    }
+    void unqueue(int64_t id) override { queue_.erase(std::remove(queue_.begin(), queue_.end(), id), queue_.end()); }
+    void rescan_now() override {
+        known_.clear();
+        next_scan_ = 0;
+    }
+    void set_mode(library::IngestModeRequest m) override { mode_req_.store(static_cast<int>(m)); }
 
     bool start() {
         std::error_code ec;
@@ -220,20 +241,24 @@ public:
             blocks_.lib->pid.store(GetCurrentProcessId());
             blocks_.lib->ready_seq.store(db_.ready_seq());
         }
+        ops_ = std::make_unique<ingest::IngestOps>(db_, cfg_.root, cfg_.watch, *this);
+        pump_ = std::make_unique<ingest::CommandPump>(blocks_.lib);
+        if (const int n = pump_->recover()) log("%d command(s) were cut short by a restart: replied Interrupted", n);
+        if (const int n = ops_->retry_pending_deletes()) log("deleted %d file(s) of removed clips", n);
         return true;
     }
 
     void run() {
         monitor_ = std::thread([this] { monitor(); });
         SettleTracker settle(2000);
-        uint64_t next_scan = 0;
         bool idle_logged = false;
         while (!stopping()) {
-            if (now_us() >= next_scan) {
+            poll_commands(0);
+            if (now_us() >= next_scan_) {
                 scan(settle);
-                next_scan = now_us() + 2000000;
+                next_scan_ = now_us() + 2000000;
             }
-            if (!queue_.empty()) {
+            if (!queue_.empty() && !hold()) {
                 idle_logged = false;
                 const int64_t id = queue_.front();
                 queue_.pop_front();
@@ -242,7 +267,7 @@ public:
                 update_counts();
                 continue;
             }
-            if (cfg_.once && first_scan_done_ && settle_pending_ == 0) break;
+            if (cfg_.once && first_scan_done_ && settle_pending_ == 0 && queue_.empty()) break;
             if (!idle_logged) {
                 log("idle: %d ready, %d failed", db_.count(static_cast<int>(State::Ready)), db_.count(static_cast<int>(State::Failed)));
                 idle_logged = true;
@@ -258,6 +283,49 @@ private:
     using SettleTracker = ingest::SettleTracker;
 
     bool stopping() const { return g_stop.load() || (blocks_.lib && blocks_.lib->stop_request.load() != 0); }
+    bool hold() const { return mode_req_.load() == static_cast<int>(library::IngestModeRequest::Hold); }
+    // The running job must end now: the worker stops, or a command cancelled this clip.
+    bool aborted() const { return stopping() || (current_ != 0 && cancel_id_ == current_); }
+
+    // ---- commands (library-db.md §10), always on the worker thread ----
+    // Between files current = 0: every waiting command is applied. During a job (called from
+    // run_tool's poll): commands for other clips are applied; one for the running clip is held
+    // until the job ends (Remove / forced Relink cancel the job first).
+    void poll_commands(int64_t current) {
+        if (!pump_) return;
+        if (held_) {
+            if (current != 0) return;
+            apply_command(held_prod_, *held_);
+            held_.reset();
+        }
+        int prod = 0;
+        library::IngestCommand c;
+        while (pump_->take(prod, c)) {
+            bool cancel = false;
+            if (ingest::IngestOps::touches(c, current, cancel)) {
+                held_ = std::make_unique<library::IngestCommand>(c);
+                held_prod_ = prod;
+                if (cancel) {
+                    cancel_id_ = current;
+                    log("command %u for the clip being imported: cancelling its job first", c.type);
+                }
+                return;
+            }
+            apply_command(prod, c);
+        }
+    }
+
+    void apply_command(int prod, const library::IngestCommand& c) {
+        const auto r = ops_->apply(c);
+        pump_->reply(prod, c, r);
+        log("command %u (producer %d, seq %u, clip %lld%s%s): status %u, %d - %s", c.type, prod, c.seq,
+            static_cast<long long>(c.clip), c.path[0] ? ", " : "", c.path[0] ? c.path : "", r.status, r.count, r.message);
+        if (ops_->take_changed()) {
+            db_.bump_ready_seq();
+            if (auto* b = blocks_.lib) b->ready_seq.fetch_add(1, std::memory_order_acq_rel);
+        }
+        update_counts();
+    }
     bool background() const { return background_.load(); }
 
     // Every 100 ms: heartbeat, engine sample, throttle, mode.
@@ -266,17 +334,22 @@ private:
         while (!g_stop.load()) {
             const auto s = blocks_.sample_engine();
             throttle_.update(s, static_cast<int64_t>(now_us() / 1000));
-            const bool bg = cfg_.force_mode == 2 || (cfg_.force_mode == 0 && throttle_.show_running());
+            // A Mode command wins over --mode; Auto falls back to --mode.
+            const int req = mode_req_.load();
+            const int mode = req == 1 ? 1 : req == 2 ? 2 : cfg_.force_mode;
+            const bool bg = mode == 2 || (mode == 0 && throttle_.show_running());
             background_.store(bg);
-            paused_.store(bg && throttle_.paused());
+            paused_.store((bg && throttle_.paused()) || hold());
             if (bg != was_bg) log(bg ? "a show is running: background import (idle priority, 1 job, pauses on late frames)"
                                      : "no show running: full-speed import");
-            if (paused_.load() != was_paused) log(paused_.load() ? "paused: the renderer had a late frame" : "resumed");
+            if (paused_.load() != was_paused) log(paused_.load() ? (hold() ? "on hold (Mode command)" : "paused: the renderer had a late frame") : "resumed");
             was_bg = bg, was_paused = paused_.load();
             if (auto* b = blocks_.lib) {
                 b->heartbeat_us.store(now_us());
-                b->mode.store(static_cast<uint32_t>(bg ? library::IngestMode::Background : working_.load() ? library::IngestMode::Full
-                                                                                                             : library::IngestMode::Idle));
+                b->mode.store(static_cast<uint32_t>(hold() ? library::IngestMode::Hold
+                                                    : bg       ? library::IngestMode::Background
+                                                    : working_.load() ? library::IngestMode::Full
+                                                                      : library::IngestMode::Idle));
                 b->paused.store(paused_.load() ? 1 : 0);
                 b->pauses.store(throttle_.pauses());
                 if (b->stop_request.load()) g_stop.store(true);
@@ -286,7 +359,10 @@ private:
     }
 
     void wait_while_paused() {
-        while (paused_.load() && !stopping()) Sleep(50);
+        while (paused_.load() && !aborted()) {
+            poll_commands(current_);
+            Sleep(50);
+        }
     }
 
     void update_counts() {
@@ -308,11 +384,12 @@ private:
     void scan(SettleTracker& settle) {
         set_thread_background(background());
         std::vector<fs::path> skip;
-        for (const char* d : {"hap", "stills", "meta", "thumbs", "work"}) skip.push_back(cfg_.root / d);
+        skip = ops_->skip_folders();
         const int64_t now_ms = static_cast<int64_t>(now_us() / 1000);
         int pending = 0;
         if (!first_scan_done_) resume_unfinished();
-        for (const auto& w : cfg_.watch) {
+        ops_->retry_pending_deletes();
+        for (const auto& w : ops_->watch_folders()) {
             for (auto& c : ingest::scan_folder(w, skip)) {
                 const std::string key = ingest::u8path(c.path);
                 if (known_.count(key) && known_[key] == std::make_pair(c.size, c.mtime)) continue;
@@ -331,49 +408,17 @@ private:
 
     void resume_unfinished() {
         for (auto& r : db_.list()) {
-            if (r.state == State::Ready || r.state == State::Failed) continue;
+            if (r.state == State::Ready || r.state == State::Failed || r.state == State::Removed) continue;
             queue_.push_back(r.id);
         }
         if (!queue_.empty()) log("resuming %zu unfinished import(s)", queue_.size());
     }
 
     void enqueue(const ingest::Candidate& c) {
-        const std::string src = ingest::u8path(c.path);
-        std::string hash;
-        if (!db_.cached_hash(src, c.size, c.mtime, hash)) {
-            hash = c.kind == Kind::Sequence ? library::hash_sequence(c.seq_files) : library::hash_file(c.path);
-            if (hash.empty()) {
-                log("cannot read %s - skipped", src.c_str());
-                return;
-            }
-            db_.cache_hash(src, c.size, c.mtime, hash);
-        }
-        ClipRecord r;
-        if (db_.find_by_hash(hash, r)) {
-            if (r.source != src) {  // moved / renamed / a copy: no new import (design §1.3)
-                std::error_code ec;
-                if (!fs::exists(from_utf8(r.source), ec)) {
-                    r.source = src;
-                    db_.upsert(r);
-                }
-            }
-            if (r.state != State::Ready && r.state != State::Failed &&
-                std::find(queue_.begin(), queue_.end(), r.id) == queue_.end())
-                queue_.push_back(r.id);
-            return;
-        }
-        r.hash = hash;
-        r.kind = c.kind;
-        r.name = c.name;
-        r.source = src;
-        r.state = State::Queued;
-        r.added_unix = unix_now();
-        if (!db_.upsert(r)) {
-            log("DB error for %s: %s", src.c_str(), db_.last_error().c_str());
-            return;
-        }
-        log("queued %s (%s) as \"%s\"", src.c_str(), library::kind_name(r.kind), r.name.c_str());
-        queue_.push_back(r.id);
+        const auto res = ops_->enqueue(c, false);
+        if (res.id == 0) log("cannot read or queue %s - skipped", ingest::u8path(c.path).c_str());
+        else if (res.queued) log("queued %s (%s)", ingest::u8path(c.path).c_str(), library::kind_name(c.kind));
+        if (ops_->take_changed()) update_counts();
     }
 
     // ---- one clip, all stages ----
@@ -396,8 +441,11 @@ private:
     ingest::RunOptions run_opts(std::function<void(const uint8_t*, size_t)> out = nullptr) {
         ingest::RunOptions o;
         o.background = background();
-        o.should_pause = [this] { return paused_.load(); };
-        o.should_stop = [this] { return stopping(); };
+        o.should_pause = [this] {
+            poll_commands(current_);  // run_tool polls on this (the worker) thread
+            return paused_.load();
+        };
+        o.should_stop = [this] { return aborted(); };
         o.on_stdout = std::move(out);
         o.timeout_ms = 30 * 60 * 1000;
         return o;
@@ -407,9 +455,18 @@ private:
 
     bool process(int64_t id) {
         ClipRecord r;
-        if (!db_.get(id, r)) return false;
+        if (!db_.get(id, r) || r.state == State::Removed || (r.state == State::Ready && r.stage_done == 15)) return false;
         working_.store(true);
-        struct Done { std::atomic<bool>& w; ~Done() { w.store(false); } } done{working_};
+        current_ = id;
+        cancel_id_ = 0;
+        struct Done {
+            Ingest& in;
+            ~Done() {
+                in.working_.store(false);
+                in.current_ = 0;
+                in.cancel_id_ = 0;
+            }
+        } done{*this};
         set_thread_background(background());
         const uint64_t t0 = now_us();
         const fs::path src = from_utf8(r.source);
@@ -444,7 +501,7 @@ private:
                     const auto res = ingest::run_tool(tools_.ffmpeg, ingest::still_png_args(r.source, ingest::u8path(png_tmp),
                                                                                              cfg_.canvas_w * 2, cfg_.canvas_h * 2),
                                                       run_opts());
-                    if (!res.ok()) return stopping() ? false : fail(r, "still: " + res.err_tail);
+                    if (!res.ok()) return aborted() ? false : fail(r, "still: " + res.err_tail);
                 }
                 fs::rename(png_tmp, png, ec);
                 if (ec) return fail(r, "cannot move the PNG into stills/");
@@ -462,7 +519,7 @@ private:
             auto o = run_opts([&](const uint8_t* p, size_t n) { out.append(reinterpret_cast<const char*>(p), n); });
             o.timeout_ms = 60000;
             const auto res = ingest::run_tool(tools_.ffprobe, args, o);
-            if (stopping()) return false;
+            if (aborted()) return false;
             std::string err;
             if (!res.ok() || !ingest::parse_probe(out, r.probe, &err))
                 return fail(r, "probe: " + (res.err_tail.empty() ? err : res.err_tail));
@@ -499,7 +556,7 @@ private:
                 if (res.paused_ms > 0) log("  %s: paused %.1f s for the show", r.name.c_str(), res.paused_ms / 1000.0);
                 if (!res.ok()) {
                     fs::remove(tmp, ec);
-                    return stopping() ? false : fail(r, "ffmpeg: " + res.err_tail);
+                    return aborted() ? false : fail(r, "ffmpeg: " + res.err_tail);
                 }
             }
             fs::rename(tmp, hap, ec);
@@ -517,7 +574,7 @@ private:
             wait_while_paused();
             const fs::path t_tmp = work / (h + ".jpg"), t = cfg_.root / "thumbs" / (h + ".jpg");
             auto res = ingest::run_tool(tools_.ffmpeg, ingest::thumb_args(ingest::u8path(hap), ingest::u8path(t_tmp), r.seconds * 0.1), run_opts());
-            if (!res.ok()) return stopping() ? false : fail(r, "thumbnail: " + res.err_tail);
+            if (!res.ok()) return aborted() ? false : fail(r, "thumbnail: " + res.err_tail);
             fs::rename(t_tmp, t, ec);
             if (r.frames > 1) {
                 const fs::path s_tmp = work / (h + "-strip.jpg"), s = cfg_.root / "thumbs" / (h + "-strip.jpg");
@@ -545,7 +602,7 @@ private:
             px.rgb.reserve(static_cast<size_t>(px.w) * px.h * 3 * static_cast<size_t>(std::max(1.0, r.seconds * pf + 2)));
             auto o = run_opts([&](const uint8_t* p, size_t n) { px.rgb.insert(px.rgb.end(), p, p + n); });
             const auto res = ingest::run_tool(tools_.ffmpeg, ingest::proxy_args(ingest::u8path(hap), px.w, px.h, pf, bg ? 1 : 0), o);
-            if (!res.ok() || px.frames() == 0) return stopping() ? false : fail(r, "proxy: " + res.err_tail);
+            if (!res.ok() || px.frames() == 0) return aborted() ? false : fail(r, "proxy: " + res.err_tail);
             px.rgb.resize(static_cast<size_t>(px.frames()) * px.w * px.h * 3);
             wait_while_paused();
             r.analysis = library::analyse(px);
@@ -555,7 +612,8 @@ private:
         // 6. Sidecar, then READY (only now does the engine see it).
         r.state = State::Ready;
         r.error.clear();
-        r.ready_unix = unix_now();
+        if (r.ready_unix == 0) r.ready_unix = unix_now();  // a re-analysis is not NEW again
+        if (aborted()) return false;
         if (!library::write_sidecar(cfg_.root / "meta" / (h + ".json"), r)) return fail(r, "cannot write the sidecar");
         db_.begin();
         db_.upsert(r);
@@ -614,20 +672,100 @@ private:
     std::atomic<bool> background_{false}, paused_{false}, working_{false};
     std::deque<int64_t> queue_;
     std::map<std::string, std::pair<int64_t, int64_t>> known_;
+    std::unique_ptr<ingest::IngestOps> ops_;
+    std::unique_ptr<ingest::CommandPump> pump_;
+    std::unique_ptr<library::IngestCommand> held_;  // a command waiting for the running job
+    int held_prod_ = 0;
+    int64_t current_ = 0, cancel_id_ = 0;           // worker thread only
+    std::atomic<int> mode_req_{0};                  // IngestModeRequest (Mode command)
+    uint64_t next_scan_ = 0;
     int chunks_ = 4;
     int settle_pending_ = 0;
     bool first_scan_done_ = false;
     bool thread_bg_ = false;
 };
 
+// ---- himmel_ingest --send VERB ...: one command to the running worker (producer slot Tool) ----
+// import PATH [watch] | rescan [ID] | remove ID | relink ID|0 PATH [force] | reanalyse [ID] [thumbs]
+// | retry [ID] | mode auto|full|background|hold | unwatch PATH. Prints the reply; exit 0 = Ok/Accepted.
+// One --send at a time (the Tool slot has one writer).
+int send_command(int argc, char** argv) {
+    auto arg = [&](int k) -> std::string { return k < argc ? argv[k] : ""; };
+    const std::string verb = arg(2);
+    library::IngestCommand c;
+    auto id_at = [&](int k) { return static_cast<int64_t>(std::atoll(arg(k).c_str())); };
+    auto abs_path = [&](int k) {
+        std::error_code ec;
+        return ingest::u8path(fs::absolute(from_utf8(arg(k)), ec));
+    };
+    auto has = [&](const char* w) {
+        for (int k = 3; k < argc; ++k)
+            if (arg(k) == w) return true;
+        return false;
+    };
+    bool ok = true;
+    using T = library::IngestCommandType;
+    if (verb == "import") ok = library::make_ingest(c, T::Import, 0, abs_path(3).c_str(), has("watch") ? library::kIngestWatch : 0);
+    else if (verb == "rescan") ok = library::make_ingest(c, T::Rescan, id_at(3));
+    else if (verb == "remove") ok = library::make_ingest(c, T::Remove, id_at(3));
+    else if (verb == "relink") ok = library::make_ingest(c, T::Relink, id_at(3), abs_path(4).c_str(), has("force") ? library::kIngestForce : 0);
+    else if (verb == "reanalyse") ok = library::make_ingest(c, T::Reanalyse, id_at(3), nullptr, has("thumbs") ? library::kIngestThumbs : 0);
+    else if (verb == "retry") ok = library::make_ingest(c, T::Retry, id_at(3));
+    else if (verb == "unwatch") ok = library::make_ingest(c, T::Unwatch, 0, abs_path(3).c_str());
+    else if (verb == "mode") {
+        const std::string m = arg(3);
+        const int i = m == "full" ? 1 : m == "background" ? 2 : m == "hold" ? 3 : m == "auto" ? 0 : -1;
+        ok = library::make_ingest(c, T::Mode, 0, nullptr, 0, i);
+    } else {
+        std::printf("usage: himmel_ingest --send import PATH [watch] | rescan [ID] | remove ID | relink ID|0 PATH [force]\n"
+                    "                     | reanalyse [ID] [thumbs] | retry [ID] | mode auto|full|background|hold | unwatch PATH\n");
+        return 2;
+    }
+    if (!ok) return std::printf("the path is too long\n"), 2;
+    HANDLE map = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, library::kLibraryShmName);
+    auto* b = map ? static_cast<library::LibraryBlock*>(MapViewOfFile(map, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(library::LibraryBlock))) : nullptr;
+    if (!b || b->header.magic != library::kLibraryMagic || b->header.version != library::kLibraryVersion ||
+        b->header.size != sizeof(library::LibraryBlock)) {
+        std::printf("no himmel_ingest (version %u) is running\n", library::kLibraryVersion);
+        return 3;
+    }
+    auto& ch = b->channels[static_cast<int>(protocol::Producer::Tool)];
+    library::IngestReply r{};
+    while (ch.replies.pop(r)) {}  // old replies
+    const uint32_t seq = std::max(ch.done_seq.load(), ch.applying_seq.load()) + 1;
+    if (!library::push_ingest(ch, c, seq, GetCurrentProcessId(), now_us())) return std::printf("the command ring is full\n"), 4;
+    for (int t = 0; t < 600; ++t) {  // 60 s: a command for the clip being converted waits for its job
+        while (ch.replies.pop(r))
+            if (r.seq == seq) {
+                static const char* kNames[] = {"Ok", "Accepted", "UnknownType", "BadId", "BadPath", "Mismatch",
+                                               "Duplicate", "Failed", "Interrupted", "BadValue"};
+                std::printf("%s count=%d clip=%lld: %s\n", r.status < 10 ? kNames[r.status] : "?", r.count,
+                            static_cast<long long>(r.clip), r.message);
+                return r.status <= 1 ? 0 : 1;
+            }
+        Sleep(100);
+    }
+    std::printf("no reply within 60 s\n");
+    return 5;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCtrlHandler(on_console, TRUE);
+    if (argc > 1 && std::string(argv[1]) == "--send") return send_command(argc, argv);
     // The supervisor starts its children at high priority; the import never competes with the show.
     SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS);
     const Config cfg = parse_args(argc, argv);
+    if (cfg.selftest) {
+        // Never under Documents: a temp folder, deleted afterwards; an in-memory block.
+        wchar_t tmp[MAX_PATH];
+        GetTempPathW(MAX_PATH, tmp);
+        const fs::path dir = fs::path(tmp) / ("himmel_ingest_selftest_" + std::to_string(GetCurrentProcessId()));
+        const int fails = ingest::run_command_selftest(dir, [](const std::string& line) { std::printf("%s\n", line.c_str()); });
+        return fails == 0 ? 0 : 1;
+    }
     std::error_code ec;
     fs::create_directories(cfg.root, ec);
     g_log = _wfsopen((cfg.root / "ingest.log").c_str(), L"a", _SH_DENYWR);

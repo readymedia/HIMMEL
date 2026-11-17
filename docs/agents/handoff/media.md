@@ -1,5 +1,5 @@
 # MEDIA handoff
-Updated: 2026-11-17 by the MEDIA wave-3 agent (M7) · Branch: `claude/media-m7-ingest` · Merged main a9f6198 (CONTROL M4) · Green: build, 15 test programs, himmel_audio --selftest, 12 Python selftests, mk2_e2e.py PASS
+Updated: 2026-11-17 by the MEDIA wave-5 agent (ingest commands) · Branch: `claude/media-ingest-commands` (from main e8e0e88) · Green: build, 19 test programs, himmel_audio --selftest, himmel_ingest --selftest, 12 Python selftests, mk2_e2e.py PASS
 
 ## State in one paragraph
 M7 ingest works end to end. `himmel_ingest.exe` watches folders, probes with
@@ -13,6 +13,11 @@ clips to the catalog while the show runs (append-only ids). While a show runs
 the import works at idle / background priority and suspends ffmpeg on any late
 frame. **Measured: 100 mixed files imported during a 3-layer show, 0 late
 frames** (`docs/measurements/2026-11-17-ingest-during-show.md`).
+
+**Wave 5:** the worker takes commands 60–67 (Import, Rescan, Remove, Relink,
+Reanalyse, Retry, Mode, Unwatch) from `Local\HimmelLibrary` v2
+(`library-db.md` §10, D148–D149), each with one reply. The GUI builds its
+library buttons on that contract (pushed first, commit 0e6375e).
 
 ## Done (with commits)
 - `docs/interfaces/library-db.md` v1 (library folder, kinds, SQLite schema,
@@ -41,14 +46,36 @@ frames** (`docs/measurements/2026-11-17-ingest-during-show.md`).
 - Credits: SQLite in `THIRD_PARTY_NOTICES.md` + `licenses/sqlite-PUBLIC-DOMAIN.txt`;
   Direct2D / WIC listed; ffmpeg row updated. Decisions D140–D147.
 
+### Wave 5 (2026-11-17)
+- Contract first: `library-db.md` v2 §10 + `library_block.h` (`IngestCommand`
+  1024 B, `IngestReply` 128 B, `IngestChannel` per producer, `make_ingest` /
+  `push_ingest`), commit 0e6375e, pushed early for GUI.
+- `src/media/ingest/ingest_ops.{h,cpp}`: `IngestOps` (each command, the
+  enqueue moved here, watch list in `meta.watch`, pending deletes in
+  `meta.pending_delete`), `CommandPump` (take / reply / recover), `touches`
+  (a command for the running clip waits; Remove / forced Relink cancel it).
+- Library: `State::Removed` (tombstone), `source_missing` + `removed` in the
+  sidecar (no schema change), `ready_order` kept once given, `meta_get/set`,
+  `source_info`, `--rebuild` keeps tombstones. Scan helper `candidate_from_path`.
+- `himmel_ingest`: commands polled between files and from run_tool's poll
+  (every 50 ms during a conversion), Mode = auto / full / background / hold,
+  `--selftest` (temp library under %TEMP%, in-memory block, no ffmpeg, 56
+  checks), `--send VERB ...` (one command as the Tool producer, prints the reply).
+- Tests: `library_tests` runs the self-test + DB v2 rules (252 checks).
+- Checked live on a temp library (no stack running): every verb through
+  `--send` against the real worker; Remove during a 60 s 1080p conversion
+  cancelled it in 0.1 s and cleaned `work/`; reanalysis kept `ready_order`
+  and `ready_unix`; a removed clip came back with its id on Import.
+
 ## In progress
 Nothing. Waiting for the LEAD's merge.
 
 ## Next up (ordered)
 1. MK2 `BROWSE` (build-v1 M7 lists it; CONTROL owns Perform): needs a
    library query path for weapons (filters by mood / colour / NEW / FAV).
-2. Commands to the ingest worker (CommandType 60–69): rescan, retry, set stars /
-   tags, Prepare Show priority. Then the GUI library view (GUI track) can use them.
+2. Commands 68–69: set stars / tags, Prepare Show priority (the GUI library
+   view uses 60–67 now). The GUI bridge's clip list should hide `removed` rows
+   and show a badge for `source_missing` (GUI track).
 3. `library-rules.json` (tunable analysis thresholds) and tuning on the starter library.
 4. Natural beats from motion periodicity; bars at the show BPM; hover loops.
 5. Hap Q Alpha; "optimise for show" downscale; Prepare Show step 1–2.
@@ -57,6 +84,13 @@ Nothing. Waiting for the LEAD's merge.
    does not see library clips that arrived after start (SHOW / LEAD to decide).
 
 ## GUESSES
+- GUESS (medium): relink-folder search caps at 16 hash checks per missing
+  clip (name matches first, then same size). Big folders of same-size files
+  could miss; raise the cap if the owner's media hits it.
+- GUESS (high): a HAP file the engine has open cannot be deleted (the clip
+  player opens with FILE_SHARE_READ only), so Remove leaves it in
+  `meta.pending_delete` and the next scan (every 2 s) retries. Checked with an
+  open handle in the self-test, not with a running renderer.
 - GUESS (D146, medium): every analysis threshold in `AnalysisRules`
   (cut_min 0.35, ×3 local median, motion gain 10, loopable ≥ 0.8, crossfade
   < 0.9, flashes warn ≥ 2 / bad > 3 per s, warmth weights, energy / mood
@@ -84,6 +118,10 @@ Nothing. Waiting for the LEAD's merge.
 - `build\bin\Release\library_tests.exe` (needs nothing; uses ffmpeg if on PATH).
 - `himmel_ingest --library DIR --watch DIR --once` imports a folder and exits;
   `--status`, `--rebuild`, `--retry`.
+- `himmel_ingest --selftest` (no files under Documents, no ffmpeg).
+- `himmel_ingest --send import PATH [watch] | rescan [ID] | remove ID |
+  relink ID|0 PATH [force] | reanalyse [ID] [thumbs] | retry [ID] |
+  mode auto|full|background|hold | unwatch PATH` talks to the running worker.
 - `python tools/make_ingest_test_set.py` then `python tools/ingest_measure.py`
   (refuses to run while another Himmel stack runs).
 
@@ -97,9 +135,17 @@ Nothing. Waiting for the LEAD's merge.
   own class at start and runs its work thread in background mode.
 - Ids are given at queue time, so the feed's cursor is `ready_order`, not `id`.
 - Git Bash turns `cmake --build ... -- /m` into `M:/`; use `--parallel`.
+- The Bash tool's heredocs halve backslashes (`\\n` arrives as a newline):
+  write patch scripts to a file first.
+- mk2_e2e's first run of the day failed 21 checks ("the output shows a picture
+  to black out", mean brightness 0); the next two runs passed. Unrelated to the
+  library (e2e uses `--no-show-files`, no ingest).
 
 ## Interfaces touched
 - New: `docs/interfaces/library-db.md` (v1), `Local\HimmelLibrary` (v1).
+- Wave 5: `library-db.md` v2 / `Local\HimmelLibrary` v2 (channels appended, block
+  size grows; `IngestMode::Hold` = 4 appended; `State::Removed` appended). No
+  change to `src/protocol/` or `Local\HimmelState`.
 - `engine-state.md`: one additive note (the catalog grows while running).
 - `EngineStatus::late_frames` is now written every frame (same field, same
   meaning; was every 5 s).

@@ -135,6 +135,33 @@ std::vector<Candidate> scan_folder(const fs::path& root, const std::vector<fs::p
     return out;
 }
 
+bool candidate_from_path(const fs::path& p, Candidate& out) {
+    std::error_code ec;
+    out = Candidate{};
+    if (fs::is_regular_file(p, ec)) {
+        if (!kind_for_extension(lower_ext(p), out.kind)) return false;
+        out.path = p;
+        out.name = u8(p.stem());
+        out.size = static_cast<int64_t>(fs::file_size(p, ec));
+        out.mtime = mtime_of(p);
+        return true;
+    }
+    if (!fs::is_directory(p, ec)) return false;
+    std::vector<fs::path> files;
+    for (auto it = fs::directory_iterator(p, ec); !ec && it != fs::directory_iterator(); it.increment(ec))
+        if (it->is_regular_file(ec)) files.push_back(it->path());
+    std::sort(files.begin(), files.end());
+    if (!find_sequence(files, out)) return false;
+    out.kind = Kind::Sequence;
+    out.path = p;
+    out.name = u8(p.filename());
+    for (const auto& f : out.seq_files) {
+        out.size += static_cast<int64_t>(fs::file_size(f, ec));
+        out.mtime = std::max(out.mtime, mtime_of(f));
+    }
+    return true;
+}
+
 bool SettleTracker::settled(const Candidate& c, int64_t now_ms) {
     auto& s = seen_[c.path.wstring()];
     if (!s.known || s.size != c.size || s.mtime != c.mtime) {

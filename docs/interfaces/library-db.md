@@ -1,6 +1,8 @@
 # Library DB, sidecars and the library block
 
 Status: **version 1, written by MEDIA 2026-11-17 (M7)**, before the code.
+**Version 2 (2026-11-17, wave 5): commands to the ingest worker (§10)**, the
+`removed` state, `source_missing`, stored watch folders. All additive.
 Writers: `himmel_ingest.exe` only. Readers: the render process (its library
 feed worker), the GUI bridge, SHOW (relink by name), tools. Change rules as
 in [`command-protocol.md`](command-protocol.md): append-only; a layout or
@@ -59,7 +61,7 @@ CREATE TABLE clips (
   kind          TEXT NOT NULL,       -- video | still | vector | animation | sequence
   name          TEXT NOT NULL,       -- display name (file stem / folder name), unique in the library
   source        TEXT NOT NULL,       -- absolute UTF-8 path of the original (last seen)
-  state         TEXT NOT NULL,       -- queued | probing | converting | analysing | ready | failed
+  state         TEXT NOT NULL,       -- queued | probing | converting | analysing | ready | failed | removed (v2)
   stage_done    INTEGER NOT NULL DEFAULT 0,  -- bitmask: 1 probe, 2 convert, 4 analyse, 8 thumbs (resume)
   error         TEXT NOT NULL DEFAULT '',
   play_path     TEXT NOT NULL DEFAULT '',    -- relative to the library: hap/<hash>.mov
@@ -84,14 +86,15 @@ CREATE TABLE clips (
   stars INTEGER NOT NULL DEFAULT 0, favourite INTEGER NOT NULL DEFAULT 0,
   user_tags TEXT NOT NULL DEFAULT '[]',
   sidecar TEXT NOT NULL DEFAULT '',          -- the full sidecar JSON (motion curve, cuts, probe)
-  ready_order INTEGER NOT NULL DEFAULT 0     -- 1, 2, 3 ... in the order rows turned ready; 0 = not ready
+  ready_order INTEGER NOT NULL DEFAULT 0     -- 1, 2, 3 ... in the order rows FIRST turned ready; 0 = never ready.
+                                             -- v2: kept while a ready row is re-analysed or removed (§10)
 );
 CREATE INDEX clips_state ON clips(state, id);
 CREATE INDEX clips_ready ON clips(ready_order);
 CREATE TABLE sources (       -- path -> hash cache, so a rescan does not re-hash
   path TEXT PRIMARY KEY, size INTEGER, mtime INTEGER, hash TEXT
 );
-CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);  -- 'schema', 'ready_seq'
+CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);  -- 'schema', 'ready_seq', v2: 'watch' (JSON array of UTF-8 folders)
 ```
 
 - **Ready means complete.** A row turns `ready` only after the HAP file,
@@ -103,7 +106,16 @@ CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);  -- 'schema', 'ready_seq'
 - `failed` rows keep `error` (one line) and are retried when the source
   changes or on `himmel_ingest --retry`.
 - **Rebuild:** `himmel_ingest --rebuild` deletes the DB and recreates it from
-  `meta/*.json` (every sidecar whose `hap/` file exists is `ready`).
+  `meta/*.json` (every sidecar whose `hap/` file exists is `ready`; v2: a
+  sidecar with `"removed": true` becomes a `removed` row).
+- v2: `removed` rows are tombstones: the clip is out of the library, its
+  derived files are deleted, and the row keeps the hash so the watch-folder
+  scan does not import the same original again. **Readers hide `removed`
+  rows.** An explicit Import of the same file brings it back (same id).
+- v2: `source_missing` (in the sidecar JSON, so no new column; the schema
+  stays `user_version = 1`) means the original is gone. A `ready` clip with a
+  missing original still plays, because the HAP file is in the library. The
+  GUI shows an "original missing" badge and offers Relink.
 
 ## 4. The content hash
 
@@ -143,9 +155,12 @@ plus user fields. Readers ignore keys they do not know.
     "flicker": "ok", "black_frames": 0,
     "proxy": {"width": 64, "height": 36, "fps": 12.5, "frames": 375}
   },
-  "added": "2026-11-17T14:02:11Z", "ready": "2026-11-17T14:02:40Z"
+  "added": "2026-11-17T14:02:11Z", "ready": "2026-11-17T14:02:40Z",
+  "source_missing": false, "removed": false
 }
 ```
+
+`source_missing` and `removed` are v2 keys (absent = false).
 
 Units: colours `#rrggbb`; 0..1 unless said; `motion_dir` degrees (0 = right,
 90 = up); frame numbers are frames of the **HAP file**; `motion_curve` is one
@@ -154,7 +169,7 @@ value per proxy frame (`proxy.fps`). The rules and thresholds that write
 `src/library/analysis.cpp` (`AnalysisRules`, defaults listed in the handoff);
 `library-rules.json` will make them tunable (later).
 
-## 6. The library block (`Local\HimmelLibrary`, magic `HMLB`, version 1)
+## 6. The library block (`Local\HimmelLibrary`, magic `HMLB`, version 2)
 
 Written by `himmel_ingest` (creates it; header last), read by anyone.
 Plain atomics plus one seqlock section.
@@ -163,8 +178,8 @@ Plain atomics plus one seqlock section.
 |---|---|
 | `pid`, `heartbeat_us` | the ingest worker is alive (supervisor timeout 2 s) |
 | `stop_request` | supervisor → ingest: 1 = finish the current file write and exit |
-| `ready_seq` | bumps every time a row turns `ready` (or a ready row's name / path changes). The engine's feed re-reads the DB when it changes |
-| `mode` | 0 idle, 1 full speed (no show), 2 background (show running), 3 high (Prepare Show, later) |
+| `ready_seq` | bumps every time a row turns `ready` (or a ready row's name / path changes; v2: also after every command that changed rows). The engine's feed and the GUI re-read the DB when it changes |
+| `mode` | 0 idle, 1 full speed (no show), 2 background (show running), 3 high (Prepare Show, later), 4 hold (v2: command `Mode` = Hold) |
 | `paused` | 1 while throttled (§7) |
 | `queued`, `working`, `ready_total`, `failed_total` | counts |
 | `job` (seqlock) | the current file: name, stage, progress 0..1, `last_error` |
@@ -218,5 +233,93 @@ With no show running the import uses every core (normal priority).
 - Type tags / similarity (ONNX), tracking sidecars, generators' 10 s render.
 - A `library-rules.json` file for the analysis thresholds.
 - Hover loops (`thumbs/<hash>.webm`).
-- Commands to the ingest worker (CommandType 60–69: rescan, retry, set
-  stars / tags, Prepare Show priority) and MK2 `BROWSE`.
+- Commands 68–69 (set stars / tags, Prepare Show priority) and MK2 `BROWSE`.
+- A paged catalog beyond 256 clips (catalog v3, with the LEAD).
+
+## 10. Commands to the ingest worker (version 2, CommandType 60–69)
+
+The GUI, tools and later OSC can ask the ingest worker to import, rescan,
+remove, relink and re-analyse. These commands use MEDIA's CommandType range
+60–69, but they travel **in the library block**, not in
+`Local\HimmelCommands`. The ingest worker is their only consumer, and paths
+do not fit in a 32-byte `Command`. The engine still refuses 60–69 in its own
+rings (`UnknownType`).
+Header (source of truth): `src/library/include/himmel/library/library_block.h`.
+
+### 10.1 Transport
+
+`LibraryBlock::channels[8]` holds one `IngestChannel` per producer slot. The
+slots are numbered like `protocol::Producer`: Perform 0, **Gui 1**, Osc 2,
+**Tool 3**, Show 4. Exactly one process writes a slot's `commands` ring.
+
+| Field | Writer | Meaning |
+|---|---|---|
+| `pid`, `heartbeat_us` | producer | who uses the slot, and when it last pushed |
+| `commands` | producer → ingest | SPSC ring of 16 `IngestCommand` (1024 bytes each). When it is full, `push` returns false (resend later) |
+| `replies` | ingest → producer | SPSC ring of 32 `IngestReply` (128 bytes each). When it is full, the reply is dropped and counted; `done_seq` still moves |
+| `applying_seq` | ingest | the seq being applied, 0 = none |
+| `done_seq` | ingest | the last seq replied to |
+| `rejected` | ingest | replies with status ≥ `UnknownType` |
+
+- `himmel_ingest` creates the block. **No ingest running = no block**, or a
+  stale block with an old `heartbeat_us`. The GUI greys out the library
+  buttons when the heartbeat is older than 2 s.
+- Producers use `make_ingest()` + `push_ingest()` from the header (no
+  allocation). `seq` runs 1, 2, 3 … per producer.
+- The worker drains every ring every 100 ms. `Mode` is applied at once. The
+  other commands are applied by the worker between files. A running
+  conversion is never cut, except by a `Remove` or `Relink` of that very
+  clip, which cancels it.
+- **Restart safety:** each command is popped, then `applying_seq` is set,
+  then the command is applied, then the reply is sent. If the worker dies in
+  between, the next worker finds `applying_seq != 0`, replies `Interrupted`
+  for that seq, and does not apply it again. So a poison command cannot
+  crash-loop the worker. Commands still in the ring when the worker restarts
+  are applied.
+- If the block layout does not match (an older worker), the producer must
+  not write. Check `header.magic`, `header.version == 2` and `header.size`.
+
+### 10.2 `IngestCommand` (1024 bytes)
+
+| Field | Type | Meaning |
+|---|---|---|
+| `type` | u16 | `IngestCommandType` (60–67) |
+| `flags` | u16 | `kIngestWatch` 1, `kIngestForce` 2, `kIngestThumbs` 4 |
+| `seq` | u32 | producer's running number; echoed in the reply |
+| `clip` | i64 | **library id**: `clips.id` in the DB, not the engine catalog index. 0 = all / none |
+| `i` | i32 | integer argument (`Mode`) |
+| `path` | char[1000] | UTF-8, NUL-terminated, absolute; "" when unused |
+
+### 10.3 The commands
+
+| # | Name | Arguments | What it does | Reply |
+|---|---|---|---|---|
+| 60 | `Import` | `path` = a file or a folder; `kIngestWatch` | Hashes and queues every importable thing under `path`, recursively (an image sequence becomes one clip). The originals stay where they are: they are referenced, never copied or changed. Content already in the library is not imported again, but a `removed` clip with that content comes back with the same id. With `kIngestWatch` (folders only), the folder is stored in `meta.watch` and scanned every 2 s from then on, also after a restart. | `Accepted`, `count` = rows queued (0 = all already known), `clip` = the first one; `BadPath` |
+| 61 | `Rescan` | `clip` = id, or 0 | With `clip` = 0: scan every watch folder now (new files still wait out the 2 s settle) and check every clip's original. With `clip` = id: check that one original. If the original is gone, `source_missing` is set (a ready clip keeps playing); if it is found again, the flag is cleared. If the same path now holds **other content**, it is imported as a new clip, and the old clip keeps its files. | `Ok`, `count` = rows whose `source_missing` changed, plus rows queued; `BadId` |
+| 62 | `Remove` | `clip` = id | The clip leaves the library: the row turns `removed` (a tombstone), the sidecar keeps `"removed": true`, and the HAP file, still and thumbnails are deleted. **The original is never touched.** A running import of that clip is cancelled. If the engine still has the HAP file open (a layer is playing it), the file cannot be deleted yet; the delete is retried on every rescan and at start-up, and the layer keeps playing until it lets go. The clip stays in the engine catalog until the engine restarts (append-only, §8); loading it after that shows "missing". | `Ok`, `count` 1; `BadId` (no such clip, or already removed) |
+| 63 | `Relink` | `clip` = id + `path` = a file; or `clip` = 0 + `path` = a folder; `kIngestForce` | **One clip:** hashes `path`. Same content → `source` = `path` and `source_missing` is cleared; nothing is imported again. Other content → `Mismatch`, unless `kIngestForce` is set: then the clip is imported again from `path` under the same id and name, with a new hash, a new HAP file and a new `ready_order`, so the engine catalog gets a new entry and the old entry shows "missing". **A folder:** for every clip with `source_missing`, searches the folder recursively for a file with the same name, then the same size, and relinks it when the hash matches ("Find missing clips", projects.md §4). | `Ok`, `count` = clips relinked; `Mismatch`; `Duplicate` (the forced content already is clip `clip`); `BadId`, `BadPath` |
+| 64 | `Reanalyse` | `clip` = id, or 0 = every ready clip; `kIngestThumbs` | Runs the analysis again, for example after new rules. The clip **stays playable** and keeps its `ready_order`, so there is no duplicate catalog entry. Meanwhile the row shows `analysing`; then it turns `ready` with the new tags and `ready_seq` bumps. The HAP file is not converted again. | `Accepted`, `count` = rows queued; `BadId` |
+| 65 | `Retry` | `clip` = id, or 0 = every failed clip | Queues a `failed` clip again from the start. | `Accepted`, `count`; `BadId` (not failed) |
+| 66 | `Mode` | `i` = `IngestModeRequest`: 0 auto, 1 full, 2 background, 3 hold | Auto (the default) = background while a show runs. Full = full speed even during a show; the GUI should warn that this is not show-safe. Hold = start no new work and suspend the running ffmpeg; any other mode resumes. The mode is not stored, so a restarted worker is in Auto. `LibraryBlock::mode` shows the result (4 = hold). | `Ok`; `BadValue` |
+| 67 | `Unwatch` | `path` = a folder | Removes a folder that was added with `Import` + `kIngestWatch`. Its clips stay in the library. The default `originals/` folder and `--watch` folders cannot be removed. | `Ok`; `BadPath` (not in the list) |
+| 68–69 | free | | (stars / tags, Prepare Show priority) | |
+
+### 10.4 `IngestReply` (128 bytes)
+
+| Field | Meaning |
+|---|---|
+| `seq`, `type` | the command's |
+| `status` | `IngestStatus`: 0 `Ok` (done), 1 `Accepted` (queued; follow the rows in the DB and `job`), 2 `UnknownType`, 3 `BadId`, 4 `BadPath`, 5 `Mismatch`, 6 `Duplicate`, 7 `Failed`, 8 `Interrupted`, 9 `BadValue` |
+| `count` | rows changed / queued / relinked |
+| `clip` | the clip it is about (`Duplicate`: the clip that already has this content) |
+| `message` | one English line for a toast and the log, e.g. `relinked 3 of 5 missing clips` |
+
+Every command gets exactly one reply. After a command that changed rows,
+`ready_seq` bumps, so a GUI that re-reads the DB on `ready_seq` sees the result.
+
+### 10.5 Testing
+
+`himmel_ingest --selftest` runs every command against a temporary library
+under `%TEMP%` (deleted afterwards; never `Documents`). It uses an in-memory
+block (not the shared one), needs no ffmpeg, and prints `SELFTEST PASS`. `library_tests.exe`
+covers the command logic (`ingest_ops`) for each command.
