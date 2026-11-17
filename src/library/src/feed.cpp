@@ -81,6 +81,9 @@ protocol::ClipInfo clip_info_from(const ClipRecord& r, const ClipTable& table, u
     ci.seconds = static_cast<float>(r.seconds);
     ci.codec = r.codec == "hap" ? 0 : r.codec == "hap_alpha" ? 1 : r.codec == "hap_q" ? 2 : 3;
     ci.thumb_rgb = r.analysis.version > 0 ? (r.analysis.avg_rgb & 0xFFFFFF) : 0x404040;
+    // ==== CONTROL (w8 energy): ClipInfo.reserved[0] = energy 1..5, 0 = not analysed (D202) ====
+    ci.reserved[0] = static_cast<uint8_t>(r.analysis.version > 0 ? std::clamp(r.analysis.energy, 1, 5) : 0);
+    // ==== end CONTROL (w8 energy) ====
     return ci;
 }
 

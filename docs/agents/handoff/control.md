@@ -91,8 +91,13 @@ loads by library id and skips removed clips. The NuVJ pads (bank × 9 per deck) 
 
 Not built: real thumbnails (the library's thumbs are JPEG files: decoding them needs a decoder dependency such as
 stb_image plus a worker outside the render loop, an owner / LEAD call), search by letters, a filter by mood.
-ENERGY sorts on `ClipInfo.reserved[0]` (D201): until the library feed fills it, every clip is "unknown" and
-ENERGY = NAME order.
+ENERGY sorts on `ClipInfo.reserved[0]` = the library analysis energy (D202, approved by the LEAD; the library feed
+fills it, fenced "CONTROL (w8 energy)" in `feed.cpp`); clips without it (media/, not analysed) come last.
+
+**Follow-up (owner's call): real thumbnails on the MK2 screen.** The library writes JPEG thumbs
+(`thumbs/<hash>.jpg`); showing them needs a JPEG decoder (stb_image, public domain / MIT) and a small worker in
+the renderer that decodes the selected clip's thumb to 48 × 27 grey outside the frame loop. A new dependency
+needs the owner's OK; until then the detail shows the dithered `thumb_rgb` swatch.
 
 ## NuVJ mapping (M10)
 `docs/design/perform.md` §5.2; PROPOSED D165. Code: `src/perform/include/himmel/perform/nuvj_perform.h`. `himmel_render` finds the weapon slot whose header says `nuvj` (the Lightpad's link, generalised), drains ring 0 into the mapper, writes `led[]` and the LCD `display` (on change, ≤ 30 Hz; the driver resends every 2 s). The mapper never asks for SysEx `7B`.
@@ -133,7 +138,7 @@ Not built (M10 follow-ups): scenes on the NuVJ (hold LATCH + pad = scene 1–9 i
 10. Note what feels wrong (wheel speed, bend amount, fade range) and send `build\bin\Release\logs\himmel-<date>.log`. Settle D165.
 
 ## Done (with commits)
-- **Wave 8 (2026-11-17, branch `claude/control-w8-browse`):** BROWSE + CLIPS pads + PLAY SCROLL on catalog v3 (`Mk2Perform::nclips / clip_at / load_clip`, sorted list `order_` rebuilt only on change, no heap), NuVJ pads past 255, `perform_tests` +325 checks (`test_browse_catalog_v3`, 300 clips), `nuvj_tests` +6, `mk2_e2e.py` stage "300+ library clips" (a temp library of 310 tiny HAP clips in `%TEMP%\himmel_e2e_lib300`, built once with `himmel_ingest --once`; `--no-lib300` skips it) and the wave 7 stack lock in `mk2_e2e.py`, D200–D201.
+- **Wave 8 (2026-11-17, branch `claude/control-w8-browse`):** BROWSE + CLIPS pads + PLAY SCROLL on catalog v3 (`Mk2Perform::nclips / clip_at / load_clip`, sorted list `order_` rebuilt only on change, no heap), NuVJ pads past 255, `perform_tests` +325 checks (`test_browse_catalog_v3`, 300 clips), `nuvj_tests` +6, `mk2_e2e.py` stage "300+ library clips" (a temp library of 310 tiny HAP clips in `%TEMP%\himmel_e2e_lib300`, built once with `himmel_ingest --once`; `--no-lib300` skips it) and the wave 7 stack lock in `mk2_e2e.py`, D200–D202 (energy byte: `state.h` comment, `engine-state.md`, `feed.cpp` + `library_tests`).
 - **MK2 stop_request (wave 6, 2026-11-17, branch `claude/control-mk2-stop`):** `Local\HimmelMk2` v2: `Status.stop_request` (appended; `kShmVersion` 1 -> 2). `Controller::run` stops on it like on Ctrl+C; with the MK2 still connected it lets go first: every LED off, the "stopped" page (`ui::draw_stopped`) on both screens, then "Stopped" and exit 0. `mk2_controller` clears the flag when it starts. The supervisor sets it right after "stopping" (fenced `CONTROL (mk2 stop)` block, 3 lines), so the controller lets go in parallel with the renderer instead of being terminated after 3 s. `mk2_tests` +12 checks (`test_stop_request`: a real `Controller` against a simulated MK2 on UDP 28766 and a private block: run() returns ~60 ms after the request, the last LED reports are all off, all 16 strips = the stopped page; without an MK2 < 1 s; Ctrl+C still works). Not run: `quit_check.py` (the LEAD measures it at merge).
 - **MK2 BROWSE + M10 (2026-11-17, branch `claude/control-m10-nuvj`):** BROWSE in `Mk2Perform` (+14 checks, `perform_tests --dump-browse`), `NuvjPerform` + `nuvj_tests` (60 checks), the NuVJ slot in `render_main.cpp` (ENGINE file: the Lightpad link generalised, ~45 lines; `perform->set_library(...)`), `mk2_e2e.py` BROWSE + NuVJ stages (the stack now runs `--weapons lightpad,nuvj`; `--no-nuvj`), D165.
 - **M13 (2026-11-17, branch `claude/control-m13-osc`):** `src/osc/` + `osc_tests` + `docs/interfaces/osc.md` (+ a row in `docs/interfaces/README.md`), supervisor starts `himmel_osc.exe` (ENGINE file, +16 lines), `mk2_e2e.py` OSC stage (`--no-osc` skips it), D164.
@@ -175,8 +180,8 @@ Not built (M10 follow-ups): scenes on the NuVJ (hold LATCH + pad = scene 1–9 i
 - The input → glass number covers UDP + engine + DWM, not USB and not the panel (see the measurement doc).
 
 ## Open questions for the owner
-- PROPOSED D200 (BROWSE: knob 2 = order ADDED / NAME / NEWEST / ENERGY, SHIFT + wheel = 16-row pages, the SYSTEM menu not from BROWSE). D201 (energy for the sort in `ClipInfo.reserved[0]`, filled by the library feed: asked the LEAD).
-- Real thumbnails on the MK2 screen need a JPEG decoder (new dependency): yes / no?
+- PROPOSED D200 (BROWSE: knob 2 = order ADDED / NAME / NEWEST / ENERGY, SHIFT + wheel = 16-row pages, the SYSTEM menu not from BROWSE), D201 (the ENERGY order). D202 (energy in `ClipInfo.reserved[0]`) is decided by the LEAD.
+- Real thumbnails on the MK2 screen need a JPEG decoder (new dependency, stb_image): yes / no? (follow-up above)
 - PROPOSED D165 (NuVJ: deck A/B = engine A/B, the selected layer = the focus layer on that deck, else layer 1; SPEED fader 0..2×; BEND ±2 % per tick; AUTO FADE 0..8 s; LATCH = no dice; ENTER loads while the MK2 browses).
 - PROPOSED D164 (OSC: UDP 7000, this PC only by default, out-of-range values refused, the extra addresses `/himmel/back`, `/go/preview`, `/xfade`, `/undo`, `/redo`, `/beat` = a tap).
 - PROPOSED D163 (Lightpad: MIX absolute A ↔ B with soft takeover, TOUCH zones = the first 5 effects in master FX slot 2, Mode tap = hold / double-tap = next mode).
@@ -201,6 +206,7 @@ VS 2022 Build Tools' bundled CMake: `cmake -S . -B build -G "Visual Studio 17 20
 
 
 ## Interfaces touched
+- 2026-11-17 (wave 8, approved by the LEAD): `ClipInfo::reserved[0]` = energy 0..5 (D202), documented in `protocol/state.h` and `interfaces/engine-state.md`; no layout or version change. `Mk2Perform` got public read-only `browse_position()`, `browse_rows()`, `browse_sort()`, `BrowseSort`; `NuvjPerform::set_clips()`.
 - 2026-11-17 (wave 6): `Local\HimmelMk2` **v2**: `Status.stop_request` appended at the end of `Status` (so `Outputs` and the rings move; every reader checks `version` / `size`, and all binaries build together). Writer: the supervisor (and anyone stopping the controller); reader: `mk2_controller`. `ui::draw_stopped()` is new in `pages.h`.
 - 2026-11-16: sim link report `0xFD` (controller -> ignored MK2 simulator), `sim_link.h` only; no shared-memory or protocol change. `Controller` got private counters (header change, ABI-internal).
 - `src/perform/include/himmel/perform/mk2_perform.h`: **private members only** (public API unchanged). No protocol change.
