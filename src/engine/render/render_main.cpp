@@ -777,7 +777,7 @@ int main(int argc, char** argv) {
     }
     auto model = std::make_unique<DeckModel>(*catalog);
 
-    // ---- music (M8): Local\HimmelAudio, mapped once; himmel_audio.exe may come and go.
+    // ==== AUDIO (M8): Local\HimmelAudio, mapped once; himmel_audio.exe may come and go ====
     himmel::engine::AudioLink audio_link;
     himmel::engine::ReactionFeed reaction_feed;
     himmel::audio::Signals audio_sig{};
@@ -787,6 +787,7 @@ int main(int argc, char** argv) {
         if (audio_link.open()) LOG("audio: reactions listen to %ls (AV offset %.0f ms)", himmel::audio::kBlockName, cfg.av_offset_ms);
         else LOG("audio: cannot map %ls - reactions stay still", himmel::audio::kBlockName);
     }
+    // ==== END AUDIO (M8) ====
 
     // ---- state block: restore from a block that survived the last renderer
     StateLink state;
@@ -969,7 +970,7 @@ int main(int argc, char** argv) {
         drain(static_cast<int>(proto::Producer::Perform), *perform_ring);
         if (cmd.blk)
             for (int slot = 1; slot < proto::kProducers; ++slot) drain(slot, cmd.blk->rings[slot]);
-        // Music (M8): copy the audio block; an external MIDI clock leads the show clock.
+        // ==== AUDIO (M8): copy the audio block; an external MIDI clock leads the show clock ====
         const bool audio_ok = cfg.audio && !cfg.test_signal && audio_link.read(t, audio_sig, audio_midi);
         {
             const himmel::engine::ClockLead lead =
@@ -986,6 +987,7 @@ int main(int argc, char** argv) {
             if (audio_ok) LOG("audio: hearing \"%s\" (%u Hz)", audio_link.input().device, audio_link.input().sample_rate);
             else LOG("audio: no audio - reactions glide to rest");
         }
+        // ==== END AUDIO (M8) ====
         model->tick(t);
         if (t >= alive_next) {
             alive_next = t + 250000;
@@ -1130,9 +1132,11 @@ int main(int argc, char** argv) {
             fc.bpm = static_cast<float>(model->bpm());
             fc.dt = static_cast<float>(dt);
             fc.flash_cap_hz = cfg.flash_cap;
+            // ==== AUDIO (M8): the reaction signals ====
             if (cfg.test_signal) fc.sig = himmel::fx::TestSignal::at(fc.time_s, fc.beats);
             else reaction_feed.update(audio_ok ? &audio_sig : nullptr,
                                       model->beat(t + static_cast<int64_t>(cfg.av_offset_ms * 1000.0f)), fc.dt, fc.sig);
+            // ==== END AUDIO (M8) ====
             g_fx->begin_frame(fc);
         }
         const float black[4] = {0, 0, 0, 1};
