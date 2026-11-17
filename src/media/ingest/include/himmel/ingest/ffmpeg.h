@@ -34,6 +34,18 @@ struct ConvertSpec {
     double fps = 0;                // sequences: input rate; animations: output rate; 0 = keep
     int seq_start = 0;
     int max_w = 3840, max_h = 2160;  // stills: fit inside (2 x the canvas)
+    // v3 (library-db.md §11.4)
+    int out_max_h = 0;             // every kind: the largest output height, 0 = keep
+    double conform_fps = 0;        // > 0: blend to this frame rate (ffmpeg framerate filter)
+    bool progress = false;         // -progress pipe:1 (frame= / total_size= lines on stdout)
+};
+// Reads ffmpeg's -progress lines; feed it stdout chunks.
+struct ProgressParser {
+    int64_t frame = 0, total_size = 0;
+    void feed(const uint8_t* p, size_t n);
+
+private:
+    std::string line_;
 };
 std::vector<std::string> probe_args(const std::string& input, bool sequence = false, double seq_fps = 25, int seq_start = 0);
 std::vector<std::string> convert_args(const ConvertSpec& s);

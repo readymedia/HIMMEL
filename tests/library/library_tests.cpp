@@ -25,6 +25,8 @@
 #include <vector>
 
 #include "himmel/ingest/ffmpeg.h"
+#include "himmel/ingest/guard.h"
+#include "himmel/ingest/library_move.h"
 #include "himmel/ingest/ingest_ops.h"
 #include "himmel/ingest/scan.h"
 #include "himmel/ingest/selftest.h"
@@ -35,6 +37,7 @@
 #include "himmel/library/feed.h"
 #include "himmel/library/hash.h"
 #include "himmel/library/library_db.h"
+#include "himmel/library/location.h"
 #include "himmel/library/sidecar.h"
 
 using namespace himmel;
@@ -663,6 +666,201 @@ static void test_ingest_cli() {
     CHECK(run_ingest("--send", out) == 2 && out.find("usage") != std::string::npos);
 }
 
+// ---- v3 (wave 7): disk guard maths, options, progress, plain errors, location, move ----
+static void test_v3_guard() {
+    using namespace himmel::ingest;
+    // The reserve: max(10 GB, 10 % of the disk), or the override.
+    CHECK(reserve_for(100 * kGB) == 10 * kGB);
+    CHECK(reserve_for(2000 * kGB) == 200 * kGB);
+    CHECK(reserve_for(2000 * kGB, 5 * kGB) == 5 * kGB);
+    // The owner's case (2026-11-17): 7.3 GB free, 17 GB needed -> refused.
+    CHECK(!fits(static_cast<uint64_t>(7.3 * kGB), 0, 17 * kGB, 10 * kGB));
+    CHECK(!fits(5 * kGB, 0, 0, 10 * kGB));  // already below the reserve
+    CHECK(fits(30 * kGB, 5 * kGB, 15 * kGB, 10 * kGB));
+    CHECK(!fits(30 * kGB, 5 * kGB, 15 * kGB + 1, 10 * kGB));
+
+    // Output shape and estimate: 1080p30, 313 frames (one of the owner's clips).
+    Probe pr;
+    pr.width = 1920, pr.height = 1080, pr.fps = 30, pr.frames = 313, pr.seconds = 313 / 30.0;
+    ImportOptions o;
+    auto s = output_shape(Kind::Video, pr, o, "hap", 1920, 1080);
+    CHECK(s.w == 1920 && s.h == 1080 && s.frames == 313 && s.codec == "hap" && !s.conform);
+    const int64_t hap = estimate_bytes(s, Kind::Video);
+    CHECK(hap == static_cast<int64_t>(1920.0 * 1080 * 313 * 0.5) + kSideBytes);  // ~324 MB (measured: ~214 MB)
+    o.codec = "hap_q";
+    CHECK(estimate_bytes(output_shape(Kind::Video, pr, o, "hap", 1920, 1080), Kind::Video) > hap * 19 / 10);
+    o = {};
+    o.max_h = 720;  // "1080p -> 720p"
+    s = output_shape(Kind::Video, pr, o, "hap", 1920, 1080);
+    CHECK(s.w == 1280 && s.h == 720);
+    CHECK(estimate_bytes(s, Kind::Video) < hap / 2);
+    o.max_h = 2160;  // never up
+    s = output_shape(Kind::Video, pr, o, "hap", 1920, 1080);
+    CHECK(s.w == 1920 && s.h == 1080);
+    pr.width = 1918, pr.height = 1078;  // rounded down to a multiple of 4
+    s = output_shape(Kind::Video, pr, {}, "hap", 1920, 1080);
+    CHECK(s.w == 1916 && s.h == 1076);
+    pr.width = 1920, pr.height = 1080;
+    pr.alpha = true;
+    CHECK(output_shape(Kind::Video, pr, {}, "hap", 1920, 1080).codec == "hap_alpha");
+    pr.alpha = false;
+    // Stills fit in 2 x the canvas, one frame, plus the PNG.
+    Probe big;
+    big.width = 8000, big.height = 4000;
+    s = output_shape(Kind::Still, big, {}, "hap", 1920, 1080);
+    CHECK(s.w == 3840 && s.h == 1920 && s.frames == 1);
+
+    // Frame-rate conform (D181): 30 on 60 and 25 on 50 are already smooth.
+    CHECK(conform_fps(30, 60) == 0);
+    CHECK(conform_fps(25, 50) == 0);
+    CHECK(conform_fps(60, 60) == 0);
+    CHECK(conform_fps(120, 60) == 0);
+    CHECK(conform_fps(24, 60) == 60);
+    CHECK(conform_fps(25, 60) == 60);
+    CHECK(conform_fps(30, 50) == 50);
+    CHECK(conform_fps(24, 0) == 0);
+    CHECK(conform_fps(0, 60) == 0);
+    o = {};
+    o.conform_hz = 60;
+    pr.fps = 24, pr.frames = 240;
+    s = output_shape(Kind::Video, pr, o, "hap", 1920, 1080);
+    CHECK(s.conform && s.fps == 60 && s.frames == 600);
+    pr.fps = 30, pr.frames = 300;
+    s = output_shape(Kind::Video, pr, o, "hap", 1920, 1080);
+    CHECK(!s.conform && s.fps == 30 && s.frames == 300);
+
+    CHECK(human_bytes(17200000000ull) == "17.2 GB");
+    CHECK(human_bytes(640000000ull) == "640 MB");
+
+    // Plain words.
+    CHECK(plain_error("converting", "ffmpeg: Error writing trailer: No space left on device") == "The disk is full.");
+    CHECK(is_disk_full("av_interleaved_write_frame(): No space left on device"));
+    CHECK(!is_disk_full("Invalid data found when processing input"));
+    CHECK(plain_error("probing", "probe: x.mp4: Invalid data found when processing input").find("damaged") != std::string::npos);
+    CHECK(plain_error("probing", "the original is gone").find("gone") != std::string::npos);
+    CHECK(plain_error("converting", "something odd") == "The import failed while converting.");
+
+    // Batch progress and ETA (work in estimated bytes).
+    BatchProgress b;
+    b.add(3);
+    CHECK(b.eta_s(1000) == -1 && b.total() == 3 && b.done() == 0);
+    b.file_done(100, 10.0, 80);  // 10 bytes per second
+    CHECK(b.done() == 1 && b.written() == 80);
+    CHECK(b.eta_s(200) == 20);
+    CHECK(b.eta_s(0) == 0);
+    b.file_done(0, 0, 0);  // a cleared clip: counts as done, not as speed
+    CHECK(b.done() == 2 && b.eta_s(200) == 20);
+    b.reset();
+    CHECK(b.done() == 0 && b.total() == 0 && b.eta_s(1) == -1);
+    CHECK(file_progress("probing", 1.0f) > 0.019f && file_progress("probing", 1.0f) < 0.021f);
+    CHECK(std::fabs(file_progress("converting", 0.5f) - 0.42f) < 1e-4f);
+    CHECK(file_progress("analysing", 1.0f) == 1.0f && file_progress("ready", 0) == 1.0f);
+
+    // ffmpeg's -progress lines.
+    ProgressParser pp;
+    const std::string chunk1 = "frame=12\nfps=30.0\ntotal_size=4", chunk2 = "096\nprogress=continue\nframe=40\r\n";
+    pp.feed(reinterpret_cast<const uint8_t*>(chunk1.data()), chunk1.size());
+    CHECK(pp.frame == 12 && pp.total_size == 0);
+    pp.feed(reinterpret_cast<const uint8_t*>(chunk2.data()), chunk2.size());
+    CHECK(pp.frame == 40 && pp.total_size == 4096);
+
+    // The convert command line with the v3 options.
+    ConvertSpec cs;
+    cs.input = "in.mp4", cs.output = "out.mov";
+    cs.out_max_h = 720, cs.conform_fps = 60, cs.progress = true;
+    const auto a = convert_args(cs);
+    std::string joined;
+    for (const auto& x : a) joined += x + " ";
+    CHECK(joined.find("min(ih,720)") != std::string::npos);
+    CHECK(joined.find("framerate=fps=60") != std::string::npos);
+    CHECK(joined.find("-progress pipe:1") != std::string::npos);
+    ConvertSpec plain;
+    plain.input = "in.mp4", plain.output = "out.mov";
+    std::string j2;
+    for (const auto& x : convert_args(plain)) j2 += x + " ";
+    CHECK(j2.find("framerate") == std::string::npos && j2.find("-progress") == std::string::npos && j2.find("min(ih") == std::string::npos);
+
+    // The real disk API answers for the temp folder (and for a folder not made yet).
+    const auto d = disk_space(fs::temp_directory_path() / "himmel_no_such_folder" / "x");
+    CHECK(d.known && d.total > 0 && d.free <= d.total);
+
+    // Import options survive the sidecar (and so the DB's sidecar column).
+    ClipRecord r;
+    r.hash = "0123456789abcdef", r.name = "opt", r.source = "C:\\x.mp4";
+    r.import.max_h = 720, r.import.codec = "hap_q", r.import.conform_hz = 60, r.import.est_bytes = 123456789;
+    ClipRecord back;
+    CHECK(sidecar_from_json(sidecar_to_json(r), back));
+    CHECK(back.import.max_h == 720 && back.import.codec == "hap_q" && back.import.conform_hz == 60 && back.import.est_bytes == 123456789);
+    ClipRecord none;
+    none.hash = r.hash, none.name = "n", none.source = r.source;
+    CHECK(sidecar_to_json(none).find("\"import\"") == std::string::npos);  // v2 sidecars stay as they were
+}
+
+static void test_v3_location_and_move() {
+    using namespace himmel::ingest;
+    const fs::path t = temp_dir("v3_move");
+    std::error_code ec;
+    // The saved location (a temp file here; the real one is Documents\Himmel\library-location.json).
+    const fs::path loc = t / "settings" / "library-location.json";
+    CHECK(read_location(loc).empty());
+    CHECK(save_location(loc, t / "E-drive" / "Himmel Library"));
+    CHECK(read_location(loc) == t / "E-drive" / "Himmel Library");
+    write_file(loc, "{\"format\": \"something-else\", \"root\": \"C:\\\\x\"}");
+    CHECK(read_location(loc).empty());
+    CHECK(location_file().filename() == "library-location.json");
+
+    // A library to move: derived files, the DB, originals (never copied).
+    const fs::path a = t / "A", b = t / "B";
+    {
+        LibraryDb db;
+        CHECK(db.open(a / kDbFile, false));
+        CHECK(!db.meta_get("uid").empty());
+        db.checkpoint();
+    }
+    write_file(a / "hap" / "1111111111111111.mov", std::string(300000, 'h'));
+    write_file(a / "thumbs" / "1111111111111111.jpg", std::string(2000, 't'));
+    write_file(a / "meta" / "1111111111111111.json", "{}");
+    write_file(a / "originals" / "mine.mp4", std::string(5000, 'o'));
+    write_file(a / "work" / "junk.mov", "x");
+    CHECK(library_bytes(a) >= 302000);
+    const auto plan = plan_move(a);
+    bool has_orig = false, has_db = false, has_work = false;
+    for (const auto& f : plan.files) {
+        has_orig |= f.string().find("originals") != std::string::npos;
+        has_work |= f.string().find("work") != std::string::npos;
+        has_db |= f == fs::path(kDbFile);
+    }
+    CHECK(!has_orig && !has_work && has_db && plan.files.size() == 4);
+    CHECK(empty_or_missing(b) && !empty_or_missing(a));
+    // A cancelled copy leaves nothing behind and the old library untouched.
+    std::string err;
+    CHECK(!copy_library(a, b, plan, [](uint64_t done, uint64_t) { return done == 0; }, err));
+    CHECK(err.find("cancelled") != std::string::npos);
+    CHECK(!fs::exists(b / "hap" / "1111111111111111.mov", ec) && fs::exists(a / "hap" / "1111111111111111.mov", ec));
+    // A full copy with progress.
+    uint64_t last = 0, calls = 0;
+    CHECK(copy_library(a, b, plan, [&](uint64_t done, uint64_t total) { last = done, ++calls; return total == plan.bytes; }, err));
+    CHECK(last == plan.bytes && calls >= plan.files.size());
+    CHECK(fs::file_size(b / "hap" / "1111111111111111.mov", ec) == 300000);
+    {
+        LibraryDb moved, orig;
+        CHECK(moved.open(b / kDbFile, true) && orig.open(a / kDbFile, true));
+        CHECK(moved.meta_get("uid") == orig.meta_get("uid"));  // the feed keeps its cursor after a move
+    }
+    // The redirect in the old folder: found once the old DB is gone.
+    CHECK(write_moved_redirect(a, b));
+    CHECK(resolve_library_root(a) == a);  // the old DB is still there (renderer not restarted yet)
+    CHECK(delete_old_library(a) == 0);
+    CHECK(!fs::exists(a / kDbFile, ec) && !fs::exists(a / "hap", ec) && !fs::exists(a / "work", ec));
+    CHECK(fs::exists(a / "originals" / "mine.mp4", ec));  // originals are never deleted
+    CHECK(resolve_library_root(a) == b);
+    CHECK(resolve_library_root(b) == b);
+    // A copy into a folder that already has the file fails and undoes itself.
+    CHECK(!copy_library(a / ".." / "B", b, plan_move(b), nullptr, err));
+    CHECK(fs::exists(b / "hap" / "1111111111111111.mov", ec));  // the target's own files are kept
+    fs::remove_all(t, ec);
+}
+
 int main() {
     test_hash();
     test_judder();
@@ -675,6 +873,8 @@ int main() {
     test_feed();
     test_ingest_commands();
     test_ingest_cli();
+    test_v3_guard();
+    test_v3_location_and_move();
     test_ffmpeg_round_trip();
     std::printf("library_tests: %d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;

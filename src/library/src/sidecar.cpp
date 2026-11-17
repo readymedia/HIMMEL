@@ -84,6 +84,9 @@ std::string sidecar_to_json(const ClipRecord& r) {
     // v2 keys (library-db.md §5): absent = false.
     if (r.source_missing) j["source_missing"] = true;
     if (r.state == State::Removed) j["removed"] = true;
+    if (!r.import.is_default())
+        j["import"] = {{"max_h", r.import.max_h}, {"codec", r.import.codec}, {"conform_hz", r.import.conform_hz},
+                       {"est_bytes", r.import.est_bytes}};
     return j.dump(1);
 }
 
@@ -106,6 +109,12 @@ bool sidecar_from_json(const std::string& text, ClipRecord& r, std::string* err)
     r.thumb_path = j.value("thumb", "");
     r.source_missing = j.value("source_missing", false);
     if (j.value("removed", false)) r.state = State::Removed;
+    if (const auto im = j.find("import"); im != j.end() && im->is_object()) {
+        r.import.max_h = im->value("max_h", 0);
+        r.import.codec = im->value("codec", std::string());
+        r.import.conform_hz = im->value("conform_hz", 0);
+        r.import.est_bytes = im->value("est_bytes", int64_t{0});
+    }
     if (const auto p = j.find("probe"); p != j.end() && p->is_object()) {
         r.probe.codec = p->value("codec", "");
         r.probe.pix_fmt = p->value("pix_fmt", "");

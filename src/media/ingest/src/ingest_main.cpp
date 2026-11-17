@@ -9,7 +9,7 @@
 //
 //   himmel_ingest [--library DIR] [--watch DIR]... [--ffmpeg DIR] [--once]
 //                 [--mode auto|full|background] [--seq-fps N] [--canvas WxH]
-//                 [--quality hap|hap_q] [--rebuild] [--retry] [--status] [--selftest]
+//                 [--quality hap|hap_q] [--reserve-gb N] [--rebuild] [--retry] [--status] [--selftest]
 //
 //   --once     scan, import everything, then exit (tests, measurements)
 //   --rebuild  recreate the DB from meta/*.json, then exit
@@ -19,8 +19,10 @@
 //   --help     usage; an unknown or incomplete argument prints it too and exits 2 (nothing started)
 //   --selftest run every ingest command against a temporary library (no ffmpeg) and exit
 //
-// Commands 60..67 (import, rescan, remove, relink, reanalyse, retry, mode, unwatch) arrive
-// in the library block's channels (docs/interfaces/library-db.md §10, ingest_ops.h).
+// Commands 60..69 (import, rescan, remove, relink, reanalyse, retry, mode, unwatch, clear queue,
+// library) arrive in the library block's channels (docs/interfaces/library-db.md §10-11, ingest_ops.h).
+// v3 (wave 7): the disk guard keeps a reserve free (max(10 GB, 10 %) or --reserve-gb), the
+// mode is stored in the DB, progress / plan / library root are published in the block (§11).
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -42,6 +44,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <set>
 #include <string>
 #include <thread>
@@ -49,7 +52,9 @@
 
 #include "himmel/engine/engine_shared.h"
 #include "himmel/ingest/ffmpeg.h"
+#include "himmel/ingest/guard.h"
 #include "himmel/ingest/ingest_ops.h"
+#include "himmel/ingest/library_move.h"
 #include "himmel/ingest/scan.h"
 #include "himmel/ingest/selftest.h"
 #include "himmel/ingest/svg.h"
@@ -59,10 +64,13 @@
 #include "himmel/library/hash.h"
 #include "himmel/library/library_block.h"
 #include "himmel/library/library_db.h"
+#include "himmel/library/location.h"
 #include "himmel/library/sidecar.h"
 #include "himmel/media/hap.h"
 #include "himmel/media/mov.h"
 #include "himmel/protocol/commands.h"
+
+#include <nlohmann/json.hpp>
 
 namespace fs = std::filesystem;
 using namespace himmel;
@@ -114,6 +122,8 @@ struct Config {
     double seq_fps = 25.0;
     int canvas_w = 1920, canvas_h = 1080;
     std::string quality = "hap";
+    bool explicit_root = false;   // --library given: a switch / move is not saved as the default (D182)
+    uint64_t reserve_bytes = 0;   // --reserve-gb: the disk guard's reserve; 0 = max(10 GB, 10 %)
     bool help = false;
     std::string error;  // a bad command line: print usage, exit 2, start nothing
 };
@@ -122,7 +132,7 @@ void print_usage() {
     std::printf(
         "usage: himmel_ingest [--library DIR] [--watch DIR]... [--ffmpeg DIR] [--once]\n"
         "                     [--mode auto|full|background] [--seq-fps N] [--canvas WxH]\n"
-        "                     [--quality hap|hap_q] [--rebuild] [--retry] [--status]\n"
+        "                     [--quality hap|hap_q] [--reserve-gb N] [--rebuild] [--retry] [--status]\n"
         "       himmel_ingest --selftest      every ingest command against a temp library, then exit\n"
         "       himmel_ingest --send VERB ... one command to the running worker (--send alone: the verbs)\n"
         "       himmel_ingest --help\n"
@@ -131,7 +141,8 @@ void print_usage() {
         "  --once         scan, import everything, then exit\n"
         "  --rebuild      recreate the DB from meta\\*.json, then exit\n"
         "  --retry        put failed clips back in the queue\n"
-        "  --status       print the library counts and exit\n"
+        "  --status       print the library counts and the disk space, then exit\n"
+        "  --reserve-gb N the disk guard keeps N GB free (default: 10 GB or 10 %% of the disk, the larger)\n"
         "An unknown argument prints this and exits with code 2 (nothing is started or written).\n");
 }
 
@@ -150,7 +161,7 @@ Config parse_args(int argc, char** argv) {
             return argv[++i];
         };
         if (a == "--help" || a == "-h" || a == "/?") c.help = true;
-        else if (a == "--library") c.root = from_utf8(next());
+        else if (a == "--library") c.root = from_utf8(next()), c.explicit_root = true;
         else if (a == "--watch") c.watch.push_back(from_utf8(next()));
         else if (a == "--ffmpeg") c.ffmpeg_dir = from_utf8(next());
         else if (a == "--once") c.once = true;
@@ -170,6 +181,11 @@ Config parse_args(int argc, char** argv) {
             const std::string q = next();
             if (c.error.empty() && q != "hap" && q != "hap_q") c.error = "--quality is hap or hap_q";
             c.quality = q == "hap_q" ? "hap_q" : "hap";
+        } else if (a == "--reserve-gb") {
+            const std::string v = next();
+            const double g = std::atof(v.c_str());
+            if (c.error.empty() && !(g > 0 && g < 100000)) c.error = "--reserve-gb needs a number of GB";
+            c.reserve_bytes = static_cast<uint64_t>(g * 1e9);
         } else if (a == "--mode") {
             const std::string m = next();
             if (c.error.empty() && m != "auto" && m != "full" && m != "background") c.error = "--mode is auto, full or background";
@@ -179,7 +195,8 @@ Config parse_args(int argc, char** argv) {
         }
     }
     if (!c.error.empty() || c.help) return c;  // never resolve the default library for a bad command line
-    if (c.root.empty()) c.root = library::default_library_root();
+    // v3: the saved location (default_library_root) and moved-library redirects (D182).
+    c.root = c.root.empty() ? library::default_library_root() : library::resolve_library_root(c.root);
     if (c.watch.empty()) c.watch.push_back(c.root / "originals");
     c.canvas_w = std::clamp(c.canvas_w, 64, 8192);
     c.canvas_h = std::clamp(c.canvas_h, 64, 8192);
@@ -228,6 +245,7 @@ struct Blocks {
         s.late_frames = eng->late_frames.load();
         s.frames = eng->frames.load();
         s.fps_x100 = eng->fps_x100.load();
+        s.pid = eng->pid.load();
         return s;
     }
     void set_job(const std::string& name, const char* stage, float progress, const std::string& err = {}) {
@@ -239,6 +257,26 @@ struct Blocks {
         std::snprintf(j.last_error, sizeof(j.last_error), "%s", err.c_str());
         protocol::seq_write(lib->job_seq, lib->job, j);
     }
+    // v3: the library folder in use and a running move.
+    void set_root(const fs::path& root, library::MoveState st, float progress, uint64_t done, uint64_t total,
+                  const fs::path& to, const std::string& msg) {
+        if (!lib) return;
+        auto r = std::make_unique<library::LibraryRoot>();
+        copy_utf8(r->path, sizeof(r->path), ingest::u8path(root));
+        r->move_state = static_cast<uint32_t>(st);
+        r->move_progress = progress;
+        r->move_done_bytes = done, r->move_total_bytes = total;
+        copy_utf8(r->move_to, sizeof(r->move_to), to.empty() ? std::string() : ingest::u8path(to));
+        copy_utf8(r->move_message, sizeof(r->move_message), msg);
+        protocol::seq_write(lib->root_seq, lib->root, *r);
+    }
+    // Cuts on a UTF-8 boundary.
+    static void copy_utf8(char* dst, size_t n, const std::string& s) {
+        size_t len = std::min(s.size(), n - 1);
+        while (len > 0 && len < s.size() && (static_cast<unsigned char>(s[len]) & 0xC0) == 0x80) --len;
+        std::memcpy(dst, s.data(), len);
+        dst[len] = 0;
+    }
 };
 
 // ---- the worker ----
@@ -248,14 +286,98 @@ public:
 
     // ---- ingest::OpsHost (called on the worker thread, from IngestOps) ----
     void queue(int64_t id) override {
-        if (std::find(queue_.begin(), queue_.end(), id) == queue_.end()) queue_.push_back(id);
+        if (std::find(queue_.begin(), queue_.end(), id) != queue_.end()) return;
+        if (queue_.empty() && !working_.load()) batch_.reset();  // a new batch (library-db.md §11.7)
+        queue_.push_back(id);
+        batch_.add(1);
     }
-    void unqueue(int64_t id) override { queue_.erase(std::remove(queue_.begin(), queue_.end(), id), queue_.end()); }
+    void unqueue(int64_t id) override {
+        const auto it = std::find(queue_.begin(), queue_.end(), id);
+        if (it == queue_.end()) return;
+        queue_.erase(it);
+        batch_.file_done(0, 0, 0);  // cleared / removed: finished for the batch count
+    }
     void rescan_now() override {
         known_.clear();
         next_scan_ = 0;
     }
     void set_mode(library::IngestModeRequest m) override { mode_req_.store(static_cast<int>(m)); }
+
+    // ---- v3 OpsHost (library-db.md §11) ----
+    bool estimate(const ingest::Candidate& c, const library::ImportOptions& o, int64_t& bytes) override {
+        library::Probe pr;
+        bool ok = false;
+        if (c.kind == Kind::Vector) {  // drawn at 2 x the canvas (no ffprobe for SVG)
+            pr.width = cfg_.canvas_w * 2, pr.height = cfg_.canvas_h * 2, pr.alpha = true;
+            ok = true;
+        } else {
+            std::string out;
+            const auto args = c.kind == Kind::Sequence
+                                  ? ingest::probe_args(ingest::u8path(c.path / from_utf8(c.seq_pattern)), true, cfg_.seq_fps, c.seq_start)
+                                  : ingest::probe_args(ingest::u8path(c.path));
+            ingest::RunOptions ro;
+            ro.background = background();
+            ro.timeout_ms = 15000;
+            ro.should_stop = [this] { return stopping(); };
+            ro.on_stdout = [&](const uint8_t* q, size_t n) { out.append(reinterpret_cast<const char*>(q), n); };
+            const auto res = ingest::run_tool(tools_.ffprobe, args, ro);
+            ok = res.ok() && ingest::parse_probe(out, pr);
+            if (ok && c.kind == Kind::Sequence) pr.fps = cfg_.seq_fps, pr.frames = static_cast<int64_t>(c.seq_files.size());
+        }
+        if (!ok) {
+            bytes = ingest::kSideBytes;
+            return false;
+        }
+        bytes = ingest::estimate_bytes(ingest::output_shape(c.kind, pr, o, cfg_.quality, cfg_.canvas_w, cfg_.canvas_h, cfg_.seq_fps), c.kind);
+        return true;
+    }
+    ingest::DiskSpace disk() override {
+        refresh_disk();
+        return disk_;
+    }
+    uint64_t reserve(uint64_t total) override { return ingest::reserve_for(total, cfg_.reserve_bytes); }
+    bool moving() override { return moving_; }
+    void on_plan(const library::IngestPlan& plan) override {
+        if (!blocks_.lib) return;
+        library::IngestPlan q = plan;
+        q.producer = static_cast<uint8_t>(cur_prod_);
+        protocol::seq_write(blocks_.lib->plan_seq, blocks_.lib->plan, q);
+        log("import plan: %s%s", q.message, q.dry_run ? " (dry run)" : q.refused ? " - REFUSED" : "");
+    }
+    library::IngestReply library_command(const library::IngestCommand& c) override {
+        library::IngestReply r{};
+        auto say = [&](library::IngestStatus st, const std::string& msg) {
+            r.status = static_cast<uint8_t>(st);
+            r.count = st == library::IngestStatus::Accepted ? 1 : 0;
+            Blocks::copy_utf8(r.message, sizeof(r.message), msg);
+            return r;
+        };
+        std::error_code ec;
+        const fs::path to = from_utf8(c.path).lexically_normal();
+        if (ingest::same_path(to, cfg_.root)) return say(library::IngestStatus::BadPath, "that already is the library folder");
+        for (fs::path q = to.parent_path(); !q.empty() && q != q.root_path(); q = q.parent_path())
+            if (ingest::same_path(q, cfg_.root)) return say(library::IngestStatus::BadPath, "the new place cannot be inside the library");
+        if (fs::exists(to, ec) && !fs::is_directory(to, ec)) return say(library::IngestStatus::BadPath, "that is a file, not a folder");
+        if (c.flags & library::kIngestMove) {
+            if (!ingest::empty_or_missing(to)) return say(library::IngestStatus::BadPath, "the target folder must be empty (or not exist yet)");
+            const uint64_t need = ingest::library_bytes(cfg_.root) + (1u << 20);
+            const auto d = ingest::disk_space(to);
+            const uint64_t res = ingest::reserve_for(d.total, cfg_.reserve_bytes);
+            if (d.known && !ingest::fits(d.free, 0, need, res))
+                return say(library::IngestStatus::NoSpace, "the library needs " + ingest::human_bytes(need) + " there; " +
+                                                               ingest::human_bytes(d.free) + " free, " + ingest::human_bytes(res) + " kept free");
+            pending_lib_ = LibraryJob{to, true};
+            moving_ = true;
+            blocks_.set_root(cfg_.root, library::MoveState::Copying, 0, 0, need, to, "starting the move");
+            return say(library::IngestStatus::Accepted, "moving the library (" + ingest::human_bytes(need) + ") to " + ingest::u8path(to));
+        }
+        if (fs::exists(to / library::kDbFile, ec) && !(c.flags & library::kIngestForce))
+            return say(library::IngestStatus::BadPath, "there is already a library there (send it with force to use it)");
+        pending_lib_ = LibraryJob{to, false};
+        moving_ = true;
+        blocks_.set_root(cfg_.root, library::MoveState::Switching, 0, 0, 0, to, "switching");
+        return say(library::IngestStatus::Accepted, "switching to the library in " + ingest::u8path(to));
+    }
 
     bool start() {
         std::error_code ec;
@@ -280,6 +402,15 @@ public:
             blocks_.lib->pid.store(GetCurrentProcessId());
             blocks_.lib->ready_seq.store(db_.ready_seq());
         }
+        // v3: the stored mode (D183): a Hold survives a restart.
+        mode_req_.store(static_cast<int>(ingest::IngestOps::stored_mode(db_)));
+        if (hold()) log("on hold (stored mode): nothing is imported until the mode is changed");
+        library_bytes_ = ingest::library_bytes(cfg_.root);
+        blocks_.set_root(cfg_.root, library::MoveState::None, 0, 0, 0, {}, "");
+        refresh_disk();
+        log("disk: %s free of %s, %s kept free; the library uses %s", ingest::human_bytes(disk_.free).c_str(),
+            ingest::human_bytes(disk_.total).c_str(), ingest::human_bytes(reserve_bytes_).c_str(),
+            ingest::human_bytes(library_bytes_).c_str());
         ops_ = std::make_unique<ingest::IngestOps>(db_, cfg_.root, cfg_.watch, *this);
         pump_ = std::make_unique<ingest::CommandPump>(blocks_.lib);
         if (const int n = pump_->recover()) log("%d command(s) were cut short by a restart: replied Interrupted", n);
@@ -293,20 +424,47 @@ public:
         bool idle_logged = false;
         while (!stopping()) {
             poll_commands(0);
+            if (pending_lib_) {  // v3: a Library command (switch / move) runs between files
+                run_library_job(settle);
+                continue;
+            }
             if (now_us() >= next_scan_) {
                 scan(settle);
                 next_scan_ = now_us() + 2000000;
+                refresh_disk();
+                publish_progress();
             }
             if (!queue_.empty() && !hold()) {
                 idle_logged = false;
+                // v3: the disk guard (library-db.md §11.1): the next file must fit above the reserve.
+                if (disk_low_ && now_us() < next_disk_check_) {
+                    Sleep(200);
+                    if (cfg_.once) break;
+                    continue;
+                }
                 const int64_t id = queue_.front();
+                if (!disk_ok_for(id)) {
+                    set_disk_low(true, id);
+                    continue;
+                }
+                set_disk_low(false, 0);
                 queue_.pop_front();
                 update_counts();
+                const uint64_t t0 = now_us();
+                outcome_ = Outcome::Cancelled;
                 process(id);
+                if (outcome_ != Outcome::Deferred)
+                    batch_.file_done(std::max<int64_t>(cur_est_, cur_written_), (now_us() - t0) / 1e6, outcome_ == Outcome::Ready ? cur_written_ : 0);
+                cur_written_ = 0, cur_est_ = 0, cur_fp_ = 0;
+                cur_file_.clear();
                 update_counts();
+                publish_progress();
                 continue;
             }
-            if (cfg_.once && first_scan_done_ && settle_pending_ == 0 && queue_.empty()) break;
+            if (cfg_.once && first_scan_done_ && settle_pending_ == 0 && (queue_.empty() || hold())) {
+                if (hold() && !queue_.empty()) log("--once: on hold with %zu queued, stopping", queue_.size());
+                break;
+            }
             if (!idle_logged) {
                 log("idle: %d ready, %d failed", db_.count(static_cast<int>(State::Ready)), db_.count(static_cast<int>(State::Failed)));
                 idle_logged = true;
@@ -355,6 +513,7 @@ private:
     }
 
     void apply_command(int prod, const library::IngestCommand& c) {
+        cur_prod_ = prod;
         const auto r = ops_->apply(c);
         pump_->reply(prod, c, r);
         log("command %u (producer %d, seq %u, clip %lld%s%s): status %u, %d - %s", c.type, prod, c.seq,
@@ -391,6 +550,7 @@ private:
                                                                       : library::IngestMode::Idle));
                 b->paused.store(paused_.load() ? 1 : 0);
                 b->pauses.store(throttle_.pauses());
+                b->stored_mode.store(static_cast<uint32_t>(mode_req_.load()));
                 if (b->stop_request.load()) g_stop.store(true);
             }
             Sleep(100);
@@ -411,6 +571,242 @@ private:
             b->ready_total.store(static_cast<uint32_t>(db_.count(static_cast<int>(State::Ready))));
             b->failed_total.store(static_cast<uint32_t>(db_.count(static_cast<int>(State::Failed))));
         }
+        queue_bytes_ = ops_ ? ops_->queue_need() : 0;
+        if (auto* b = blocks_.lib) {
+            b->queue_bytes.store(queue_bytes_);
+            b->library_bytes.store(library_bytes_);
+        }
+    }
+
+    // ---- v3: disk guard, progress, library switch / move (library-db.md §11) ----
+    void refresh_disk() {
+        disk_ = ingest::disk_space(cfg_.root);
+        reserve_bytes_ = disk_.known ? ingest::reserve_for(disk_.total, cfg_.reserve_bytes) : 0;
+        last_disk_us_ = now_us();
+        if (auto* b = blocks_.lib) {
+            b->disk_free.store(disk_.free);
+            b->disk_total.store(disk_.total);
+            b->disk_reserve.store(reserve_bytes_);
+            b->library_bytes.store(library_bytes_);
+        }
+    }
+
+    int64_t estimate_row(const ClipRecord& r) {
+        if (r.stage_done & library::kStageConvert) return ingest::kSideBytes;
+        if (r.stage_done & library::kStageProbe) {
+            library::Probe pr = r.probe;
+            if (r.kind == Kind::Vector) pr.width = cfg_.canvas_w * 2, pr.height = cfg_.canvas_h * 2;
+            return ingest::estimate_bytes(ingest::output_shape(r.kind, pr, r.import, cfg_.quality, cfg_.canvas_w, cfg_.canvas_h, cfg_.seq_fps), r.kind);
+        }
+        return std::max<int64_t>(r.import.est_bytes, ingest::kSideBytes);
+    }
+
+    bool disk_ok_for(int64_t id) {
+        ClipRecord r;
+        if (!db_.get(id, r)) return true;
+        refresh_disk();
+        return !disk_.known || ingest::fits(disk_.free, 0, static_cast<uint64_t>(estimate_row(r)), reserve_bytes_);
+    }
+
+    void set_disk_low(bool low, int64_t id) {
+        if (low) {
+            next_disk_check_ = now_us() + 2000000;
+            if (!disk_low_) {
+                ClipRecord r;
+                db_.get(id, r);
+                const std::string msg = "disk low: " + ingest::human_bytes(disk_.free) + " free, " + ingest::human_bytes(reserve_bytes_) +
+                                        " kept free; \"" + r.name + "\" needs ~" + ingest::human_bytes(static_cast<uint64_t>(estimate_row(r)));
+                log("%s - the import waits (free space, Clear queue or a library move lets it go on)", msg.c_str());
+                blocks_.set_job(r.name, "disk low", 0, msg);
+            }
+        } else if (disk_low_) {
+            log("disk space is fine again: the import goes on");
+        }
+        disk_low_ = low;
+        if (auto* b = blocks_.lib) b->disk_low.store(low ? 1 : 0);
+    }
+
+    // During a conversion (from run_tool's poll, every 50 ms): stop when the free space falls
+    // below the reserve, so a file is never written half (library-db.md §11.1).
+    bool disk_abort_check() {
+        if (disk_abort_) return true;
+        if (now_us() - last_disk_us_ < 500000) return false;
+        refresh_disk();
+        if (disk_.known && disk_.free < reserve_bytes_) {
+            disk_abort_ = true;
+            log("disk low during the conversion (%s free, %s kept free): stopping it", ingest::human_bytes(disk_.free).c_str(),
+                ingest::human_bytes(reserve_bytes_).c_str());
+        }
+        return disk_abort_;
+    }
+
+    // The clip goes back to the front of the queue untouched (never failed, never half-written).
+    bool defer_for_disk(ClipRecord& r, const std::string& why) {
+        std::error_code ec;
+        for (auto it = fs::directory_iterator(cfg_.root / "work", ec); !ec && it != fs::directory_iterator(); it.increment(ec))
+            if (ingest::u8path(it->path().filename()).rfind(r.hash, 0) == 0) fs::remove(it->path(), ec);
+        r.state = State::Queued;
+        r.error.clear();
+        db_.upsert(r);
+        queue_.push_front(r.id);
+        outcome_ = Outcome::Deferred;
+        log("  %s: back in the queue (%s)", r.name.c_str(), why.c_str());
+        refresh_disk();
+        set_disk_low(true, r.id);
+        return false;
+    }
+
+    void publish_progress() {
+        if (!blocks_.lib) return;
+        library::IngestProgress p{};
+        p.done = batch_.done();
+        p.total = batch_.total();
+        p.clip = current_;
+        p.file_progress = cur_fp_;
+        const int64_t remaining = static_cast<int64_t>(queue_bytes_) + static_cast<int64_t>((1.0f - cur_fp_) * static_cast<float>(cur_est_));
+        p.eta_s = (queue_.empty() && current_ == 0) ? 0 : batch_.eta_s(remaining);
+        p.bytes_written = batch_.written() + static_cast<uint64_t>(std::max<int64_t>(0, cur_written_));
+        p.file_bytes = static_cast<uint64_t>(std::max<int64_t>(0, cur_est_));
+        Blocks::copy_utf8(p.file, sizeof(p.file), cur_file_);
+        p.error_clip = err_clip_;
+        Blocks::copy_utf8(p.error, sizeof(p.error), err_msg_);
+        protocol::seq_write(blocks_.lib->progress_seq, blocks_.lib->progress, p);
+        last_progress_us_ = now_us();
+    }
+
+    void stage_progress(const char* stage, float p) {
+        cur_fp_ = ingest::file_progress(stage, p);
+        if (now_us() - last_progress_us_ >= 250000 || p <= 0.0f || p >= 1.0f) publish_progress();
+    }
+
+    // Opens (or creates) the library in `to` and makes it the one in use.
+    bool open_library(const fs::path& to, std::string& err) {
+        std::error_code ec;
+        for (const char* d : {"originals", "hap", "stills", "meta", "thumbs", "work"}) fs::create_directories(to / d, ec);
+        db_.close();
+        if (!db_.open(to / library::kDbFile, false, &err)) return false;
+        for (auto& w : cfg_.watch)
+            if (ingest::same_path(w, cfg_.root / "originals")) w = to / "originals";
+        cfg_.root = to;
+        ops_ = std::make_unique<ingest::IngestOps>(db_, cfg_.root, cfg_.watch, *this);
+        queue_.clear();
+        known_.clear();
+        first_scan_done_ = false;
+        next_scan_ = 0;
+        batch_.reset();
+        {
+            std::lock_guard lock(g_log_mu);
+            if (g_log) std::fclose(g_log);
+            g_log = _wfsopen((cfg_.root / "ingest.log").c_str(), L"a", _SH_DENYWR);
+        }
+        library_bytes_ = ingest::library_bytes(cfg_.root);
+        if (!cfg_.explicit_root) {
+            if (library::save_location(library::location_file(), cfg_.root)) log("saved the library location: %s", ingest::u8path(cfg_.root).c_str());
+            else log("cannot save the library location in %s", ingest::u8path(library::location_file()).c_str());
+        }
+        db_.bump_ready_seq();
+        if (auto* b = blocks_.lib) b->ready_seq.fetch_add(1, std::memory_order_acq_rel);
+        refresh_disk();
+        return true;
+    }
+
+    // A Library command (69), between files on the worker thread (library-db.md §11.5).
+    void run_library_job(SettleTracker& settle) {
+        const LibraryJob job = *pending_lib_;
+        pending_lib_.reset();
+        const fs::path old = cfg_.root;
+        std::string err;
+        settle = SettleTracker(2000);
+        if (!job.move) {
+            if (open_library(job.to, err)) {
+                mode_req_.store(static_cast<int>(ingest::IngestOps::stored_mode(db_)));
+                log("switched to the library in %s", ingest::u8path(cfg_.root).c_str());
+                blocks_.set_root(cfg_.root, library::MoveState::Done, 1, 0, 0, {}, "switched to this library");
+            } else {
+                log("cannot open the library in %s: %s - staying in %s", ingest::u8path(job.to).c_str(), err.c_str(), ingest::u8path(old).c_str());
+                std::string e2;
+                open_library(old, e2);
+                blocks_.set_root(cfg_.root, library::MoveState::Failed, 0, 0, 0, job.to, "cannot open that library: " + err);
+            }
+            moving_ = false;
+            update_counts();
+            return;
+        }
+        // The move: checkpoint and close the DB, copy everything, compare, then switch.
+        log("moving the library from %s to %s", ingest::u8path(old).c_str(), ingest::u8path(job.to).c_str());
+        db_.checkpoint();
+        db_.close();
+        const auto plan = ingest::plan_move(old);
+        uint64_t last_pub = 0;
+        const bool ok = ingest::copy_library(old, job.to, plan, [&](uint64_t done, uint64_t total) {
+            if (stopping()) return false;
+            if (now_us() - last_pub >= 250000) {
+                last_pub = now_us();
+                const float f = total ? static_cast<float>(static_cast<double>(done) / static_cast<double>(total)) : 1.0f;
+                blocks_.set_root(old, library::MoveState::Copying, f, done, total, job.to,
+                                 "copying " + ingest::human_bytes(done) + " of " + ingest::human_bytes(total));
+                poll_commands(0);  // Mode is applied; everything else replies Busy
+            }
+            return true;
+        }, err);
+        if (!ok) {
+            log("the move failed: %s - the library stays in %s", err.c_str(), ingest::u8path(old).c_str());
+            std::string e2;
+            if (!db_.open(old / library::kDbFile, false, &e2)) log("cannot reopen the library DB: %s", e2.c_str());
+            blocks_.set_root(old, library::MoveState::Failed, 0, 0, plan.bytes, job.to, "the move failed: " + err);
+            moving_ = false;
+            resume_unfinished();
+            update_counts();
+            return;
+        }
+        blocks_.set_root(old, library::MoveState::Switching, 1, plan.bytes, plan.bytes, job.to, "switching to the new folder");
+        const int mode = mode_req_.load();
+        if (!open_library(job.to, err)) {
+            log("cannot open the moved library: %s - staying in %s", err.c_str(), ingest::u8path(old).c_str());
+            std::string e2;
+            open_library(old, e2);
+            blocks_.set_root(old, library::MoveState::Failed, 0, 0, plan.bytes, job.to, "cannot open the moved library: " + err);
+            moving_ = false;
+            return;
+        }
+        static const char* kNames[] = {"auto", "full", "background", "hold"};
+        db_.meta_set("mode", kNames[std::clamp(mode, 0, 3)]);  // a Mode sent during the copy
+        // The old copy goes once the renderer that loaded it has restarted or stopped.
+        const auto eng = blocks_.sample_engine();
+        db_.meta_set("old_root", nlohmann::json{{"path", ingest::u8path(old)},
+                                                {"engine_pid", eng.present && eng.heartbeat_age_ms < 2000 ? eng.pid : 0}}.dump());
+        library::write_moved_redirect(old, cfg_.root);
+        // Originals are never moved: the old drop folder stays watched where it is.
+        if (!ingest::empty_or_missing(old / "originals")) {
+            auto j = nlohmann::json::parse(db_.meta_get("watch"), nullptr, false);
+            if (!j.is_array()) j = nlohmann::json::array();
+            j.push_back(ingest::u8path(old / "originals"));
+            db_.meta_set("watch", j.dump());
+        }
+        log("moved the library to %s (%s); the old copy is deleted when the renderer has restarted", ingest::u8path(cfg_.root).c_str(),
+            ingest::human_bytes(plan.bytes).c_str());
+        blocks_.set_root(cfg_.root, library::MoveState::Done, 1, plan.bytes, plan.bytes, {},
+                         "moved; the old copy is deleted after the renderer restarts");
+        moving_ = false;
+        update_counts();
+    }
+
+    // At every scan: delete a moved library's old copy once no renderer uses it.
+    void cleanup_old_root() {
+        const auto j = nlohmann::json::parse(db_.meta_get("old_root"), nullptr, false);
+        if (!j.is_object()) return;
+        const std::string path = j.value("path", std::string());
+        const uint32_t pid = j.value("engine_pid", 0u);
+        const auto eng = blocks_.sample_engine();
+        if (eng.present && eng.heartbeat_age_ms < 2000 && eng.pid == pid && pid != 0) return;  // still the old renderer
+        const int left = ingest::delete_old_library(from_utf8(path));
+        if (left == 0) {
+            db_.meta_set("old_root", "");
+            log("deleted the old library copy in %s", path.c_str());
+        } else if (!old_root_logged_) {
+            old_root_logged_ = true;
+            log("the old library copy in %s: %d file(s) still in use, retrying", path.c_str(), left);
+        }
     }
 
     void set_thread_background(bool on) {
@@ -428,6 +824,11 @@ private:
         int pending = 0;
         if (!first_scan_done_) resume_unfinished();
         ops_->retry_pending_deletes();
+        cleanup_old_root();
+        if (now_us() >= next_bytes_us_) {  // keep library_bytes current (Remove, Clear queue, other tools)
+            library_bytes_ = ingest::library_bytes(cfg_.root);
+            next_bytes_us_ = now_us() + 10000000;
+        }
         for (const auto& w : ops_->watch_folders()) {
             for (auto& c : ingest::scan_folder(w, skip)) {
                 const std::string key = ingest::u8path(c.path);
@@ -448,26 +849,35 @@ private:
     void resume_unfinished() {
         for (auto& r : db_.list()) {
             if (r.state == State::Ready || r.state == State::Failed || r.state == State::Removed) continue;
-            queue_.push_back(r.id);
+            queue(r.id);
         }
         if (!queue_.empty()) log("resuming %zu unfinished import(s)", queue_.size());
     }
 
     void enqueue(const ingest::Candidate& c) {
-        const auto res = ops_->enqueue(c, false);
-        if (res.id == 0) log("cannot read or queue %s - skipped", ingest::u8path(c.path).c_str());
+        const auto res = ops_->enqueue_scanned(c);  // v3: with the disk guard
+        if (res.no_space)
+            log("not enough disk space for %s (needs ~%s): left out; Rescan tries again", ingest::u8path(c.path).c_str(),
+                ingest::human_bytes(static_cast<uint64_t>(res.est_bytes)).c_str());
+        else if (res.id == 0) log("cannot read or queue %s - skipped", ingest::u8path(c.path).c_str());
         else if (res.queued) log("queued %s (%s)", ingest::u8path(c.path).c_str(), library::kind_name(c.kind));
         if (ops_->take_changed()) update_counts();
     }
 
     // ---- one clip, all stages ----
     bool fail(ClipRecord& r, const std::string& why) {
+        // v3: no space is never a failure: the clip waits in the queue (library-db.md §11.1).
+        if (disk_abort_ || ingest::is_disk_full(why)) return defer_for_disk(r, disk_abort_ ? "disk low" : "the disk is full");
+        std::string tech = why.substr(0, 300);
+        std::replace(tech.begin(), tech.end(), '\n', ' ');
         r.state = State::Failed;
-        r.error = why.substr(0, 300);
-        std::replace(r.error.begin(), r.error.end(), '\n', ' ');
+        r.error = ingest::plain_error(cur_stage_, tech);  // plain words for the GUI; the detail goes in the log
         db_.upsert(r);
         blocks_.set_job(r.name, "failed", 0, r.error);
-        log("FAILED %s: %s", r.name.c_str(), r.error.c_str());
+        err_clip_ = r.id;
+        err_msg_ = r.error;
+        outcome_ = Outcome::Failed;
+        log("FAILED %s: %s (%s)", r.name.c_str(), r.error.c_str(), tech.c_str());
         return false;
     }
 
@@ -475,6 +885,8 @@ private:
         r.state = s;
         db_.upsert(r);
         blocks_.set_job(r.name, stage, 0);
+        cur_stage_ = stage;
+        stage_progress(stage, 0);
     }
 
     ingest::RunOptions run_opts(std::function<void(const uint8_t*, size_t)> out = nullptr) {
@@ -484,7 +896,7 @@ private:
             poll_commands(current_);  // run_tool polls on this (the worker) thread
             return paused_.load();
         };
-        o.should_stop = [this] { return aborted(); };
+        o.should_stop = [this] { return aborted() || disk_abort_check(); };
         o.on_stdout = std::move(out);
         o.timeout_ms = 30 * 60 * 1000;
         return o;
@@ -498,6 +910,14 @@ private:
         working_.store(true);
         current_ = id;
         cancel_id_ = 0;
+        outcome_ = Outcome::Cancelled;
+        disk_abort_ = false;
+        cur_stage_ = "probing";
+        cur_file_ = ingest::u8path(from_utf8(r.source).filename());
+        cur_est_ = estimate_row(r);
+        cur_written_ = 0;
+        cur_fp_ = 0;
+        publish_progress();
         struct Done {
             Ingest& in;
             ~Done() {
@@ -537,8 +957,9 @@ private:
                     if (!ingest::rasterize_svg(src, png_tmp, cfg_.canvas_h * 2, cfg_.canvas_w * 2, &err)) return fail(r, "SVG: " + err);
                 } else {
                     wait_while_paused();
+                    const int mh = r.import.max_h > 0 ? std::min(cfg_.canvas_h * 2, r.import.max_h) : cfg_.canvas_h * 2;
                     const auto res = ingest::run_tool(tools_.ffmpeg, ingest::still_png_args(r.source, ingest::u8path(png_tmp),
-                                                                                             cfg_.canvas_w * 2, cfg_.canvas_h * 2),
+                                                                                             cfg_.canvas_w * 2, mh),
                                                       run_opts());
                     if (!res.ok()) return aborted() ? false : fail(r, "still: " + res.err_tail);
                 }
@@ -567,6 +988,14 @@ private:
             r.stage_done |= library::kStageProbe;
             db_.upsert(r);
         }
+        cur_est_ = estimate_row(r);  // v3: the real numbers now
+
+        // v3: the disk guard before the big write (library-db.md §11.1).
+        if (!(r.stage_done & library::kStageConvert)) {
+            refresh_disk();
+            if (disk_.known && !ingest::fits(disk_.free, 0, static_cast<uint64_t>(cur_est_), reserve_bytes_))
+                return defer_for_disk(r, "needs ~" + ingest::human_bytes(static_cast<uint64_t>(cur_est_)));
+        }
 
         // 3. Convert to HAP (work/ -> hap/).
         const fs::path hap = cfg_.root / "hap" / (h + ".mov");
@@ -574,8 +1003,10 @@ private:
             set_state(r, State::Converting, "converting");
             const fs::path tmp = work / (h + ".mov");
             const bool alpha = r.probe.alpha || r.kind == Kind::Animation;
-            r.codec = alpha ? "hap_alpha" : cfg_.quality;
-            const bool already_hap = r.kind == Kind::Video && r.probe.codec == "hap" && r.probe.width % 4 == 0 && r.probe.height % 4 == 0;
+            r.codec = alpha ? "hap_alpha" : (r.import.codec.empty() ? cfg_.quality : r.import.codec);
+            const bool already_hap = r.kind == Kind::Video && r.probe.codec == "hap" && r.probe.width % 4 == 0 && r.probe.height % 4 == 0 &&
+                                     (r.import.max_h == 0 || r.probe.height <= r.import.max_h) &&
+                                     ingest::conform_fps(r.probe.fps, r.import.conform_hz) == 0;
             if (already_hap) {
                 fs::copy_file(src, tmp, fs::copy_options::overwrite_existing, ec);
                 if (ec) return fail(r, "cannot copy the HAP file");
@@ -591,7 +1022,19 @@ private:
                 spec.max_w = cfg_.canvas_w * 2, spec.max_h = cfg_.canvas_h * 2;
                 if (r.kind == Kind::Sequence) spec.fps = cfg_.seq_fps;
                 if (r.kind == Kind::Animation) spec.fps = std::clamp(std::round(r.probe.fps > 0 ? r.probe.fps : 10.0), 1.0, 60.0);
-                const auto res = ingest::run_tool(tools_.ffmpeg, ingest::convert_args(spec), run_opts());
+                // v3 options (library-db.md §11.4)
+                spec.out_max_h = r.import.max_h;
+                const double in_fps = r.kind == Kind::Sequence ? cfg_.seq_fps : r.kind == Kind::Animation ? spec.fps : r.probe.fps;
+                spec.conform_fps = ingest::conform_fps(in_fps, r.import.conform_hz);
+                spec.progress = true;
+                const auto shape = ingest::output_shape(r.kind, r.probe, r.import, cfg_.quality, cfg_.canvas_w, cfg_.canvas_h, cfg_.seq_fps);
+                const double out_frames = static_cast<double>(std::max<int64_t>(1, shape.frames));
+                ingest::ProgressParser pp;
+                const auto res = ingest::run_tool(tools_.ffmpeg, ingest::convert_args(spec), run_opts([&](const uint8_t* q, size_t n) {
+                    pp.feed(q, n);
+                    cur_written_ = pp.total_size;
+                    stage_progress("converting", static_cast<float>(pp.frame / out_frames));
+                }));
                 if (res.paused_ms > 0) log("  %s: paused %.1f s for the show", r.name.c_str(), res.paused_ms / 1000.0);
                 if (!res.ok()) {
                     fs::remove(tmp, ec);
@@ -606,6 +1049,8 @@ private:
         if (!read_hap_header(hap, r)) return fail(r, "the converted file is not a HAP clip Himmel can play");
         r.judder = library::judder_for(r.frames > 1 ? r.fps : 0);
         db_.upsert(r);
+        cur_written_ = static_cast<int64_t>(fs::file_size(hap, ec));
+        stage_progress("converting", 1.0f);
 
         // 4. Thumbnails.
         if (!(r.stage_done & library::kStageThumbs) || !fs::exists(abs(r.thumb_path), ec)) {
@@ -660,6 +1105,15 @@ private:
         db_.commit();
         if (auto* b = blocks_.lib) b->ready_seq.fetch_add(1, std::memory_order_acq_rel);
         blocks_.set_job(r.name, "ready", 1.0f);
+        outcome_ = Outcome::Ready;
+        {
+            int64_t sz = static_cast<int64_t>(fs::file_size(hap, ec));
+            for (const auto& rel : {r.thumb_path, r.still_path, "thumbs/" + h + "-strip.jpg", "meta/" + h + ".json"})
+                if (!rel.empty() && fs::exists(abs(rel), ec)) sz += static_cast<int64_t>(fs::file_size(abs(rel), ec));
+            cur_written_ = sz;
+            library_bytes_ += static_cast<uint64_t>(sz);
+        }
+        cur_fp_ = 1.0f;
         log("READY %s: %s %dx%d %.2f fps %lld frames, %s, energy %d, %s, %s%s in %.1f s", r.name.c_str(), r.codec.c_str(),
             r.width, r.height, r.fps, static_cast<long long>(r.frames), library::rgb_hex(r.analysis.avg_rgb).c_str(),
             r.analysis.energy, r.analysis.loop_style.c_str(), r.analysis.flicker.c_str(),
@@ -716,7 +1170,26 @@ private:
     std::unique_ptr<library::IngestCommand> held_;  // a command waiting for the running job
     int held_prod_ = 0;
     int64_t current_ = 0, cancel_id_ = 0;           // worker thread only
-    std::atomic<int> mode_req_{0};                  // IngestModeRequest (Mode command)
+    std::atomic<int> mode_req_{0};                  // IngestModeRequest (Mode command; v3: stored in the DB)
+    // ---- v3 (wave 7), worker thread only ----
+    enum class Outcome { Ready, Failed, Cancelled, Deferred };
+    struct LibraryJob {
+        fs::path to;
+        bool move = false;
+    };
+    std::optional<LibraryJob> pending_lib_;
+    bool moving_ = false;                           // a Library job is pending / running: commands reply Busy
+    Outcome outcome_ = Outcome::Cancelled;
+    ingest::BatchProgress batch_;
+    ingest::DiskSpace disk_;
+    uint64_t reserve_bytes_ = 0, library_bytes_ = 0, queue_bytes_ = 0;
+    uint64_t last_disk_us_ = 0, next_disk_check_ = 0, last_progress_us_ = 0, next_bytes_us_ = 0;
+    bool disk_low_ = false, disk_abort_ = false, old_root_logged_ = false;
+    int64_t cur_est_ = 0, cur_written_ = 0, err_clip_ = 0;
+    float cur_fp_ = 0;
+    std::string cur_file_, err_msg_;
+    const char* cur_stage_ = "probing";
+    int cur_prod_ = 0;
     uint64_t next_scan_ = 0;
     int chunks_ = 4;
     int settle_pending_ = 0;
@@ -725,8 +1198,10 @@ private:
 };
 
 // ---- himmel_ingest --send VERB ...: one command to the running worker (producer slot Tool) ----
-// import PATH [watch] | rescan [ID] | remove ID | relink ID|0 PATH [force] | reanalyse [ID] [thumbs]
-// | retry [ID] | mode auto|full|background|hold | unwatch PATH. Prints the reply; exit 0 = Ok/Accepted.
+// import PATH [watch] [OPTIONS] | import-list FILE [OPTIONS] | rescan [ID] | remove ID | relink ID|0 PATH [force]
+// | reanalyse [ID] [thumbs] | retry [ID] | mode auto|full|background|hold | unwatch PATH | clear
+// | library DIR [move] [force]. OPTIONS (v3): dry fit skip hapq max=H (or 720) conform50 conform60.
+// Prints the reply; exit 0 = Ok/Accepted. `library DIR move` waits for the move and prints its end.
 // One --send at a time (the Tool slot has one writer).
 int send_command(int argc, char** argv) {
     auto arg = [&](int k) -> std::string { return k < argc ? argv[k] : ""; };
@@ -744,7 +1219,33 @@ int send_command(int argc, char** argv) {
     };
     bool ok = true;
     using T = library::IngestCommandType;
-    if (verb == "import") ok = library::make_ingest(c, T::Import, 0, abs_path(3).c_str(), has("watch") ? library::kIngestWatch : 0);
+    // v3 import options (library-db.md §11.4)
+    auto import_flags = [&]() {
+        uint16_t f = 0;
+        if (has("watch")) f |= library::kIngestWatch;
+        if (has("dry")) f |= library::kIngestDryRun;
+        if (has("fit")) f |= library::kIngestFit;
+        if (has("skip")) f |= library::kIngestSkipKnown;
+        if (has("hapq")) f |= library::kIngestHapQ;
+        return f;
+    };
+    auto import_opts = [&](library::IngestCommand& cmd) {
+        for (int k = 4; k < argc; ++k) {
+            const std::string a = arg(k);
+            if (a == "720" || a == "1080" || a == "540") cmd.i = std::atoi(a.c_str());
+            else if (a.rfind("max=", 0) == 0) cmd.i = std::atoi(a.c_str() + 4);
+            else if (a == "conform50") cmd.conform_hz = 50;
+            else if (a == "conform60") cmd.conform_hz = 60;
+        }
+    };
+    if (verb == "import" || verb == "import-list") {
+        ok = library::make_ingest(c, T::Import, 0, abs_path(3).c_str(),
+                                  static_cast<uint16_t>(import_flags() | (verb == "import-list" ? library::kIngestList : 0)));
+        import_opts(c);
+    } else if (verb == "clear") ok = library::make_ingest(c, T::ClearQueue);
+    else if (verb == "library")
+        ok = library::make_ingest(c, T::Library, 0, abs_path(3).c_str(),
+                                  static_cast<uint16_t>((has("move") ? library::kIngestMove : 0) | (has("force") ? library::kIngestForce : 0)));
     else if (verb == "rescan") ok = library::make_ingest(c, T::Rescan, id_at(3));
     else if (verb == "remove") ok = library::make_ingest(c, T::Remove, id_at(3));
     else if (verb == "relink") ok = library::make_ingest(c, T::Relink, id_at(3), abs_path(4).c_str(), has("force") ? library::kIngestForce : 0);
@@ -756,8 +1257,11 @@ int send_command(int argc, char** argv) {
         const int i = m == "full" ? 1 : m == "background" ? 2 : m == "hold" ? 3 : m == "auto" ? 0 : -1;
         ok = library::make_ingest(c, T::Mode, 0, nullptr, 0, i);
     } else {
-        std::printf("usage: himmel_ingest --send import PATH [watch] | rescan [ID] | remove ID | relink ID|0 PATH [force]\n"
-                    "                     | reanalyse [ID] [thumbs] | retry [ID] | mode auto|full|background|hold | unwatch PATH\n");
+        std::printf("usage: himmel_ingest --send import PATH [watch] [OPTIONS] | import-list FILE [OPTIONS] | rescan [ID]\n"
+                    "                     | remove ID | relink ID|0 PATH [force] | reanalyse [ID] [thumbs] | retry [ID]\n"
+                    "                     | mode auto|full|background|hold | unwatch PATH | clear | library DIR [move] [force]\n"
+                    "  OPTIONS: dry (estimate only)  fit (queue what fits)  skip (skip known, removed too)\n"
+                    "           hapq  720 | max=H (largest height)  conform50 | conform60\n");
         return 2;
     }
     if (!ok) return std::printf("the path is too long\n"), 2;
@@ -777,9 +1281,30 @@ int send_command(int argc, char** argv) {
         while (ch.replies.pop(r))
             if (r.seq == seq) {
                 static const char* kNames[] = {"Ok", "Accepted", "UnknownType", "BadId", "BadPath", "Mismatch",
-                                               "Duplicate", "Failed", "Interrupted", "BadValue"};
-                std::printf("%s count=%d clip=%lld: %s\n", r.status < 10 ? kNames[r.status] : "?", r.count,
+                                               "Duplicate", "Failed", "Interrupted", "BadValue", "NoSpace", "Busy"};
+                std::printf("%s count=%d clip=%lld: %s\n", r.status < 12 ? kNames[r.status] : "?", r.count,
                             static_cast<long long>(r.clip), r.message);
+                if (verb == "import" || verb == "import-list") {
+                    library::IngestPlan plan{};
+                    if (protocol::seq_read(b->plan_seq, b->plan, plan) && plan.seq == seq)
+                        std::printf("plan: %u new, %u known, %u fit, need %.2f GB, queue %.2f GB, free %.2f GB, reserve %.2f GB\n",
+                                    plan.clips, plan.known, plan.fit_clips, plan.need_bytes / 1e9, plan.queue_bytes / 1e9,
+                                    plan.free_bytes / 1e9, plan.reserve_bytes / 1e9);
+                }
+                if (verb == "library" && r.status == 1) {  // follow the switch / move to its end
+                    for (int w = 0; w < 36000; ++w) {
+                        auto lr = std::make_unique<library::LibraryRoot>();
+                        if (protocol::seq_read(b->root_seq, b->root, *lr) && b->root_seq.load() > 0) {
+                            const auto st = static_cast<library::MoveState>(lr->move_state);
+                            if (w % 10 == 0 || st == library::MoveState::Done || st == library::MoveState::Failed)
+                                std::printf("library: state %u, %.0f %%, %s (in %s)\n", lr->move_state, lr->move_progress * 100.0,
+                                            lr->move_message, lr->path);
+                            if (st == library::MoveState::Done) return 0;
+                            if (st == library::MoveState::Failed) return 1;
+                        }
+                        Sleep(100);
+                    }
+                }
                 return r.status <= 1 ? 0 : 1;
             }
         Sleep(100);
@@ -832,6 +1357,13 @@ int main(int argc, char** argv) {
                 n += db.upsert(r) ? 1 : 0;
             }
             log("%d failed clip(s) queued again", n);
+        }
+        {
+            const auto d = ingest::disk_space(cfg.root);
+            log("disk: %s free of %s, %s kept free; the library uses %s; stored mode %s", ingest::human_bytes(d.free).c_str(),
+                ingest::human_bytes(d.total).c_str(), ingest::human_bytes(ingest::reserve_for(d.total, cfg.reserve_bytes)).c_str(),
+                ingest::human_bytes(ingest::library_bytes(cfg.root)).c_str(),
+                db.meta_get("mode").empty() ? "auto" : db.meta_get("mode").c_str());
         }
         log("status: %d clips, %d ready, %d failed, %d in progress", db.count(), db.count(static_cast<int>(State::Ready)),
             db.count(static_cast<int>(State::Failed)),

@@ -8,6 +8,7 @@
 #include <cstring>
 #include <ctime>
 #include <cwctype>
+#include <fstream>
 #include <map>
 
 #include <nlohmann/json.hpp>
@@ -109,7 +110,11 @@ std::string IngestOps::hash_of(const Candidate& c) {
 
 bool IngestOps::candidate_for(const fs::path& p, Candidate& out) { return candidate_from_path(p, out); }
 
-EnqueueResult IngestOps::enqueue(const Candidate& c, bool revive_removed) {
+library::IngestReply OpsHost::library_command(const IngestCommand&) {
+    return make_reply(IngestStatus::Failed, 0, 0, "this worker cannot switch or move the library");
+}
+
+EnqueueResult IngestOps::enqueue(const Candidate& c, bool revive_removed, const library::ImportOptions* opts) {
     EnqueueResult res;
     const std::string src = u8path(c.path);
     const std::string hash = hash_of(c);
@@ -131,6 +136,7 @@ EnqueueResult IngestOps::enqueue(const Candidate& c, bool revive_removed) {
             r.source = src;
             r.source_missing = false;
             r.play_path.clear(), r.still_path.clear(), r.thumb_path.clear();
+            r.import = opts ? *opts : library::ImportOptions{};
             if (!db_.upsert(r)) return res;
             host_.queue(r.id);
             res.queued = true;
@@ -155,6 +161,7 @@ EnqueueResult IngestOps::enqueue(const Candidate& c, bool revive_removed) {
     r.source = src;
     r.state = State::Queued;
     r.added_unix = static_cast<int64_t>(std::time(nullptr));
+    if (opts) r.import = *opts;
     if (!db_.upsert(r)) return res;
     host_.queue(r.id);
     res.id = r.id;
@@ -178,9 +185,16 @@ IngestReply IngestOps::apply(const IngestCommand& c) {
         if (must_exist && !fs::exists(p, ec)) return "the path does not exist";
         return nullptr;
     };
-    switch (static_cast<IngestCommandType>(c.type)) {
+    const auto type = static_cast<IngestCommandType>(c.type);
+    if (host_.moving() && type != IngestCommandType::Mode && type != IngestCommandType::Rescan)
+        return make_reply(IngestStatus::Busy, 0, c.clip, "the library is being moved; try again when the move is done");
+    switch (type) {
         case IngestCommandType::Import:
             if (const char* e = need_path(true)) return make_reply(IngestStatus::BadPath, 0, 0, "%s", e);
+            if (c.i != 0 && (c.i < 144 || c.i > 4320))
+                return make_reply(IngestStatus::BadValue, 0, 0, "the largest height must be 0 (keep) or 144..4320, not %d", c.i);
+            if (c.conform_hz != 0 && c.conform_hz != 50 && c.conform_hz != 60)
+                return make_reply(IngestStatus::BadValue, 0, 0, "frame-rate conform is 0, 50 or 60, not %u", c.conform_hz);
             return import_path(c, p);
         case IngestCommandType::Rescan:
             return rescan(c.clip);
@@ -197,28 +211,78 @@ IngestReply IngestOps::apply(const IngestCommand& c) {
             if (c.i < 0 || c.i > static_cast<int32_t>(library::IngestModeRequest::Hold))
                 return make_reply(IngestStatus::BadValue, 0, 0, "mode %d is out of range", c.i);
             host_.set_mode(static_cast<library::IngestModeRequest>(c.i));
+            {
+                static const char* kNames[] = {"auto", "full", "background", "hold"};
+                db_.meta_set("mode", kNames[c.i]);  // v3: survives a restart (D183)
+            }
             return make_reply(IngestStatus::Ok, 0, 0, "%s",
                               c.i == 0 ? "import mode: auto" : c.i == 1 ? "import mode: full speed" : c.i == 2 ? "import mode: background" : "import on hold");
         case IngestCommandType::Unwatch:
             if (const char* e = need_path(false)) return make_reply(IngestStatus::BadPath, 0, 0, "%s", e);
             return unwatch(p);
+        case IngestCommandType::ClearQueue:
+            return clear_queue();
+        case IngestCommandType::Library:
+            if (const char* e = need_path(false)) return make_reply(IngestStatus::BadPath, 0, 0, "%s", e);
+            return host_.library_command(c);
     }
     return make_reply(IngestStatus::UnknownType, 0, 0, "ingest command %u is not used yet", c.type);
+}
+
+bool IngestOps::gather(const IngestCommand& c, const fs::path& p, std::vector<Candidate>& out, std::string& why) {
+    auto inside_library = [&](const fs::path& q) {
+        for (const auto& sk : skip_folders())
+            if (same_path(q, sk) || key_of(q).rfind(key_of(sk) + L"\\", 0) == 0) return true;
+        return false;
+    };
+    auto add = [&](const fs::path& q) {
+        std::error_code ec;
+        if (inside_library(q)) return;
+        Candidate one;
+        if (candidate_for(q, one)) out.push_back(std::move(one));  // a file, or a folder that is one image sequence
+        else if (fs::is_directory(q, ec))
+            for (auto& cand : scan_folder(q, skip_folders())) out.push_back(std::move(cand));
+    };
+    if (c.flags & library::kIngestList) {
+        // v3: "only this selection": one absolute path per line (library-db.md §11.4).
+        std::ifstream in(p, std::ios::binary);
+        if (!in) return why = "cannot read the list file", false;
+        std::string line;
+        int lines = 0, bad = 0;
+        while (lines < 10000 && std::getline(in, line)) {
+            while (!line.empty() && (line.back() == '\r' || line.back() == '\n' || line.back() == ' ')) line.pop_back();
+            if (lines == 0 && line.size() >= 3 && static_cast<unsigned char>(line[0]) == 0xEF &&
+                static_cast<unsigned char>(line[1]) == 0xBB && static_cast<unsigned char>(line[2]) == 0xBF)
+                line.erase(0, 3);  // a UTF-8 BOM
+            ++lines;
+            if (line.empty() || line[0] == '#') continue;
+            const fs::path q = from_utf8(line);
+            std::error_code ec;
+            if (!q.is_absolute() || !fs::exists(q, ec)) {
+                ++bad;
+                continue;
+            }
+            add(q);
+        }
+        if (out.empty()) return why = bad ? "none of the listed files exist" : "the list has nothing importable", false;
+        return true;
+    }
+    if (inside_library(p)) return why = "that is inside the library's own folders", false;
+    add(p);
+    return true;
 }
 
 IngestReply IngestOps::import_path(const IngestCommand& c, const fs::path& p) {
     std::error_code ec;
     const bool dir = fs::is_directory(p, ec);
     const bool watch = (c.flags & library::kIngestWatch) != 0;
-    if (watch && !dir) return make_reply(IngestStatus::BadPath, 0, 0, "only a folder can be watched");
-    for (const auto& s : skip_folders())
-        if (same_path(p, s) || key_of(p).rfind(key_of(s) + L"\\", 0) == 0)
-            return make_reply(IngestStatus::BadPath, 0, 0, "that is inside the library's own folders");
+    const bool list = (c.flags & library::kIngestList) != 0;
+    const bool dry = (c.flags & library::kIngestDryRun) != 0;
+    if (watch && (!dir || list)) return make_reply(IngestStatus::BadPath, 0, 0, "only a folder can be watched");
     std::vector<Candidate> cands;
-    Candidate one;
-    if (candidate_for(p, one)) cands.push_back(std::move(one));  // a file, or a folder that is one image sequence
-    else if (dir) cands = scan_folder(p, skip_folders());
-    if (watch) {
+    std::string why;
+    if (!gather(c, p, cands, why)) return make_reply(IngestStatus::BadPath, 0, 0, "%s", why.c_str());
+    if (watch && !dry) {
         auto stored = json_list("watch");
         const auto all = watch_folders();
         if (std::none_of(all.begin(), all.end(), [&](const fs::path& q) { return same_path(p, q); })) {
@@ -230,21 +294,159 @@ IngestReply IngestOps::import_path(const IngestCommand& c, const fs::path& p) {
     if (cands.empty())
         return watch ? make_reply(IngestStatus::Ok, 0, 0, "watching the folder; nothing to import yet")
                      : make_reply(IngestStatus::BadPath, 0, 0, "nothing importable there");
-    int queued = 0;
-    int64_t first = 0;
-    std::string known_name;
+
+    // v3: the options, and which candidates are new work (library-db.md §11.1, §11.4).
+    library::ImportOptions opts;
+    opts.max_h = c.i;
+    opts.codec = (c.flags & library::kIngestHapQ) ? "hap_q" : "";
+    opts.conform_hz = static_cast<int>(c.conform_hz);
+    const bool skip_known = (c.flags & library::kIngestSkipKnown) != 0;
+    struct Work {
+        const Candidate* cand;
+        int64_t bytes;
+    };
+    std::vector<Work> work;
+    std::vector<const Candidate*> known;
+    int unreadable = 0;
+    uint64_t need = 0;
     for (const auto& cand : cands) {
-        const auto res = enqueue(cand, true);
+        const std::string h = hash_of(cand);
+        if (h.empty()) {
+            ++unreadable;
+            continue;
+        }
+        ClipRecord r;
+        if (db_.find_by_hash(h, r) && (r.state != State::Removed || skip_known)) {
+            known.push_back(&cand);
+            continue;
+        }
+        int64_t b = kSideBytes;
+        host_.estimate(cand, opts, b);
+        work.push_back({&cand, b});
+        need += static_cast<uint64_t>(b);
+    }
+
+    // The plan: does it fit above the reserve, and how much of it does?
+    const DiskSpace d = host_.disk();
+    const uint64_t queue = queue_need();
+    const uint64_t reserve = d.known ? host_.reserve(d.total) : 0;
+    library::IngestPlan plan{};
+    plan.seq = c.seq;
+    plan.dry_run = dry ? 1 : 0;
+    plan.clips = static_cast<uint32_t>(work.size());
+    plan.known = static_cast<uint32_t>(known.size());
+    plan.need_bytes = need;
+    plan.queue_bytes = queue;
+    plan.free_bytes = d.free;
+    plan.reserve_bytes = reserve;
+    uint64_t acc = 0;
+    for (const auto& w : work) {
+        // GUESS (high): an unknown disk (GetDiskFreeSpaceEx failed) is not guarded.
+        if (d.known && !fits(d.free, queue, acc + static_cast<uint64_t>(w.bytes), reserve)) break;
+        acc += static_cast<uint64_t>(w.bytes);
+        ++plan.fit_clips;
+    }
+    plan.fits = plan.fit_clips == plan.clips ? 1 : 0;
+    const bool fit_only = (c.flags & library::kIngestFit) != 0;
+    plan.refused = (!dry && !plan.fits && !fit_only) ? 1 : 0;
+    const std::string known_txt = known.empty() ? std::string() : ", " + std::to_string(known.size()) + " already in the library";
+    if (d.known)
+        std::snprintf(plan.message, sizeof(plan.message), "needs ~%s for %u clip%s; %s free, %s kept free; %u fit%s",
+                      human_bytes(need).c_str(), plan.clips, plan.clips == 1 ? "" : "s", human_bytes(d.free).c_str(),
+                      human_bytes(reserve).c_str(), plan.fit_clips, known_txt.c_str());
+    else
+        std::snprintf(plan.message, sizeof(plan.message), "needs ~%s for %u clip%s (free space unknown)%s",
+                      human_bytes(need).c_str(), plan.clips, plan.clips == 1 ? "" : "s", known_txt.c_str());
+    host_.on_plan(plan);
+    if (dry) return make_reply(IngestStatus::Ok, static_cast<int32_t>(work.size()), 0, "%s", plan.message);
+    if (plan.refused) return make_reply(IngestStatus::NoSpace, 0, 0, "not enough disk space: %s", plan.message);
+
+    int queued = 0;
+    int64_t first = 0, first_known = 0;
+    for (const Candidate* k : known) {  // as in v2: a moved original is noted, an unfinished one queued again
+        const auto res = enqueue(*k, false);
+        if (!first_known) first_known = res.id;
+    }
+    for (uint32_t i = 0; i < plan.fit_clips; ++i) {
+        library::ImportOptions o = opts;
+        o.est_bytes = work[i].bytes;
+        const auto res = enqueue(*work[i].cand, true, &o);
         if (res.queued) ++queued;
-        if (!first) first = res.id;
-        if (res.known && !res.queued && known_name.empty()) {
-            ClipRecord r;
-            if (db_.get(res.id, r)) known_name = r.name;
+        if (!first && res.id) first = res.id;
+    }
+    if (!first) first = first_known;
+    if (cands.size() == 1 && queued == 0 && !known.empty()) {
+        ClipRecord r;
+        if (db_.get(first, r)) return make_reply(IngestStatus::Accepted, 0, first, "already in the library as \"%s\"", r.name.c_str());
+    }
+    if (plan.fit_clips < plan.clips)
+        return make_reply(IngestStatus::Accepted, queued, first, "queued %d of %u new; the rest does not fit (%s)", queued, plan.clips,
+                          plan.message);
+    return make_reply(IngestStatus::Accepted, queued, first, "queued %d of %zu%s%s", queued, cands.size(), known_txt.c_str(),
+                      unreadable ? " (some could not be read)" : "");
+}
+
+EnqueueResult IngestOps::enqueue_scanned(const Candidate& c) {
+    const std::string h = hash_of(c);
+    ClipRecord r;
+    if (h.empty() || db_.find_by_hash(h, r)) return enqueue(c, false);
+    library::ImportOptions o;
+    int64_t b = kSideBytes;
+    host_.estimate(c, o, b);
+    const DiskSpace d = host_.disk();
+    if (d.known && !fits(d.free, queue_need(), static_cast<uint64_t>(b), host_.reserve(d.total))) {
+        EnqueueResult res;
+        res.no_space = true;
+        res.est_bytes = b;
+        return res;
+    }
+    o.est_bytes = b;
+    auto res = enqueue(c, false, &o);
+    res.est_bytes = b;
+    return res;
+}
+
+uint64_t IngestOps::queue_need() {
+    uint64_t n = 0;
+    for (State st : {State::Queued, State::Probing, State::Converting, State::Analysing})
+        for (const auto& r : db_.list(static_cast<int>(st)))
+            if (!(r.stage_done & library::kStageConvert))
+                n += static_cast<uint64_t>(std::max<int64_t>(r.import.est_bytes, kSideBytes));
+    return n;
+}
+
+library::IngestModeRequest IngestOps::stored_mode(library::LibraryDb& db) {
+    const std::string m = db.meta_get("mode");
+    return m == "full"         ? library::IngestModeRequest::Full
+           : m == "background" ? library::IngestModeRequest::Background
+           : m == "hold"       ? library::IngestModeRequest::Hold
+                               : library::IngestModeRequest::Auto;
+}
+
+IngestReply IngestOps::clear_queue() {
+    int n = 0, back = 0;
+    for (State st : {State::Queued, State::Probing, State::Converting, State::Analysing}) {
+        for (auto& r : db_.list(static_cast<int>(st))) {
+            host_.unqueue(r.id);
+            if (r.ready_order > 0 && (r.stage_done & library::kStageConvert)) {
+                // A ready clip that was only being re-analysed: back to ready with its old analysis.
+                r.state = State::Ready;
+                r.stage_done |= library::kStageAnalyse | library::kStageThumbs;
+                if (db_.upsert(r)) ++back;
+                continue;
+            }
+            delete_derived(r);
+            r.state = State::Removed;  // a tombstone: the scan does not bring it back (§10)
+            r.stage_done = 0;
+            r.error.clear();
+            r.play_path.clear(), r.still_path.clear(), r.thumb_path.clear();
+            if (db_.upsert(r)) ++n;
         }
     }
-    if (cands.size() == 1 && queued == 0 && !known_name.empty())
-        return make_reply(IngestStatus::Accepted, 0, first, "already in the library as \"%s\"", known_name.c_str());
-    return make_reply(IngestStatus::Accepted, queued, first, "queued %d of %zu", queued, cands.size());
+    if (n || back) changed_ = true;
+    if (back)
+        return make_reply(IngestStatus::Ok, n, 0, "cleared %d clip%s from the queue (%d re-analysis stopped)", n, n == 1 ? "" : "s", back);
+    return make_reply(IngestStatus::Ok, n, 0, "cleared %d clip%s from the queue", n, n == 1 ? "" : "s");
 }
 
 int IngestOps::check_source(ClipRecord& r) {
@@ -510,6 +712,10 @@ bool IngestOps::touches(const IngestCommand& c, int64_t current, bool& cancel) {
         case IngestCommandType::Reanalyse:
         case IngestCommandType::Retry:
             return c.clip == current;
+        case IngestCommandType::ClearQueue:  // v3: the running import is cleared too
+        case IngestCommandType::Library:     // v3: a switch / move starts between files
+            cancel = true;
+            return true;
         default:
             return false;
     }
