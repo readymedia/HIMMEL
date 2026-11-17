@@ -374,6 +374,7 @@ json panels_library_clips() {
     auto rows = db.list(-1, 0, 2000);
     std::sort(rows.begin(), rows.end(), [](const auto& a, const auto& b) { return a.id > b.id; });
     for (const auto& r : rows) {
+        if (r.state == library::State::Removed) continue;   // v2 tombstones are never shown (library-db.md §3)
         const auto& a = r.analysis;
         json c;
         c["id"] = r.id;
@@ -382,6 +383,7 @@ json panels_library_clips() {
         c["kind"] = library::kind_name(r.kind);
         c["state"] = library::state_name(r.state);
         c["error"] = r.error;
+        c["source_missing"] = r.source_missing;   // v2: the original is gone (the clip still plays)
         c["source"] = r.source;
         c["codec"] = r.codec;
         c["size"] = {r.width, r.height};
