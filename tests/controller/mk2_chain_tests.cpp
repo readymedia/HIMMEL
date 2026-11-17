@@ -308,10 +308,12 @@ int main() {
         for (int i = 0; i < 24; ++i) tap(*a, i % 2 ? Button::GroupB : Button::GroupC);
         eng.run_until(b, [] { return false; }, 100);
         CHECK(eng.focus_cmds - before == 24);
-        // Wheel = T-bar, knob 1 = opacity of the focused layer.
+        // Wheel = T-bar; on the LAYER page (PAGE > twice, M4) knob 1 = opacity of the focused layer.
         a->wheel(3);
         CHECK(eng.run_until(b, [&] { return std::fabs(eng.live->crossfader - 0.1f) < 0.01f; }));
         const float op0 = eng.live->deck[eng.live->focus_deck].layer[eng.live->focus_layer].opacity;
+        tap(*a, Button::PageRight);
+        tap(*a, Button::PageRight);
         a->turn(0, -250);
         CHECK(eng.run_until(b, [&] { return eng.live->deck[eng.live->focus_deck].layer[eng.live->focus_layer].opacity < op0 - 0.2f; }));
         // The engine's LEDs and screens come back to the simulator.
