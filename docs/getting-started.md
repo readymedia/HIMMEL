@@ -125,6 +125,7 @@ Everything after `--` goes to the renderer:
 | `--resolution 720p\|1080p\|1440p\|4k\|custom` | The canvas size of each output (default: 1080p in full screen, `--size` in windows). Clips are scaled on the GPU, never re-encoded. |
 | `--refresh 60\|50\|59.94\|30\|25` | Output refresh in full screen (default 60; the display mode is switched for the show and put back when Himmel exits). Clips play at their own frame rate. |
 | `--mode span\|mirror` | Span: one canvas across all outputs. Mirror: every output shows the whole canvas. |
+| `--spout NAME` | Send MAIN as a Spout sender called NAME (to Resolume, OBS, a recorder …). Off by default. |
 | `--blend PX`, `--blend-gamma G` | Projector edge blend: neighbours overlap by PX canvas pixels, ramps with gamma G (2.2). |
 | `--clip file.mov` | Add a clip to the playlist (repeatable). Default: every `.mov` under `media/`. |
 | `--camera NAME`, `--camera-index N`, `--no-camera` | Pick the webcam (part of its name, or its index), or none. Default: the first camera that is not an IR camera. |

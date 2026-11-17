@@ -45,7 +45,13 @@ public:
 
     // ---- commands (slot = the layer slot DeckModel resolved, -1 if none) ----
     protocol::Reject validate(const protocol::Command& c, int layer_slot) const;
-    void apply(const protocol::Command& c, int layer_slot, uint64_t now_us);
+    // `producer` = the slot that sent it (-1 = local, e.g. the M key): a held IDENTIFY
+    // (i = 2) belongs to it, and is released when that producer goes quiet.
+    void apply(const protocol::Command& c, int layer_slot, uint64_t now_us, int producer = -1);
+    // A producer has had no heartbeat for 2 s: if it holds IDENTIFY, let go (fade out), so an
+    // output never sticks in IDENTIFY because a GUI or a weapon died while holding it.
+    void producer_quiet(int producer, uint64_t now_us);
+    int identify_holder() const { return ident_holder_; }
 
     // ---- layout ----
     int count() const { return setup_.count; }
@@ -107,6 +113,7 @@ private:
     // IDENTIFY: on at on_us, fade-out starts at off_us (0 = held until Identify 0).
     uint64_t ident_on_us_ = 0, ident_off_us_ = 0;
     bool ident_active_ = false;
+    int ident_holder_ = -1;  // the producer holding IDENTIFY (i = 2), -1 = none
 };
 
 // ---- display identity (operations.md §1) ------------------------------------

@@ -14,6 +14,7 @@ copied into this repository except their license texts in [`licenses/`](licenses
 | [hidapi](https://github.com/libusb/hidapi) (libusb project) | 0.14.0 | Your choice of GPLv3, **BSD-style** or the original HIDAPI license. We use it under the **BSD-style** license. | USB HID access to the Maschine MK2 (`mk2_controller.exe`) | [`licenses/hidapi-LICENSE.txt`](licenses/hidapi-LICENSE.txt), [`licenses/hidapi-LICENSE-bsd.txt`](licenses/hidapi-LICENSE-bsd.txt) |
 | [nlohmann/json](https://github.com/nlohmann/json) by Niels Lohmann | 3.11.3 | MIT | Reading `maschine_mk2_map.json` (later: shows, presets) | [`licenses/nlohmann-json-LICENSE.MIT`](licenses/nlohmann-json-LICENSE.MIT) |
 | [Snappy](https://github.com/google/snappy) by Google | 1.2.1 | BSD-3-Clause | HAP's second-stage decompression (`src/media/src/hap.cpp`) | [`licenses/snappy-COPYING.txt`](licenses/snappy-COPYING.txt) |
+| [Spout 2](https://github.com/leadedge/Spout2) (SpoutDX) by Lynn Jarvis (spout.zeal.co) | 2.007h (commit `7d32b05`) | BSD-2-Clause | Spout out: MAIN as a DX11 Spout sender (`himmel_render --spout NAME`, `src/engine/src/spout_out.cpp`). Only SpoutDX and the SpoutGL helper files it includes are compiled (no OpenGL part); fetched by CMake, never stored in this repo | [`licenses/spout2-LICENSE.txt`](licenses/spout2-LICENSE.txt) |
 
 If you ship Himmel binaries, ship these license texts with them (the BSD and
 MIT licenses ask for that).

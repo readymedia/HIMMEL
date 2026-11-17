@@ -11,6 +11,13 @@ Six streams of small BGRA8 pictures (top-down rows, stride = width × 4, at most
 `width` / `height` (the canvas aspect inside 480 × 270), `fps_target`
 (15–30), and 3 buffers with their own seqlock. ~9.3 MB in all.
 
+**Aspect (M6, 2026-11-17).** `DeckA`, `DeckB` and `Main` are sent at the
+**canvas** aspect: with 3 outputs spanned, that is a wide strip (e.g.
+2880 × 540 → 480 × 90). `Output1..3` are sent at their own output's aspect.
+A reader must keep the aspect from `width` / `height`. The web GUI
+letterboxes them (`object-fit: contain` on `.monitor canvas`) and never
+stretches them into its 16:9 boxes.
+
 ## 2. Writing it without hurting the frame (ENGINE)
 
 - One downsample pass per active stream into a small render target, then

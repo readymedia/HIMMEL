@@ -156,7 +156,7 @@ The enums are in `outputs.h`. Types 37–69 are not used yet and are refused as
 | Type | Targets | Argument | Notes |
 |---|---|---|---|
 | `OutputBlack` (70) | `slot` = output 0..7 (`kNone` = all) | `i` = Toggle value | black per output (a cut); master `Black` still applies |
-| `Identify` (71) | — | `i` = 0 off (fade out), 1 = 5 s, 2 = until 0 (held) | 0.5 s fade in / out; drawn over the show |
+| `Identify` (71) | — | `i` = 0 off (fade out), 1 = 5 s, 2 = until 0 (held) | 0.5 s fade in / out; drawn over the show. A held IDENTIFY belongs to the producer that sent it; when that producer has no heartbeat for 2 s it is let go (fade out), so an output never sticks in IDENTIFY. `himmel_cmd identify hold` therefore lasts ~2 s after the tool exits |
 | `LayerPlace` (72) | deck (or `kHitDeck`), layer | `i` = `Place` (FillAll, Out, Fit, Free); `param` = output (Out); `f[0..3]` = x, y, w, h on the canvas 0..1 (Free; w, h > 0) | Out n with n ≥ the output count is refused (`BadTarget`) |
 | `OutputConfig` (73) | `slot` = output (`kNone` = all) | `param` = `OutputParam`: Resolution (`i` = preset; a setup action, rebuilds the canvas), Refresh (`i` = `RefreshRate`), BlendWidth (`i` px 0..1024), BlendGamma (`f[0]` 1..3, clamped), Mode (`i` = span / mirror), Adopt (`slot`; `i` = 1 take the new display), SimLost (`slot`; `i` = 1 act as if the cable was pulled, 0 back: tests on one screen) | |
 
