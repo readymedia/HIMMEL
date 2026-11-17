@@ -30,20 +30,45 @@ inline constexpr int kMaxVariations = 8;   // a .. h
 inline constexpr int kUndoDepth = 64;      // D72
 inline constexpr int kDiceHistory = 64;    // per deck (presets-and-shuffle.md §2)
 
+// One FX knob's audio reaction as a look stores it (D131), in FxReact terms
+// (command-protocol.md section 4d). Canonical form, so two looks compare bitwise:
+// Default (the effect's own reaction) and Off keep every other field zero; only
+// Custom fills them. All zero = Default, so an old look has no reactions.
+struct ReactKnob {
+    uint8_t source;        // proto::ReactSource
+    uint8_t signal;        // proto::ReactSignal
+    uint8_t mode;          // proto::ReactMode
+    uint8_t curve;         // proto::ReactCurve
+    uint8_t quantise;      // proto::ReactQuantise
+    uint8_t hold_q;        // TRIGGER hold in quarter beats 0..kReactHoldMax
+    uint8_t ranged;        // 1 = range_lo / hi set with FxReact Range; 0 = the param's good range
+    uint8_t reserved;
+    float amount;          // -1..1
+    float attack_ms, release_ms;
+    float threshold;
+    float range_lo, range_hi;   // 0 when !ranged
+};
+struct ReactRow {
+    ReactKnob k[proto::kReactParams];   // one per FX knob 1-4 of the slot
+};
+
 // One deck as a scene stores it: 4 layers (source, mix, transport settings, FX)
-// plus the deck FX. Status fields (position, missing, playing, playhead status)
-// are always zero in a Look.
+// plus the deck FX, and each FX slot's knob reactions. Status fields (position,
+// missing, playing, playhead status) are always zero in a Look.
 struct Look {
     proto::LayerState layer[kLayers];
     proto::LayerTransport transport[kLayers];
     proto::FxSlotState fx[proto::kFxSlots];
     char clip_name[kLayers][proto::kNameLen];   // the clip's name ("" = empty); kept when the clip is missing
+    ReactRow layer_react[kLayers][proto::kFxSlots];   // = layer[l].fx[s]
+    ReactRow fx_react[proto::kFxSlots];               // = fx[s]
 };
 
 // What both decks and the master hold: the undo stack, the journal and live.json.
 struct LiveSnapshot {
     Look deck[proto::kDecks];
     proto::FxSlotState master_fx[proto::kFxSlots];
+    ReactRow master_react[proto::kFxSlots];
     float crossfader;
     uint8_t program_deck;
     uint8_t black;
@@ -152,10 +177,18 @@ int main_of(const ShowData& s, int scene);        // the main scene of a variati
 int scene_count(const ShowData& s);
 
 // Deck model state -> Look / LiveSnapshot (status fields zeroed, clip names from the catalog).
+// `react` = the model's reaction table (nullptr = every knob Default).
 void look_from_live(const proto::LiveState& live, const proto::TransportSection& tr, const proto::Catalog& cat,
-                    int deck, Look& out);
+                    int deck, Look& out, const proto::ReactionSection* react = nullptr);
 void snapshot_from_live(const proto::LiveState& live, const proto::TransportSection& tr, const proto::Catalog& cat,
-                        LiveSnapshot& out);
+                        LiveSnapshot& out, const proto::ReactionSection* react = nullptr);
+
+// One reaction table entry -> its canonical stored form (ReactKnob).
+void react_from_entry(const proto::ReactionEntry& e, ReactKnob& out);
+void react_from_row(const proto::SlotReactions& row, int effect, ReactRow& out);   // effect < 0: all Default
+// A slot whose effect changed between `ref` and `look` gets Default reactions
+// (FxSet resets them; the dice uses this).
+void reset_changed_react(Look& look, const Look& ref);
 bool same_look(const Look& a, const Look& b);    // settings only (bitwise on the zeroed form)
 
 // Copy a NUL-terminated string into a fixed buffer (always terminated).

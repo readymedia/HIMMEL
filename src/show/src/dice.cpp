@@ -133,7 +133,8 @@ uint32_t param_lock(const char* n) {
     return 0;
 }
 
-void dice_roll(const Look& cur, Look& out, const Catalog& cat, uint32_t locks, DiceScope scope, uint64_t seed) {
+namespace {
+void roll(const Look& cur, Look& out, const Catalog& cat, uint32_t locks, DiceScope scope, uint64_t seed) {
     out = cur;
     Rng r{mix64(seed ^ 0xD1CE0000ull)};
     if (scope.layer < 0 && scope.slot >= 0) {  // a deck FX slot
@@ -153,6 +154,12 @@ void dice_roll(const Look& cur, Look& out, const Catalog& cat, uint32_t locks, D
     const int count = kCounts[r.below(7)];
     for (int l = 0; l < kLayers; ++l) roll_layer(out, cur, l, cat, locks, r, l < count);
     for (int s = 0; s < kFxSlots; ++s) roll_slot(out.fx[s], cur.fx[s], cat, locks, r, s == 0 ? 0.3f : 0.0f);
+}
+}  // namespace
+
+void dice_roll(const Look& cur, Look& out, const Catalog& cat, uint32_t locks, DiceScope scope, uint64_t seed) {
+    roll(cur, out, cat, locks, scope, seed);
+    reset_changed_react(out, cur);  // a new effect brings its own (Default) reactions, like FxSet (D131)
 }
 
 void dice_mutate(const Look& cur, Look& out, const Catalog& cat, uint32_t locks, DiceScope scope, uint64_t seed,

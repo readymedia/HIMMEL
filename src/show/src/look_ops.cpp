@@ -91,6 +91,12 @@ void diff_transport(const LayerTransport& a, const LayerTransport& b, int d, int
     if (a.seed != b.seed) out.push(set_cmd(d, l, LayerParam::Seed, static_cast<int32_t>(b.seed), 0.0f));
 }
 
+bool same_set(const ReactKnob& a, const ReactKnob& b) {
+    return a.signal == b.signal && a.mode == b.mode && a.curve == b.curve && a.quantise == b.quantise &&
+           a.hold_q == b.hold_q && !differ(a.amount, b.amount) && !differ(a.attack_ms, b.attack_ms) &&
+           !differ(a.release_ms, b.release_ms) && !differ(a.threshold, b.threshold);
+}
+
 bool ieq(const char* a, const char* b) {
     for (; *a && *b; ++a, ++b)
         if (std::tolower(static_cast<unsigned char>(*a)) != std::tolower(static_cast<unsigned char>(*b))) return false;
@@ -100,6 +106,48 @@ bool ieq(const char* a, const char* b) {
 float lerpf(float a, float b, float t) { return a + (b - a) * t; }
 
 }  // namespace
+
+void diff_react(const ReactRow& cur0, const ReactRow& want, bool effect_changed, int effect, uint8_t deck,
+                uint8_t layer, uint8_t slot, const Catalog& cat, CommandList& out) {
+    if (effect < 0 || effect >= static_cast<int>(cat.effect_count)) return;
+    const int n = cat.effect[effect].param_count < kReactParams ? cat.effect[effect].param_count : kReactParams;
+    constexpr auto kDefault = static_cast<uint8_t>(ReactSource::Default);
+    constexpr auto kOffSrc = static_cast<uint8_t>(ReactSource::Off);
+    constexpr auto kCustom = static_cast<uint8_t>(ReactSource::Custom);
+    for (int p = 0; p < n; ++p) {
+        ReactKnob c{};  // all zero = Default (after an FxSet)
+        if (!effect_changed) c = cur0.k[p];
+        const ReactKnob& w = want.k[p];
+        if (std::memcmp(&c, &w, sizeof(c)) == 0) continue;
+        const auto knob = static_cast<uint8_t>(p);
+        ReactArgs a;
+        if (w.source == kOffSrc || w.source != kCustom) {
+            a.op = w.source == kOffSrc ? ReactOp::Off : ReactOp::Default;
+            if (c.source != w.source) out.push(make_react(deck, layer, slot, knob, a));
+            continue;
+        }
+        // Custom: Set (keeps the range), then the range when it differs or is not known (from Off).
+        if (c.source != kCustom || !same_set(c, w)) {
+            a.op = ReactOp::Set;
+            a.signal = static_cast<ReactSignal>(w.signal);
+            a.mode = static_cast<ReactMode>(w.mode);
+            a.curve = static_cast<ReactCurve>(w.curve);
+            a.quantise = static_cast<ReactQuantise>(w.quantise);
+            a.hold_q = w.hold_q;
+            Command x = make_react(deck, layer, slot, knob, a, w.amount);
+            x.f[1] = w.attack_ms, x.f[2] = w.release_ms, x.f[3] = w.threshold;
+            out.push(x);
+        }
+        const bool range_known = c.source == kCustom || c.source == kDefault;  // Default = the param's good range
+        const bool range_same = c.ranged == w.ranged && (!w.ranged || (!differ(c.range_lo, w.range_lo) && !differ(c.range_hi, w.range_hi)));
+        if (!range_known || !range_same) {
+            a.op = ReactOp::Range;
+            Command x = make_react(deck, layer, slot, knob, a, w.ranged ? w.range_lo : -1.0f);
+            x.f[1] = w.ranged ? w.range_hi : 0.0f;
+            out.push(x);
+        }
+    }
+}
 
 void diff_look(const Look& cur, const Look& target, int deck, const Catalog& cat, CommandList& out, uint32_t parts,
                uint32_t layer_mask, bool with_deck_fx) {
@@ -123,11 +171,28 @@ void diff_look(const Look& cur, const Look& target, int deck, const Catalog& cat
     }
     if (with_deck_fx && (parts & kDiffFx))
         for (int s = 0; s < kFxSlots; ++s) diff_slot(cur.fx[s], target.fx[s], d, kNone, static_cast<uint8_t>(s), cat, out);
+    // Reactions last (D131): every FxSet above has reset its slot to Default by now.
+    if (!(parts & kDiffFx)) return;
+    for (int l = 0; l < kLayers; ++l) {
+        if (!(layer_mask & (1u << l))) continue;
+        for (int s = 0; s < kFxSlots; ++s) {
+            const int e = target.layer[l].fx[s].effect;
+            diff_react(cur.layer_react[l][s], target.layer_react[l][s], cur.layer[l].fx[s].effect != e, e, d,
+                       static_cast<uint8_t>(l), static_cast<uint8_t>(s), cat, out);
+        }
+    }
+    if (with_deck_fx)
+        for (int s = 0; s < kFxSlots; ++s)
+            diff_react(cur.fx_react[s], target.fx_react[s], cur.fx[s].effect != target.fx[s].effect, target.fx[s].effect, d,
+                       kNone, static_cast<uint8_t>(s), cat, out);
 }
 
-void diff_master(const FxSlotState cur[kFxSlots], const FxSlotState target[kFxSlots], const Catalog& cat,
-                 CommandList& out) {
+void diff_master(const FxSlotState cur[kFxSlots], const ReactRow cur_react[kFxSlots], const FxSlotState target[kFxSlots],
+                 const ReactRow target_react[kFxSlots], const Catalog& cat, CommandList& out) {
     for (int s = 0; s < kFxSlots; ++s) diff_slot(cur[s], target[s], kMasterDeck, kNone, static_cast<uint8_t>(s), cat, out);
+    for (int s = 0; s < kFxSlots; ++s)
+        diff_react(cur_react[s], target_react[s], cur[s].effect != target[s].effect, target[s].effect, kMasterDeck, kNone,
+                   static_cast<uint8_t>(s), cat, out);
 }
 
 void lerp_look(const Look& a, const Look& b, float t, Look& out) {

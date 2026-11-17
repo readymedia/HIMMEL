@@ -43,6 +43,13 @@ every second). Writers: `status` = the render process's frame loop only,
   never used. Commands that take a text: `Project SaveAs` / `Relink` /
   `Export` (`i` ≠ 0) / `Open` (`slot` = `kNone`), `SongEdit New` (`i` ≠ 0) /
   `Rename` / `RenameScene`, `MacroSet` rename (`param` = `kNone`).
+- **Knob reactions (D131).** A scene's look includes its FX slots' knob
+  reactions (Default / Custom / Off, `show-files.md` §2). Recall, reset,
+  undo and dice set them with ordinary `FxReact` commands on slot 4, after
+  the look's `FxSet`s, so a reader sees them in the state block's
+  `ReactionSection` (`engine-state.md`), not here. A deck's `edited` flag
+  also turns on when a reaction differs from its scene. The block layout is
+  unchanged (version 1).
 - **Messages.** `status.message` is short and meant for a screen line
   ("3c saved", "Saved My Show", "Autosave 22:41 restored"); `message_seq`
   bumps on each new one, so a reader can show it once.

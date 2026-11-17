@@ -28,6 +28,12 @@ into the drain loop), reachable through commands 25–36 and the new block
   `Local\HimmelShow`; args `--project`, `--no-show-files`, `--show-root`.
   `deck_model.cpp`: command names for logs only (slot 4 is rate limited like
   everyone; the runtime caps itself at 384 commands per frame, LEAD 2026-11-17).
+- Wave 6 (2026-11-17, branch `claude/show-reactions`): looks keep the knob
+  reactions (D131). `ReactKnob` / `ReactRow` in `model.h` (canonical:
+  Default and Off zero the rest), `diff_react` in `look_ops.cpp` (FxReact
+  after every FxSet, Set + Range), `"react"` per FX slot in the files, old
+  files = Default, journal version 2, dice resets a re-rolled slot's
+  reactions. `show_tests` `test_reactions`.
 - LEAD conditions (2026-11-17) done: ranges 25–39 / slot 4 / D109–D119,
   `show-block.md` with the text-id handshake, layout `static_assert`s in
   `protocol_tests`, the four render_main hooks marked `SHOW (M3) hook n/4`.

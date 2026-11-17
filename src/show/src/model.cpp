@@ -2,6 +2,7 @@
 // Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 #include "himmel/show/model.h"
 
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 
@@ -154,7 +155,51 @@ int scene_count(const ShowData& s) {
     return n;
 }
 
-void look_from_live(const LiveState& live, const TransportSection& tr, const Catalog& cat, int deck, Look& out) {
+void react_from_entry(const ReactionEntry& e, ReactKnob& out) {
+    std::memset(&out, 0, sizeof(out));
+    out.source = e.source;
+    if (e.source == static_cast<uint8_t>(ReactSource::Off)) return;
+    if (e.source != static_cast<uint8_t>(ReactSource::Custom)) {
+        out.source = static_cast<uint8_t>(ReactSource::Default);
+        return;
+    }
+    out.signal = e.signal;
+    out.mode = e.mode;
+    out.curve = e.curve;
+    int q = 0;
+    for (int i = 1; i < static_cast<int>(ReactQuantise::Count); ++i)
+        if (std::fabs(e.quantise_beats - kReactQuantiseBeats[i]) < 1e-3f) q = i;
+    out.quantise = static_cast<uint8_t>(q);
+    const long h = std::lround(e.hold_beats * 4.0f);
+    out.hold_q = static_cast<uint8_t>(h < 0 ? 0 : (h > kReactHoldMax ? kReactHoldMax : h));
+    out.amount = e.amount;
+    out.attack_ms = e.attack_ms;
+    out.release_ms = e.release_ms;
+    out.threshold = e.threshold;
+    if (e.flags & kReactRangeSet) {
+        out.ranged = 1;
+        out.range_lo = e.range_lo;
+        out.range_hi = e.range_hi;
+    }
+}
+
+void react_from_row(const SlotReactions& row, int effect, ReactRow& out) {
+    std::memset(&out, 0, sizeof(out));
+    if (effect < 0) return;
+    for (int p = 0; p < kReactParams; ++p) react_from_entry(row.p[p], out.k[p]);
+}
+
+void reset_changed_react(Look& look, const Look& ref) {
+    for (int l = 0; l < kLayers; ++l)
+        for (int s = 0; s < kFxSlots; ++s)
+            if (look.layer[l].fx[s].effect != ref.layer[l].fx[s].effect)
+                std::memset(&look.layer_react[l][s], 0, sizeof(ReactRow));
+    for (int s = 0; s < kFxSlots; ++s)
+        if (look.fx[s].effect != ref.fx[s].effect) std::memset(&look.fx_react[s], 0, sizeof(ReactRow));
+}
+
+void look_from_live(const LiveState& live, const TransportSection& tr, const Catalog& cat, int deck, Look& out,
+                    const ReactionSection* react) {
     std::memset(&out, 0, sizeof(out));
     for (int l = 0; l < kLayers; ++l) {
         out.layer[l] = live.deck[deck].layer[l];
@@ -168,14 +213,22 @@ void look_from_live(const LiveState& live, const TransportSection& tr, const Cat
         out.fx[f] = live.deck[deck].fx[f];
         out.fx[f].press = 0;
     }
+    if (react) {
+        for (int l = 0; l < kLayers; ++l)
+            for (int f = 0; f < kFxSlots; ++f)
+                react_from_row(react->layer[deck][l][f], out.layer[l].fx[f].effect, out.layer_react[l][f]);
+        for (int f = 0; f < kFxSlots; ++f) react_from_row(react->deck[deck][f], out.fx[f].effect, out.fx_react[f]);
+    }
 }
 
-void snapshot_from_live(const LiveState& live, const TransportSection& tr, const Catalog& cat, LiveSnapshot& out) {
+void snapshot_from_live(const LiveState& live, const TransportSection& tr, const Catalog& cat, LiveSnapshot& out,
+                        const ReactionSection* react) {
     std::memset(&out, 0, sizeof(out));
-    for (int d = 0; d < kDecks; ++d) look_from_live(live, tr, cat, d, out.deck[d]);
+    for (int d = 0; d < kDecks; ++d) look_from_live(live, tr, cat, d, out.deck[d], react);
     for (int f = 0; f < kFxSlots; ++f) {
         out.master_fx[f] = live.master_fx[f];
         out.master_fx[f].press = 0;
+        if (react) react_from_row(react->master[f], out.master_fx[f].effect, out.master_react[f]);
     }
     out.crossfader = live.crossfader;
     out.program_deck = live.program_deck;
@@ -186,7 +239,9 @@ bool same_look(const Look& a, const Look& b) {
     // Names follow the ids; compare the settings only.
     return std::memcmp(a.layer, b.layer, sizeof(a.layer)) == 0 &&
            std::memcmp(a.transport, b.transport, sizeof(a.transport)) == 0 &&
-           std::memcmp(a.fx, b.fx, sizeof(a.fx)) == 0;
+           std::memcmp(a.fx, b.fx, sizeof(a.fx)) == 0 &&
+           std::memcmp(a.layer_react, b.layer_react, sizeof(a.layer_react)) == 0 &&
+           std::memcmp(a.fx_react, b.fx_react, sizeof(a.fx_react)) == 0;
 }
 
 }  // namespace himmel::show

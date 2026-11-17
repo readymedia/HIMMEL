@@ -5,6 +5,8 @@
 // (save / save as / open / export / revert / autosave restore). No GPU.
 #include <algorithm>
 #include <cmath>
+#include <functional>
+#include <nlohmann/json.hpp>
 #include <vector>
 
 #include "himmel/show/dice.h"
@@ -20,7 +22,7 @@ namespace {
 
 Look deck_look(Rig& r, int d) {
     Look l;
-    look_from_live(r.model->live(), r.model->transport(), *r.cat, d, l);
+    look_from_live(r.model->live(), r.model->transport(), *r.cat, d, l, &r.model->reactions());
     return l;
 }
 
@@ -122,6 +124,13 @@ void round_look(Look& l) {
         for (auto& p : f.param) r4(p);
         r4(f.mix);
     }
+    auto rr = [&](ReactRow& row) {
+        for (auto& k : row.k)
+            for (float* v : {&k.amount, &k.attack_ms, &k.release_ms, &k.threshold, &k.range_lo, &k.range_hi}) r4(*v);
+    };
+    for (auto& layer : l.layer_react)
+        for (auto& row : layer) rr(row);
+    for (auto& row : l.fx_react) rr(row);
 }
 
 void round_show(ShowData& s) {
@@ -227,6 +236,195 @@ void test_files_roundtrip() {
     F::write_atomic(folder / "project.json", "{\"format\": \"himmel-sh", &err);
     info = F::load_project(folder, *a, la, *r.cat);
     CHECK(!info.ok && info.interrupted);
+}
+
+// D131: a look keeps its knob reactions (Custom and Off), in memory, on recall and on disk.
+void test_reactions() {
+    std::printf("reactions: save, recall, files, old files\n");
+    Rig r(make_catalog(12));
+    r.start({.disk = false});
+    int fx = -1;
+    for (uint32_t e = 0; e < r.cat->effect_count && fx < 0; ++e)
+        if (r.cat->effect[e].param_count >= 3) fx = static_cast<int>(e);
+    CHECK(fx >= 0);
+    if (fx < 0) return;
+    const ReactionSection& rs = r.model->reactions();
+    auto set_react = [&](uint8_t d, uint8_t l, uint8_t s, uint8_t knob, ReactSignal sig, ReactMode mode) {
+        ReactArgs a;
+        a.op = ReactOp::Set, a.signal = sig, a.mode = mode, a.curve = ReactCurve::Soft;
+        a.quantise = ReactQuantise::Quarter, a.hold_q = 2;
+        Command c = make_react(d, l, s, knob, a, 0.7f);
+        c.f[1] = 25.0f, c.f[2] = 300.0f, c.f[3] = 0.2f;
+        c.seq = ++g_seq;
+        return r.deck(c);
+    };
+    auto range = [&](uint8_t d, uint8_t l, uint8_t s, uint8_t knob, float lo, float hi) {
+        ReactArgs a;
+        a.op = ReactOp::Range;
+        Command c = make_react(d, l, s, knob, a, lo);
+        c.f[1] = hi;
+        c.seq = ++g_seq;
+        return r.deck(c);
+    };
+    auto off = [&](uint8_t d, uint8_t l, uint8_t s, uint8_t knob) {
+        ReactArgs a;
+        a.op = ReactOp::Off;
+        Command c = make_react(d, l, s, knob, a);
+        c.seq = ++g_seq;
+        return r.deck(c);
+    };
+    constexpr auto kCustom = static_cast<uint8_t>(ReactSource::Custom);
+    constexpr auto kOff = static_cast<uint8_t>(ReactSource::Off);
+    constexpr auto kDefault = static_cast<uint8_t>(ReactSource::Default);
+
+    // Deck A: layer 1 slot 1 with a Custom (ranged) knob 1 and an Off knob 2; deck FX slot 1 knob 1 Custom.
+    r.fill_deck(0, 0);
+    CHECK(r.deck(cmd(CommandType::FxSet, 0, 0, 0, kNone, fx)) == Reject::None);
+    CHECK(r.deck(cmd(CommandType::FxSet, 0, kNone, 0, kNone, fx)) == Reject::None);
+    CHECK(set_react(0, 0, 0, 0, ReactSignal::Bass, ReactMode::Follow) == Reject::None);
+    CHECK(range(0, 0, 0, 0, 0.2f, 0.8f) == Reject::None);
+    CHECK(off(0, 0, 0, 1) == Reject::None);
+    CHECK(set_react(0, kNone, 0, 0, ReactSignal::Kick, ReactMode::Trigger) == Reject::None);
+    r.tick();
+    const Look saved = deck_look(r, 0);
+    const ReactKnob& k0 = saved.layer_react[0][0].k[0];
+    CHECK(k0.source == kCustom && k0.signal == static_cast<uint8_t>(ReactSignal::Bass) &&
+          k0.mode == static_cast<uint8_t>(ReactMode::Follow) && k0.curve == static_cast<uint8_t>(ReactCurve::Soft) &&
+          k0.quantise == static_cast<uint8_t>(ReactQuantise::Quarter) && k0.hold_q == 2 && k0.ranged == 1 &&
+          std::fabs(k0.amount - 0.7f) < 1e-6f && std::fabs(k0.range_lo - 0.2f) < 1e-6f && std::fabs(k0.range_hi - 0.8f) < 1e-6f);
+    CHECK(saved.layer_react[0][0].k[1].source == kOff && saved.layer_react[0][0].k[2].source == kDefault);
+    CHECK(saved.fx_react[0].k[0].source == kCustom && saved.fx_react[0].k[0].ranged == 0);
+    CHECK(r.send(cmd(CommandType::SceneSave, 0, kNone, kNone, kNone, 0)) == Reject::None);  // pad 1
+    {
+        const int id = r.show->show().bank_pad[0][0];
+        CHECK(id >= 0 && same_look(r.show->show().scene[id].look, saved));
+    }
+
+    // Another scene with no reactions on the same effects, then recall: FxSet is not sent (same effect),
+    // so the reactions must come back through FxReact alone; and the reverse goes back to Default.
+    ReactArgs dflt;
+    dflt.op = ReactOp::Default;
+    Command back = make_react(0, 0, 0, kNone, dflt);
+    back.seq = ++g_seq;
+    r.deck(back);
+    back = make_react(0, kNone, 0, kNone, dflt);
+    back.seq = ++g_seq;
+    r.deck(back);
+    r.tick();
+    CHECK(rs.layer[0][0][0].p[0].source == kDefault && rs.layer[0][0][0].p[1].source == kDefault);
+    CHECK(r.send(cmd(CommandType::SceneSave, 0, kNone, kNone, kNone, 1)) == Reject::None);  // pad 2: plain
+    CHECK(r.send(cmd(CommandType::SceneRecall, 0, kNone, kNone, kNone, 0)) == Reject::None);
+    r.tick();
+    CHECK(looks_equal(deck_look(r, 0), saved));
+    CHECK(rs.layer[0][0][0].p[0].source == kCustom && (rs.layer[0][0][0].p[0].flags & kReactRangeSet) &&
+          rs.layer[0][0][0].p[1].source == kOff && rs.deck[0][0].p[0].source == kCustom);
+    CHECK(r.send(cmd(CommandType::SceneRecall, 0, kNone, kNone, kNone, 1)) == Reject::None);
+    r.tick();
+    CHECK(rs.layer[0][0][0].p[0].source == kDefault && rs.layer[0][0][0].p[1].source == kDefault &&
+          rs.deck[0][0].p[0].source == kDefault);
+
+    // Onto the other deck, from empty: FxSet first, then FxReact (an FxSet after it would reset them).
+    CHECK(r.send(cmd(CommandType::SceneRecall, 1, kNone, kNone, kNone, 0)) == Reject::None);
+    r.tick();
+    CHECK(looks_equal(deck_look(r, 1), saved) && r.model->live().rejected[static_cast<int>(Producer::Show)] == 0);
+    CHECK(rs.layer[1][0][0].p[0].source == kCustom && rs.layer[1][0][0].p[1].source == kOff);
+    {
+        CommandList list;  // nothing left to send
+        diff_look(deck_look(r, 1), saved, 1, *r.cat, list);
+        CHECK(list.n == 0);
+    }
+
+    // Undo brings the reactions back too (they are part of the look).
+    for (int i = 0; i < 10; ++i) r.tick(100000);  // past the undo coalesce time
+    CHECK(off(1, 0, 0, 0) == Reject::None);
+    r.tick(1000000);
+    CHECK(rs.layer[1][0][0].p[0].source == kOff);
+    CHECK(r.send(cmd(CommandType::Undo, kNone, kNone, kNone, kNone, 0)) == Reject::None);
+    CHECK(rs.layer[1][0][0].p[0].source == kCustom && looks_equal(deck_look(r, 1), saved));
+
+    // Master FX: a Custom knob survives the live snapshot.
+    CHECK(r.deck(cmd(CommandType::FxSet, kMasterDeck, kNone, 1, kNone, fx)) == Reject::None);
+    CHECK(set_react(kMasterDeck, kNone, 1, 2, ReactSignal::Hat, ReactMode::Add) == Reject::None);
+    r.tick();
+
+    // Files: the document form keeps Custom and Off rows, the master row and a deck FX row.
+    LiveSnapshot live;
+    snapshot_from_live(r.model->live(), r.model->transport(), *r.cat, live, &rs);
+    CHECK(live.master_react[1].k[2].source == kCustom);
+    const std::string doc = F::show_document(r.show->show(), live, *r.cat, 5);
+    CHECK(doc.find("\"react\"") != std::string::npos && doc.find("\"follow\"") != std::string::npos &&
+          doc.find("\"source\":\"off\"") != std::string::npos);
+    auto a = std::make_unique<ShowData>();
+    LiveSnapshot la{};
+    F::LoadInfo info = F::load_document(doc, *a, la, *r.cat);
+    CHECK(info.ok);
+    {
+        const int id = a->bank_pad[0][0];
+        Look want = saved;
+        round_look(want);
+        CHECK(id >= 0 && looks_equal(a->scene[id].look, want));
+        const int plain = a->bank_pad[0][1];
+        CHECK(plain >= 0 && a->scene[plain].look.layer_react[0][0].k[0].source == kDefault);
+        CHECK(la.master_react[1].k[2].source == kCustom && la.deck[1].layer_react[0][0].k[0].source == kCustom && la.deck[1].layer_react[0][0].k[1].source == kOff);
+    }
+    // The same bytes when saved again (stable files).
+    CHECK(F::show_document(*a, la, *r.cat, 5) == doc);
+
+    // An old file (before D131) has no "react": every knob loads as Default.
+    nlohmann::json j = nlohmann::json::parse(doc);
+    int stripped = 0;
+    std::function<void(nlohmann::json&)> strip = [&](nlohmann::json& o) {
+        if (o.is_object()) {
+            stripped += static_cast<int>(o.erase("react"));
+            for (auto& [key, v] : o.items()) strip(v);
+        } else if (o.is_array()) {
+            for (auto& v : o) strip(v);
+        }
+    };
+    strip(j);
+    CHECK(stripped >= 4);
+    auto old = std::make_unique<ShowData>();
+    LiveSnapshot lo{};
+    info = F::load_document(j.dump(2), *old, lo, *r.cat);
+    CHECK(info.ok);
+    {
+        const int id = old->bank_pad[0][0];
+        CHECK(id >= 0);
+        Look want = saved;
+        std::memset(want.layer_react, 0, sizeof(want.layer_react));
+        std::memset(want.fx_react, 0, sizeof(want.fx_react));
+        round_look(want);
+        CHECK(id >= 0 && looks_equal(old->scene[id].look, want));
+        CHECK(lo.master_react[1].k[2].source == kDefault);
+    }
+    // Broken entries are skipped, not fatal: a knob past the effect's params, an unknown source.
+    nlohmann::json bad = nlohmann::json::parse(doc);
+    bool patched = false;
+    std::function<void(nlohmann::json&)> spoil = [&](nlohmann::json& o) {
+        if (o.is_object()) {
+            if (auto it = o.find("react"); it != o.end() && !patched) {
+                *it = nlohmann::json::array({{{"knob", 7}, {"source", "custom"}}, {{"knob", 0}, {"source", "loud"}}});
+                patched = true;
+            }
+            for (auto& [key, v] : o.items()) spoil(v);
+        } else if (o.is_array()) {
+            for (auto& v : o) spoil(v);
+        }
+    };
+    spoil(bad);
+    info = F::load_document(bad.dump(), *old, lo, *r.cat);
+    CHECK(patched && info.ok);
+
+    // Dice: a slot that gets a new effect gets that effect's Default reactions.
+    Look rolled;
+    for (uint64_t seed = 1; seed < 64; ++seed) {
+        dice_roll(saved, rolled, *r.cat, 0, DiceScope{0, 0}, seed);
+        if (rolled.layer[0].fx[0].effect != saved.layer[0].fx[0].effect) break;
+    }
+    if (rolled.layer[0].fx[0].effect != saved.layer[0].fx[0].effect)
+        CHECK(rolled.layer_react[0][0].k[0].source == kDefault && rolled.layer_react[0][0].k[1].source == kDefault);
+    else
+        CHECK(rolled.layer_react[0][0].k[0].source == kCustom);
 }
 
 void test_journal() {
@@ -729,6 +927,7 @@ void test_snapshots() {
 int main() {
     test_diff_roundtrip();
     test_files_roundtrip();
+    test_reactions();
     test_journal();
     test_recall_cost();
     test_morph_and_reset();

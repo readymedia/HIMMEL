@@ -15,8 +15,10 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <iterator>
 #include <memory>
 #include <nlohmann/json.hpp>
 
@@ -153,6 +155,18 @@ const char* kTargetNames[] = {"selected", "layer1", "layer2", "layer3", "layer4"
 const char* kTransitionNames[] = {"cut", "morph", "take"};
 const char* kPresetNames[] = {"720p", "1080p", "1440p", "4k", "custom"};
 const char* kLockNames[] = {"clip", "fx", "colour", "motion", "layout", "source", "react", "mood"};
+// Audio reactions (D131): the same order as the protocol enums (commands.h).
+const char* kReactSourceNames[] = {"default", "custom", "off"};
+const char* kSignalNames[] = {"none", "level", "bass", "mid", "high", "kick", "snare",
+                              "hat", "onset", "beat", "bar", "energy", "build", "drop"};
+const char* kReactModeNames[] = {"add", "follow", "trigger"};
+const char* kCurveNames[] = {"linear", "soft", "hard", "steps", "exp"};
+const char* kQuantiseNames[] = {"off", "1/16", "1/8", "1/4", "1/2", "bar"};
+static_assert(std::size(kReactSourceNames) == static_cast<size_t>(ReactSource::Count));
+static_assert(std::size(kSignalNames) == static_cast<size_t>(ReactSignal::Count));
+static_assert(std::size(kReactModeNames) == static_cast<size_t>(ReactMode::Count));
+static_assert(std::size(kCurveNames) == static_cast<size_t>(ReactCurve::Count));
+static_assert(std::size(kQuantiseNames) == static_cast<size_t>(ReactQuantise::Count));
 
 template <size_t N>
 int index_of(const char* (&names)[N], const json& v, int fallback) {
@@ -185,21 +199,90 @@ std::string js(const json& o, const char* k, const char* d = "") {
 }
 float r4(float v) { return std::round(v * 10000.0f) / 10000.0f; }  // stable, diff-friendly numbers
 
+// ---- knob reactions (D131): only Custom and Off knobs are written ----
+json react_to_json(const ReactRow& row, int knobs) {
+    json a = json::array();
+    for (int p = 0; p < knobs && p < kReactParams; ++p) {
+        const ReactKnob& k = row.k[p];
+        if (k.source == static_cast<uint8_t>(ReactSource::Off)) {
+            a.push_back({{"knob", p}, {"source", "off"}});
+            continue;
+        }
+        if (k.source != static_cast<uint8_t>(ReactSource::Custom)) continue;
+        json o = {{"knob", p},
+                  {"source", "custom"},
+                  {"signal", name_of(kSignalNames, k.signal)},
+                  {"mode", name_of(kReactModeNames, k.mode)},
+                  {"curve", name_of(kCurveNames, k.curve)},
+                  {"amount", r4(k.amount)},
+                  {"attack_ms", r4(k.attack_ms)},
+                  {"release_ms", r4(k.release_ms)},
+                  {"threshold", r4(k.threshold)}};
+        if (k.quantise) o["quantise"] = name_of(kQuantiseNames, k.quantise);
+        if (k.hold_q) o["hold_beats"] = k.hold_q * 0.25f;
+        if (k.ranged) o["range"] = json::array({r4(k.range_lo), r4(k.range_hi)});
+        a.push_back(o);
+    }
+    return a;
+}
+
+// Unknown or broken entries are skipped (that knob stays Default); numbers are clamped like FxReact does.
+void react_from_json(const json& a, ReactRow& row, int knobs) {
+    std::memset(&row, 0, sizeof(row));
+    if (!a.is_array()) return;
+    for (const json& o : a) {
+        if (!o.is_object()) continue;
+        const int p = ji(o, "knob", -1);
+        if (p < 0 || p >= knobs || p >= kReactParams) continue;
+        const int src = index_of(kReactSourceNames, o.value("source", json()), -1);
+        ReactKnob k{};
+        if (src == static_cast<int>(ReactSource::Off)) {
+            k.source = static_cast<uint8_t>(ReactSource::Off);
+        } else if (src == static_cast<int>(ReactSource::Custom)) {
+            k.source = static_cast<uint8_t>(ReactSource::Custom);
+            k.signal = static_cast<uint8_t>(index_of(kSignalNames, o.value("signal", json()), 0));
+            k.mode = static_cast<uint8_t>(index_of(kReactModeNames, o.value("mode", json()), 0));
+            k.curve = static_cast<uint8_t>(index_of(kCurveNames, o.value("curve", json()), 0));
+            k.quantise = static_cast<uint8_t>(index_of(kQuantiseNames, o.value("quantise", json()), 0));
+            k.hold_q = static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(jf(o, "hold_beats", 0.0f) * 4.0f)), 0, kReactHoldMax));
+            k.amount = std::clamp(jf(o, "amount", 0.0f), -1.0f, 1.0f);
+            k.attack_ms = std::clamp(jf(o, "attack_ms", 0.0f), 0.0f, kReactMaxMs);
+            k.release_ms = std::clamp(jf(o, "release_ms", 0.0f), 0.0f, kReactMaxMs);
+            k.threshold = std::clamp(jf(o, "threshold", 0.0f), 0.0f, 1.0f);
+            if (auto r = o.find("range"); r != o.end() && r->is_array() && r->size() == 2 && (*r)[0].is_number() &&
+                                          (*r)[1].is_number()) {
+                k.ranged = 1;
+                k.range_lo = std::clamp((*r)[0].get<float>(), 0.0f, 1.0f);
+                k.range_hi = std::clamp((*r)[1].get<float>(), 0.0f, 1.0f);
+            }
+        } else {
+            continue;  // "default" or unknown: the effect's own reaction
+        }
+        row.k[p] = k;
+    }
+}
+
 // ---- FX slot ----
-json fx_to_json(const FxSlotState& s, const Catalog& cat) {
+json fx_to_json(const FxSlotState& s, const Catalog& cat, const ReactRow* react = nullptr) {
     if (s.effect < 0 || s.effect >= static_cast<int>(cat.effect_count)) return nullptr;
     const EffectInfo& e = cat.effect[s.effect];
     json params = json::array();
     for (int p = 0; p < e.param_count && p < kFxParams; ++p) params.push_back(r4(s.param[p]));
     json o = {{"effect", e.name}, {"params", params}, {"mix", r4(s.mix)}};
     if (s.bypass) o["bypass"] = true;
+    if (react) {
+        json r = react_to_json(*react, e.param_count);
+        if (!r.empty()) o["react"] = std::move(r);
+    }
     return o;
 }
 
-void fx_from_json(const json& o, FxSlotState& s, const Catalog& cat, std::vector<std::string>* unknown) {
+void fx_from_json(const json& o, FxSlotState& s, const Catalog& cat, std::vector<std::string>* unknown,
+                  ReactRow* react = nullptr) {
     std::memset(&s, 0, sizeof(s));
     s.effect = -1;
     s.mix = 1.0f;
+    if (react) std::memset(react, 0, sizeof(*react));
     if (!o.is_object()) return;
     const std::string name = js(o, "effect");
     const int id = find_effect(cat, name.c_str());
@@ -215,15 +298,19 @@ void fx_from_json(const json& o, FxSlotState& s, const Catalog& cat, std::vector
             if ((*it)[p].is_number()) s.param[p] = std::clamp((*it)[p].get<float>(), 0.0f, 1.0f);
     s.mix = std::clamp(jf(o, "mix", 1.0f), 0.0f, 1.0f);
     s.bypass = o.value("bypass", false) ? 1 : 0;
+    if (react) react_from_json(o.value("react", json()), *react, e.param_count);  // no "react" = Default (old files)
 }
 
-json fx_list(const FxSlotState* s, const Catalog& cat) {
+json fx_list(const FxSlotState* s, const Catalog& cat, const ReactRow* react = nullptr) {
     json a = json::array();
-    for (int i = 0; i < kFxSlots; ++i) a.push_back(fx_to_json(s[i], cat));
+    for (int i = 0; i < kFxSlots; ++i) a.push_back(fx_to_json(s[i], cat, react ? &react[i] : nullptr));
     return a;
 }
-void fx_list_from(const json& a, FxSlotState* s, const Catalog& cat, std::vector<std::string>* unknown) {
-    for (int i = 0; i < kFxSlots; ++i) fx_from_json(a.is_array() && i < static_cast<int>(a.size()) ? a[i] : json(), s[i], cat, unknown);
+void fx_list_from(const json& a, FxSlotState* s, const Catalog& cat, std::vector<std::string>* unknown,
+                  ReactRow* react = nullptr) {
+    for (int i = 0; i < kFxSlots; ++i)
+        fx_from_json(a.is_array() && i < static_cast<int>(a.size()) ? a[i] : json(), s[i], cat, unknown,
+                     react ? &react[i] : nullptr);
 }
 
 // ---- transport ----
@@ -321,12 +408,12 @@ json look_to_json(const Look& l, const Catalog& cat) {
                   {"opacity", r4(s.opacity)},
                   {"blend", name_of(kBlendNames, s.blend)},
                   {"speed", r4(s.speed)},
-                  {"fx", fx_list(s.fx, cat)},
+                  {"fx", fx_list(s.fx, cat, l.layer_react[i])},
                   {"transport", transport_to_json(l.transport[i])}};
         if (s.mute) o["mute"] = true;
         layers.push_back(o);
     }
-    return {{"layers", layers}, {"fx", fx_list(l.fx, cat)}};
+    return {{"layers", layers}, {"fx", fx_list(l.fx, cat, l.fx_react)}};
 }
 
 void look_from_json(const json& o, Look& l, const Catalog& cat, std::vector<std::string>* missing,
@@ -343,10 +430,10 @@ void look_from_json(const json& o, Look& l, const Catalog& cat, std::vector<std:
         s.blend = static_cast<uint8_t>(index_of(kBlendNames, L.value("blend", json()), 0));
         s.mute = L.value("mute", false) ? 1 : 0;
         s.speed = std::clamp(jf(L, "speed", 1.0f), -4.0f, 4.0f);
-        fx_list_from(L.value("fx", json()), s.fx, cat, unknown_fx);
+        fx_list_from(L.value("fx", json()), s.fx, cat, unknown_fx, l.layer_react[i]);
         transport_from_json(L.value("transport", json()), l.transport[i]);
     }
-    fx_list_from(o.value("fx", json()), l.fx, cat, unknown_fx);
+    fx_list_from(o.value("fx", json()), l.fx, cat, unknown_fx, l.fx_react);
     bind_clips(l, cat);
     for (int i = 0; i < kLayers; ++i)
         if (l.clip_name[i][0] && l.layer[i].clip < 0 && missing) missing->push_back(l.clip_name[i]);
@@ -498,7 +585,7 @@ json live_to_json(const LiveSnapshot& l, const Catalog& cat) {
     return {{"format", kFormat},
             {"kind", "live"},
             {"decks", json::array({look_to_json(l.deck[0], cat), look_to_json(l.deck[1], cat)})},
-            {"master_fx", fx_list(l.master_fx, cat)},
+            {"master_fx", fx_list(l.master_fx, cat, l.master_react)},
             {"crossfader", r4(l.crossfader)},
             {"program_deck", l.program_deck}};
 }
@@ -507,7 +594,7 @@ void live_from_json(const json& o, LiveSnapshot& l, LoadCtx& ctx) {
     std::memset(&l, 0, sizeof(l));
     const json decks = o.value("decks", json::array());
     for (int d = 0; d < kDecks; ++d) look_from_json(d < static_cast<int>(decks.size()) ? decks[d] : json(), l.deck[d], ctx.cat, &ctx.missing, &ctx.unknown_fx);
-    fx_list_from(o.value("master_fx", json()), l.master_fx, ctx.cat, &ctx.unknown_fx);
+    fx_list_from(o.value("master_fx", json()), l.master_fx, ctx.cat, &ctx.unknown_fx, l.master_react);
     l.crossfader = std::clamp(jf(o, "crossfader", 0.0f), 0.0f, 1.0f);
     l.program_deck = static_cast<uint8_t>(std::clamp(ji(o, "program_deck", 0), 0, 1));
 }
@@ -789,7 +876,7 @@ bool save_project(const fs::path& folder, const ShowData& show, const LiveSnapsh
 namespace {
 constexpr uint32_t kJournalMagic = 0x4C4E4A48;  // "HJNL"
 constexpr uint32_t kRecordMagic = 0x43455248;   // "HREC"
-constexpr uint32_t kJournalVersion = 1;
+constexpr uint32_t kJournalVersion = 2;  // 2: LiveSnapshot + knob reactions (D131); a v1 journal is not restored
 struct JournalHeader {
     uint32_t magic, version, header_size, snapshot_size;
     uint64_t created_ms;

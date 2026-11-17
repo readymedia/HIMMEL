@@ -45,7 +45,8 @@ float clamp01(float v) { return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v); }
 bool same_edit(const LiveSnapshot& a, const LiveSnapshot& b) {  // what undo covers: decks + master FX
     for (int d = 0; d < kDecks; ++d)
         if (!same_look(a.deck[d], b.deck[d])) return false;
-    return std::memcmp(a.master_fx, b.master_fx, sizeof(a.master_fx)) == 0;
+    return std::memcmp(a.master_fx, b.master_fx, sizeof(a.master_fx)) == 0 &&
+           std::memcmp(a.master_react, b.master_react, sizeof(a.master_react)) == 0;
 }
 bool same_mixer(const LiveSnapshot& a, const LiveSnapshot& b) {
     return std::fabs(a.crossfader - b.crossfader) < 1e-4f && a.program_deck == b.program_deck && a.black == b.black;
@@ -650,7 +651,7 @@ void ShowRuntime::flush(engine::DeckModel& m, uint64_t now_us) {
 void ShowRuntime::apply_look(engine::DeckModel& m, int deck, const Look& target, uint64_t now_us, uint32_t mask, bool deck_fx,
                              uint32_t parts) {
     Look cur;
-    look_from_live(m.live(), m.transport(), m.catalog(), deck, cur);
+    look_from_live(m.live(), m.transport(), m.catalog(), deck, cur, &m.reactions());
     scratch_->clear();
     diff_look(cur, target, deck, m.catalog(), *scratch_, parts, mask, deck_fx);
     send(m, now_us);
@@ -660,8 +661,10 @@ void ShowRuntime::apply_snapshot(engine::DeckModel& m, const LiveSnapshot& s, ui
     for (int d = 0; d < kDecks; ++d) apply_look(m, d, s.deck[d], now_us);
     scratch_->clear();
     FxSlotState cur[kFxSlots];
+    ReactRow cur_react[kFxSlots];
     std::memcpy(cur, m.live().master_fx, sizeof(cur));
-    diff_master(cur, s.master_fx, m.catalog(), *scratch_);
+    for (int f = 0; f < kFxSlots; ++f) react_from_row(m.reactions().master[f], cur[f].effect, cur_react[f]);
+    diff_master(cur, cur_react, s.master_fx, s.master_react, m.catalog(), *scratch_);
     if (mixer) {
         if (std::fabs(m.live().crossfader - s.crossfader) > 1e-4f) scratch_->push(make(CommandType::Crossfader, kNone, kNone, 0, s.crossfader));
         if (m.live().black != s.black) scratch_->push(make(CommandType::Black, kNone, kNone, s.black ? 1 : 0));
@@ -670,7 +673,7 @@ void ShowRuntime::apply_snapshot(engine::DeckModel& m, const LiveSnapshot& s, ui
 }
 
 void ShowRuntime::capture(engine::DeckModel& m, uint64_t now_us) {
-    snapshot_from_live(m.live(), m.transport(), m.catalog(), cur_);
+    snapshot_from_live(m.live(), m.transport(), m.catalog(), cur_, &m.reactions());
     if (!have_last_) {
         last_ = cur_;
         have_last_ = true;
@@ -692,7 +695,7 @@ void ShowRuntime::capture(engine::DeckModel& m, uint64_t now_us) {
 }
 
 void ShowRuntime::sync(engine::DeckModel& m) {
-    snapshot_from_live(m.live(), m.transport(), m.catalog(), last_);
+    snapshot_from_live(m.live(), m.transport(), m.catalog(), last_, &m.reactions());
     have_last_ = true;
     cur_ = last_;
     ++live_gen_;
@@ -776,14 +779,14 @@ void ShowRuntime::recall(engine::DeckModel& m, int deck, int scene, float morph_
     const uint64_t t0 = steady_us();
     if (morph_s > 0.0f) {
         Look from;
-        look_from_live(m.live(), m.transport(), m.catalog(), deck, from);
+        look_from_live(m.live(), m.transport(), m.catalog(), deck, from, &m.reactions());
         start_morph(deck, from, target, morph_s, now_us, 0xF, true);
         tick_morphs(m, now_us);
         last_recall_cmds_ = 0;
     } else {
         morph_[deck].active = false;
         Look cur;
-        look_from_live(m.live(), m.transport(), m.catalog(), deck, cur);
+        look_from_live(m.live(), m.transport(), m.catalog(), deck, cur, &m.reactions());
         scratch_->clear();
         diff_look(cur, target, deck, m.catalog(), *scratch_);
         last_recall_cmds_ = scratch_->n;
@@ -857,7 +860,7 @@ void ShowRuntime::fill_stage(engine::DeckModel& m) {
     // A memcpy of the show (about 1 MB) when the worker asks for data: saves and
     // the coalesced autosave only, never every frame.
     *w_->stage = *front_;
-    snapshot_from_live(m.live(), m.transport(), m.catalog(), w_->stage_live);
+    snapshot_from_live(m.live(), m.transport(), m.catalog(), w_->stage_live, &m.reactions());
 }
 
 // ============================================================================
@@ -920,7 +923,7 @@ Reject ShowRuntime::do_command(int producer, const Command& c, uint64_t now_us, 
             if (!deck_ok) return Reject::BadTarget;
             if (c.i < -1 || c.i >= kPads) return Reject::BadTarget;
             Look look;
-            look_from_live(m.live(), m.transport(), m.catalog(), c.deck, look);
+            look_from_live(m.live(), m.transport(), m.catalog(), c.deck, look, &m.reactions());
             const Scene* from = deck_scene_ptr(c.deck);
             const int src = deck_scene_[c.deck];
             int id = -1;
@@ -1032,7 +1035,7 @@ Reject ShowRuntime::do_command(int producer, const Command& c, uint64_t now_us, 
             redo_n_ = 0;
             const float glide = c.f[0] > 0.0f ? c.f[0] : static_cast<float>(60.0 / std::max(20.0, m.bpm()));  // 1 beat
             Look from;
-            look_from_live(m.live(), m.transport(), m.catalog(), c.deck, from);
+            look_from_live(m.live(), m.transport(), m.catalog(), c.deck, from, &m.reactions());
             const uint32_t mask = c.layer == kNone ? 0xFu : (1u << c.layer);
             start_morph(c.deck, from, recalled_[c.deck], std::min(glide, 60.0f), now_us, mask, c.layer == kNone);
             message(c.layer == kNone ? "Reset scene" : "Reset layer %d", c.layer + 1);
@@ -1074,7 +1077,7 @@ Reject ShowRuntime::do_command(int producer, const Command& c, uint64_t now_us, 
                 return Reject::None;
             }
             Look cur;
-            look_from_live(m.live(), m.transport(), m.catalog(), d, cur);
+            look_from_live(m.live(), m.transport(), m.catalog(), d, cur, &m.reactions());
             Look next;
             bool roll = verb == DiceVerb::Roll || verb == DiceVerb::Mutate;
             if (verb == DiceVerb::Back) {
@@ -1306,7 +1309,7 @@ Reject ShowRuntime::do_command(int producer, const Command& c, uint64_t now_us, 
                     s.owner = static_cast<uint8_t>(Owner::Song);
                     s.owner_index = static_cast<uint8_t>(sh.setlist[c.i]);
                     s.pad = static_cast<uint8_t>(pos);
-                    look_from_live(m.live(), m.transport(), m.catalog(), c.deck, s.look);
+                    look_from_live(m.live(), m.transport(), m.catalog(), c.deck, s.look, &m.reactions());
                     std::snprintf(s.name, sizeof(s.name), "%.16s %d", so.name, pos + 1);
                     so.scene[pos] = static_cast<int16_t>(id);
                     so.scene_count = static_cast<uint8_t>(std::max<int>(so.scene_count, pos + 1));
@@ -1498,7 +1501,7 @@ void ShowRuntime::tick(engine::DeckModel& m, uint64_t now_us) {
         // Live changes -> the journal (at most every journal_min_ms).
         if (ready && now_us - last_journal_us_ >= static_cast<uint64_t>(cfg_.journal_min_ms) * 1000 &&
             (!have_journaled_ || !same_edit(cur_, journaled_) || !same_mixer(cur_, journaled_))) {
-            LiveRec rec;  // ~4 KB on the stack, copied into the preallocated ring slot
+            LiveRec rec;  // ~10 KB on the stack, copied into the preallocated ring slot
             rec.unix_ms = static_cast<uint64_t>(
                 std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
             rec.snap = cur_;
