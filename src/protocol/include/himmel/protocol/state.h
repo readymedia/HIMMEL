@@ -7,6 +7,7 @@
 //   * live     - the whole show model as it is on air now, written at most once
 //                per frame (only when something changed, plus every 250 ms);
 //   * catalog  - clips and effects the engine can play, written when it changes.
+//   * transport (v2) and react (v3) - see below.
 // Readers copy a section with seq_read and use the copy; they never hold it.
 #pragma once
 
@@ -18,7 +19,7 @@ namespace himmel::protocol {
 
 inline constexpr const wchar_t* kStateShmName = L"Local\\HimmelState";
 inline constexpr uint32_t kStateMagic = 0x54534D48;  // "HMST"
-inline constexpr uint32_t kStateVersion = 2;  // 2: + transport section (M2)
+inline constexpr uint32_t kStateVersion = 3;  // 2: + transport section (M2); 3: + reaction table (AUDIO, D131)
 
 inline constexpr int kMaxClips = 256;
 inline constexpr int kMaxEffects = 64;
@@ -175,6 +176,51 @@ struct TransportSection {
     LayerTransport hit_transport;
 };
 
+// ---- reaction table (version 3, AUDIO, D131; design/music.md §4) -------------
+// One reaction per FX knob (kReactParams) per slot, set with FxReact (commands.h).
+// Every entry always shows the reaction in use: a Default entry mirrors the
+// effect's default reaction (effect.json) when it targets this knob, else its
+// signal is None. FxSet resets the slot's 4 entries to Default.
+enum class ReactSource : uint8_t {
+    Default = 0,   // the effect's own default (from its metadata)
+    Custom = 1,    // set with FxReact (Set / Amount / Signal / Range)
+    Off = 2,       // switched off with FxReact Off (not even the default moves it)
+    Count
+};
+inline constexpr uint8_t kReactRangeSet = 1u << 0;  // ReactionEntry.flags: range from FxReact Range
+
+struct ReactionEntry {
+    uint8_t source;            // ReactSource
+    uint8_t signal;            // ReactSignal (None = nothing moves this knob)
+    uint8_t mode;              // ReactMode
+    uint8_t curve;             // ReactCurve
+    uint8_t flags;             // kReactRangeSet; else range = the param's good range
+    uint8_t reserved[3];
+    float amount;              // -1..1
+    float attack_ms;           // 0..2000
+    float release_ms;          // 0..2000
+    float threshold;           // 0..1 gate
+    float range_lo, range_hi;  // knob positions 0..1 the reaction moves between
+    float quantise_beats;      // TRIGGER grid in beats (0 = off)
+    float hold_beats;          // TRIGGER hold in beats
+    // Live (the engine writes these with the section; readers draw the "knob ghost"):
+    float env;                 // the reaction's envelope 0..1 now (0 when the slot is not on air)
+    float value;               // the knob as the shader gets it now, 0..1 (after scope, PRESS, reaction)
+};
+static_assert(sizeof(ReactionEntry) == 48);
+
+struct SlotReactions {
+    ReactionEntry p[kReactParams];
+};
+
+struct ReactionSection {
+    SlotReactions layer[kDecks][kLayersPerDeck][kFxSlots];  // = LayerState::fx
+    SlotReactions deck[kDecks][kFxSlots];                   // = DeckState::fx
+    SlotReactions master[kFxSlots];                         // = LiveState::master_fx
+    uint32_t gen;              // bumped on every change of a setting (not of env / value)
+    uint32_t reserved;
+};
+
 struct EngineStatusMirror {
     std::atomic<uint64_t> heartbeat_us;   // engine clock at the last live write
     std::atomic<uint32_t> pid;
@@ -194,6 +240,8 @@ struct StateBlock {
     Catalog catalog;
     alignas(64) std::atomic<uint32_t> transport_seq;   // version 2
     TransportSection transport;
+    alignas(64) std::atomic<uint32_t> react_seq;       // version 3
+    ReactionSection react;
 };
 #ifdef _MSC_VER
 #pragma warning(pop)

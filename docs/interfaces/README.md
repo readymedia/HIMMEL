@@ -9,14 +9,14 @@ LEAD; then both sides are built. See `docs/agents/README.md`.
 | `Local\HimmelMk2` (events, LEDs, screens, status) | CONTROL → ENGINE / GUI | Exists. See `docs/mk2-controller-spec.md` and `src/controller/include/himmel/mk2/shared.h` |
 | MK2 sim link (UDP 8766) | Simulators → `mk2_controller` | Exists. See `sim_link.h` |
 | `Local\HimmelEngine` (engine status) | ENGINE → supervisor / GUI | Exists (basic). Heartbeat / stop for the supervisor; the GUI uses `engine-state.md` |
-| [`engine-state.md`](engine-state.md) (`Local\HimmelState`: live show model + catalog + transport) | ENGINE → GUI / weapons | **Version 2, 2026-11-16** (M2 transport section) |
-| [`command-protocol.md`](command-protocol.md) (`Local\HimmelCommands`: layer, FX, crossfader, take, cut, focus) | GUI / weapons / OSC → ENGINE | **Version 1, 2026-11-15** (slice); **M2 clip transport appended 2026-11-16** (§4a); **M3 show commands 25–36 appended 2026-11-17** (§4b) |
+| [`engine-state.md`](engine-state.md) (`Local\HimmelState`: live show model + catalog + transport + reactions) | ENGINE → GUI / weapons | **Version 3, 2026-11-17** (v2: M2 transport section; v3: AUDIO reaction table, D131) |
+| [`command-protocol.md`](command-protocol.md) (`Local\HimmelCommands`: layer, FX, crossfader, take, cut, focus) | GUI / weapons / OSC → ENGINE | **Version 1, 2026-11-15** (slice); **M2 clip transport appended 2026-11-16** (§4a); **M3 show commands 25–36 appended 2026-11-17** (§4b); **`FxReact` 40 (AUDIO, D131) appended 2026-11-17** (§4d) |
 | [`preview-block.md`](preview-block.md) (`Local\HimmelPreview`: 480×270 BGRA of A, B, MAIN, outputs) | ENGINE → GUI | **Version 1, 2026-11-15** (slice) |
 | `himmel_perform` mapper API (`src/perform/include/himmel/perform/mk2_perform.h`) | CONTROL → ENGINE (in-process) | **Version 1, 2026-11-15**, `command-protocol.md` §6 |
 | `himmel_ui` HTTP (127.0.0.1:8790) | bridge ↔ web app | Internal to the GUI track |
 | `weapon-block.md` (`Local\HimmelWeapon<N>`, touch events, roles) | CONTROL → ENGINE | **Phase 1–2** (plan in `weapons/README.md`) |
 | [`effect-metadata.md`](effect-metadata.md) (`fx/<id>/effect.json`, PRESS, scopes, reactions, flash cap, shader contract) | FX → ENGINE / SHOW / GUI | **Version 1, 2026-11-16** (M5) |
-| [`library-db.md`](library-db.md) (`himmel-library.db` SQLite index, `meta/<hash>.json` sidecars `himmel-clip/1`, `Local\HimmelLibrary` import status, the engine's library feed) | MEDIA → ENGINE / SHOW / GUI | **Version 1, 2026-11-17** (M7) |
+| [`library-db.md`](library-db.md) (`himmel-library.db` SQLite index, `meta/<hash>.json` sidecars `himmel-clip/1`, `Local\HimmelLibrary` import status, the engine's library feed) | MEDIA → ENGINE / SHOW / GUI | **Version 2, 2026-11-17** (M7; v2 wave 5: ingest commands 60–67 in the library block, §10) |
 | [`show-files.md`](show-files.md) (`himmel-show/1` project folder + `.himmelshow`, autosave journal, `Local\HimmelShow`: show status, files, text boxes) | SHOW ↔ GUI / weapons | **Version 1, 2026-11-17** (M3; moods and cues later); the block: [`show-block.md`](show-block.md) |
 | [`outputs-block.md`](outputs-block.md) (`Local\HimmelOutputs`: output slots, displays by identity, canvas, layer places, curtains) | ENGINE → supervisor / GUI / weapons | **Version 1, 2026-11-17** (M6); commands 70–73 in `command-protocol.md` §4c |
 | [`osc.md`](osc.md) (OSC in on UDP 7000: the `/himmel/...` address map, allow list, `Local\HimmelOsc` status + last messages) | lighting desks / Companion → `himmel_osc` → ENGINE (producer slot 2) | **Version 1, 2026-11-17** (M13) |

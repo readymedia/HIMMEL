@@ -113,6 +113,11 @@ real signal with a non-zero amount in −1..1, attack / release 0..2000 ms, hold
   - `trigger`: fires on a rising edge over the threshold (on the
     `quantise_beats` grid when set), stays up `hold_beats`, then releases.
 - A param with scope **MOVE** follows the reaction over its whole range.
+- **Per-knob reactions (D131, AUDIO, 2026-11-17):** this is each effect's
+  *default* reaction. `FxReact` (command 40, [`command-protocol.md`](command-protocol.md) §4d)
+  gives any knob of a slot its own reaction, or switches one off; the table
+  is in the state block (v3, `ReactionSection`). Each knob has its own
+  envelope; the resolver runs them in knob order.
 - **0.1 status:** the engine feeds silence until the AUDIO track exists, so
   reactions are data only. `himmel_render --test-signal` feeds
   `himmel::fx::TestSignal` (kick on every beat, snare on 2 and 4, hats on the
