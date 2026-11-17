@@ -15,3 +15,6 @@ out/
 # Clips and media (large, never in git)
 /media/
 tools/_entrancer/
+
+# QA rig stack logs (docs/qa/README.md): big, per run
+docs/qa/stack-*.log
