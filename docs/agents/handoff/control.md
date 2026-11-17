@@ -1,42 +1,62 @@
 # CONTROL handoff
-Updated: 2026-11-16 by the CONTROL session (MK2 input end to end) · Branch: claude/control-mk2-input · Last commit: see git log
+Updated: 2026-11-17 by the CONTROL wave-3 session (M4 MK2 Perform v4) · Branch: claude/control-m4-perform · Last commit: see git log
 
 ## State in one paragraph
-MK2: verified map, C++ controller (`src/controller`, shared memory `Local\HimmelMk2`, LEDs, screens, reconnect, `--sim` over UDP 8766), screen pages (`pages.cpp`), Python live view + simulator + games. Generic weapon block + drivers for Lightpad / LUMI / NuVJ / APC20 (`weapons/README.md`). **New (S2): `himmel::perform::Mk2Perform` plays the slice** (`src/perform/`): focus by groups, wheel = TAKE T-bar, knobs, pads = clips, FX buttons, LEDs and both screens; 120 unit checks in `perform_tests.exe`. **Checked end-to-end 2026-11-15** (main fa84ed0 + the sim link fix): a simulated MK2 through `himmel.exe --sim` sets the focus (Group C → B3), moves the crossfader (wheel +6 → 0.200), runs a TAKE (PLAY) that flips PROGRAM, after which the focus follows its role (B3 → A3), and the engine's screens / LEDs reach the simulator.
+MK2: verified map, C++ controller (`src/controller`, shared memory `Local\HimmelMk2`, LEDs, screens, reconnect, `--sim` over UDP 8766), screen pages (`pages.cpp`), Python live view + simulator + games. Generic weapon block + drivers for Lightpad / LUMI / NuVJ / APC20 (`weapons/README.md`). **New (M4, 2026-11-17): `himmel::perform::Mk2Perform` plays Perform v4** (`src/perform/`, `docs/design/perform.md`, `hardware-mapping.md` §3): focus PREP / PLAY with double-tap, wheel = TAKE, Top buttons (locks, FREEZE / STROBE / BLACK / ASSIST), knob pages PLAY / CLIP / LAYER / FX / MIX, knobs 5–8 = the PROGRAM scene's macros, pads CLIPS / SLICE / LOOKS / FX PADS (+ MOODS stub), pad targets, PRESS, HIT, `REC` / `ERASE` / `ENTER`, both screens. 219 unit checks in `perform_tests.exe`. **A whole song is played from the MK2 alone** in `himmel.exe --sim` (`python tools/mk2_e2e.py`: build 3 scenes with pads + REC, LOOKS recall, wheel TAKE, ENTER × 3, macro, BLACK, FX PAD, PLAY-focus edit + variation, ERASE undo, SOLO HIT; PASS) and **input → glass is measured: median 32 ms, p90 38 ms, max 40 ms** (`docs/measurements/2026-11-17-control-m4-input-to-glass.md`). M9 (Lightpad TOUCH / MIX / SCRUB) not started.
 
-## Slice mapping (2026-11)
-Subset of `docs/design/perform.md` v4 / `hardware-mapping.md` §3. Focus is a **role** (PREP = the PREVIEW deck, PLAY = the PROGRAM deck) + a layer: after a TAKE the rows keep meaning prepare / live, and the mapper re-sends `Focus` for the deck that now has the role. A focus set by the GUI is adopted.
+## Perform mapping (M4)
+`docs/design/perform.md` v4 wins; owner choices are PROPOSED D160–D162 in `docs/decisions.md`. Focus is a **role** (PREP = the PREVIEW deck, PLAY = the PROGRAM deck) + a layer; after a TAKE the rows keep meaning prepare / live, and the mapper re-sends `Focus` for the deck that now has the role. A focus set by the GUI is adopted.
 
 | Control | Does | Command(s) |
 |---|---|---|
-| Group A–D | Focus PREVIEW layer 1–4 (PREP) | `Focus` (preview deck, layer) |
-| Group E–H | Focus PROGRAM layer 1–4 (PLAY) | `Focus` (program deck, layer) |
+| Group A–D / E–H | Focus PREVIEW / PROGRAM layer 1–4. **Double-tap** (< 350 ms) = the same layer on the other side | `Focus` |
 | `SHIFT` + group | Mute / unmute that layer (focus unchanged) | `LayerMute` toggle |
-| Wheel (master encoder) | Endless T-bar: clockwise blends PREVIEW in, 30 detents = all the way, whichever deck is PREVIEW | `Crossfader` relative ±detents/30 |
-| `SHIFT` + wheel | Reserved for the system menu (no-op) | — |
-| `PLAY`, wheel push | TAKE (show default time) | `Take` i = 0 |
-| `RESTART` | CUT | `Cut` |
-| Knob 1 | Opacity of the focused layer (1 turn = 0..1) | `LayerOpacity` relative |
-| Knob 2 | Speed of the focused layer (1 turn = ±2) | `LayerSpeed` relative |
-| Knob 3 / 4 | FX slot 1 param 1 / 2 of the focused layer (only if the effect has it) | `FxParam` relative |
-| Knob 5–8 | `GUESS:` stand-in macros = master FX slot 1 params 1–4 | `FxParam` master, relative |
+| hold `ERASE` + group | Reset that layer to its scene | `SceneReset` (deck, layer) |
+| hold pad + group / `ALL` / `SOLO` / `SELECT` | The pad's target: LAYER 1–4 / ALL / HIT / SELECTED (screen: "PAD 6 > LAYER 2") | — (mapper, session only, D162) |
+| Wheel | Endless T-bar, 30 detents = all the way, clockwise = PREVIEW in | `Crossfader` relative |
+| `TEMPO` + wheel / `TEMPO` alone | BPM ±0.5 per detent / tap | `Clock` Bpm / Tap |
+| `SELECT` + wheel | Scratch the focused layer (let go on `SELECT` up) | `LayerScratch` |
+| `SHIFT` + wheel | System menu (not in 0.1) | — |
+| `PLAY`, wheel push / `RESTART` | TAKE (MIX page time, 0 = show default) / CUT | `Take` / `Cut` |
+| Top 1–4 (`SHIFT`: the second four) | Dice locks CLIP FX COLOUR MOTION (LAYOUT SOURCE REACT MOOD); LED lit = free | `Locks` Toggle |
+| Top 5 / 6 / 7 (`SHIFT` = latch) | FREEZE (pause PROGRAM layers) / STROBE ("Strobe" in master FX slot 4) / BLACK, while held | `LayerPlay` / `FxSet` / `Black` |
+| Top 8 | ASSIST stub | — |
+| `PAGE` < > (`SHIFT` = PLAY) | Knob pages PLAY → CLIP → LAYER → FX → MIX (clamped) | — |
+| Knobs 1–4 PLAY | SCROLL (next / previous clip, 100 units a step) · DICE (150 units: right Roll, left Back; `ALL` = whole deck) · FX AMT (FX slot 1 mix) · SPEED (2× per turn) | `LayerClip` · `Dice` · `FxMix` · `LayerSpeed` |
+| Knobs 1–4 CLIP | IN · OUT · MODE (steps PlayMode) · SPEED | `LayerSet` In / Out / Mode · `LayerSpeed` |
+| Knobs 1–4 LAYER | OPACITY · BLEND (steps) · FADE IN · FADE OUT (5 s per turn) | `LayerOpacity` · `LayerBlend` · `LayerSet` |
+| Knobs 1–4 FX | EFFECT (slot 1, steps through none) · P1 · P2 · MIX | `FxSet` · `FxParam` · `FxMix` |
+| Knobs 1–4 MIX | TAKE time (local, 100 ms–10 s) · BPM (40 per turn) · GRID (steps) · master FX mix | — · `Clock` · `FxMix` master |
+| Knobs 5–8 (every page, either focus) | The PROGRAM scene's macros (names / values from the show block); `SHIFT` + knob 8 = choose the master effect (slot 1) | `MacroValue` relative · `FxSet` master |
 | `SHIFT` + knob 1–7 | Fine (1/10) | same |
-| `SHIFT` + knob 8 | Choose the master effect (one step per ~1/10 turn, wraps through "none") | `FxSet` master slot 1 |
-| Pad 1–16 | Load clip `page × 16 + pad − 1` into the focused layer; velocity → opacity 0.2..1 | `LayerClip` + `LayerOpacity` absolute |
-| `TRANSPORT <` / `>` | Pad page back / forward (clamped) | — |
-| `PAD MODE` | Next effect in FX slot 1 of the focused layer (`SHIFT` = previous; wraps through "none") | `FxSet` |
-| `NAVIGATE` | Bypass FX slot 1 of the focused layer (toggle; only if it has an effect) | `FxBypass` toggle |
-| `MUTE` | Mute / unmute the focused layer | `LayerMute` toggle |
+| `PATTERN` | CLIPS ↔ SLICE (LED blinks in SLICE); `SHIFT` = KIT stub | — |
+| `SCENE` / `SHIFT` + `SCENE` | LOOKS / MOODS stub | — |
+| `PAD MODE` | FX PADS | — |
+| `MASTER` < > | CLIPS: clip page; LOOKS: bank (song with the setlist) | — / `ShowSelect` relative |
+| `TRANSPORT` < > (`SHIFT` + > = mutate) | Dice back / forward on the focus deck (`ALL` = whole deck) | `Dice` |
+| `GRID` | Global snap off ↔ 1 beat | `Clock` Grid |
+| `REC` (on release) | PREP: save PREVIEW as a new scene (next free pad); PLAY: a new variation of the live scene. `REC` + pad: LOOKS = save to that pad, SLICE = set a cue | `SceneSave` (`kVariation`) · `LayerCue` Set |
+| `ERASE` (on release) / `SHIFT` + `ERASE` | Undo / redo. `ERASE` + `ALL` = reset the focus deck's scene; `ERASE` + SLICE pad = clear the cue | `Undo` · `SceneReset` · `LayerCue` Clear |
+| `ENTER` / `SHIFT` + `ENTER` | GO: next scene live (its transition) / next scene into PREVIEW (cut) | `SceneRecall` kSceneNext |
+| `NOTE REPEAT` | 1/4-beat loop on every PROGRAM layer while held | `LayerBeatLoop` |
+| `MUTE` / `SHIFT` + `MUTE` | Mute the focused layer / PANIC = black latched | `LayerMute` / `Black` |
+| `NAVIGATE` | OUTPUTS stub (M6) | — |
+| CLIPS pad | Clip `page × 16 + pad − 1` into the pad's target on the focus deck; velocity → opacity 0.2..1 on PREVIEW only; release sends `kRelease` (piano / HIT); `SHIFT` + pad in PREP = load + TAKE; `SOLO` + pad = HIT | `LayerTrigger` (+ `LayerOpacity`) |
+| CLIPS pad pressure | PRESS of the target layer's FX slot 1 (once per frame, 64/4095 deadband) | `FxPress` |
+| SLICE pad | Jump to cue *n* of the focused layer's clip; pressure > 1200 = beat loop 1 → 1/16 beat; release ends it | `LayerCue` Jump · `LayerBeatLoop` |
+| LOOKS pad | Scene on that pad: PREP = into PREVIEW (cut), PLAY = live with its transition; `SHIFT` = the other way | `SceneRecall` |
+| FX PADS pad | Catalog effect *n* in master FX slot 3 while held (velocity = mix 0.35..1, pressure = PRESS); `SHIFT` = latch / unlatch | `FxSet` · `FxMix` · `FxPress` |
 
-**LEDs:** groups A–D green, E–H red: full = focused, dim (28) = has a clip, off = empty. Pads: the clip's `thumb_rgb` scaled (very dark colours → grey): full = the clip on the focused layer, medium (56) = on any other layer, dim (16) = only in the catalog, white = finger down, off = no clip. `PLAY` full while a TAKE runs, `TRANSPORT < >` lit when that page exists, `PATTERN` lit (CLIPS), `PAD MODE` full when FX slot 1 has an effect, `NAVIGATE` full when bypassed, `MUTE` full when muted, `SHIFT` while held.
+**LEDs:** groups A–D green, E–H red (full = focus, dim = has a clip). CLIPS pads: on PROGRAM red pulsing with the beat, on PREVIEW green-tinted, in the bank the clip colour dim, white = finger. SLICE: clip colour, bright = cue set. LOOKS: PROGRAM red pulse, PREVIEW green, other scenes their colour dim. FX PADS: magenta = on. Top 1–4 = locks, Top 5–8 = holds, `PATTERN` / `SCENE` / `PAD MODE` = pad mode (blink = SLICE / MOODS), `PAGE` / `MASTER` < > = can move, `ERASE` dim when there is something to undo, `GRID`, `NOTE REPEAT`, `SOLO` / `ALL` / `SELECT` / `TEMPO` / `REC` while held.
 
-**Screens** (one 512 × 64 canvas, left = PREVIEW deck, right = PROGRAM deck): header "PREVIEW B" / "PADS 1/3" (or SHIFT) and "PROGRAM A" / ON AIR · TAKE · BLACK; the focus side's header is inverted, the other underlined. Row 2: the 4 layers in the knob columns ("1 clipname", focused cell inverted, muted struck through, `!` = missing) with opacity bars. Row 3 left: "L1 FX name (BYP)"; right: TAKE bar + % (how much PREVIEW is blended in). Bottom: knob labels / values / bars over the physical knobs (`kKnobX`), the turned knob's column inverted for 0.8 s. Render a sample with `perform_tests --dump file.pbm`.
+**Screens** (left = PREVIEW, right = PROGRAM; the focus side's header inverted): header "PREVIEW B 3b*" (scene pad + variation, `*` = edited) / pad mode + page; "PROGRAM A 1a" / ON AIR · TAKE · BLACK · FREEZE · MORPH. Row 2: the 4 layers over the knobs (focused cell inverted, muted struck through, `!` = missing) + opacity bars. Row 3 left: a flash message for 1.5 s, inverted ("UNDO", "PAD 6 > LAYER 2", the show's own "3b saved"), else page + focused layer + FX; right: TAKE bar + % + BPM with a beat dot. Bottom: knob labels / values / bars over the physical knobs; knobs 5–8 = macro names. Top 1–8 labels are not on the screens (no room; the LEDs show them). Sample: `perform_tests --dump file.pbm`.
 
 ## Done (with commits)
-- S2 slice mapper + tests (branch `claude/control-slice-perform`, see git log). Earlier history: `CLAUDE.md` "Next steps" and `docs/roadmap.md`.
+- **M4 (2026-11-17, branch `claude/control-m4-perform`):** the mapper above, `set_context(ShowStatus*, TransportSection*)` (one call in `render_main.cpp`), 219 unit checks, `mk2_chain_tests` updated (knob 1 opacity now on the LAYER page), `tools/mk2_e2e.py` = basic + song + input → glass, measurement doc, D160–D162.
+- S2 slice mapper (branch `claude/control-slice-perform`). Earlier history: `CLAUDE.md` "Next steps" and `docs/roadmap.md`.
 
 ## In progress
-- Nothing. Last task: MK2 input end to end (below). Waiting for the owner's real-MK2 run.
+- Nothing. M4 is ready to merge; M9 (Lightpad) not started.
 
 ## Done 2026-11-16: MK2 input end to end (owner: "neither the sim nor the MK2 drives the engine")
 - **Measured, not guessed.** On main (35e662e) with exactly ONE simulator, the whole chain works: scripted `SimMk2`, the live view over HTTP, and clicks in the browser page all reached the engine (every group, 12 quick presses, knob 1, wheel +6 = 0.200, PLAY TAKE), and the engine's Perform screens / LEDs showed on the page.
@@ -53,24 +73,25 @@ Subset of `docs/design/perform.md` v4 / `hardware-mapping.md` §3. Focus is a **
 - `CLAUDE.md` line "A new simulator port = new session" is now: "the newest simulator wins; others are ignored while it is alive" (LEAD file, not edited here).
 
 ## Next up (ordered)
-1. The owner runs the real MK2 under plain `himmel.exe` (steps in the 2026-11-16 report to LEAD) and sends `build\bin\Release\logs\mk2-<date>.log`. If presses are counted there but the engine does not move, the break is in `himmel_render` (ENGINE's file) after ring 0.
-2. The owner plays it; settle the PROPOSED rows D97–D99 in `docs/decisions.md`.
-3. Then the full perform.md mapping: double-tap group, LOOKS / SLICE / FX PADS pad modes, knob pages (`PAGE < >`), Top 5–8 holds, `ERASE` undo, `REC`, `ENTER`, pad targets.
-- Older items kept: `roles` section in the profiles; Phase 1c MK2 (SLICE, PRESS, HIT, scratch); Block SCRUB, LUMI SLICE KEYS; M13 OSC; M6 display drop-out with ENGINE.
+1. The owner plays M4 on the real MK2 under plain `himmel.exe` (every MK2 Live page closed) and settles D160–D162 (and the older D97–D99, now mostly replaced by D160–D161).
+2. M9: Lightpad Block (TOUCH / MIX = fader with soft takeover against the wheel / SCRUB) through the generic weapon block (`Local\HimmelWeapon2`), a `LightpadPerform` mapper next to `Mk2Perform`.
+3. Gaps left in M4 (each needs another track first): hold a LOOKS pad = morph over the hold time; SCENE kits (needs the kit in the show block, SHOW v2) and KitSet from the MK2; LAYER page PLACE / ZOOM / PAN (ENGINE M6 places); OUTPUTS on `NAVIGATE` (M6); MOODS (SHOW moods); ASSIST; real FREEZE (an engine freeze-frame instead of pausing); `DUPLICATE` (copy layer / scene to PREVIEW needs a command); `AUTO WRITE` (reactions, M8 / D131); `REC` + empty clip pad = SAMPLE; SLICE hold A + tap B = in / out; `VOLUME` / `SWING` + wheel; CONTROL / STEP / BROWSE / SAMPLING views.
+- Older items kept: `roles` section in the profiles; Block SCRUB, LUMI SLICE KEYS; M13 OSC; M6 display drop-out with ENGINE.
 
 ## GUESSES
-- `GUESS:` the engine flips `program_deck` when a **manual** crossfader move reaches the far end (engine-state.md says "the side the crossfader rests on"). If it only flips on `Take` / `Cut`, the wheel stops at the end and never swaps; check with S1. Confidence: medium.
-- `GUESS:` loading a clip starts it playing (the mapper sends no `LayerPlay`). Check with S1.
-- `GUESS:` tuning: speed 2× per knob turn, SHIFT = 1/10 fine, 100 raw units per master-effect step, pad floor opacity 0.2, 0.8 s knob highlight. Owner to feel it.
-- `GUESS:` pad 1 (bottom-left) = first clip of the page (Maschine numbering). The GUI clip grid should match (S3).
-- `GUESS:` knobs 5–8 = master FX params until scenes / macros exist (perform.md §3).
-- The mapper does not send `Hello`; it runs inside the render process, so the engine marks slot 0 alive itself.
+- `GUESS:` every tuning number in `mk2_perform.cpp` "tuning" (step sizes 100 / 150 raw units, speed 2× and fades 5 s per turn, BPM 40 per turn, SHIFT = 1/10, pad floor opacity 0.2, double-tap 350 ms, flash 1.5 s, PRESS deadband 64, SLICE loop above pressure 1200, stutter 1/4 beat, scratch 0.05 s per detent, TEMPO 0.5 BPM per detent). Owner to feel them. Confidence: medium.
+- `GUESS:` velocity sets the opacity only on PREVIEW (a PROGRAM launch may wait for the grid, so its opacity is left alone). Medium.
+- `GUESS:` FREEZE = pause the PROGRAM layers; STROBE = the effect named "Strobe" in master FX slot 4; FX PADS = catalog effect *n* in master FX slot 3; PANIC = black (D161). Medium-low: these wait for real engine features.
+- `GUESS:` pad targets are kept by the mapper for the session, not in the scene kit (D162); SHOW's block has no kit yet. High that this is a stop-gap.
+- `GUESS:` LOOKS fires on the hit (no hold-to-morph yet): lower latency, but the morph gesture is missing. The PLAY-focus scene uses its own transition (`f[0] = -1`); PREP and the `SHIFT` ways cut.
+- `GUESS:` pad 1 (bottom-left) = first clip of the page (Maschine numbering). The GUI clip grid should match.
+- The input → glass number covers UDP + engine + DWM, not USB and not the panel (see the measurement doc).
 
 ## Open questions for the owner
-- PROPOSED D97 (FX buttons `PAD MODE` / `NAVIGATE`), D98 (pad paging on `TRANSPORT < >`, pad order), D99 (knobs 5–8 + SHIFT) in `docs/decisions.md`.
+- PROPOSED D160 (knob pages, knobs 5–8 always macros), D161 (stand-ins for FREEZE / STROBE / FX PADS / PANIC / NOTE REPEAT / GRID / dice buttons), D162 (session pad targets, REC / ERASE on release, LOOKS fires on the hit) in `docs/decisions.md`.
 
 ## How to build / run / test this track
-VS 2022 Build Tools' bundled CMake: `cmake -S . -B build -G "Visual Studio 17 2022" -A x64`, `cmake --build build --config Release`, then `ctest --test-dir build -C Release` (9 suites incl. `mk2_chain_tests`) or `build\bin\Release\perform_tests.exe`.
+VS 2022 Build Tools' bundled CMake: `cmake -S . -B build -G "Visual Studio 17 2022" -A x64`, `cmake --build build --config Release --parallel`, then every `build\bin\Release\*_tests.exe` (incl. `perform_tests`, `mk2_chain_tests`). End to end: `python tools/mk2_e2e.py` (needs `media/test/*.mov`: `python tools/make_test_clips.py`, or copy them; starts and stops its own `himmel.exe --sim --no-ui --no-weapons -- --no-show-files`; `--basic`, `--no-latency`, `--runs N`, `--attach`). Takes about a minute; it pins the output window on top while measuring (no focus change) and writes `build/mk2_e2e_latency.json`.
 
 ## Gotchas found
 - A simulator is ignored while a newer one runs: look for the red pill / "ignoring another MK2 simulator" in the mk2 log before debugging anything else.
@@ -80,7 +101,12 @@ VS 2022 Build Tools' bundled CMake: `cmake -S . -B build -G "Visual Studio 17 20
 - `himmel.exe --help` is not a help flag: it starts the real (hardware) stack.
 - `Mk2Perform::sync()` runs at the start of `on_event` and `tick`, so events before the first tick are fine. Commands sent in a frame are not in the `LiveState` passed until the next frame; the mapper keeps its own focus so a group press is not undone by the stale state.
 - `pages.h`'s `draw_perform` fills the whole screen with knob slots, so the slice screen is drawn by the mapper itself with the `pages.h` helpers (`text_in`, `text_anchored`, `kKnobColumn`); no controller change was needed.
+- `himmel_cmd quit` is not a command (it prints the usage). `mk2_e2e.py` stops its stack with `taskkill /T /F` on the supervisor; a stack you start by hand must be stopped the same way, or the next e2e run plays against two stacks.
+- Reading the composed desktop (GDI on the screen DC) waits for the next DWM frame: one poll = one 16.5 ms frame. Sample the whole output (StretchBlt to a few samples) and judge the mean: the test clips flash in the middle.
+- Git Bash turns `-- /m` into a path for MSBuild ("Only one project can be specified"): use `cmake --build ... --parallel`.
+
 
 ## Interfaces touched
 - 2026-11-16: sim link report `0xFD` (controller -> ignored MK2 simulator), `sim_link.h` only; no shared-memory or protocol change. `Controller` got private counters (header change, ABI-internal).
 - `src/perform/include/himmel/perform/mk2_perform.h`: **private members only** (public API unchanged). No protocol change.
+- 2026-11-17 (M4): `Mk2Perform::set_context(const ShowStatus*, const TransportSection*)` (new public inline method) + read-only accessors `page()`, `pad_mode()`, `pad_target()`, `flash()`; private members rewritten. ENGINE's `render_main.cpp` got one line (`perform->set_context(&show->status(), &model->transport())`). No change to `src/protocol/` or any shared block; only existing command types are used (none from CONTROL's range 80–89).
