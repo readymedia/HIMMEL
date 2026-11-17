@@ -55,6 +55,11 @@ public:
 
     // Once per frame, before the first chain.
     void begin_frame(const FrameCtx& ctx);
+    // D131: the per-knob reaction table (the deck model's; nullptr = only each
+    // effect's default reaction). Chains 0..10 read it; the HIT layer has no FX.
+    void set_reactions(const protocol::ReactionSection* table) { react_ = table; }
+    // Frame counter (bumped by begin_frame); SlotRuntime::frame == this = resolved this frame.
+    uint64_t frame_count() const { return frame_; }
     const FrameCtx& frame() const { return ctx_; }
 
     // Runs the active slots of one chain on the ping-pong pair; returns the index of
@@ -72,6 +77,7 @@ public:
 
     Globals& globals() { return globals_; }
     SlotRuntime& runtime(int chain, int slot) { return rt_[chain][slot]; }
+    const SlotRuntime& runtime(int chain, int slot) const { return rt_[chain][slot]; }
     const Library& library() const { return *lib_; }
     bool shader_ok(int effect) const { return effect >= 0 && effect < kMaxEffects && ps_[effect]; }
     double compile_ms() const { return compile_ms_; }
@@ -106,6 +112,7 @@ private:
     uint64_t frame_ = 0;
     Globals globals_;
     SlotRuntime rt_[kChains][protocol::kFxSlots];
+    const protocol::ReactionSection* react_ = nullptr;
     double compile_ms_ = 0;
 };
 

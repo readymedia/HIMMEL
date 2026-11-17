@@ -174,10 +174,13 @@ struct SlotRuntime {
     float look[kParams] = {};    // LOOK values (M3 scenes fill them; until then = the slot value)
     bool look_set[kParams] = {};
     float press_env = 0;         // PRESS after velocity / release shaping
-    float react_env = 0;         // the reaction's envelope
-    float prev_sig = 0;          // for TRIGGER edges
-    double trigger_until_beat = -1;
-    double last_trigger_beat = -1e9;
+    // One reaction per knob (D131): each has its own envelope and TRIGGER state.
+    float react_env[kParams] = {};             // the reaction's envelope
+    float prev_sig[kParams] = {};              // for TRIGGER edges
+    double trigger_until_beat[kParams] = {-1, -1, -1, -1};
+    double last_trigger_beat[kParams] = {-1e9, -1e9, -1e9, -1e9};
+    float out[kParams] = {};                   // the last resolved values (state block "knob ghosts")
+    uint64_t frame = 0;                        // FxGpu frame of the last resolve (0 = never)
     // flash cap
     bool flash_on = false;
     double last_flash_s = -1e9;
@@ -203,9 +206,20 @@ int step_index(float p, int n);
 float step_center(int i, int n);
 
 // Turns one slot into shader values. Updates `rt` (envelopes, flash limiter).
-// `press01` = the slot's PRESS from the command ring (FxSlotState::press / 255).
+// PRESS comes from FxSlotState::press. `reacts`: the slot's reaction per knob
+// (kParams entries, D131; signal None = no reaction on that knob, `param` is
+// ignored), or nullptr = only the effect's default reaction (m.reaction).
 Resolved resolve(const EffectMeta& m, int effect_id, const protocol::FxSlotState& slot, SlotRuntime& rt,
-                 const Globals& globals, const FrameCtx& ctx);
+                 const Globals& globals, const FrameCtx& ctx, const Reaction* reacts = nullptr);
+
+// D131: the state block's reaction table (protocol::ReactionEntry, numbered like
+// Signal / ReactMode / Curve) -> the resolver's per-knob reactions. An Off entry,
+// a bad enum or a non-finite number gives "no reaction" on that knob.
+void reactions_from(const protocol::SlotReactions& in, Reaction out[kParams]);
+// The table entry an effect starts with on knob `p` (ReactSource::Default): its
+// default reaction when it targets `p`, else signal None; the range is the
+// reaction's range, else the param's good range.
+void default_entry(const EffectMeta& m, int p, protocol::ReactionEntry& out);
 
 // Flashes per second the strobe makes at knob `rate01` and `bpm` (no cap).
 float strobe_flash_hz(const EffectMeta& m, float rate01, float bpm);
