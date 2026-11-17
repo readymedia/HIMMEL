@@ -184,6 +184,17 @@ What is left needs the owner and real hardware:
 - the 8 h soak and the show-PC run (`docs/qa/README.md`);
 - ~~the wave 2–4 PROPOSED decisions~~ **decided** by the owner 2026-11-17 (7997cfb); D89, D94–D103 and D106–D108 are still PROPOSED.
 
+### Wave 5 — started 2026-11-17 (owner: "avslutt og fortsett")
+Polish of 0.1 on the decided defaults. The owner's `himmel.exe` may be running with the real MK2 + Lightpad:
+**no agent starts a stack (himmel.exe, mk2_e2e, qa_rig) while `tasklist` shows any himmel process, and never kills one.**
+Build and unit tests in the agent's own worktree are fine. If e2e cannot run, say "e2e pending" and the LEAD runs it.
+
+| Track · session | Task | Owns | Done when |
+|---|---|---|---|
+| AUDIO (audio-m8) | D131 `FxReact` = command 40 + per-slot reaction table in `Local\HimmelState` (version bump, LEAD-approved); engine applies per-parameter reactions; **first commit = the contract** in `docs/interfaces/` pushed early so GUI can build on it | `src/audio/`, protocol range 40–49, reaction apply in `src/engine/`, `docs/agents/handoff/audio.md` | unit tests for packing + apply; a knob with its own reaction moves in `himmel.exe --sim` (or e2e pending) |
+| MEDIA (media-m7) | ingest commands 60–69 (import folder, rescan, remove, relink, reanalyse) consumed by `himmel_ingest`; `--selftest` for `himmel_ingest`; contract doc pushed first | `src/library/`, `himmel_ingest`, `docs/interfaces/library-db.md`, `docs/agents/handoff/media.md` | `media_tests`/library tests cover each command; ingest `--selftest` green; no catalog-v3 paging yet (would clash with AUDIO's state bump) |
+| GUI (gui-m11) | the reaction editor on AUDIO's contract; library import / rescan / remove on MEDIA's contract; the rest of M11 still missing (clip editor drawer, wizard steps 5+, scene / kit editor gaps) | `gui/`, `src/ui/`, `docs/agents/handoff/gui.md` | panels work against the fake engine and the real one; GUI kill / restart never changes the outputs |
+
 **Old wave 4 candidates (now done or folded in):**
 - GUI: the SHOW and AUDIO panels, the reaction editor and the wizard (rest of M11);
 - M9 / M13 if CONTROL did not reach them;
