@@ -159,3 +159,6 @@ button.fsrow, .fsrow.nocb { grid-template-columns: 22px 1fr auto; }
 .bdsc { height: 48px; border-radius: 5px; border: 1px solid var(--line); display: flex; align-items: flex-end; cursor: grab; overflow: hidden; }
 .bdsc span { font-size: 10px; background: #000b; width: 100%; padding: 1px 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bdsc:hover { border-color: var(--accent); }
+.fsopts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 4px 10px; font-size: 12px; }
+.fsopts:empty { display: none; }
+.lbjud { font-size: 10px; padding: 0 7px; }

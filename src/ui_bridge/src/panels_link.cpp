@@ -7,6 +7,7 @@
 #include <shlobj.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstring>
 #include <fstream>
@@ -83,6 +84,8 @@ struct Panels {
     Link osc{osc::kOscShmName, sizeof(osc::OscBlock), osc::kOscMagic, osc::kOscVersion, false, {}};
     Link library{library::kLibraryShmName, sizeof(library::LibraryBlock), library::kLibraryMagic,
                  library::kLibraryVersion, true, {}};   // v2: the bridge writes its ingest command channel (Gui = 1)
+    std::mutex root_m;             // guards library_root: the worker may move / switch the library (v3, §11.5)
+    uint32_t root_seq_seen = 0;
     uint32_t ingest_seq = 0;        // the bridge's running ingest seq (under write_m)
     json ingest_replies = json::array();   // the last replies, newest first (under write_m)
     std::mutex write_m;        // the bridge's own writes (text box, audio config): one writer
@@ -93,6 +96,11 @@ struct Panels {
     std::chrono::steady_clock::time_point devices_at{};
 };
 Panels* g = nullptr;
+fs::path lib_root() {
+    if (!g) return {};
+    std::lock_guard rl(g->root_m);
+    return g->library_root;
+}
 
 uint64_t steady_us() {
     return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
@@ -105,7 +113,7 @@ uint64_t steady_us() {
 void panels_init(bool watch, const fs::path& library_root, const fs::path& exe_dir) {
     g = new Panels();
     g->watch = watch;
-    g->library_root = library_root;
+    g->library_root = library_root;  // (init: no other thread yet)
     g->exe_dir = exe_dir;
     if (watch) g->show.writable = g->audio.writable = g->library.writable = false;
 }
@@ -205,6 +213,35 @@ PanelJson panels_poll(uint64_t now_us, bool retry) {
         if (!seq_read(b->job_seq, b->job, job)) job = library::IngestJob{};
         json j = library_block_to_json(c, job);
         j["alive"] = g->library.alive(b->heartbeat_us.load(std::memory_order_acquire), now);
+        // v3 (MEDIA wave 7): disk guard, stored mode, batch progress, the last import plan, the root / move.
+        {
+            LibraryV3 v;
+            v.stored_mode = b->stored_mode.load();
+            v.disk_low = b->disk_low.load();
+            v.disk_free = b->disk_free.load();
+            v.disk_total = b->disk_total.load();
+            v.disk_reserve = b->disk_reserve.load();
+            v.library_bytes = b->library_bytes.load();
+            v.queue_bytes = b->queue_bytes.load();
+            auto prog = std::make_unique<library::IngestProgress>();
+            auto plan = std::make_unique<library::IngestPlan>();
+            auto rt = std::make_unique<library::LibraryRoot>();
+            if (!seq_read(b->progress_seq, b->progress, *prog)) *prog = library::IngestProgress{};
+            if (!seq_read(b->plan_seq, b->plan, *plan)) *plan = library::IngestPlan{};
+            const uint32_t rs = b->root_seq.load(std::memory_order_acquire);
+            if (seq_read(b->root_seq, b->root, *rt)) {
+                // Readers follow the root (§11.5): the DB and thumbnails are read from where the worker is.
+                const size_t n = strnlen(rt->path, sizeof(rt->path));
+                if (n && rs != g->root_seq_seen) {
+                    g->root_seq_seen = rs;
+                    std::lock_guard rl(g->root_m);
+                    g->library_root = fs::path(std::u8string(rt->path, rt->path + n));
+                }
+            } else {
+                *rt = library::LibraryRoot{};
+            }
+            library_v3_to_json(j, v, *prog, *plan, *rt, static_cast<int>(Producer::Gui));
+        }
         // v2: the ingest replies to this bridge (the GUI slot); drained here, kept for the page.
         {
             std::lock_guard wl(g->write_m);
@@ -220,11 +257,11 @@ PanelJson panels_poll(uint64_t now_us, bool retry) {
             }
             j["writable"] = g->library.writable;
         }
-        j["root"] = utf8(g->library_root);
+        j["root"] = utf8(lib_root());
         out.library = dump(j);
     } else {
         json j = json::parse(g->library.absent_json("library"));
-        j["root"] = utf8(g->library_root);   // the clip list still works from the DB
+        j["root"] = utf8(lib_root());   // the clip list still works from the DB
         out.library = dump(j);
     }
     // ---- weapon drivers (Local\HimmelWeapon1..16), once a second: name, connected, alive ----
@@ -358,13 +395,13 @@ json panels_audio_devices() {
 }
 
 json panels_library_clips() {
-    json out = {{"ok", false}, {"root", g ? utf8(g->library_root) : std::string()}, {"clips", json::array()}};
+    json out = {{"ok", false}, {"root", g ? utf8(lib_root()) : std::string()}, {"clips", json::array()}};
     if (!g) return out;
-    if (g->library_root.empty()) {
+    if (lib_root().empty()) {
         out["error"] = "no library in this run (--no-library / a test run)";
         return out;
     }
-    const fs::path dbf = g->library_root / library::kDbFile;
+    const fs::path dbf = lib_root() / library::kDbFile;
     std::error_code ec;
     if (!fs::exists(dbf, ec)) {
         out["error"] = "no library yet (" + utf8(dbf) + ")";
@@ -459,8 +496,35 @@ fs::file_time_type mtime(const fs::path& p) {
 }
 }  // namespace
 
-json panels_ingest_command(const json& body) {
+json panels_ingest_command(const json& body_in) {
     if (!g) return {{"ok", false}, {"error", "not started"}};
+    json body = body_in;
+    // v3 (wave 7) "Import only this selection": {"type": "Import", "files": [absolute paths]} -> the bridge
+    // writes them to a UTF-8 list file in %TEMP% and sends Import with kIngestList (library-db.md §11.4).
+    if (auto it = body.find("files"); it != body.end()) {
+        if (!it->is_array() || it->empty() || it->size() > 10000) return {{"ok", false}, {"error", "\"files\" must be 1..10000 absolute paths"}};
+        std::string text;
+        for (const auto& f : *it) {
+            if (!f.is_string()) return {{"ok", false}, {"error", "\"files\" holds strings only"}};
+            const std::string p = f.get<std::string>();
+            if (p.size() < 3 || p.find_first_of("\r\n") != std::string::npos || !(p[1] == ':' || p.rfind("\\\\", 0) == 0))
+                return {{"ok", false}, {"error", "not an absolute path: " + p}};
+            text += p + "\n";
+        }
+        wchar_t tmp[MAX_PATH + 1];
+        const DWORD n = GetTempPathW(MAX_PATH, tmp);
+        if (!n) return {{"ok", false}, {"error", "no temp folder"}};
+        static std::atomic<uint32_t> list_no{0};
+        const fs::path lf = fs::path(tmp) / ("himmel-import-" + std::to_string(GetCurrentProcessId()) + "-" + std::to_string(++list_no) + ".txt");
+        {
+            std::ofstream o(lf, std::ios::binary);
+            o << text;
+            if (!o) return {{"ok", false}, {"error", "cannot write the import list"}};
+        }
+        body.erase("files");
+        body["path"] = utf8(lf);
+        body["list"] = true;
+    }
     library::IngestCommand c;
     std::string err;
     if (!ingest_command_from_json(body, c, err)) return {{"ok", false}, {"error", err}};
@@ -525,7 +589,7 @@ json panels_show_document() {
 }
 
 std::string panels_library_thumb(const std::string& file) {
-    if (!g || g->library_root.empty()) return {};
+    if (!g || lib_root().empty()) return {};
     // <16 hex>.jpg or <16 hex>-strip.jpg only.
     auto hex16 = [&](size_t n) {
         if (file.size() < 16) return false;
@@ -537,14 +601,14 @@ std::string panels_library_thumb(const std::string& file) {
     };
     const bool ok = (hex16(20) && file.compare(16, 4, ".jpg") == 0) || (hex16(26) && file.compare(16, 10, "-strip.jpg") == 0);
     if (!ok) return {};
-    std::ifstream f(g->library_root / "thumbs" / file, std::ios::binary);
+    std::ifstream f(lib_root() / "thumbs" / file, std::ios::binary);
     if (!f) return {};
     std::ostringstream ss;
     ss << f.rdbuf();
     return ss.str();
 }
 
-std::string panels_library_root() { return g ? utf8(g->library_root) : std::string(); }
+std::string panels_library_root() { return g ? utf8(lib_root()) : std::string(); }
 
 // ---- GUI wave 7: the import path dialog and the disk line ----
 namespace {
@@ -576,7 +640,7 @@ json panels_fs_list(const std::string& path_utf8, bool all_files) {
             drives.push_back(std::move(dj));
         }
         json places = json::array();
-        if (g && !g->library_root.empty()) places.push_back({{"name", "Library originals"}, {"path", utf8(g->library_root / "originals")}});
+        if (g && !lib_root().empty()) places.push_back({{"name", "Library originals"}, {"path", utf8(lib_root() / "originals")}});
         for (auto& p : {known_place("Videos", FOLDERID_Videos), known_place("Pictures", FOLDERID_Pictures),
                         known_place("Desktop", FOLDERID_Desktop), known_place("Downloads", FOLDERID_Downloads),
                         known_place("Documents", FOLDERID_Documents)})
@@ -626,9 +690,9 @@ json panels_fs_list(const std::string& path_utf8, bool all_files) {
 }
 
 json panels_open_originals() {
-    if (!g || g->library_root.empty()) return {{"ok", false}, {"error", "no library in this run"}};
+    if (!g || lib_root().empty()) return {{"ok", false}, {"error", "no library in this run"}};
     if (g->watch) return {{"ok", false}, {"error", "read-only bridge (--watch)"}};
-    const fs::path d = g->library_root / "originals";
+    const fs::path d = lib_root() / "originals";
     std::error_code ec;
     if (!fs::is_directory(d, ec)) fs::create_directories(d, ec);   // the ingest worker creates it too
     if (!fs::is_directory(d, ec)) return {{"ok", false}, {"error", "no originals folder: " + utf8(d)}};
@@ -640,7 +704,7 @@ json panels_open_originals() {
 
 json panels_library_disk() {
     json out = {{"ok", false}};
-    if (!g || g->library_root.empty()) return out;
+    if (!g || lib_root().empty()) return out;
     static std::mutex m;
     static json cached;
     static std::chrono::steady_clock::time_point at{};
@@ -650,7 +714,7 @@ json panels_library_disk() {
     uint64_t bytes = 0, files = 0;
     // What Himmel itself stores in the library (HAP copies, stills, thumbnails, the DB); never the originals.
     for (const char* sub : {"hap", "stills", "thumbs", "meta", "work"}) {
-        const fs::path d = g->library_root / sub;
+        const fs::path d = lib_root() / sub;
         if (!fs::is_directory(d, ec)) continue;
         for (fs::recursive_directory_iterator it(d, fs::directory_options::skip_permission_denied, ec), end;
              !ec && it != end; it.increment(ec)) {
@@ -660,12 +724,12 @@ json panels_library_disk() {
     }
     for (const char* f : {library::kDbFile}) {
         std::error_code e2;
-        const auto sz = fs::file_size(g->library_root / f, e2);
+        const auto sz = fs::file_size(lib_root() / f, e2);
         if (!e2) bytes += sz;
     }
-    out = {{"ok", true}, {"library_bytes", bytes}, {"library_files", files}, {"root", utf8(g->library_root)}};
+    out = {{"ok", true}, {"library_bytes", bytes}, {"library_files", files}, {"root", utf8(lib_root())}};
     ULARGE_INTEGER fr{}, tot{};
-    fs::path probe = g->library_root;
+    fs::path probe = lib_root();
     while (!probe.empty() && !fs::exists(probe, ec) && probe.has_parent_path() && probe.parent_path() != probe) probe = probe.parent_path();
     if (GetDiskFreeSpaceExW(probe.c_str(), &fr, &tot, nullptr)) { out["free"] = fr.QuadPart; out["total"] = tot.QuadPart; }
     cached = out;

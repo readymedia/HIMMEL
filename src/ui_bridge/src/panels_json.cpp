@@ -92,10 +92,13 @@ const char* const kClockRunNames[] = {"Absent", "Stopped", "Running"};
 const char* const kVerdictNames[] = {"Applied", "Refused", "Blocked", "Garbage", "RateLimited"};
 static_assert(std::size(kVerdictNames) == static_cast<size_t>(osc::Verdict::Count));
 const char* const kIngestModeNames[] = {"Idle", "Full", "Background", "High", "Hold"};
-const char* const kIngestCmdNames[] = {"Import", "Rescan", "Remove", "Relink", "Reanalyse", "Retry", "Mode", "Unwatch"};
+const char* const kIngestCmdNames[] = {"Import", "Rescan", "Remove", "Relink", "Reanalyse", "Retry", "Mode", "Unwatch",
+                                       "ClearQueue", "Library"};   // v3: 68, 69
+static_assert(std::size(kIngestCmdNames) == library::kIngestLast - library::kIngestFirst + 1);
 const char* const kIngestReqNames[] = {"Auto", "Full", "Background", "Hold"};
 const char* const kIngestStatusNames[] = {"Ok", "Accepted", "UnknownType", "BadId", "BadPath", "Mismatch",
-                                          "Duplicate", "Failed", "Interrupted", "BadValue"};
+                                          "Duplicate", "Failed", "Interrupted", "BadValue", "NoSpace", "Busy"};   // v3: 10, 11
+const char* const kMoveStateNames[] = {"None", "Copying", "Verifying", "Switching", "Done", "Failed"};
 
 json locks_json(uint32_t mask) {
     json a = json::array();
@@ -321,6 +324,26 @@ json osc_to_json(const osc::OscStatus& s) {
     }
     j["last"] = std::move(last);
     return j;
+}
+
+void library_v3_to_json(json& j, const LibraryV3& v, const library::IngestProgress& p, const library::IngestPlan& plan,
+                        const library::LibraryRoot& root, int my_producer) {
+    j["stored_mode"] = name_or(kIngestReqNames, static_cast<int>(v.stored_mode));
+    j["disk_low"] = v.disk_low != 0;
+    j["disk"] = {{"free", v.disk_free}, {"total", v.disk_total}, {"reserve", v.disk_reserve},
+                 {"library_bytes", v.library_bytes}, {"queue_bytes", v.queue_bytes}};
+    j["progress"] = {{"done", p.done}, {"total", p.total}, {"clip", p.clip}, {"file", fixed(p.file)},
+                     {"file_progress", std::round(std::clamp(p.file_progress, 0.0f, 1.0f) * 1000.0) / 1000.0},
+                     {"eta_s", p.eta_s}, {"bytes_written", p.bytes_written}, {"file_bytes", p.file_bytes},
+                     {"error_clip", p.error_clip}, {"error", fixed(p.error)}};
+    j["plan"] = {{"seq", plan.seq}, {"mine", plan.producer == my_producer}, {"dry_run", plan.dry_run != 0},
+                 {"fits", plan.fits != 0}, {"refused", plan.refused != 0}, {"clips", plan.clips}, {"known", plan.known},
+                 {"fit_clips", plan.fit_clips}, {"need_bytes", plan.need_bytes}, {"queue_bytes", plan.queue_bytes},
+                 {"free_bytes", plan.free_bytes}, {"reserve_bytes", plan.reserve_bytes}, {"message", fixed(plan.message)}};
+    j["root_info"] = {{"path", fixed(root.path)}, {"move_state", name_or(kMoveStateNames, static_cast<int>(root.move_state))},
+                      {"move_progress", std::round(std::clamp(root.move_progress, 0.0f, 1.0f) * 1000.0) / 1000.0},
+                      {"move_done_bytes", root.move_done_bytes}, {"move_total_bytes", root.move_total_bytes},
+                      {"move_to", fixed(root.move_to)}, {"move_message", fixed(root.move_message)}};
 }
 
 json library_block_to_json(const LibraryCounts& c, const library::IngestJob& job) {
@@ -1032,8 +1055,32 @@ bool ingest_command_from_json(const json& j, library::IngestCommand& c, std::str
     if (flag("force")) flags |= library::kIngestForce;
     if (flag("thumbs")) flags |= library::kIngestThumbs;
     int32_t iv = 0;
+    // v3 (wave 7): Import options, Library flags.
+    if (flag("hapq")) flags |= library::kIngestHapQ;
+    if (flag("skip_known")) flags |= library::kIngestSkipKnown;
+    if (flag("list")) flags |= library::kIngestList;
+    if (flag("dry_run")) flags |= library::kIngestDryRun;
+    if (flag("fit")) flags |= library::kIngestFit;
+    if (flag("move")) flags |= library::kIngestMove;
+    uint32_t conform = 0;
+    if (type == IngestCommandType::Import) {
+        if (auto it = j.find("height"); it != j.end() && !it->is_null()) {
+            if (!it->is_number_integer() || !(it->get<int64_t>() == 0 || (it->get<int64_t>() >= 144 && it->get<int64_t>() <= 4320))) {
+                error = "\"height\" must be 0 (keep) or 144..4320";
+                return false;
+            }
+            iv = static_cast<int32_t>(it->get<int64_t>());
+        }
+        if (auto it = j.find("conform_hz"); it != j.end() && !it->is_null()) {
+            if (!it->is_number_integer() || !(it->get<int64_t>() == 0 || it->get<int64_t>() == 50 || it->get<int64_t>() == 60)) {
+                error = "\"conform_hz\" must be 0, 50 or 60";
+                return false;
+            }
+            conform = static_cast<uint32_t>(it->get<int64_t>());
+        }
+    }
     const bool needs_path = type == IngestCommandType::Import || type == IngestCommandType::Unwatch ||
-                            type == IngestCommandType::Relink;
+                            type == IngestCommandType::Relink || type == IngestCommandType::Library;
     const bool needs_clip = type == IngestCommandType::Remove;
     if (needs_path && path.empty()) { error = std::string(kIngestCmdNames[idx]) + " needs \"path\""; return false; }
     if (needs_clip && clip <= 0) { error = "Remove needs \"clip\" (a library id)"; return false; }
@@ -1056,6 +1103,7 @@ bool ingest_command_from_json(const json& j, library::IngestCommand& c, std::str
         error = "the path is too long";
         return false;
     }
+    c.conform_hz = conform;
     return true;
 }
 

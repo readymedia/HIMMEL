@@ -25,7 +25,7 @@
   const LB = {
     built: false, key: '', sel: new Set(), last: -1, shown: [], limit: 300,
     q: '', state: 'all', kind: 'all', energy: [1, 5], fps: 'all', tag: 'all', sort: 'new',
-    disk: null, diskAt: -1e9, seenReply: 0, relink: {}, batch: null,
+    disk: null, diskAt: -1e9, seenReply: 0, relink: {}, batch: null, imports: {}, opts: { height: 0, hapq: false, skip_known: false, conform_hz: 0 },
   };
 
   // ------------------------------------------------------------------ ingest commands
@@ -49,10 +49,11 @@
   }
   function diskInfo() {
     const l = S.library, d = LB.disk || {};
-    const dk = has(l) && l.disk ? l.disk : null;   // MEDIA w7 contract (when present)
+    const dk = has(l) && l.disk && l.disk.total ? l.disk : null;   // library block v3 (MEDIA wave 7, §11.1)
     return {
-      free: dk?.free_bytes ?? d.free, total: dk?.total_bytes ?? d.total, lib: dk?.library_bytes ?? d.library_bytes,
-      guard: dk?.state || null, reserve: dk?.reserve_bytes ?? null, root: l?.root || d.root || '',
+      free: dk ? dk.free : d.free, total: dk ? dk.total : d.total, lib: dk ? dk.library_bytes : d.library_bytes,
+      guard: dk ? (l.disk_low ? 'low' : 'ok') : null, reserve: dk ? dk.reserve : null, queue: dk ? dk.queue_bytes : 0,
+      root: l?.root_info?.path || l?.root || d.root || '',
     };
   }
 
@@ -65,8 +66,9 @@
     const jobOn = !!(l.job?.name && !/^(ready|failed|done|removed)?$/i.test(l.job.stage || ''));
     const busy = l.queued + Math.max(l.working, jobOn ? 1 : 0);
     const fin = l.ready_total + l.failed_total;
-    if (l.batch_total != null) {
-      return { done: l.batch_done, total: l.batch_total, eta: l.eta_s ?? -1, busy: l.batch_done < l.batch_total };
+    const pg = l.progress;
+    if (pg && pg.total > 0) {
+      return { done: pg.done, total: pg.total, eta: pg.eta_s, busy: pg.done < pg.total || !!pg.file, file: pg.file, fileP: pg.file_progress, error: pg.error, v3: true };
     }
     if (busy > 0 && !LB.batch) LB.batch = { start: fin, t0: performance.now(), lastFin: fin, lastAt: performance.now() };
     if (!LB.batch) return null;
@@ -102,6 +104,7 @@
       btn('OPEN DROP FOLDER', 'Open the library\'s originals folder in Explorer: files you copy there are imported by themselves', () => openOriginals()),
       btn('RESCAN', 'Scan the watch folders now and check that every original is still there', () => ingest({ type: 'Rescan', clip: 0 })),
       btn('RETRY FAILED', 'Queue every failed clip again', () => ingest({ type: 'Retry', clip: 0 })),
+      btn('MOVE LIBRARY…', 'Move the library (its HAP copies, thumbnails and database) to another folder or disk', () => moveDialog()),
       btn('FIND MISSING…', 'Search a folder for clips whose original file moved (matched by name, then size and content)', async () => {
         const d = await pathDialog('folder', 'FIND MISSING ORIGINALS · choose the folder to search');
         if (d) ingest({ type: 'Relink', clip: 0, path: d.path });
@@ -213,7 +216,35 @@
       if (title.startsWith('FIND')) { ok.textContent = 'SEARCH THIS FOLDER'; watch.classList.add('hidden'); }
       const cancel = btn('Cancel', null, () => finish(null));
       const foot = el('div', 'askrow'); foot.append(watch, el('div', 'spacer'), cancel, ok);
-      box.append(head, bar, list, info, foot); md.append(box); document.body.append(md);
+      // Import options (library block v3, §11.4): size, codec, skip known, frame-rate conform, estimate.
+      const opts = el('div', 'fsopts');
+      const isImport = !title.startsWith('FIND') && !title.startsWith('MOVE');
+      if (isImport && supports('ClearQueue')) {
+        const o = LB.opts;
+        const sz = el('select'); sz.title = 'Keep the source size, or make big clips smaller (saves disk: 720p is about half of 1080p)';
+        for (const [v, t] of [[0, 'keep size'], [1080, 'max 1080p'], [720, 'max 720p (half the disk)']]) { const x = el('option', null, t); x.value = v; sz.append(x); }
+        sz.value = o.height; sz.addEventListener('change', () => { o.height = +sz.value; });
+        const q = el('label', 'fswatch'); const qc = el('input'); qc.type = 'checkbox'; qc.checked = o.hapq; qc.addEventListener('change', () => { o.hapq = qc.checked; });
+        q.append(qc, el('span', null, ' HAP Q')); q.title = 'Better colour, about 2× the disk';
+        const k = el('label', 'fswatch'); const kc = el('input'); kc.type = 'checkbox'; kc.checked = o.skip_known; kc.addEventListener('change', () => { o.skip_known = kc.checked; });
+        k.append(kc, el('span', null, ' skip clips I removed')); k.title = 'Content already in the library is skipped, removed clips too';
+        const cf = el('select'); cf.title = 'Conform 24 / 25 fps clips to the refresh (smooth, about 2.5× the disk). Off = as shot.';
+        for (const [v, t] of [[0, 'fps as shot'], [50, 'conform to 50'], [60, 'conform to 60']]) { const x = el('option', null, t); x.value = v; cf.append(x); }
+        cf.value = o.conform_hz; cf.addEventListener('change', () => { o.conform_hz = +cf.value; });
+        const est = btn('ESTIMATE DISK', 'How much space this import needs (nothing is imported)', async () => {
+          if (!cur.path) return;
+          info.textContent = 'Estimating…';
+          LB.estimate = null; LB.estWait = true;
+          const base = mode === 'files' && ticked.size ? { files: [...ticked].map(n => cur.path.replace(/[\\/]$/, '') + '\\' + n) } : { path: cur.path };
+          const j = await sendImport(base, { dry_run: true });
+          if (!j.ok) { info.textContent = j.error || 'refused'; return; }
+          const t0 = performance.now();
+          const poll = () => { if (LB.estimate) { info.textContent = '≈ ' + LB.estimate.text; info.classList.toggle('bad', !!(LB.estimate.pl && !LB.estimate.pl.fits)); } else if (performance.now() - t0 < 20000 && md.isConnected) setTimeout(poll, 300); else info.textContent = 'No estimate (the worker is busy); try again.'; };
+          poll();
+        });
+        opts.append(el('span', 'lbl', 'options'), sz, q, k, cf, est);
+      }
+      box.append(head, bar, list, info, opts, foot); md.append(box); document.body.append(md);
       md.addEventListener('click', e => { if (e.target === md) finish(null); });
       pathIn.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') go(pathIn.value.trim()); if (e.key === 'Escape') finish(null); });
       let cur = { path: '' };
@@ -271,8 +302,44 @@
     const r = await pathDialog(mode, mode === 'folder' ? 'IMPORT A FOLDER' : 'IMPORT FILES');
     if (!r) return;
     LB.lastDir = r.path;
-    if (mode === 'folder') ingest({ type: 'Import', path: r.path, watch: r.watch });
-    else for (const f of r.files) await ingest({ type: 'Import', path: f });
+    sendImport(mode === 'folder' ? { path: r.path, watch: r.watch } : { files: r.files });
+  }
+  // One Import with the dialog's options (v3 §11.4). A refusal (NoSpace) offers the clips that fit.
+  async function sendImport(base, extra) {
+    const o = LB.opts, cmd = { type: 'Import', ...base, ...extra };
+    if (o.height) cmd.height = o.height;
+    if (o.hapq) cmd.hapq = true;
+    if (o.skip_known) cmd.skip_known = true;
+    if (o.conform_hz) cmd.conform_hz = o.conform_hz;
+    const j = await ingest(cmd);
+    if (j.ok) LB.imports[j.seq] = cmd;
+    return j;
+  }
+  function afterImport(cmd, r) {
+    const plan = S.library?.plan;
+    const pl = plan && plan.mine && plan.seq === r.seq ? plan : null;
+    if (cmd.dry_run) { LB.estimate = { text: pl?.message || r.message, at: performance.now(), pl }; window.H.invalidate(); return; }
+    if (r.status !== 'NoSpace') return;
+    const md = el('div', 'modal'), box = el('div', 'mbox askbox');
+    const close = () => md.remove();
+    box.append(el('div', 'lbl', 'NOT ENOUGH DISK SPACE'),
+      el('div', null, pl?.message || r.message),
+      el('div', 'dim', 'Nothing was imported. Himmel keeps a reserve free so the show and Windows keep running. You can import only the clips that fit, choose a smaller size (720p) in the import options, move the library to a bigger disk, or free some space.'));
+    const row = el('div', 'askrow');
+    row.append(el('div', 'spacer'), btn('Cancel', null, close));
+    if (pl && pl.fit_clips > 0) row.append(btn(`IMPORT THE ${pl.fit_clips} THAT FIT`, 'Queue the clips that fit above the reserve, in the order found', () => { close(); const c = { ...cmd }; delete c.dry_run; sendImport({}, { ...c, fit: true }); }, 'primary'));
+    row.append(btn('MOVE LIBRARY…', 'Move the library to another folder or disk', () => { close(); moveDialog(); }));
+    box.append(row); md.append(box); document.body.append(md);
+    md.addEventListener('click', e => { if (e.target === md) close(); });
+  }
+  // Library (69): move the library to another folder (v3 §11.5); the progress shows in the status line.
+  async function moveDialog() {
+    if (!supports('Library')) { toast('This import worker cannot move the library (needs library block v3).', 'bad'); return; }
+    const r = await pathDialog('folder', 'MOVE THE LIBRARY · choose an empty folder (or a new one on another disk)');
+    if (!r) return;
+    const d = diskInfo();
+    if (!confirm(`Move the library (${gb(d.lib || 0)}) to\n${r.path}?\n\nThe import pauses while it copies. The old copy is deleted after the next restart of Himmel. Clips keep playing.`)) return;
+    ingest({ type: 'Library', path: r.path, move: true });
   }
 
   // ------------------------------------------------------------------ filters
@@ -325,7 +392,8 @@
     // mode chips
     for (const b of LB.modeBtns) {
       const m = has(l) ? l.mode : '';
-      const on = b.dataset.m === 'Hold' ? m === 'Hold' : b.dataset.m === 'Auto' ? (l?.requested ? l.requested === 'Auto' : m === 'Idle' || m === 'Background' && !l?.requested) : l?.requested ? l.requested === b.dataset.m : m === b.dataset.m && m !== 'Background';
+      // v3: the stored mode (it survives a restart); older workers: guess it from the running mode.
+      const on = l?.stored_mode ? l.stored_mode === b.dataset.m : b.dataset.m === 'Hold' ? m === 'Hold' : b.dataset.m === 'Auto' ? (m === 'Idle' || m === 'Background') : m === b.dataset.m;
       b.classList.toggle('on', !!on);
       b.disabled = !ingestOk();
     }
@@ -340,6 +408,9 @@
         el('span', 'dim', 'himmel.exe starts it. Without it you can still browse the library, but not import.'));
     }
     s.append(LB.modeBox);
+    const ri = l?.root_info;
+    if (ri && ri.move_state && ri.move_state !== 'None' && ri.move_state !== 'Done')
+      s.append(el('span', 'chip ' + (ri.move_state === 'Failed' ? 'bad' : 'warn'), `LIBRARY MOVE · ${ri.move_state.toUpperCase()} ${Math.round(ri.move_progress * 100)}% · ${ri.move_message}`));
     // disk line
     loadDisk();
     const d = diskInfo(), de = LB.diskEl; de.textContent = '';
@@ -360,14 +431,15 @@
     LB.prog.classList.toggle('hidden', !p);
     if (p) {
       const job = l.job || {};
-      const pct = p.total ? (p.done + (p.busy ? Math.min(0.99, job.progress || 0) : 0)) / p.total : 1;
+      const pct = p.total ? (p.done + (p.busy ? Math.min(0.99, (p.v3 ? p.fileP : job.progress) || 0) : 0)) / p.total : 1;
       LB.progFill.style.width = (pct * 100).toFixed(1) + '%';
       LB.progTxt.textContent = '';
       LB.progTxt.append(el('b', null, p.busy ? `Importing ${Math.min(p.total, p.done + 1)} of ${p.total}` : `Imported ${p.done} of ${p.total}`));
-      if (p.busy && job.name) LB.progTxt.append(el('span', null, ` · ${job.name} · ${job.stage || ''} ${Math.round((job.progress || 0) * 100)}%`));
+      if (p.busy && (p.file || job.name)) LB.progTxt.append(el('span', null, ` · ${p.file || job.name} · ${job.stage || ''} ${Math.round(((p.v3 ? p.fileP : job.progress) || 0) * 100)}%`));
       if (p.busy) LB.progTxt.append(el('span', 'dim', ` · ${p.eta < 0 ? 'estimating time…' : 'about ' + dur(p.eta) + ' left'}`));
       if (l.paused) LB.progTxt.append(el('span', 'warn', ' · paused while the show is busy'));
-      if (job.last_error) LB.progTxt.append(el('span', 'bad', ' · ⚠ ' + job.last_error));
+      if (p.error || job.last_error) LB.progTxt.append(el('span', 'bad', ' · ⚠ ' + (p.error || job.last_error)));
+      if (l.disk_low) LB.progTxt.append(el('span', 'bad', ' · DISK LOW: the import waits (free space, remove clips, or CLEAR QUEUE)'));
       LB.hold.textContent = l.mode === 'Hold' ? 'RESUME' : 'PAUSE';
       LB.hold.disabled = !ingestOk();
       LB.clear.classList.toggle('hidden', !supports('ClearQueue'));
@@ -383,6 +455,8 @@
         if (r.seq <= LB.seenReply) continue;
         LB.seenReply = r.seq;
         if (r.seq > (LB.startSeq ?? 0)) toast(`${r.type}: ${r.message || r.status}`, r.ok ? '' : 'bad');
+        const op = LB.imports[r.seq];
+        if (op && r.type === 'Import') afterImport(op, r);
         const rl = LB.relink[r.seq];
         if (rl && r.status === 'Mismatch' && confirm(`${rl.path} has other content than the clip.\nImport the clip again from this file (same name, new analysis)?`)) ingest({ ...rl, force: true });
         F().loadRows(true);
@@ -503,7 +577,10 @@
     const cb = el('span', 'lbcheck', LB.sel.has(c.id) ? '✓' : ''); cb.title = 'Select'; th.append(cb);
     k.append(th);
     k.append(el('div', 'lbname', c.name));
-    k.append(el('div', 'dim mono lbmeta', `${c.kind} · ${c.size[0]}×${c.size[1]} · ${c.fps} fps · ${c.seconds} s` + (c.alpha ? ' · α' : '') + (c.judder.length ? ` · judders at ${c.judder.join('/')} Hz` : '')));
+    const hz = { Hz60: 60, Hz50: 50, Hz59_94: 60, Hz30: 30, Hz25: 25 }[S.outputs?.refresh] || 0;
+    const jud = hz ? c.judder.filter(x => x === hz) : c.judder;
+    k.append(el('div', 'dim mono lbmeta', `${c.kind} · ${c.size[0]}×${c.size[1]} · ${c.fps} fps · ${c.seconds} s` + (c.alpha ? ' · α' : '')));
+    if (jud.length) { const jb = el('div', 'warn lbjud', `⚠ judders on ${jud.join('/')} Hz outputs`); jb.title = 'The frame rate does not divide the refresh: motion steps a little. Import with "conform" for a smooth copy.'; k.append(jb); }
     if (a) {
       const chips = el('div', 'lbchips');
       const e = el('span', 'chip2 en', '●'.repeat(a.energy) + '○'.repeat(Math.max(0, 5 - a.energy))); e.title = `Energy ${a.energy} of 5`;

@@ -840,6 +840,58 @@ static void test_wave7() {
     CHECK(eta_seconds(100000, 10.0) == 86400 && eta_seconds(2, 1e9) == -1);
     CHECK(url_decode("C%3A%5CClips%5CMy+Club") == R"(C:\Clips\My Club)");
     CHECK(url_decode("%E2%9C%93") == "\xE2\x9C\x93" && url_decode("100%") == "100%" && url_decode("%zz") == "%zz");
+
+    // Library block v3 (MEDIA wave 7, library-db.md §11): the new commands and Import options.
+    namespace lib = himmel::library;
+    using nlohmann::json;
+    lib::IngestCommand ic;
+    std::string err;
+    CHECK(ingest_command_from_json(json{{"type", "ClearQueue"}}, ic, err) && ic.type == 68 && ic.path[0] == 0);
+    CHECK(ingest_command_from_json(json{{"type", "Library"}, {"path", R"(E:\Himmel Library)"}, {"move", true}}, ic, err) &&
+          ic.type == 69 && (ic.flags & lib::kIngestMove) && std::string(ic.path) == R"(E:\Himmel Library)");
+    CHECK(!ingest_command_from_json(json{{"type", "Library"}}, ic, err));   // needs a path
+    CHECK(ingest_command_from_json(json{{"type", "Import"}, {"path", R"(D:\Clips)"}, {"height", 720}, {"hapq", true},
+                                        {"skip_known", true}, {"dry_run", true}, {"fit", true}, {"conform_hz", 60}}, ic, err) &&
+          ic.i == 720 && ic.conform_hz == 60 && (ic.flags & lib::kIngestHapQ) && (ic.flags & lib::kIngestSkipKnown) &&
+          (ic.flags & lib::kIngestDryRun) && (ic.flags & lib::kIngestFit) && !(ic.flags & lib::kIngestList));
+    CHECK(ingest_command_from_json(json{{"type", "Import"}, {"path", R"(C:\t\list.txt)"}, {"list", true}}, ic, err) &&
+          (ic.flags & lib::kIngestList) && ic.i == 0 && ic.conform_hz == 0);
+    CHECK(!ingest_command_from_json(json{{"type", "Import"}, {"path", R"(D:\Clips)"}, {"height", 100}}, ic, err));
+    CHECK(!ingest_command_from_json(json{{"type", "Import"}, {"path", R"(D:\Clips)"}, {"height", 5000}}, ic, err));
+    CHECK(!ingest_command_from_json(json{{"type", "Import"}, {"path", R"(D:\Clips)"}, {"conform_hz", 30}}, ic, err));
+    CHECK(ingest_command_from_json(json{{"type", "Import"}, {"path", R"(D:\Clips)"}, {"height", 0}}, ic, err) && ic.i == 0);
+    lib::IngestReply rep{};
+    rep.seq = 9; rep.type = 60; rep.status = static_cast<uint8_t>(lib::IngestStatus::NoSpace);
+    json rj = ingest_reply_to_json(rep);
+    CHECK(rj["status"] == "NoSpace" && rj["ok"] == false && rj["type"] == "Import");
+    rep.type = 69; rep.status = static_cast<uint8_t>(lib::IngestStatus::Busy);
+    rj = ingest_reply_to_json(rep);
+    CHECK(rj["status"] == "Busy" && rj["type"] == "Library");
+    LibraryV3 v;
+    v.stored_mode = 3; v.disk_low = 1; v.disk_free = 7300000000ull; v.disk_total = 500000000000ull; v.disk_reserve = 10000000000ull;
+    v.library_bytes = 123; v.queue_bytes = 17200000000ull;
+    auto prog = std::make_unique<lib::IngestProgress>();
+    prog->done = 3; prog->total = 86; prog->clip = 41; prog->file_progress = 0.4567f; prog->eta_s = 1260;
+    std::snprintf(prog->file, sizeof prog->file, "beach.mp4");
+    std::snprintf(prog->error, sizeof prog->error, "The disk is full.");
+    auto plan = std::make_unique<lib::IngestPlan>();
+    plan->seq = 4; plan->producer = 1; plan->refused = 1; plan->clips = 86; plan->fit_clips = 0; plan->need_bytes = 17200000000ull;
+    std::snprintf(plan->message, sizeof plan->message, "needs ~17.2 GB for 86 clips");
+    auto rt = std::make_unique<lib::LibraryRoot>();
+    std::snprintf(rt->path, sizeof rt->path, R"(E:\Lib)");
+    rt->move_state = static_cast<uint32_t>(lib::MoveState::Copying); rt->move_progress = 0.25f;
+    json lj;
+    library_v3_to_json(lj, v, *prog, *plan, *rt, 1);
+    CHECK(lj["stored_mode"] == "Hold" && lj["disk_low"] == true && lj["disk"]["free"] == 7300000000ull && lj["disk"]["queue_bytes"] == 17200000000ull);
+    CHECK(lj["progress"]["done"] == 3 && lj["progress"]["total"] == 86 && lj["progress"]["file"] == "beach.mp4" &&
+          lj["progress"]["eta_s"] == 1260 && std::fabs(lj["progress"]["file_progress"].get<double>() - 0.457) < 1e-9 &&
+          lj["progress"]["error"] == "The disk is full.");
+    CHECK(lj["plan"]["mine"] == true && lj["plan"]["refused"] == true && lj["plan"]["clips"] == 86 && lj["plan"]["message"] == "needs ~17.2 GB for 86 clips");
+    CHECK(lj["root_info"]["path"] == R"(E:\Lib)" && lj["root_info"]["move_state"] == "Copying");
+    library_v3_to_json(lj, v, *prog, *plan, *rt, 3);
+    CHECK(lj["plan"]["mine"] == false);
+    json nm = panels_names();
+    CHECK(nm["ingest"].size() == 10 && nm["ingest"][8] == "ClearQueue" && nm["ingest"][9] == "Library");
 }
 
 int main() {

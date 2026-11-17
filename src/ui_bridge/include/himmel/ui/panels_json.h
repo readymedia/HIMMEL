@@ -41,6 +41,18 @@ struct LibraryCounts {
     uint64_t ready_seq = 0;
 };
 nlohmann::json library_block_to_json(const LibraryCounts& c, const library::IngestJob& job);
+// Library block v3 (MEDIA wave 7, library-db.md §11): the disk guard, the stored mode, the batch
+// progress, the last import plan and the library location / move. Merged into the "library" event as
+// {stored_mode, disk_low, disk{free, total, reserve, library_bytes, queue_bytes}, progress{done, total,
+//  clip, file, file_progress, eta_s, bytes_written, file_bytes, error_clip, error}, plan{seq, mine,
+//  dry_run, fits, refused, clips, known, fit_clips, need_bytes, queue_bytes, free_bytes, reserve_bytes,
+//  message}, root{path, move_state, move_progress, move_done_bytes, move_total_bytes, move_to, move_message}}.
+struct LibraryV3 {
+    uint32_t stored_mode = 0, disk_low = 0;
+    uint64_t disk_free = 0, disk_total = 0, disk_reserve = 0, library_bytes = 0, queue_bytes = 0;
+};
+void library_v3_to_json(nlohmann::json& j, const LibraryV3& v, const library::IngestProgress& p,
+                        const library::IngestPlan& plan, const library::LibraryRoot& root, int my_producer);
 
 // The page's AUDIO input picker -> AudioConfig (only the keys given change `cfg`).
 //   {"device": "Microphone", "mode": "Capture"|"Loopback", "channel_first": 0, "channel_count": 1|2,
@@ -85,7 +97,9 @@ nlohmann::json show_doc_for_page(const nlohmann::json& doc);
 
 // POST /library/cmd (MEDIA, library-db.md §10): {"type": "Import" | "Rescan" | "Remove" | "Relink" |
 // "Reanalyse" | "Retry" | "Mode" | "Unwatch", "clip": library id (0 = all), "path": absolute,
-// "watch" / "force" / "thumbs": true, "mode": "Auto" | "Full" | "Background" | "Hold"} -> an IngestCommand
+// "watch" / "force" / "thumbs": true, "mode": "Auto" | "Full" | "Background" | "Hold"} -> an IngestCommand.
+// v3 (wave 7): "ClearQueue"; "Library" (path, "move", "force"); Import options "height" (0 or 144..4320),
+// "hapq", "skip_known", "dry_run", "fit", "list" (path = a list file), "conform_hz" (0 | 50 | 60)
 // (seq is stamped when it is pushed). False with `error` for anything the worker would refuse anyway.
 bool ingest_command_from_json(const nlohmann::json& j, library::IngestCommand& c, std::string& error);
 nlohmann::json ingest_reply_to_json(const library::IngestReply& r);
