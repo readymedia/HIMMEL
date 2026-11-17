@@ -17,6 +17,7 @@
 //   --no-audio: do not start himmel_audio.exe (music in, M8). --audio "ARGS": its
 //          arguments, e.g. --audio "--loopback" or --audio "--device Focusrite --channels 1-2"
 //          (default: the Windows default capture device, auto gain on).
+//   --no-curtains: no black curtain windows behind the outputs (M6; on by default).
 //   --legacy: run the parked pre-slice renderer (himmel_render_legacy.exe: test
 //          card, camera, Touch FX, Entrancer) instead of the deck engine.
 //
@@ -31,6 +32,8 @@
 //   * everything is logged to the console and logs\himmel-YYYY-MM-DD.log.
 // Ctrl+C / closing the window stops the renderer cleanly (stop_request), then
 // the controller.
+// Curtains (M6): one black window per output, held by this process just below the
+// renderer's output windows, so a renderer crash / restart shows black, not the desktop.
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -38,12 +41,14 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <dwmapi.h>
 
 #include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 #include <share.h>
 #include <filesystem>
 #include <string>
@@ -53,8 +58,13 @@
 
 #include "himmel/audio/block.h"
 #include "himmel/engine/engine_shared.h"
+#include "himmel/engine/shm_block.h"
 #include "himmel/mk2/shared.h"
 #include "himmel/mk2/types.h"
+#include "himmel/protocol/commands.h"
+#include "himmel/protocol/outputs.h"
+#include "himmel/protocol/show.h"
+#include "himmel/protocol/state.h"
 #include "himmel/weapon/shared.h"
 
 namespace fs = std::filesystem;
@@ -87,6 +97,146 @@ void log(const char* fmt, ...) {
     }
 }
 
+// ---------------------------------------------------------------- curtains (M6)
+// Black windows held by the supervisor, one per output, just below the renderer's
+// output window (operations.md, build-v1 M6): when the renderer dies or restarts,
+// its windows vanish and the curtain shows black - never the desktop. The curtain
+// thread follows Local\HimmelOutputs (window rects + HWNDs, written by the renderer)
+// and never moves a curtain unless the renderer's window moved. Windows may try to
+// move a curtain when its display goes away (onto another output): refused.
+class Curtains {
+public:
+    void start() { thread_ = std::thread([this] { run(); }); }
+    void stop() {
+        stop_.store(true);
+        if (thread_.joinable()) thread_.join();
+    }
+    uint32_t shown() const { return shown_.load(); }
+
+private:
+    struct Curtain {
+        HWND hwnd = nullptr;
+        RECT rect{};
+        uint64_t below = 0;   // the renderer window it sits under
+        bool topmost = false;
+    };
+    static inline thread_local bool t_self_move = false;
+
+    static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
+        switch (m) {
+            case WM_WINDOWPOSCHANGING:
+                if (!t_self_move) reinterpret_cast<WINDOWPOS*>(l)->flags |= SWP_NOMOVE | SWP_NOSIZE;
+                break;
+            case WM_MOUSEACTIVATE: return MA_NOACTIVATE;
+            case WM_CLOSE: return 0;  // only the supervisor closes them
+            case WM_SETCURSOR: SetCursor(nullptr); return TRUE;
+            case WM_ERASEBKGND: {
+                RECT r;
+                GetClientRect(h, &r);
+                FillRect(reinterpret_cast<HDC>(w), &r, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
+                return 1;
+            }
+        }
+        return DefWindowProcW(h, m, w, l);
+    }
+
+    void place(Curtain& c, int index, const himmel::protocol::OutputInfo& oi, bool fullscreen) {
+        const RECT r{oi.rect[0], oi.rect[1], oi.rect[2], oi.rect[3]};
+        if (r.right <= r.left || r.bottom <= r.top) return;
+        if (c.hwnd && c.topmost != fullscreen) {  // switched between windows and full screen
+            DestroyWindow(c.hwnd);
+            c = Curtain{};
+        }
+        t_self_move = true;
+        if (!c.hwnd) {
+            wchar_t title[48];
+            swprintf_s(title, L"Himmel curtain %d", index + 1);
+            c.hwnd = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | (fullscreen ? WS_EX_TOPMOST : 0),
+                                     L"HimmelCurtain", title, WS_POPUP, r.left, r.top, r.right - r.left,
+                                     r.bottom - r.top, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+            c.topmost = fullscreen;
+            c.rect = r;
+            c.below = 0;
+            if (c.hwnd) {
+                const BOOL off = TRUE;  // no fade-in / out animations
+                DwmSetWindowAttribute(c.hwnd, DWMWA_TRANSITIONS_FORCEDISABLED, &off, sizeof(off));
+                ShowWindow(c.hwnd, SW_SHOWNOACTIVATE);
+                log("curtain %d: up at %ld,%ld %ldx%ld", index + 1, r.left, r.top, r.right - r.left, r.bottom - r.top);
+            }
+        }
+        if (c.hwnd) {
+            const HWND out = reinterpret_cast<HWND>(oi.hwnd);
+            const bool moved = !EqualRect(&r, &c.rect);
+            // Just below the renderer's window (only while that window exists).
+            const bool restack = oi.hwnd && oi.hwnd != c.below && IsWindow(out);
+            if (moved || restack) {
+                SetWindowPos(c.hwnd, restack ? out : nullptr, r.left, r.top, r.right - r.left, r.bottom - r.top,
+                             SWP_NOACTIVATE | SWP_SHOWWINDOW | (restack ? 0 : SWP_NOZORDER));
+                c.rect = r;
+                if (restack) c.below = oi.hwnd;
+            }
+        }
+        t_self_move = false;
+    }
+
+    void run() {
+        SetThreadDescription(GetCurrentThread(), L"himmel curtains");
+        WNDCLASSW wc{};
+        wc.lpfnWndProc = proc;
+        wc.hInstance = GetModuleHandleW(nullptr);
+        wc.hbrBackground = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+        wc.lpszClassName = L"HimmelCurtain";
+        RegisterClassW(&wc);
+        himmel::engine::ShmBlock shm;
+        const himmel::protocol::OutputsBlock* blk = nullptr;
+        auto sec = std::make_unique<himmel::protocol::OutputsSection>();
+        Curtain cur[himmel::protocol::kMaxOutputs];
+        uint64_t next_try = 0;
+        while (!stop_.load()) {
+            MSG msg;
+            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) DispatchMessageW(&msg);
+            const uint64_t t = now_us();
+            if (!blk && t >= next_try) {
+                next_try = t + 1000000;
+                if (shm.open_existing(himmel::protocol::kOutputsShmName, sizeof(himmel::protocol::OutputsBlock))) {
+                    const auto* b = static_cast<const himmel::protocol::OutputsBlock*>(shm.data());
+                    if (himmel::engine::header_ok(b->header, himmel::protocol::kOutputsMagic, himmel::protocol::kOutputsVersion,
+                                                  static_cast<uint32_t>(sizeof(himmel::protocol::OutputsBlock)))) {
+                        blk = b;
+                        log("curtains: following %ls", himmel::protocol::kOutputsShmName);
+                    } else {
+                        shm.close();
+                    }
+                }
+            }
+            if (blk && himmel::protocol::seq_read(blk->seq, blk->s, *sec)) {
+                uint32_t up = 0;
+                for (int i = 0; i < himmel::protocol::kMaxOutputs; ++i) {
+                    const auto& oi = sec->out[i];
+                    const bool want = oi.state != static_cast<uint8_t>(himmel::protocol::OutputState::Off) &&
+                                      static_cast<uint32_t>(i) < sec->count;
+                    if (want) {
+                        place(cur[i], i, oi, sec->fullscreen != 0);
+                    } else if (cur[i].hwnd) {
+                        DestroyWindow(cur[i].hwnd);
+                        cur[i] = Curtain{};
+                        log("curtain %d: down (output not used)", i + 1);
+                    }
+                    up += cur[i].hwnd ? 1 : 0;
+                }
+                shown_.store(up);
+            }
+            Sleep(50);
+        }
+        for (auto& c : cur)
+            if (c.hwnd) DestroyWindow(c.hwnd);
+    }
+
+    std::thread thread_;
+    std::atomic<bool> stop_{false};
+    std::atomic<uint32_t> shown_{0};
+};
+
 struct Child {
     std::string name;
     std::wstring exe;
@@ -96,6 +246,7 @@ struct Child {
     uint64_t started_us = 0;
     uint64_t next_start_us = 0;
     uint64_t backoff_us = 125000;  // doubled before use: the first restart waits 0.25 s
+    uint64_t max_backoff_us = 10000000;
     uint32_t restarts = 0;
     // Heartbeat source (0 if none yet).
     uint64_t (*heartbeat)(void*) = nullptr;
@@ -131,7 +282,7 @@ void reap(Child& c, const char* why) {
     const uint64_t t = now_us();
     const uint64_t ran = t - c.started_us;
     // Fast first restart (show-safe); back off if it keeps dying, reset after a minute of running.
-    c.backoff_us = ran > 60000000 ? 250000 : std::min<uint64_t>(c.backoff_us * 2, 10000000);
+    c.backoff_us = ran > 60000000 ? 250000 : std::min<uint64_t>(c.backoff_us * 2, c.max_backoff_us);
     c.next_start_us = t + c.backoff_us;
     ++c.restarts;
     log("%s: %s (exit code %lu, ran %.1f s) - restart in %.2f s", c.name.c_str(), why, code, ran / 1e6, c.backoff_us / 1e6);
@@ -190,7 +341,7 @@ int main(int argc, char** argv) {
     // Shared for reading (_SH_DENYWR), so the log can be read / tailed while Himmel runs.
     g_logfile = _wfsopen((dir / "logs" / name).c_str(), L"a", _SH_DENYWR);
 
-    bool with_controller = true, with_ui = true, with_audio = true, legacy = false;
+    bool with_controller = true, with_ui = true, with_audio = true, legacy = false, with_curtains = true;
     std::wstring render_args, ctl_args, audio_args;
     std::string weapons = "lightpad,lumi,nuvj,apc20";
     for (int i = 1; i < argc; ++i) {
@@ -203,6 +354,7 @@ int main(int argc, char** argv) {
         else if (a == "--no-audio") with_audio = false;
         else if (a == "--audio" && i + 1 < argc) audio_args = widen(argv[++i]);
         else if (a == "--legacy") legacy = true;
+        else if (a == "--no-curtains") with_curtains = false;
         else if (a == "--") {
             for (++i; i < argc; ++i) render_args += widen(argv[i]) + L" ";
         }
@@ -245,6 +397,10 @@ int main(int argc, char** argv) {
         if (!m->get() && !m->open()) return 0;
         return m->get()->status.heartbeat_us.load();
     };
+    // M6: the outputs show black (curtains) while the renderer is down, so it comes back fast
+    // every time: at most 0.5 s between restarts, even in a crash loop (GUESS: a GPU that keeps
+    // failing gains nothing from waiting longer; the log shows the loop).
+    ren.max_backoff_us = 500000;
     ren.ctx = &eshm;
     ren.heartbeat = [](void* p) -> uint64_t {
         auto* m = static_cast<himmel::engine::EngineShm*>(p);
@@ -295,6 +451,29 @@ int main(int argc, char** argv) {
     if (with_audio) children.push_back(&aud);
     children.push_back(&ren);
     if (with_ui) children.push_back(&ui);
+    // Kept open for the whole night: the outputs block (and the curtains' rects in it) survives
+    // a renderer restart, so the new renderer finds its display identities and settings.
+    himmel::engine::ShmBlock outputs_keep;
+    if (outputs_keep.open_or_create(himmel::protocol::kOutputsShmName, sizeof(himmel::protocol::OutputsBlock)) ==
+        himmel::engine::ShmBlock::Result::Failed)
+        log("outputs: cannot map the outputs block - curtains off");
+    // The show must survive a renderer restart even when no GUI holds the blocks open:
+    // keep the state (the show to restore), the commands and the show block mapped too.
+    himmel::engine::ShmBlock state_keep, commands_keep, show_keep;
+    state_keep.open_or_create(himmel::protocol::kStateShmName, sizeof(himmel::protocol::StateBlock));
+    // The state block is left without a header when we create it: the renderer writes it (and
+    // knows an empty block is not a show to restore). The command block's creator writes its
+    // header (command-protocol.md §2), so that is us when we come first.
+    if (commands_keep.open_or_create(himmel::protocol::kCommandShmName, sizeof(himmel::protocol::CommandBlock)) ==
+        himmel::engine::ShmBlock::Result::Created) {
+        auto* cb = static_cast<himmel::protocol::CommandBlock*>(commands_keep.data());
+        std::memset(static_cast<void*>(cb), 0, sizeof(*cb));
+        himmel::engine::write_header(cb->header, himmel::protocol::kCommandMagic, himmel::protocol::kCommandVersion,
+                                     static_cast<uint32_t>(sizeof(himmel::protocol::CommandBlock)));
+    }
+    show_keep.open_or_create(himmel::protocol::kShowShmName, sizeof(himmel::protocol::ShowBlock));
+    Curtains curtains;
+    if (with_curtains && !legacy) curtains.start();
     constexpr uint64_t kHungUs = 2000000, kGraceUs = 8000000;  // grace: start-up (GPU, shaders, USB)
     uint64_t next_report = now_us() + 60000000;
 
@@ -333,7 +512,7 @@ int main(int argc, char** argv) {
                     s->mk2_connected.load() ? "ok" : "off", s->input_to_present_us.load() / 1000.0, ren.restarts,
                     ctl.restarts);
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));  // exit seen within 50 ms
     }
 
     log("stopping");
@@ -348,6 +527,7 @@ int main(int argc, char** argv) {
         if (shm->get()) shm->get()->status.stop_request.store(1);
     for (auto& w : weapon_children) stop_child(*w, 3000);
     stop_child(ctl, 3000);  // otherwise terminated
+    curtains.stop();  // after every child: black until the very end
     log("bye");
     if (g_logfile) std::fclose(g_logfile);
     CloseHandle(job);

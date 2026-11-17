@@ -120,19 +120,31 @@ Everything after `--` goes to the renderer:
 | Renderer option | Meaning |
 |---|---|
 | `--outputs N` | Number of outputs (1–8). Default: one per monitor in fullscreen, 3 windows otherwise. |
-| `--fullscreen` / `--windowed` | Borderless on the monitors (left to right) / normal windows. |
-| `--size WxH` | Window size in windowed mode. |
+| `--fullscreen` / `--windowed` | Borderless on the displays / normal windows. In full screen each output belongs to its display **by identity** (EDID): unplug a projector and its output waits (the others never notice); plug it in again, on any port, and it comes back to its slot. |
+| `--size WxH` | Window size in windowed mode (also the canvas size of each output there, unless `--resolution` is given). |
+| `--resolution 720p\|1080p\|1440p\|4k\|custom` | The canvas size of each output (default: 1080p in full screen, `--size` in windows). Clips are scaled on the GPU, never re-encoded. |
+| `--refresh 60\|50\|59.94\|30\|25` | Output refresh in full screen (default 60; the display mode is switched for the show and put back when Himmel exits). Clips play at their own frame rate. |
 | `--mode span\|mirror` | Span: one canvas across all outputs. Mirror: every output shows the whole canvas. |
+| `--blend PX`, `--blend-gamma G` | Projector edge blend: neighbours overlap by PX canvas pixels, ramps with gamma G (2.2). |
 | `--clip file.mov` | Add a clip to the playlist (repeatable). Default: every `.mov` under `media/`. |
 | `--camera NAME`, `--camera-index N`, `--no-camera` | Pick the webcam (part of its name, or its index), or none. Default: the first camera that is not an IR camera. |
 
-Supervisor options: `--no-controller` (renderer only), `--sim` (no MK2: play
+Supervisor options: `--no-controller` (renderer only), `--no-curtains` (no black
+windows behind the outputs; by default a crashed or restarting renderer shows
+black, not the desktop), `--sim` (no MK2: play
 Himmel from the simulated MK2 in the browser, see below). The supervisor logs to
 `build\bin\Release\logs\himmel-YYYY-MM-DD.log`, restarts a crashed part within
 0.25 s and kills and restarts a part that hangs for 2 s. **Ctrl+C** in its
 window stops everything cleanly. In a fullscreen output only **Shift+Esc**
 closes the renderer (which the supervisor then restarts); **M** toggles
 span/mirror.
+
+Outputs at run time (from the GUI later, or `himmel_cmd`): `identify` shows
+a big number, the size and the display name on every output for 5 s;
+`outblack 2 on` blacks out one output; `place a 1 out 2` puts a layer on
+output 2 only (`fill`, `fit`, `free X Y W H` too); `outres 1440p`,
+`refresh 50`, `blendw 200`, `outmode mirror`; `himmel_cmd outputs` shows
+every output, its display and whether it is lost.
 
 ### No MK2? Play Himmel from the browser
 

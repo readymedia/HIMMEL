@@ -10,6 +10,7 @@
 #include <type_traits>
 
 #include "himmel/protocol/commands.h"
+#include "himmel/protocol/outputs.h"
 #include "himmel/protocol/preview.h"
 #include "himmel/protocol/show.h"
 #include "himmel/protocol/state.h"
@@ -95,7 +96,15 @@ static void test_show_block() {
     static_assert(kShowMagic == 0x57534D48 && kShowVersion == 1);
     // Command numbers: SHOW owns 25..39 (LEAD, wave 2); never renumber.
     static_assert(static_cast<int>(CommandType::SceneRecall) == 25 && static_cast<int>(CommandType::SongEdit) == 36);
-    static_assert(static_cast<int>(CommandType::Count) <= 40, "types 40+ belong to AUDIO / GUI");
+    // Wave 3 ranges (LEAD 2026-11-17): MEDIA 60..69, ENGINE 70..79, CONTROL 80..89.
+    static_assert(static_cast<int>(CommandType::OutputBlack) == 70 && static_cast<int>(CommandType::OutputConfig) == 73,
+                  "ENGINE M6 owns 70..79");
+    static_assert(static_cast<int>(CommandType::Count) <= 90, "types 90+ are not given out yet");
+    // Outputs block (M6, outputs-block.md).
+    static_assert(std::is_trivially_copyable_v<OutputsSection> && sizeof(DisplayId) == 36);
+    static_assert(offsetof(OutputsBlock, header) == 0 && offsetof(OutputsBlock, seq) % 64 == 0);
+    static_assert(sizeof(OutputsBlock) < 16 * 1024 && kOutputsMagic == 0x54554F48 && kOutputsVersion == 1);
+    static_assert(kPlaceSlots == 9 && kMaxOutputs == 8);
     static_assert(static_cast<int>(Producer::Show) == 4);
     static_assert(kLookCommandsMax == 352 && kShowCommandsPerFrame >= kLookCommandsMax);
     CHECK(is_show_command(CommandType::SceneRecall) && is_show_command(static_cast<CommandType>(39)));

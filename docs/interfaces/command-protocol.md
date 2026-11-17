@@ -6,7 +6,9 @@ Status: **version 1, written by the LEAD 2026-11-15** for the playable slice;
 `kCommandVersion` are unchanged, an older engine refuses the new types as
 `UnknownType`); **M3 show commands appended by SHOW 2026-11-17** (§4b: types
 25–36, producer slot 4 = `Show`, flags `kVariation` / `kClear`, the new block
-`Local\HimmelShow`; additive like `FxPress`, so `kCommandVersion` stays 1)
+`Local\HimmelShow`; additive like `FxPress`, so `kCommandVersion` stays 1);
+**M6 outputs appended by ENGINE 2026-11-17** (§4c: types 70–73, the new block
+`Local\HimmelOutputs`; additive, `kCommandVersion` stays 1)
 (D90). Header: [`src/protocol/include/himmel/protocol/commands.h`](../../src/protocol/include/himmel/protocol/commands.h)
 (the header is the source of truth for field layout; this page is the why and
 the rules). Change it only with a PR to this page + the header, agreed by the
@@ -142,6 +144,21 @@ runtime refuses it (`BadValue`) when the box holds another id
 | `MacroSet` (34) | deck (its scene), `slot` = macro 0..3, `layer` = target layer (`kNone` = deck FX) | `param` = binding 0..7 (`kNone` = rename: `i` = text id); `i` = FX slot × 16 + param; `f[0]` min, `f[1]` max; `flags & kClear` = remove | |
 | `MacroValue` (35) | `slot` = macro 0..3 | `f[0]` 0..1 (`kRelative` = delta) | knobs 5–8: always the PROGRAM deck |
 | `SongEdit` (36) | deck (AddScene: source), `slot` = position | `param` = `SongAction` (New, Delete, AddScene, RemoveScene, Bpm, Rename, Move, RenameScene); `i` = song; New: `i` = text id (0 = "Song n"); Rename: `slot` = song, `i` = text id; RenameScene: `slot` = pad, `i` = text id; `f[0]` = BPM | |
+
+## 4c. Outputs (M6, ENGINE; [`outputs-block.md`](outputs-block.md))
+
+Types 70–79 are ENGINE's range (LEAD, wave 3). They go through the deck
+model like every command (rate limit, validation, ack in `LiveState`), and
+the output model applies them. The result is shown in `Local\HimmelOutputs`.
+The enums are in `outputs.h`. Types 37–69 are not used yet and are refused as
+`UnknownType`.
+
+| Type | Targets | Argument | Notes |
+|---|---|---|---|
+| `OutputBlack` (70) | `slot` = output 0..7 (`kNone` = all) | `i` = Toggle value | black per output (a cut); master `Black` still applies |
+| `Identify` (71) | — | `i` = 0 off (fade out), 1 = 5 s, 2 = until 0 (held) | 0.5 s fade in / out; drawn over the show |
+| `LayerPlace` (72) | deck (or `kHitDeck`), layer | `i` = `Place` (FillAll, Out, Fit, Free); `param` = output (Out); `f[0..3]` = x, y, w, h on the canvas 0..1 (Free; w, h > 0) | Out n with n ≥ the output count is refused (`BadTarget`) |
+| `OutputConfig` (73) | `slot` = output (`kNone` = all) | `param` = `OutputParam`: Resolution (`i` = preset; a setup action, rebuilds the canvas), Refresh (`i` = `RefreshRate`), BlendWidth (`i` px 0..1024), BlendGamma (`f[0]` 1..3, clamped), Mode (`i` = span / mirror), Adopt (`slot`; `i` = 1 take the new display), SimLost (`slot`; `i` = 1 act as if the cable was pulled, 0 back: tests on one screen) | |
 
 ## 5. Validation (the engine, before anything else)
 
