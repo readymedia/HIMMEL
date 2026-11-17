@@ -207,7 +207,9 @@ already on main and merged into this branch; MEDIA's contract commit is in, its 
 
 ## How to build / run / test this track
 - Build: `cmake --build build --config Release --target himmel_ui fake_engine ui_bridge_tests`
-- Test: `build\bin\Release\ui_bridge_tests.exe` (358 checks, also in ctest); `node --check gui/app.js gui/panels.js gui/views.js`.
+- Test: `build\bin\Release\ui_bridge_tests.exe` (463 checks, also in ctest); `node --check` on every `gui/*.js`.
+- e2e (one stack per machine; it refuses while any himmel process runs): `python tools/gui_flow_e2e.py` (`--keep` keeps the temp root).
+- Live, wave 7: launch config `himmel-gui-w7-test` (`--show-root %TEMP%\himmel_gui_w7`); check `tasklist` first.
 - Run (test data only): launch config `himmel-sim-test`. It runs `himmel.exe --sim -- --show-root build/test-show-root`;
   the children run in `build/bin/Release`, so the root lands in `build/bin/Release/build/test-show-root`. Then open
   http://127.0.0.1:8790. Read-only second view: launch config `himmel-ui-watch`.
