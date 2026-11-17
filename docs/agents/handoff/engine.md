@@ -1,5 +1,5 @@
 # ENGINE handoff
-Updated: 2026-11-17 by the ENGINE M6 session · Branch: `claude/engine-m6-outputs` · Last commit: see `git log` on the branch
+Updated: 2026-11-17 by the ENGINE M6 session · Branch: `claude/engine-m6-spout` (M6 itself merged on main) · Last commit: see `git log` on the branch
 
 ## State in one paragraph
 **M6 outputs (2026-11-17, this branch)** on top of S1 + M2 (below). Output
