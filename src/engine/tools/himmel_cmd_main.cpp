@@ -32,6 +32,14 @@
 //   himmel_cmd tap | bpm V | grid off|1/4|1|bar|2bar|4bar | resync | phase BEATS
 //   himmel_cmd cuebench D L N [MS]         N cue jumps, one every MS (default 250) - the renderer logs latency
 //   himmel_cmd soak SECONDS                cycles transport modes on every loaded layer (soak test)
+// Outputs (M6, docs/interfaces/outputs-block.md); N = output 1..8:
+//   himmel_cmd outputs                     the outputs block (slots, displays, canvas, places)
+//   himmel_cmd outblack N|all [on|off|toggle]   black per output
+//   himmel_cmd identify [on|hold|off]      IDENTIFY: 5 s (on), until off (hold)
+//   himmel_cmd place D L fill|fit|out N|free X Y W H   the layer's place (canvas 0..1)
+//   himmel_cmd outres 720p|1080p|1440p|4k|custom [N]   resolution preset (all outputs, or N)
+//   himmel_cmd refresh 60|50|59.94|30|25 | blendw PX | blendgamma G | outmode span|mirror
+//   himmel_cmd adopt N | simlost N on|off  take the new display / act as if N's cable was pulled
 // Several commands may be chained with "--": himmel_cmd clip a 1 0 -- take 500
 // Layers and slots are 1-based on the command line, 0-based on the wire.
 // Exit code: 0 = all applied, 1 = usage, 2 = no engine / no block, 3 = refused.
@@ -57,6 +65,7 @@
 #include "himmel/engine/shm_block.h"
 #include "himmel/fx/fx.h"
 #include "himmel/protocol/commands.h"
+#include "himmel/protocol/outputs.h"
 #include "himmel/protocol/state.h"
 
 using namespace himmel::protocol;
@@ -83,6 +92,9 @@ void usage() {
         "  set D L PARAM VALUE | trigger D L ID [VEL] [up] | cue D L K jump|set [V]|clear\n"
         "  beatloop D L BEATS | scratch D L grab|release|move V|rel S | play D L release|stop\n"
         "  tap | bpm V | grid off|1/4|1|bar|2bar|4bar | resync | phase BEATS | cuebench D L N [MS] | soak S\n"
+        "  outputs | outblack N|all [on|off|toggle] | identify [on|hold|off] | place D L fill|fit|out N|free X Y W H\n"
+        "  outres 720p|1080p|1440p|4k|custom [N] | refresh HZ | blendw PX | blendgamma G | outmode span|mirror\n"
+        "  adopt N | simlost N on|off\n"
         "  D = a|b, L = 1..4, T = a1..b4 (layer) | a | b (deck) | m (master), S = 1..4, P = 1..8\n"
         "  chain with --:  himmel_cmd clip a 1 0 -- clip a 2 1 -- take\n");
 }
@@ -336,6 +348,74 @@ int run_one(Engine& e, const std::vector<std::string>& a, const Catalog& cat) {
         if (a.size() < 3 || !fx_target(a[1], deck, layer) || n(2) < 1) return 1;
         return e.send(make_fx(t, deck, layer, static_cast<uint8_t>(n(2) - 1), param, iv, fv));
     };
+    // ---- outputs (M6) ----
+    auto out_cfg = [&](OutputParam p, uint8_t slot, int32_t iv, float fv) {
+        Command x = make(CommandType::OutputConfig, kNone, kNone, iv, fv);
+        x.param = static_cast<uint8_t>(p);
+        x.slot = slot;
+        return e.send(x);
+    };
+    auto out_slot = [&](size_t i) -> int {  // "all" = kNone, 1..8 -> 0..7, -1 = bad
+        if (i >= a.size()) return -1;
+        if (a[i] == "all") return kNone;
+        const int v = n(i);
+        return v >= 1 && v <= kMaxOutputs ? v - 1 : -1;
+    };
+    if (c == "outblack") {
+        const int sl = out_slot(1);
+        if (sl < 0) return 1;
+        Command x = make(CommandType::OutputBlack, kNone, kNone, a.size() > 2 ? toggle_of(a[2]) : kToggle);
+        x.slot = static_cast<uint8_t>(sl);
+        return e.send(x);
+    }
+    if (c == "identify") {
+        const std::string m = a.size() > 1 ? a[1] : "on";
+        return e.send(make(CommandType::Identify, kNone, kNone, m == "off" ? 0 : m == "hold" ? 2 : 1));
+    }
+    if (c == "place") {
+        if (a.size() < 4 || deck_of(a[1]) < 0 || n(2) < 1) return 1;
+        Command x = make(CommandType::LayerPlace, static_cast<uint8_t>(deck_of(a[1])), static_cast<uint8_t>(n(2) - 1));
+        const std::string& w = a[3];
+        if (w == "fill") x.i = static_cast<int32_t>(Place::FillAll);
+        else if (w == "fit") x.i = static_cast<int32_t>(Place::Fit);
+        else if (w == "out") {
+            if (n(4) < 1) return 1;
+            x.i = static_cast<int32_t>(Place::Out);
+            x.param = static_cast<uint8_t>(n(4) - 1);
+        } else if (w == "free") {
+            if (a.size() < 8) return 1;
+            x.i = static_cast<int32_t>(Place::Free);
+            for (int k = 0; k < 4; ++k) x.f[k] = f(4 + static_cast<size_t>(k));
+        } else return 1;
+        return e.send(x);
+    }
+    if (c == "outres") {
+        if (a.size() < 2) return 1;
+        const std::string& r = a[1];
+        const int p = r == "720p" ? 0 : r == "1080p" ? 1 : r == "1440p" ? 2 : (r == "4k" || r == "4K") ? 3 : r == "custom" ? 4 : -1;
+        if (p < 0) return 1;
+        const int sl = a.size() > 2 ? out_slot(2) : kNone;
+        if (sl < 0) return 1;
+        return out_cfg(OutputParam::Resolution, static_cast<uint8_t>(sl), p, 0);
+    }
+    if (c == "refresh") {
+        const float hz = f(1);
+        const int r = hz > 59.5f && hz < 59.99f ? 2 : hz == 50 ? 1 : hz == 30 ? 3 : hz == 25 ? 4 : hz == 60 ? 0 : -1;
+        if (r < 0) return 1;
+        return out_cfg(OutputParam::Refresh, kNone, r, 0);
+    }
+    if (c == "blendw") return out_cfg(OutputParam::BlendWidth, kNone, n(1), 0);
+    if (c == "blendgamma") return out_cfg(OutputParam::BlendGamma, kNone, 0, f(1));
+    if (c == "outmode") {
+        if (a.size() < 2 || (a[1] != "span" && a[1] != "mirror")) return 1;
+        return out_cfg(OutputParam::Mode, kNone, a[1] == "mirror" ? 1 : 0, 0);
+    }
+    if (c == "adopt" || c == "simlost") {
+        const int sl = out_slot(1);
+        if (sl < 0 || sl == kNone) return 1;
+        const int32_t v = c == "adopt" ? 1 : (a.size() > 2 && a[2] == "off" ? 0 : 1);
+        return out_cfg(c == "adopt" ? OutputParam::Adopt : OutputParam::SimLost, static_cast<uint8_t>(sl), v, 0);
+    }
     if (c == "take") return e.send(make(CommandType::Take, kNone, kNone, n(1)));
     if (c == "cut") return e.send(make(CommandType::Cut));
     if (c == "black") return e.send(make(CommandType::Black, kNone, kNone, a.size() > 1 ? toggle_of(a[1]) : kToggle));
@@ -557,6 +637,46 @@ int main(int argc, char** argv) {
     if (args[0] == "state") {
         if (!e->live(*live)) return 2;
         print_state(*live, *cat, e->transport(*tr) ? tr.get() : nullptr);
+        return 0;
+    }
+    if (args[0] == "outputs") {
+        ShmBlock ob;
+        if (!ob.open_existing(kOutputsShmName, sizeof(OutputsBlock))) {
+            std::printf("no outputs block (%ls)\n", kOutputsShmName);
+            return 2;
+        }
+        const auto* b = static_cast<const OutputsBlock*>(ob.data());
+        if (!himmel::engine::header_ok(b->header, kOutputsMagic, kOutputsVersion, static_cast<uint32_t>(sizeof(OutputsBlock)))) {
+            std::printf("outputs block: another version\n");
+            return 2;
+        }
+        auto sec = std::make_unique<OutputsSection>();
+        if (!seq_read(b->seq, b->s, *sec)) return 2;
+        const char* const st[] = {"off", "OK", "LOST", "window", "NEW DISPLAY?"};
+        const char* const pr[] = {"720p", "1080p", "1440p", "4K", "custom"};
+        const char* const pl[] = {"fill", "out", "fit", "free"};
+        std::printf("outputs: %u %s, canvas %ux%u %s, blend %u px gamma %.2f, refresh %.2f Hz (measured %.1f fps), "
+                    "%u displays, renderer pid %u%s\n",
+                    sec->count, sec->fullscreen ? "full screen" : "window(s)", sec->canvas_w, sec->canvas_h,
+                    sec->mode ? "mirror" : "span", sec->blend_px, sec->blend_gamma, sec->hz_target, sec->hz_measured,
+                    sec->displays, b->status.pid.load(), sec->identify ? "  IDENTIFY" : "");
+        for (uint32_t o = 0; o < sec->count && o < static_cast<uint32_t>(kMaxOutputs); ++o) {
+            const auto& oi = sec->out[o];
+            std::printf("  OUT %u  %-12s %-6s canvas x %5d %4ux%-4u  swap %4ux%-4u  %5.2f Hz  %s%s  \"%s\" %s %04X #%u %s  "
+                        "rect %d,%d %d,%d  lost %u (back in %u ms)\n",
+                        o + 1, oi.state < 5 ? st[oi.state] : "?", oi.preset < 5 ? pr[oi.preset] : "?", oi.canvas_x,
+                        oi.width, oi.height, oi.swap_w, oi.swap_h, oi.hz, oi.black ? "BLACK " : "",
+                        oi.blend_left > 0 || oi.blend_right > 0 ? "blend " : "", oi.name, oi.id.maker, oi.id.product,
+                        oi.id.serial, oi.id.serial_text, oi.rect[0], oi.rect[1], oi.rect[2], oi.rect[3], oi.lost_count,
+                        oi.returned_ms);
+        }
+        for (int i = 0; i < kPlaceSlots; ++i) {
+            const auto& p = sec->layer[i];
+            if (p.place == 0) continue;
+            std::printf("  layer %c%d  %s%s  rect %.3f %.3f %.3f %.3f\n", i == 8 ? 'H' : 'A' + i / 4, i == 8 ? 1 : i % 4 + 1,
+                        p.place < 4 ? pl[p.place] : "?", p.place == 1 ? (std::string(" ") + std::to_string(p.out + 1)).c_str() : "",
+                        p.rect[0], p.rect[1], p.rect[2], p.rect[3]);
+        }
         return 0;
     }
     if (args[0] == "catalog") {

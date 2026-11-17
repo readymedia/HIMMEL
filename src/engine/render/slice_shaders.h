@@ -7,7 +7,8 @@
 //   ps_source  - one layer's source (HAP clip / placeholder colour) as RGBA, for a layer with FX
 //   ps_layer   - composite a layer source over the deck: blend mode + opacity (reads the deck so far)
 //   ps_mix     - deck A / deck B through the crossfader into MAIN
-//   ps_blit    - MAIN (its part for this output) onto the swap chain, black, status overlay
+//   ps_blit    - MAIN (its part for this output) onto the swap chain, black, edge blend, IDENTIFY,
+//                status overlay (M6)
 //   ps_down    - a box-filtered small copy for the preview block (BGRA target)
 //   ps_trans   - a layer's FADE transition: the old picture (kept) -> the new source (M2)
 #pragma once
@@ -29,7 +30,9 @@ cbuffer Mix : register(b2) {
 cbuffer Blit : register(b3) {
     float4 b_src;      // canvas uv: offset.xy, scale.zw
     float4 b_overlay;  // overlay rect in output pixels: x, y, w, h (w = 0: none)
-    float4 b_info;     // x = master gain (0 = black)
+    float4 b_info;     // x = gain (0 = black: master or this output), y = IDENTIFY alpha
+    float4 b_edge;     // M6 edge blend: x = left ramp, y = right ramp (part of the output width), z = 1 / gamma
+    float4 b_ident;    // M6 IDENTIFY picture rect in output pixels: x, y, w, h
 };
 cbuffer Down : register(b4) {
     float4 d_src;      // source uv: offset.xy, scale.zw
@@ -38,6 +41,7 @@ cbuffer Down : register(b4) {
 
 Texture2D tex0 : register(t0);
 Texture2D tex1 : register(t1);
+Texture2D tex3 : register(t3);     // ps_blit: the IDENTIFY picture (R8)
 SamplerState lin : register(s0);
 SamplerState pnt : register(s1);
 SamplerState wrap : register(s2);
@@ -66,9 +70,9 @@ float4 layer_src(float2 uv) {
     float mode = l_info.z;
     if (mode > 5.5) return 0;                              // transparent
     if (mode > 4.5) return tex1.Sample(lin, uv);          // render target (layer with FX), identity
-    if (mode > 3.5) return float4(l_color.rgb, 1);         // placeholder colour
-    float2 cu = (uv - 0.5) * l_xform.xy + 0.5 + l_xform.zw;
+    float2 cu = (uv - 0.5) * l_xform.xy + 0.5 + l_xform.zw;  // the layer's place (M6)
     if (any(cu < 0) || any(cu > 1)) return 0;
+    if (mode > 3.5) return float4(l_color.rgb, 1);         // placeholder colour
     float4 c = tex1.Sample(lin, cu * l_info.xy);
     float3 rgb = c.rgb;
     float a = 1;
@@ -117,8 +121,26 @@ float4 ps_mix(VSOut i) : SV_Target {
     return float4(lerp(a, b, m_info.x), 1);    // linear crossfade (curves later)
 }
 
+// Edge-blend ramp: 0 at the outer edge of the overlap, 1 inside; smooth, then gamma-corrected
+// so two overlapping projectors add up to one (engine.md §2.0).
+float edge_gain(float u) {
+    float g = 1;
+    if (b_edge.x > 0) { float a = saturate(u / b_edge.x); g *= a * a * (3 - 2 * a); }
+    if (b_edge.y > 0) { float a = saturate((1 - u) / b_edge.y); g *= a * a * (3 - 2 * a); }
+    return pow(g, b_edge.z);
+}
+
 float4 ps_blit(VSOut i) : SV_Target {
     float3 col = tex0.Sample(lin, b_src.xy + i.uv * b_src.zw).rgb * b_info.x;
+    col *= edge_gain(i.uv.x);
+    float2 ipx = i.pos.xy - b_ident.xy;
+    if (b_info.y > 0) {  // IDENTIFY: darken the show, the number on top (over the show if needed)
+        col *= 1 - 0.6 * b_info.y;
+        if (b_ident.z > 0 && all(ipx >= 0) && all(ipx < b_ident.zw)) {
+            float t = tex3.Sample(pnt, ipx / b_ident.zw).r;
+            col = lerp(col, float3(1, 1, 1), t * b_info.y);
+        }
+    }
     float2 opx = i.pos.xy - b_overlay.xy;
     if (b_overlay.z > 0 && all(opx >= 0) && all(opx < b_overlay.zw)) {
         float t = tex1.Sample(pnt, opx / b_overlay.zw).r;
