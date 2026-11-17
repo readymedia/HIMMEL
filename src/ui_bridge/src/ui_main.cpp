@@ -12,6 +12,7 @@
 //   GET  /state        everything as one JSON (debugging)
 //   M11 part 2 (optional blocks, panel hidden when missing): SSE "show", "outputs", "audio", "osc",
 //   "library"; GET /audio/devices, POST /audio/config, GET /library/clips, GET /library/thumb/<file>
+//   M11 part 3: GET /show/document (kits, macros, songs for the BUILD view)
 //
 // Rules (docs/interfaces/*.md, gui.md §1.5): the bridge never blocks the
 // engine and never takes it down. Engine absent / restarted / wrong version
@@ -762,6 +763,8 @@ void connection(SOCKET s) {
                                                     : himmel::ui::panels_audio_config(cfg_in)),
                              keep);
             }
+        } else if (req.method == "GET" && req.path == "/show/document") {
+            ok = respond(s, 200, "OK", "application/json", dump(himmel::ui::panels_show_document()), keep);
         } else if (req.method == "GET" && req.path == "/library/clips") {
             ok = respond(s, 200, "OK", "application/json", dump(himmel::ui::panels_library_clips()), keep);
         } else if (req.method == "GET" && req.path.rfind("/library/thumb/", 0) == 0) {

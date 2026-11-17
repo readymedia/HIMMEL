@@ -658,6 +658,77 @@ static void test_http() {
           !origin_is_local("null"));
 }
 
+static void test_part3() {
+    using nlohmann::json;
+    auto c = downsample_curve({0.1f, 0.2f, 0.4f, 0.1f, 0.0f, 0.2f}, 3);
+    CHECK(c.size() == 3 && c[0] == 0.5f && c[1] == 1.0f && c[2] == 0.5f);
+    CHECK(downsample_curve({}, 8).empty() && downsample_curve({1.0f}, 0).empty());
+    CHECK(downsample_curve({0.3f, 0.6f}, 8).size() == 2);
+    auto z = downsample_curve({0.0f, 0.0f}, 2);
+    CHECK(z.size() == 2 && z[0] == 0.0f);
+    auto nan = downsample_curve({std::numeric_limits<float>::quiet_NaN(), 2.0f}, 1);
+    CHECK(nan.size() == 1 && nan[0] == 1.0f);
+
+    CHECK(!show_doc_for_page(json::object())["ok"].get<bool>());
+    CHECK(!show_doc_for_page(json{{"format", "other"}})["ok"].get<bool>());
+    json doc = {{"format", "himmel-show/1"}, {"kind", "document"}, {"name", "My Show"}, {"bank", 2},
+                {"use_setlist", true}, {"live", {{"decks", json::array()}}},
+                {"banks", json::array({json{{"index", 2}, {"pads", json::array({nullptr, json{{"name", "S2"}}})}}, 7})},
+                {"setlist", json::array({json{{"name", "Intro"}, {"bpm", 120}, {"scenes", json::array()}}})}};
+    json j = show_doc_for_page(doc);
+    CHECK(j["ok"].get<bool>() && j["name"] == "My Show" && j["bank"] == 2 && j["use_setlist"] == true);
+    CHECK(!j.contains("live") && j["banks"].size() == 1 && j["banks"][0]["index"] == 2);
+    CHECK(j["banks"][0]["pads"][1]["name"] == "S2" && j["setlist"][0]["bpm"] == 120);
+
+    // The exact commands gui/build.js sends (the BUILD view), deck as a number.
+    using namespace himmel::protocol;
+    auto r = P(R"({"type":"KitSet","deck":1,"slot":12,"param":"Clip","layer":"Layer1","value":4})");
+    CHECK(r.ok && r.cmd.type == CommandType::KitSet && r.cmd.deck == 1 && r.cmd.slot == 12 &&
+          r.cmd.param == static_cast<uint8_t>(PadKind::Clip) && r.cmd.layer == static_cast<uint8_t>(PadTarget::Layer1) && r.cmd.i == 4);
+    r = P(R"({"type":"KitSet","deck":0,"slot":2,"param":"Action","value":"Black"})");
+    CHECK(r.ok && r.cmd.i == static_cast<int32_t>(PadAction::Black) && r.cmd.layer == 0);
+    r = P(R"({"type":"KitSet","deck":0,"slot":3,"param":"Action","value":"NextScene"})");
+    CHECK(r.ok && r.cmd.i == static_cast<int32_t>(PadAction::NextScene));
+    r = P(R"({"type":"KitSet","deck":0,"slot":5,"param":"Empty"})");
+    CHECK(r.ok && r.cmd.param == static_cast<uint8_t>(PadKind::Empty));
+    r = P(R"({"type":"KitSet","deck":0,"slot":0,"param":"Clip","layer":"Hit","value":2})");
+    CHECK(r.ok && r.cmd.layer == static_cast<uint8_t>(PadTarget::Hit));
+    r = P(R"({"type":"MacroSet","deck":1,"slot":2,"param":0,"value":17,"f":[0.2,0.9]})");   // deck FX (no layer)
+    CHECK(r.ok && r.cmd.layer == kNone && r.cmd.param == 0 && r.cmd.i == 17 && r.cmd.f[0] == 0.2f && r.cmd.f[1] == 0.9f);
+    r = P(R"({"type":"MacroSet","deck":1,"slot":2,"param":1,"layer":3,"value":0,"f":[1,0]})");
+    CHECK(r.ok && r.cmd.layer == 3 && r.cmd.f[0] == 1.0f && r.cmd.f[1] == 0.0f);
+    r = P(R"({"type":"MacroSet","deck":1,"slot":2,"param":1,"clear":true})");
+    CHECK(r.ok && (r.cmd.flags & kClear));
+    r = P(R"({"type":"MacroSet","deck":1,"slot":0,"text":"INTENSITY"})");
+    CHECK(r.ok && r.needs_text && r.text == "INTENSITY" && r.cmd.param == kNone);
+    r = P(R"({"type":"SongEdit","param":"New"})");
+    CHECK(r.ok && r.cmd.i == 0 && !r.needs_text);
+    r = P(R"({"type":"SongEdit","param":"New","text":"Warmup"})");
+    CHECK(r.ok && r.needs_text);
+    r = P(R"({"type":"SongEdit","param":"Move","value":2,"slot":1})");
+    CHECK(r.ok && r.cmd.i == 2 && r.cmd.slot == 1);
+    r = P(R"({"type":"SongEdit","param":"Bpm","value":0,"f":128})");
+    CHECK(r.ok && r.cmd.f[0] == 128.0f);
+    r = P(R"({"type":"SongEdit","param":"Rename","slot":0,"text":"Glass"})");
+    CHECK(r.ok && r.needs_text && r.cmd.slot == 0);
+    r = P(R"({"type":"SongEdit","param":"AddScene","value":0,"deck":1})");
+    CHECK(r.ok && r.cmd.deck == 1 && r.cmd.i == 0);
+    r = P(R"({"type":"SongEdit","param":"RemoveScene","value":0,"slot":4})");
+    CHECK(r.ok && r.cmd.slot == 4);
+    r = P(R"({"type":"SongEdit","param":"Delete","value":1})");
+    CHECK(r.ok && r.cmd.i == 1);
+    r = P(R"({"type":"SceneRecall","deck":1,"value":4,"f":0})");
+    CHECK(r.ok && r.cmd.deck == 1 && r.cmd.f[0] == 0.0f);
+    r = P(R"({"type":"ShowSelect","param":"Song","value":2})");
+    CHECK(r.ok && r.cmd.i == 2 && !(r.cmd.flags & kRelative));
+    r = P(R"({"type":"ShowSelect","param":"UseSetlist","value":0})");
+    CHECK(r.ok && r.cmd.i == 0);
+    r = P(R"({"type":"OutputConfig","param":"BlendWidth","value":128})");
+    CHECK(r.ok && r.cmd.i == 128);
+    r = P(R"({"type":"Project","param":"New","value":3})");
+    CHECK(r.ok && r.cmd.i == 3);
+}
+
 int main() {
     test_layer_commands();
     test_fx_commands();
@@ -669,6 +740,7 @@ int main() {
     test_panel_commands();
     test_panel_json();
     test_http();
+    test_part3();
     std::printf("\n%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

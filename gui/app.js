@@ -656,10 +656,79 @@ function buildClipEditor() {
   CE.seed = numBox('seed', 'Seed', 0, 2147483647, 1, '', 'RANDOM / CHOP / autopilot pattern (same seed = same pattern)');
   row5.append(CE.innerT.b, CE.catch.b, CE.auto.g, CE.trans.g, CE.seed.w);
 
+  // Row 1b (M11 part 3): the filmstrip + motion curve + analysed cuts from the library (gui.md §16), and
+  // the layer's effects with their level tag and live PRESS (row 3 of the drawer). Click a tile = LAYER FX.
+  CE.film = el('div', 'cefilm'); CE.film.title = 'The clip from the library: 8 frames, the motion curve (white) and analysed cuts (yellow). Click = jump.';
+  CE.film.addEventListener('pointerdown', e => { const r = CE.film.getBoundingClientRect(); send({ type: 'LayerJump', ...focusTarget(), value: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) }); });
+  CE.fxrow = el('div', 'cefx');
   CE.none = el('div', 'cenone dim', '');
   CE.body = el('div', 'cebody');
-  CE.body.append(tl, row2, row3, row4, row5);
+  CE.body.append(tl, CE.film, row2, row3, row4, row5, CE.fxrow);
   box.append(head, CE.none, CE.body);
+}
+// The library row of a catalog clip (by file name), for the drawer's filmstrip. Refreshed every 15 s
+// while the CLIP tab shows; a run without a library (tests) simply has no filmstrip.
+const LIBC = { byName: null, at: -1e9, busy: false };
+async function libRows() {
+  if (LIBC.busy || performance.now() - LIBC.at < 15000) return;
+  LIBC.busy = true; LIBC.at = performance.now();
+  try {
+    const r = await fetch('/library/clips');
+    if (r.ok) {
+      const j = await r.json(); const m = new Map();
+      for (const c of j.clips || []) if (c.state === 'ready') m.set(c.name.toLowerCase(), c);
+      LIBC.byName = m; CE.filmKey = ''; invalidate();
+    }
+  } catch (e) { /* no bridge */ }
+  LIBC.busy = false;
+}
+function libRowOf(ci) {
+  if (!ci || !LIBC.byName) return null;
+  const n = ci.name.replace(/ \(lib\)$/, '').toLowerCase();
+  return LIBC.byName.get(n) || LIBC.byName.get(n.replace(/\.mov$/, '')) || null;
+}
+function renderFilm(ci, pos) {
+  libRows();
+  const row = libRowOf(ci);
+  const key = (ci ? ci.name : '') + '|' + (row ? row.hash : '') + '|' + !!LIBC.byName;
+  if (CE.filmKey !== key) {
+    CE.filmKey = key; CE.film.textContent = '';
+    CE.film.style.backgroundImage = row && row.thumb ? `url(/library/thumb/${row.hash}-strip.jpg)` : 'none';
+    if (row && row.curve && row.curve.length > 1) {
+      const n = row.curve.length, pts = row.curve.map((v, i) => `${(i / (n - 1) * 100).toFixed(2)},${(34 - v * 30).toFixed(1)}`).join(' ');
+      CE.film.insertAdjacentHTML('beforeend', `<svg viewBox="0 0 100 34" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="#fff" stroke-width="1.2" vector-effect="non-scaling-stroke" opacity=".85"/></svg>`);
+    }
+    for (const c of (row && row.cuts) || []) { const m = el('div', 'cut'); m.style.left = (c * 100) + '%'; CE.film.append(m); }
+    if (!row) CE.film.append(el('div', 'fnote', !ci ? '' : !LIBC.byName ? 'no library in this run' : 'not in the library (no analysis)'));
+    CE.fph = el('div', 'fph'); CE.film.append(CE.fph);
+  }
+  CE.film.classList.toggle('hidden', !ci);
+  if (CE.fph) CE.fph.style.left = (pos * 100).toFixed(2) + '%';
+}
+function renderDrawerFx(ls) {
+  const fx = ls.fx || [];
+  const key = JSON.stringify(fx.map(f => [f.effect, f.bypass]));
+  if (CE.fxKey !== key) {
+    CE.fxKey = key; CE.fxrow.textContent = ''; CE.press = [];
+    CE.fxrow.append(el('span', 'lbl', 'effects'));
+    fx.forEach((f, k) => {
+      const fi = fxInfo(f.effect);
+      if (!fi) return;   // only the slots in use; LAYER FX shows all four
+      const t = el('button', 'cefxt' + (f.effect < 0 || f.bypass ? ' off' : ''));
+      t.append(el('span', 'lvl', 'LAYER'), el('span', null, `${k + 1} ${fi ? fi.name : 'empty'}`));
+      t.title = `The layer's effect slot ${k + 1} (click = LAYER FX tab)`;
+      t.addEventListener('click', () => setTab('layer'));
+      CE.fxrow.append(t);
+      if (fi) {
+        const pm = fxMeta(f.effect)?.press;
+        const p = el('span', 'cepress'); const bar = el('span', 'pb'); const fill = el('i'); bar.append(fill);
+        p.append(el('span', 'dim', 'PRESS ' + (pm ? pm.param : '')), bar); p.title = 'Live PRESS on this slot (pads, Block Z, LUMI, the PRESS button)';
+        CE.fxrow.append(p); CE.press[k] = fill;
+      }
+    });
+    if (!fx.some(f => f.effect >= 0)) CE.fxrow.append(el('span', 'dim', 'none · LAYER FX adds one'));
+  }
+  fx.forEach((f, k) => { if (CE.press[k]) CE.press[k].style.width = Math.round((f.press || 0) * 100) + '%'; });
 }
 function curTransport() {
   if (!S.tr || !S.live) return null;
@@ -693,6 +762,8 @@ function renderClipEditor() {
   if (CE.dragging !== 'LoopIn') CE.h.LoopIn.style.left = pct(tr.loop_in);
   if (CE.dragging !== 'LoopOut') CE.h.LoopOut.style.left = pct(tr.loop_out);
   CE.ph.style.left = pct(ls.position);
+  renderFilm(ci, ls.position);
+  renderDrawerFx(ls);
   CE.bl.classList.toggle('hidden', !tr.beat_loop);
   // cue points (they belong to the clip)
   const anyCue = tr.cue.some(q => q >= 0);
@@ -944,6 +1015,7 @@ function render() {
   renderClock();
   if (window.Panels) window.Panels.render();
   if (window.Views) window.Views.render();
+  if (window.Build) window.Build.render();
   if (S.view !== 'perform' || !S.live || !S.cat) return;
   renderMonitors(); renderStrips(); renderTake(); renderLibrary(); renderInspector(); renderHit();
 }
@@ -1008,7 +1080,7 @@ function connect() {
 }
 
 // ------------------------------------------------------------------ views
-const VIEWS = ['perform', 'start', 'outputs', 'library', 'mk2', 'settings'];
+const VIEWS = ['perform', 'start', 'build', 'outputs', 'library', 'mk2', 'settings'];
 function setView(v) {
   S.view = v;
   for (const id of VIEWS) $(id).classList.toggle('hidden', id !== v);
@@ -1017,6 +1089,7 @@ function setView(v) {
   if (location.hash !== '#' + v) history.replaceState(null, '', '#' + v);
   if (window.Views) window.Views.shown(v);
   if (window.Panels) window.Panels.shown(v);
+  if (window.Build) window.Build.shown(v);
   invalidate();
 }
 window.setView = setView;

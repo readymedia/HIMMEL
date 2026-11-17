@@ -12,8 +12,8 @@
   const S = window.S;
 
   // ================================================================ start wizard
-  const W = { step: 1 };
-  const NEXT = { 1: 'Next: weapon', 2: 'Next: outputs', 3: 'Next: play', 4: 'Open Perform' };
+  const W = { step: 1, auto: true };
+  const NEXT = { 0: 'Next: clips', 1: 'Next: weapon', 2: 'Next: outputs', 3: 'Next: play', 4: 'Open Perform' };
 
   function card(title, body, cls) {
     const c = el('div', 'wcard' + (cls ? ' ' + cls : ''));
@@ -23,17 +23,22 @@
   }
   function wizNav() {
     const nav = el('div', 'wiznav');
-    if (W.step > 1) { const b = el('button', null, '◀ Back'); b.addEventListener('click', () => go(W.step - 1)); nav.append(b); }
+    if (W.step > (S.show?.present ? 0 : 1)) { const b = el('button', null, '◀ Back'); b.addEventListener('click', () => go(W.step - 1)); nav.append(b); }
     nav.append(el('div', 'spacer'));
     const n = el('button', 'primary', NEXT[W.step] + ' ▶');
     n.addEventListener('click', () => (W.step < 4 ? go(W.step + 1) : window.setView('perform')));
     nav.append(n);
     return nav;
   }
-  function go(step) { W.step = step; W.key = ''; renderWizard(); }
+  function go(step) { W.step = step; W.auto = false; W.key = ''; renderWizard(); }
 
   // Each step is rebuilt only when what it shows changed (cheap key), so clicks are not eaten.
   function renderWizard() {
+    // The start screen (step 0) needs the show block; without it the wizard starts at step 1.
+    const hasShow = !!S.show?.present;
+    $('wizBar').querySelector('[data-step="0"]')?.classList.toggle('hidden', !hasShow);
+    if (W.auto && hasShow && W.step === 1) W.step = 0;
+    if (!hasShow && W.step === 0) W.step = 1;
     for (const b of document.querySelectorAll('#wizBar button')) {
       b.classList.toggle('on', +b.dataset.step === W.step);
     }
@@ -41,19 +46,59 @@
     if (W.key === key) { if (W.step === 4 && W.u) window.Panels.W.updatePicker(W.u); return; }
     W.key = key;
     const body = $('wizBody'); body.textContent = '';
-    body.append(el('h2', null, ['', 'Add clips', 'Choose your weapon', 'Set outputs', 'Play'][W.step]));
+    body.append(el('h2', null, ['Start: your project', 'Add clips', 'Choose your weapon', 'Set outputs', 'Play'][W.step]));
     W.u = null;
-    ({ 1: step1, 2: step2, 3: step3, 4: step4 })[W.step](body);
+    ({ 0: step0, 1: step1, 2: step2, 3: step3, 4: step4 })[W.step](body);
     body.append(wizNav());
     if (W.u) window.Panels.W.updatePicker(W.u);
   }
   function stepKey(step) {
     const b = S.bridge, m = S.mk2, L = S.live, lib = S.library, o = S.outputs, a = S.audio;
+    if (step === 0) { const sh = S.show, f = sh?.files; return JSON.stringify([sh?.present, sh?.project, sh?.dirty, sh?.busy, f?.path, f?.recent, f?.restored, f?.saved_unix, f?.autosave_unix, f?.missing_count, b?.engine, S.cat?.clips.length, m?.connected, o?.count]); }
     if (step === 1) return JSON.stringify([S.cat?.clips.length ?? -1, S.cat?.effects.length ?? -1, lib?.present, lib?.alive, lib?.queued, lib?.working, lib?.ready_total, lib?.failed_total, lib?.job?.name, lib?.catalog_full]);
     if (step === 2) return JSON.stringify([m?.present, m?.connected, m?.alive, (m?.pressed || []).join('+'), L?.producer?.[0]?.alive, L?.producer?.[1]?.alive, S.weapons, a?.present]);
     if (step === 3) return JSON.stringify([b?.preview, b?.engine, o]);
     // Step 4 holds a live meter: rebuilt only when the input changes; the meter updates in place.
     return JSON.stringify([b?.engine, S.cat?.clips.length, m?.connected, a?.present, a?.input?.device, a?.input?.state, o?.count, (o?.outputs || []).map(x => x.state)]);
+  }
+
+  // Step 0, the start screen (gui.md §3 "Before the wizard", projects.md): new / open / recent, the
+  // autosave offer, and the one-line health check. Opening a project during a show is a SHOW command
+  // (Project Open / New); the renderer keeps the outputs alive.
+  function step0(body) {
+    const sh = S.show, f = sh.files, send = window.H.send, ask = window.Panels.W.ask;
+    const b = S.bridge, m = S.mk2, o = S.outputs, n = S.cat?.clips.length ?? 0;
+    const lost = (o?.outputs || []).filter(x => x.state === 'Lost' || x.state === 'Other').length;
+    body.append(el('div', 'health ' + (b?.engine === 'ok' && !lost && !f.missing_count ? 'ok' : 'bad'),
+      b?.engine !== 'ok' ? 'The engine is not running yet: start himmel.exe.' :
+        `${lost || f.missing_count ? '⚠ ' : 'All good: '}${sh.project}${sh.dirty ? ' ●' : ''} · ${n} clips · ${m?.connected ? 'MK2' : 'no MK2'} · ${o?.count ?? '?'} output${o?.count === 1 ? '' : 's'}` +
+        (lost ? ` · ${lost} output${lost > 1 ? 's' : ''} lost` : '') + (f.missing_count ? ` · ${f.missing_count} clips missing (project ⋯ → Relink)` : '')));
+    if (f.restored && f.restored !== 'None')
+      body.append(card('CAME BACK FROM ' + (f.restored === 'Autosave' ? 'THE AUTOSAVE' : 'AN INTERRUPTED SAVE'), 'Himmel restored your work after a crash. Keep it (save), or go back to the last save with Revert (project ⋯).', 'sel'));
+    else if (f.path && f.autosave_unix > f.saved_unix) {
+      const c = el('div');
+      const r = el('button', 'primary', 'Restore the autosave');
+      r.addEventListener('click', () => send({ type: 'Project', param: 'RestoreAutosave' }));
+      c.append(el('div', 'dim', `A newer autosave (${new Date(f.autosave_unix * 1000).toLocaleTimeString()}) than the last save is there.`), r);
+      body.append(card('AUTOSAVE', c));
+    }
+    const row = el('div', 'wstart');
+    const sure = cmd => () => { if (!sh.dirty || confirm('Unsaved changes are lost (the autosave keeps them). Go on?')) send(cmd); };
+    const big = (title, sub, fn, cls) => { const x = el('button', 'wproj' + (cls ? ' ' + cls : '')); x.append(el('b', null, title), el('span', 'dim', sub)); x.addEventListener('click', fn); return x; };
+    row.append(
+      big('Keep playing', `${sh.project}${sh.dirty ? ' (unsaved changes)' : ''}`, () => go(1), 'sel'),
+      big('New project · 3 screens', 'Empty, the 3-screen template', sure({ type: 'Project', param: 'New', value: 3 })),
+      big('New project · 1 screen', 'Empty, one output', sure({ type: 'Project', param: 'New', value: 1 })),
+      big('Open…', 'A project folder or a .himmelshow file', async () => {
+        const p = await ask('OPEN · project folder or .himmelshow file', '', 'e.g. C:\\Users\\me\\Documents\\Himmel\\Projects\\Club.himmel');
+        if (p && (!sh.dirty || confirm('Unsaved changes are lost (the autosave keeps them). Open?'))) send({ type: 'Project', param: 'Open', text: p });
+      }));
+    body.append(row, el('div', 'lbl', 'RECENT PROJECTS'));
+    const rec = el('div', 'wstart');
+    f.recent.forEach((r, i) => rec.append(big(r.name, `${r.outputs} output${r.outputs === 1 ? '' : 's'} · ${r.saved_unix ? new Date(r.saved_unix * 1000).toLocaleString() : ''}`,
+      sure({ type: 'Project', param: 'Open', slot: i }), r.path === f.path ? 'sel' : '')));
+    if (!f.recent.length) rec.append(el('div', 'dim', 'No recent projects yet: SAVE (Ctrl+S) puts this one here.'));
+    body.append(rec);
   }
 
   function step1(body) {
@@ -128,6 +173,7 @@
       body.append(card('Outputs', o?.state === 'version' ? 'The renderer is another version than this GUI (outputs block).' : 'The renderer is not running (no outputs block yet). himmel.exe starts it.', 'off'));
       return;
     }
+    body.append(el('div', 'lbl', 'THE CANVAS YOU PLAY ON (to scale)'), canvasDrawing(o));
     const cards = el('div', 'wrow');
     o.outputs.forEach((x, k) => cards.append(PW.outputCard(x, k, true)));
     body.append(el('div', 'lbl', `${o.count} OUTPUT${o.count === 1 ? '' : 'S'} · ${o.mode.toUpperCase()} · canvas ${o.canvas[0]}×${o.canvas[1]} · ${o.displays} displays found`), cards);
@@ -136,9 +182,28 @@
     ctl.append(el('span', 'lbl', 'RESOLUTION PER OUTPUT'), PW.presetSel(res, v => PW.setResolution(v)),
       el('span', 'lbl', 'REFRESH'), PW.refreshSel(o.refresh, v => window.H.send({ type: 'OutputConfig', param: 'Refresh', value: v })),
       PW.identifyBtn(false));
+    if (o.count > 1) {
+      const bw = el('input'); bw.type = 'range'; bw.min = 0; bw.max = 1024; bw.step = 8; bw.value = o.blend_px; bw.title = 'Edge blend overlap (projectors): 0 = screens, the edges just meet';
+      bw.addEventListener('change', () => window.H.send({ type: 'OutputConfig', param: 'BlendWidth', value: Math.round(+bw.value) }));
+      ctl.append(el('span', 'lbl', `BLEND ${o.blend_px} px`), bw);
+    }
     body.append(ctl,
       el('div', 'dim', 'IDENTIFY shows a big number on every output for 5 s: check that OUT 1 is on the left. 1080p is the safe choice; 1440p / 4K for big rigs. 50 Hz in countries with 50 Hz light and cameras. The number of outputs is set when Himmel starts (himmel.exe -- --outputs N) in 0.1.'));
     const more = el('button', null, 'More on the OUTPUTS view'); more.addEventListener('click', () => window.setView('outputs')); body.append(more);
+  }
+
+  // The canvas to scale: each output where it sits, blend zones hatched, lost outputs hatched red.
+  function canvasDrawing(o) {
+    const box = el('div', 'wcanvas');
+    const W0 = Math.max(1, o.canvas[0]);
+    o.outputs.forEach((x, k) => {
+      const d = el('div', 'wco' + (x.state === 'Lost' ? ' lost' : ''), String(k + 1));
+      d.style.left = (x.canvas_x / W0 * 100) + '%'; d.style.width = (x.size[0] / W0 * 100) + '%';
+      d.title = `OUT ${k + 1} · ${x.size[0]}×${x.size[1]} · ${x.state}`;
+      box.append(d);
+      if (x.blend[1] > 0) { const z = el('div', 'wbl'); z.style.left = ((x.canvas_x + x.size[0] - x.blend[1]) / W0 * 100) + '%'; z.style.width = (x.blend[1] / W0 * 100) + '%'; box.append(z); }
+    });
+    return box;
   }
 
   function step4(body) {

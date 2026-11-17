@@ -376,6 +376,14 @@ json panels_library_clips() {
         c["stars"] = r.stars;
         c["favourite"] = r.favourite;
         c["tags"] = r.user_tags;
+        if (!a.motion_curve.empty()) c["curve"] = downsample_curve(a.motion_curve, 96);
+        if (!a.cuts.empty() && r.seconds > 0 && r.fps > 0) {
+            const double frames = r.seconds * r.fps;
+            json cuts = json::array();
+            for (const auto f : a.cuts)
+                if (f >= 0 && f < frames) cuts.push_back(std::round(f / frames * 10000.0) / 10000.0);
+            c["cuts"] = std::move(cuts);
+        }
         if (a.version > 0) {
             char rgb[8];
             std::snprintf(rgb, sizeof rgb, "#%06x", a.avg_rgb & 0xFFFFFFu);
@@ -406,6 +414,67 @@ json panels_library_clips() {
     }
     out["ok"] = true;
     return out;
+}
+
+namespace {
+bool read_text_file(const fs::path& p, std::string& out) {
+    std::ifstream f(p, std::ios::binary);
+    if (!f) return false;
+    std::ostringstream ss;
+    ss << f.rdbuf();
+    out = ss.str();
+    return true;
+}
+fs::file_time_type mtime(const fs::path& p) {
+    std::error_code ec;
+    const auto t = fs::last_write_time(p, ec);
+    return ec ? fs::file_time_type::min() : t;
+}
+}  // namespace
+
+json panels_show_document() {
+    if (!g) return {{"ok", false}, {"error", "not started"}};
+    std::string path;
+    {
+        std::shared_lock vl(g->views);
+        if (g->show.st != ShmStatus::Ok) return {{"ok", false}, {"error", "no show block (the renderer is not running)"}};
+        const auto* b = g->show.view.as<const ShowBlock>();
+        auto fl = std::make_unique<FilesStatus>();
+        if (!seq_read(b->files_seq, b->files, *fl)) return {{"ok", false}, {"error", "the show block is busy, try again"}};
+        path.assign(fl->path, strnlen(fl->path, sizeof(fl->path)));
+    }
+    if (path.empty()) return {{"ok", false}, {"error", "no project path yet"}};
+    const fs::path folder = fs::path(std::u8string(path.begin(), path.end()));
+    const fs::path auto_doc = folder / "autosave" / "show.json", head_file = folder / "project.json";
+    std::string text;
+    json doc;
+    // The autosave is written after every show change (<= 4/s); a plain save rewrites project.json.
+    if (mtime(auto_doc) >= mtime(head_file) && read_text_file(auto_doc, text)) doc = json::parse(text, nullptr, false);
+    if (!doc.is_object() && read_text_file(head_file, text)) {
+        doc = json::parse(text, nullptr, false);
+        if (doc.is_object()) {
+            json banks = json::array(), songs = json::array();
+            auto load = [&](const json& list, json& into) {
+                if (!list.is_array()) return;
+                for (const auto& rel : list) {
+                    std::string t, r = rel.is_string() ? rel.get<std::string>() : std::string();
+                    if (r.empty() || r.find("..") != std::string::npos) continue;
+                    if (read_text_file(folder / fs::path(std::u8string(r.begin(), r.end())), t)) {
+                        json x = json::parse(t, nullptr, false);
+                        if (x.is_object()) into.push_back(std::move(x));
+                    }
+                }
+            };
+            load(doc.value("banks", json::array()), banks);
+            load(doc.value("setlist", json::array()), songs);
+            doc["banks"] = std::move(banks);
+            doc["setlist"] = std::move(songs);
+        }
+    }
+    if (!doc.is_object()) return {{"ok", false}, {"error", "no show document in " + path}};
+    json j = show_doc_for_page(doc);
+    j["path"] = path;
+    return j;
 }
 
 std::string panels_library_thumb(const std::string& file) {

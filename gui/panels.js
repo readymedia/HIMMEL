@@ -665,7 +665,7 @@
     tabShown(tab) { if (tab === 'scenes') { SC.key = ''; renderScenes(); } },
     settings: renderSettingsPage,
     // Widgets for the wizard (views.js).
-    W: { outputCard, identifyBtn, presetSel, refreshSel, setResolution, audioPicker, updatePicker, PRESET_WORDS, REFRESH_WORDS, has },
+    W: { outputCard, identifyBtn, presetSel, refreshSel, setResolution, audioPicker, updatePicker, PRESET_WORDS, REFRESH_WORDS, has, ask },
   };
   buildProjectBar();
   buildAudioMeter();

@@ -1,0 +1,96 @@
+/* SPDX-License-Identifier: MIT · Copyright (c) 2026 ReadyMedia.no and Himmel contributors */
+/* M11 part 3: the BUILD view (song, scene and kit editor), the clip drawer's filmstrip, the wizard's start screen. Dark only (D28). */
+
+.buildwrap { flex: 1; display: flex; flex-direction: column; gap: 8px; padding: 10px 16px; min-height: 0; overflow: auto; }
+.bdhead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bdstep { font-weight: 800; font-size: 12px; padding: 4px 10px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); }
+.bdcols { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(320px, 1.5fr) minmax(300px, 1.2fr); gap: 10px; min-height: 0; flex: 1; }
+@media (max-width: 1100px) { .bdcols { grid-template-columns: 1fr; } }
+.bdcol { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 6px; min-width: 0; overflow: auto; }
+
+.bdmode, .bdbank { display: flex; gap: 6px; align-items: center; }
+.bdbankn { font-weight: 800; min-width: 80px; text-align: center; }
+.bdsongs { display: flex; flex-direction: column; gap: 3px; }
+.bdsong { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 2px 4px; border-radius: 6px; border: 1px solid transparent; }
+.bdsong.on { border-color: var(--accent); background: var(--panel-2); }
+.bdsongn { background: none; border: none; font-weight: 700; text-align: left; flex: 1; min-height: 26px; }
+.bdtools { display: flex; gap: 3px; }
+.bdtools button { min-height: 24px; padding: 0 6px; font-size: 11px; }
+button.bad { color: var(--live); }
+
+.bdscenes { display: flex; flex-direction: column; gap: 3px; }
+.bdscene { display: grid; grid-template-columns: 26px 1fr auto; grid-template-rows: auto auto; column-gap: 8px; align-items: center; text-align: left; padding: 5px; min-height: 40px; background: transparent; border: 1px solid transparent; }
+.bdscene:hover { background: var(--panel-2); }
+.bdscene.sel { background: var(--panel-2); border-color: var(--preview); }
+.bdscene > i { grid-row: 1 / span 2; width: 26px; height: 26px; border-radius: 5px; }
+.bdscene .bdsn { font-weight: 700; }
+.bdscene .dim { grid-column: 2; font-size: 11px; }
+.bdon { grid-column: 3; grid-row: 1 / span 2; display: flex; flex-direction: column; gap: 2px; }
+.bdon b { font-size: 9px; padding: 1px 4px; border-radius: 3px; color: #000; }
+.bdon b.prev { background: var(--preview); } .bdon b.prog { background: var(--live); }
+
+.bdshead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bdsname { font-size: 16px; font-weight: 800; }
+.prevchip { color: #000; background: var(--preview); border-color: var(--preview); }
+.bdlayers { display: flex; flex-direction: column; gap: 3px; }
+.bdlayer { display: grid; grid-template-columns: 44px minmax(90px, 1fr) 2fr; gap: 6px; align-items: baseline; padding: 4px 6px; background: var(--panel-2); border-radius: 5px; font-size: 12px; }
+.bdlayer b { color: var(--deck-a); }
+.bdlayer .dim { font-size: 11px; }
+.bdtrans { display: flex; gap: 8px; align-items: center; }
+.bdmacros { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.bdmac { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 6px; display: flex; flex-direction: column; gap: 4px; }
+.bdmachead { display: flex; align-items: center; gap: 6px; }
+.bdmachead b { background: var(--live); color: #000; border-radius: 4px; padding: 0 5px; font-size: 11px; }
+.bdmacn { font-weight: 800; flex: 1; }
+.bdmac button { min-height: 22px; padding: 0 6px; font-size: 11px; }
+.bdbind { display: grid; grid-template-columns: 1fr 60px auto auto; gap: 4px; align-items: center; font-size: 11px; }
+.bdrange { position: relative; height: 8px; background: var(--bg); border-radius: 3px; }
+.bdrange i { position: absolute; top: 0; bottom: 0; background: var(--live); border-radius: 3px; }
+.bdbindbox { width: min(720px, 94vw); padding: 12px; gap: 8px; }
+.bdbindrow, .bdbindfoot, .bdpadrow, .bdpadfoot { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+.bdkhead { display: flex; align-items: center; gap: 6px; }
+.bdkit { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+.bdpad { position: relative; height: 58px; border-radius: 7px; text-align: left; padding: 4px 6px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; background: #10141a; }
+.bdpad.fx { background: #2a2420; } .bdpad.act { background: var(--panel-2); } .bdpad.empty { opacity: .6; }
+.bdpad.sel { border: 2px solid #fff; }
+.bdpn { position: absolute; left: 5px; top: 3px; font-size: 9px; color: var(--text-dim); font-family: var(--mono); }
+.bdpname { font-weight: 700; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bdptag { position: absolute; right: 3px; top: 3px; font: 800 9px var(--ui); padding: 1px 4px; border-radius: 3px; background: #0B0D10cc; }
+.t-L1, .t-L2, .t-L3, .t-L4 { color: var(--deck-a); } .t-ALL { color: var(--accent); } .t-FX { color: var(--deck-b); }
+.t-HIT { color: var(--live); } .t-ACT, .t-SCN { color: var(--text-dim); } .t-SEL { color: var(--text); } .t-FREE { color: #7EE2A0; }
+.chip2.on.t-L1, .chip2.on.t-L2, .chip2.on.t-L3, .chip2.on.t-L4 { background: var(--deck-a); border-color: var(--deck-a); color: #000; }
+.chip2.on.t-HIT { background: var(--live); border-color: var(--live); color: #000; }
+.chip2.on.t-SEL { background: var(--text); border-color: var(--text); color: #000; }
+.chip2.on.t-FREE { background: #7EE2A0; border-color: #7EE2A0; color: #000; }
+.bdpaded { border-top: 1px solid var(--line); padding-top: 6px; display: flex; flex-direction: column; gap: 6px; }
+.bdpadh { font-weight: 800; }
+.bdtargets { display: flex; gap: 3px; align-items: center; flex-wrap: wrap; }
+.bdpaded select { max-width: 260px; }
+.bdpaded .hidden, .bdtargets.hidden { display: none; }
+
+/* ---- the clip drawer: filmstrip + motion curve under the timeline (gui.md §16 row 1) ---- */
+.cefilm { position: relative; height: 34px; border-radius: 4px; overflow: hidden; background: #0d1015 center / 100% 100% no-repeat; border: 1px solid var(--line); }
+.cefilm svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.cefilm .cut { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--warn); opacity: .8; }
+.cefilm .fph { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; }
+.cefilm .fnote { position: absolute; left: 6px; top: 9px; font-size: 11px; color: var(--text-dim); }
+.cefx { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.cefxt { display: inline-flex; align-items: center; gap: 4px; min-height: 26px; padding: 0 8px; border-radius: 5px; font-size: 11px; background: var(--panel-2); border: 1px solid var(--line); }
+.cefxt .lvl { font: 800 8px var(--ui); letter-spacing: .1em; padding: 1px 3px; border-radius: 3px; background: var(--bg); color: var(--deck-a); }
+.cefxt.off { opacity: .55; }
+.cepress { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; }
+.cepress .pb { width: 70px; height: 8px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+.cepress .pb i { display: block; height: 100%; background: var(--accent); }
+
+/* ---- the wizard's start screen (gui.md §3 "Before the wizard") ---- */
+.wstart { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.wproj { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 10px; min-height: 70px; text-align: left; }
+.wproj b { font-size: 14px; }
+.wcanvas { position: relative; height: 90px; margin: 4px 0 8px; }
+.wcanvas .wco { position: absolute; top: 0; bottom: 0; border: 2px solid var(--deck-a); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 22px; background: #2ec5ff14; }
+.wcanvas .wco.lost { border-color: var(--live); background: repeating-linear-gradient(45deg, #ff3b3022 0 8px, transparent 8px 16px); }
+.wcanvas .wbl { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(-45deg, #ffd60a33 0 6px, transparent 6px 12px); }
+
+/* The BUILD tab makes the top bar ~20 px wider: tighten the view tabs a little so BLACK stays on screen. */
+@media (max-width: 1700px) { #viewTabs button { padding: 0 6px; } #fpsChip { display: none; } }

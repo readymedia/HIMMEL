@@ -957,4 +957,45 @@ json panels_names() {
     return j;
 }
 
+std::vector<float> downsample_curve(const std::vector<float>& curve, int n) {
+    std::vector<float> out;
+    if (curve.empty() || n <= 0) return out;
+    const size_t m = curve.size();
+    const size_t k = std::min<size_t>(static_cast<size_t>(n), m);
+    out.assign(k, 0.0f);
+    for (size_t b = 0; b < k; ++b) {
+        const size_t lo = b * m / k, hi = std::max(lo + 1, (b + 1) * m / k);
+        float v = 0.0f;
+        for (size_t x = lo; x < hi && x < m; ++x)
+            if (std::isfinite(curve[x])) v = std::max(v, curve[x]);
+        out[b] = v;
+    }
+    const float top = *std::max_element(out.begin(), out.end());
+    for (auto& v : out) v = top > 0.0f ? std::round(v / top * 1000.0f) / 1000.0f : 0.0f;
+    return out;
+}
+
+json show_doc_for_page(const json& doc) {
+    if (!doc.is_object() || doc.value("format", std::string()) != "himmel-show/1")
+        return {{"ok", false}, {"error", "not a himmel-show/1 document"}};
+    json j = json::object();
+    for (const char* k : {"name", "use_setlist", "bank", "song", "locks", "default_take_ms", "saved_ms"})
+        if (auto it = doc.find(k); it != doc.end()) j[k] = *it;
+    json banks = json::array(), setlist = json::array();
+    if (auto b = doc.find("banks"); b != doc.end() && b->is_array())
+        for (const auto& x : *b)
+            if (x.is_object()) banks.push_back({{"index", x.value("index", 0)}, {"pads", x.value("pads", json::array())}});
+    if (auto s = doc.find("setlist"); s != doc.end() && s->is_array())
+        for (const auto& x : *s)
+            if (x.is_object()) {
+                json so = {{"name", x.value("name", std::string())}, {"scenes", x.value("scenes", json::array())}};
+                if (x.contains("bpm")) so["bpm"] = x["bpm"];
+                setlist.push_back(std::move(so));
+            }
+    j["banks"] = std::move(banks);
+    j["setlist"] = std::move(setlist);
+    j["ok"] = true;
+    return j;
+}
+
 }  // namespace himmel::ui
