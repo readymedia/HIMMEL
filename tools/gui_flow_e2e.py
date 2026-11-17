@@ -235,7 +235,8 @@ def run(port, keep):
         ev = wait_for(lambda: (lambda e: e if e and abs((e.get("disk") or {}).get("reserve", 0) - big * (1 << 30)) < (1 << 30) or abs((e.get("disk") or {}).get("reserve", 0) - big * 1e9) < 1e9 else None)(br.event("library")), 10)
         ck(bool(ev), "the block shows the new reserve (disk_reserve %.1f GB)" % (((ev or {}).get("disk") or {}).get("reserve", 0) / 1e9))
         r = br.post("/library/cmd", {"type": "Import", "path": src, "dry_run": True})
-        rr = ingest_reply(r.get("seq"))
+        ck(r.get("ok"), "ESTIMATE sent (dry run, seq %s%s)" % (r.get("seq"), "" if r.get("ok") else ", " + str(r.get("error"))))
+        rr = ingest_reply(r.get("seq"), 120)
         ev = br.event("library") or {}
         pl = ev.get("plan") or {}
         ck(rr and pl.get("seq") == r.get("seq") and pl.get("mine") and pl.get("dry_run"),
@@ -245,7 +246,8 @@ def run(port, keep):
            (pl.get("clips"), pl.get("need_bytes", 0) / 1e6, pl.get("free_bytes", 0) / 1e9, pl.get("reserve_bytes", 0) / 1e9))
         ck(pl.get("fits") is False, "ESTIMATE says it does not fit")
         r = br.post("/library/cmd", {"type": "Import", "path": src})
-        rr = ingest_reply(r.get("seq"))
+        ck(r.get("ok"), "Import sent (seq %s%s)" % (r.get("seq"), "" if r.get("ok") else ", " + str(r.get("error"))))
+        rr = ingest_reply(r.get("seq"), 120)
         pl = (br.event("library") or {}).get("plan") or {}
         ck(rr and rr["status"] == "NoSpace" and pl.get("refused") and pl.get("seq") == r.get("seq"),
            "the import is refused (NoSpace) with its plan: \"%s\"" % (rr and rr.get("message")))

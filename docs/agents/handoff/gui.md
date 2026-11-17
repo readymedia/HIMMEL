@@ -1,5 +1,70 @@
 # GUI handoff
-Updated: 2026-11-17 by the GUI agent (wave 7) · Branch: `claude/gui-w7-flows` · Last commit: see `git log claude/gui-w7-flows`
+Updated: 2026-11-17 by the GUI agent (wave 8) · Branch: `claude/gui-w8-polish` (from main 7ea64c6) · Last commit: see `git log claude/gui-w8-polish`
+
+## Wave 8: polish before the owner tests (2026-11-17)
+The three bugs from the LEAD's wave-7 walk (`docs/qa/2026-11-17-wave7-first-user-flow.md`), then a fresh-eyes
+first-user walk at 1600×900 on the owner's disk situation (reserve above the free space, D180).
+
+### Fixed
+1. **PERFORM layout.** Layer rows D / H no longer draw over the bottom panel. The monitor gives up height first
+   (it letterboxes, min 64 px), the 4 strips keep theirs, and the bottom panel is capped at
+   `min(48vh, 100vh − 356px)`. Below 1450 px the strips, side columns and top bar get narrower: BLACK and ⏻
+   always stay visible, and the view tabs never wrap.
+   - Checked by a script at 1280×720, 1366×768, 1600×900, 1920×1080 and 2560×1440: no strip below the panel's
+     top, every tab clickable (`elementFromPoint`), no horizontal or vertical page scroll.
+   - The first pass passed at 1280×720 against `fake_engine`, but the live stack, with its project bar, made
+     the top bar 1379 px wide. Fixed and re-checked at 1280.
+2. **ESTIMATE DISK.** The ingest replies were handled only while the LIBRARY page rendered, so the START wizard
+   missed them, and the first render also marked the reply as seen. Now:
+   - `Lib.tick()` handles the replies on every view;
+   - the dialog reads its own reply and plan by seq (`plan.seq === seq && plan.mine`);
+   - it shows, for example, "✓ 10 new clips need about 754 MB. That leaves 22 GB free on the disk; Himmel keeps
+     5.0 GB free.", or why it does not fit ("free 8.0 GB more, or keep less free") with KEEP FREE ON DISK….
+3. **"the library uses 0.0 GB".** The worker's `library_bytes` was right; the START line printed GB with one
+   decimal. It now uses the shared formatter (MB / kB below 1 GB) and shows the reserve. A link appears when the
+   disk is low.
+
+### From the first-user walk (owner's case: free < reserve)
+- **NoSpace** (from START or LIBRARY) opens "Not enough free disk space: nothing was imported" with the plan in
+  words, and what to do: free space, lower "Keep free on disk", move the library, or import less. KEEP FREE ON DISK… is
+  the main button and opens Settings → Library, which sends SetReserve (100). Checked live: 20 GB → 5 GB, then
+  the import ran.
+- Several selected cards go onto layers **in the order you clicked them** (they used to follow the list order).
+- The import status says what the worker does ("IMPORTING · gently, a show is running"; "IMPORT WAITS · DISK
+  LOW"), not "BACKGROUND" next to an AUTO chip. The throttle line says "waiting a moment: the outputs come
+  first". A finished "Imported n of n" bar hides after 15 s.
+- The judder badge shows only when frame smoothing is Off (the LEAD's rule). The bridge now sends
+  `outputs.frame_smooth`.
+
+### Tests (2026-11-17)
+- Build green; all 20 test programs pass (ui_bridge **492**); every selftest passes.
+- `mk2_e2e.py` PASS (93 checks). One run failed once at the NuVJ "turning the wheel holds the playhead (SCRATCH)"
+  check (timing, not GUI code); the rerun passed.
+- `tools/gui_flow_e2e.py` **PASS 46 checks**. New in wave 8:
+  - SetReserve above the free space → ESTIMATE dry-run plan (clips, need, free, reserve, does not fit) → NoSpace
+    with its plan, nothing queued;
+  - SetReserve 2 GB → the import runs;
+  - a non-zero library size (block and bridge).
+  
+  It no longer passes `--reserve-gb`, which would override SetReserve for the run, and it prints its usage on
+  `--help` instead of starting a stack. One earlier run lost the dry-run reply (seq 0) and failed 3 checks; it now
+  reports the bridge's answer at each step, and two runs after that passed.
+- Not automated: the layout (it needs a browser); it was checked with the script above in the browser pane.
+
+### Screenshots (live stack on a temp show root)
+1. ESTIMATE when it does not fit, 1600×900: ![](gui-w8/01-estimate-1600x900.jpg)
+2. NoSpace with what to do, 1600×900: ![](gui-w8/02-nospace-1600x900.jpg)
+3. Settings → Library (keep free on disk), 1600×900: ![](gui-w8/03-settings-library-1600x900.jpg)
+4. Import progress n of m, 1600×900: ![](gui-w8/04-import-progress-1600x900.jpg)
+5. PERFORM, 1600×900 (layer D focused, the CLIP panel below it): ![](gui-w8/05-perform-1600x900.jpg)
+6. PERFORM, 1280×720: ![](gui-w8/06-perform-1280x720.jpg)
+7. LIBRARY, 1280×720: ![](gui-w8/07-library-1280x720.jpg)
+
+### Open
+- A "Keep free on disk" set in the GUI is overridden for the whole run when himmel.exe gets `--reserve-gb`, and the
+  page cannot see that. MEDIA could flag it in the block.
+- In the browser pane, `requestAnimationFrame` sometimes stops after a reload, so the page draws nothing until it
+  is shown. That is the pane, not the page; `Panels.render()` by hand, or a screenshot, wakes it.
 
 ## Wave 7: the first-time user's whole flow (2026-11-17)
 The owner stopped his user test: "I found no way to get the clips onto layers", and the 89-file import nearly filled
