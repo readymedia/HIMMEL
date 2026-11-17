@@ -382,6 +382,10 @@ void Mk2Perform::on_knob(int k, int delta, const LiveState& s, const Catalog& ca
     const LayerState& L = s.deck[deck].layer[layer];
     const LayerTransport* T = transport_ ? &transport_->layer[deck][layer] : nullptr;
 
+    if (browse_ && k == 0) {  // BROWSE: knob 1 scrolls the list (hardware-mapping §3.1)
+        browse_sel_ = std::clamp(browse_sel_ + steps(k, delta, kStepUnits / 2), 0, std::max(0, clip_count(cat) - 1));
+        return;
+    }
     if (k >= 4) {  // knobs 5-8: always the PROGRAM scene's macros (perform.md §3)
         if (k == 7 && shift_) {  // SHIFT + knob 8 = choose the master effect (hardware-mapping §3.3)
             cycle_fx(kMasterDeck, kNone, kMasterFxSlot, s.master_fx[kMasterFxSlot], steps(k, delta, kStepUnits), cat, sink);
@@ -584,8 +588,18 @@ void Mk2Perform::on_button(Button b, const LiveState& s, const Catalog& cat, Com
             assist_ = !assist_;
             say(assist_ ? "ASSIST ON (STUB)" : "ASSIST OFF", now_us);
             break;
-        case Button::Play:
+        case Button::Browse:  // LIBRARY: the catalog as a list (hardware-mapping §3.5); BROWSE again = back
+            browse_ = !browse_;
+            if (browse_) browse_sel_ = std::clamp(L.clip >= 0 ? static_cast<int>(L.clip) : browse_sel_, 0,
+                                                  std::max(0, clip_count(cat) - 1));
+            break;
         case Button::EncoderPush:
+            if (browse_) {  // in BROWSE the wheel push loads the selected clip
+                browse_load(s, cat, sink, now_us);
+                break;
+            }
+            [[fallthrough]];
+        case Button::Play:
             send(make(CommandType::Take, kNone, kNone, static_cast<int32_t>(take_ms_)), sink);
             break;
         case Button::Restart: send(make(CommandType::Cut), sink); break;
@@ -665,6 +679,10 @@ void Mk2Perform::on_button(Button b, const LiveState& s, const Catalog& cat, Com
             }
             break;
         case Button::Enter: {  // GO: the next scene live (scene's transition); SHIFT = into PREVIEW (cut)
+            if (browse_) {  // in BROWSE, ENTER loads the selected clip (GUESS: GO waits until BROWSE is left)
+                browse_load(s, cat, sink, now_us);
+                break;
+            }
             Command c = make(CommandType::SceneRecall, shift_ ? prev : prog, kNone, kSceneNext, shift_ ? 0.0f : -1.0f);
             send(c, sink);
             break;
@@ -942,6 +960,10 @@ void Mk2Perform::on_event(const mk2::Event& e, const LiveState& s, const Catalog
             break;
         case mk2::EventType::EncoderDelta: {
             if (shift_) break;  // SHIFT + wheel = the system menu (not in 0.1)
+            if (browse_) {  // BROWSE: the wheel scrolls the list; nothing is crossfaded (hardware-mapping §3.1)
+                browse_sel_ = std::clamp(browse_sel_ + e.value, 0, std::max(0, clip_count(cat) - 1));
+                break;
+            }
             if (held(Button::Tempo)) {  // TEMPO + wheel = BPM nudge
                 tempo_turned_ = true;
                 Command c = make(CommandType::Clock, kNone, kNone, 0, static_cast<float>(e.value) * kBpmPerDetent, kRelative);
@@ -1115,6 +1137,11 @@ void Mk2Perform::tick(uint64_t now_us, const LiveState& s, const Catalog& cat, C
     set_button_led(leds, Button::All, held(Button::All) ? kLedFull : kLedFaint);
     set_button_led(leds, Button::Select, held(Button::Select) ? kLedFull : kLedFaint);
     set_button_led(leds, Button::Tempo, held(Button::Tempo) ? kLedFull : kLedFaint);
+    set_button_led(leds, Button::Browse, browse_ ? kLedFull : kLedFaint);
+    if (browse_) {
+        draw_browse(now_us, s, cat, screens);
+        return;
+    }
 
     // ---- screens: left = PREVIEW deck, right = PROGRAM deck ----
     ui::Screen c;
@@ -1258,6 +1285,81 @@ void Mk2Perform::tick(uint64_t now_us, const LiveState& s, const Catalog& cat, C
     }
     const bool recent = touched_knob_ >= 0 && now_us >= touched_us_ && now_us - touched_us_ < kTouchedUs;
     for (int k = 0; k < mk2::kKnobs; ++k) knob_cell(c, k, kv[k], recent && k == touched_knob_);
+    c.split(screens[0], screens[1]);
+}
+
+// ============================================================================ BROWSE
+void Mk2Perform::browse_load(const LiveState& s, const Catalog& cat, CommandSink& sink, uint64_t now_us) {
+    if (!valid_clip(cat, browse_sel_)) return;
+    const uint8_t d = focus_deck(s);
+    send(make(CommandType::LayerClip, d, focus_layer_, browse_sel_), sink);
+    Text t;
+    t.add("LOADED > ").add(static_cast<char>('A' + d)).num(focus_layer_ + 1).add(focus_side_ == kPlay ? " LIVE" : "");
+    say(t.s, now_us);
+}
+
+// Left: the list (selected row inverted). Right: the selected clip and where it will land.
+void Mk2Perform::draw_browse(uint64_t now_us, const LiveState& s, const Catalog& cat, uint8_t screens[2][mk2::kScreenBytes]) {
+    const int count = clip_count(cat);
+    ui::Screen c;
+    c.clear();
+    ui::ListModel list;
+    {
+        Text h;
+        h.add("LIBRARY");
+        list.head.left.set(h.view());
+        Text r;
+        if (count) r.num(browse_sel_ + 1).add('/').num(count);
+        else r.add("EMPTY");
+        list.head.right.set(r.view());
+    }
+    // A window of up to kMax rows around the selection (the catalog holds up to 256).
+    const int first = std::clamp(browse_sel_ - ui::ListModel::kMax / 2, 0, std::max(0, count - ui::ListModel::kMax));
+    list.count = std::min(count - first, ui::ListModel::kMax);
+    list.selected = browse_sel_ - first;
+    for (int i = 0; i < list.count; ++i) {
+        const int id = first + i;
+        list.items[static_cast<size_t>(i)].set(clip_name(cat, id));
+        bool on_prog = false, on_prev = false;
+        for (int l = 0; l < kLayersPerDeck; ++l) {
+            on_prog = on_prog || s.deck[program_of(s)].layer[l].clip == id;
+            on_prev = on_prev || s.deck[preview_of(s)].layer[l].clip == id;
+        }
+        list.tags[static_cast<size_t>(i)].set(on_prog ? "LIVE" : on_prev ? "PREV" : "");
+    }
+    if (count == 0) list.count = 0;
+    ui::draw_list(c, 0, list);
+
+    ui::DetailModel det;
+    const uint8_t d = focus_deck(s);
+    {
+        Text h;
+        h.add("LOAD > ").add(static_cast<char>('A' + d)).num(focus_layer_ + 1).add(focus_side_ == kPlay ? " PROGRAM" : " PREVIEW");
+        det.head.left.set(h.view());
+        det.head.right.set("PUSH");
+    }
+    if (valid_clip(cat, browse_sel_)) {
+        const ClipInfo& ci = cat.clip[browse_sel_];
+        det.lines[0].set(clip_name(cat, browse_sel_));
+        Text a;
+        a.num(static_cast<int>(ci.width)).add('x').num(static_cast<int>(ci.height)).add(' ');
+        a.fixed(ci.fps, 1).add("FPS");
+        det.lines[1].set(a.view());
+        Text b;
+        b.fixed(ci.seconds, 1).add("S ");
+        static constexpr const char* kCodec[] = {"HAP", "HAP ALPHA", "HAP Q", "OTHER"};
+        b.add(kCodec[std::min<int>(ci.codec, 3)]);
+        det.lines[2].set(b.view());
+    }
+    if (catalog_full_) {  // ready library clips the catalog (256) cannot hold (library-db.md §6)
+        Text f;
+        f.add("CATALOG FULL: +").num(static_cast<int>(catalog_full_));
+        det.lines[3].set(f.view());
+        det.lines[4].set("IN THE LIBRARY ONLY");
+    } else if (flash_[0] && now_us < flash_until_us_) {
+        det.lines[4].set(std::string_view(flash_));
+    }
+    ui::draw_detail(c, 1, det);
     c.split(screens[0], screens[1]);
 }
 

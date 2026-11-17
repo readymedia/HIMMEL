@@ -1583,6 +1583,7 @@ int main(int argc, char** argv) {
 
         // 5. MK2 outputs from the mapper (LEDs on change, screens on change at <= 30 Hz).
         if (mk2_alive) {
+            perform->set_library(library_feed.catalog_full.load(std::memory_order_relaxed));  // CONTROL: MK2 BROWSE
             perform->tick(t, live, *catalog, sink, mk2link.leds, mk2link.screens);
             auto* b = mk2link.shm.get();
             if (!mk2link.written || std::memcmp(&mk2link.leds, &mk2link.leds_last, sizeof(mk2::LedState)) != 0) {

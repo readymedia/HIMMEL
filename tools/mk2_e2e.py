@@ -277,6 +277,27 @@ def basic(bin_dir, sim, check):
     check(leds > 0, "engine group LEDs reach the simulator", "%d lit" % leds)
 
 
+# ------------------------------------------------------------------------------------- BROWSE
+def browse(bin_dir, sim, check):
+    """MK2 BROWSE: the catalog on the screens, the wheel scrolls (no crossfade), push loads into the focus."""
+    hand = Player(sim)
+    hand.tap("Group A")
+    time.sleep(0.4)
+    st = state(bin_dir)
+    prev = "B" if st["program"] == "A" else "A"
+    x0 = st["xfade"]
+    c0 = st["clips"].get(prev + "1", 0)
+    hand.tap("Browse")
+    hand.wheel(2)
+    want = min(c0 + 2, 3)
+    hand.tap("Master encoder (push)")
+    got = wait_for(lambda: (lambda s: s if s["clips"].get(prev + "1") == want else None)(state(bin_dir)), timeout=2)
+    check(bool(got), "BROWSE: wheel +2, push loads clip %d into %s1" % (want, prev),
+          "" if got else str(state(bin_dir)["clips"]))
+    check(abs(state(bin_dir)["xfade"] - x0) < 0.01, "BROWSE: the wheel did not move the crossfader")
+    hand.tap("Browse")  # back to PERFORM
+
+
 # ------------------------------------------------------------------------------------- the song
 def song(bin_dir, sim, check):
     """A whole song from the MK2 alone: build 3 scenes, then play them live (perform.md §2, §6)."""
@@ -773,6 +794,8 @@ def main():
         else:
             print("basic")
             basic(bin_dir, sim, check)
+            print("BROWSE")
+            browse(bin_dir, sim, check)
         if "--basic" not in args:
             print("song (from the MK2 alone)")
             song(bin_dir, sim, check)
