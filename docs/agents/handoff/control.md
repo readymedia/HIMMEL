@@ -16,7 +16,7 @@ MK2: verified map, C++ controller (`src/controller`, shared memory `Local\Himmel
 | Wheel | Endless T-bar, 30 detents = all the way, clockwise = PREVIEW in | `Crossfader` relative |
 | `TEMPO` + wheel / `TEMPO` alone | BPM ±0.5 per detent / tap | `Clock` Bpm / Tap |
 | `SELECT` + wheel | Scratch the focused layer (let go on `SELECT` up) | `LayerScratch` |
-| `SHIFT` + wheel | System menu (not in 0.1) | — |
+| `SHIFT` + wheel | System menu: QUIT HIMMEL (hold the wheel push 2 s → `SystemQuit` f = 1; ENGINE 2026-11-17, fenced "ENGINE (quit)" in `mk2_perform.cpp`) | — |
 | `PLAY`, wheel push / `RESTART` | TAKE (MIX page time, 0 = show default) / CUT | `Take` / `Cut` |
 | Top 1–4 (`SHIFT`: the second four) | Dice locks CLIP FX COLOUR MOTION (LAYOUT SOURCE REACT MOOD); LED lit = free | `Locks` Toggle |
 | Top 5 / 6 / 7 (`SHIFT` = latch) | FREEZE (pause PROGRAM layers) / STROBE ("Strobe" in master FX slot 4) / BLACK, while held | `LayerPlay` / `FxSet` / `Black` |

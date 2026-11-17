@@ -136,7 +136,12 @@ black, not the desktop), `--sim` (no MK2: play
 Himmel from the simulated MK2 in the browser, see below). The supervisor logs to
 `build\bin\Release\logs\himmel-YYYY-MM-DD.log`, restarts a crashed part within
 0.25 s and kills and restarts a part that hangs for 2 s. **Ctrl+C** in its
-window stops everything cleanly. In a fullscreen output only **Shift+Esc**
+window stops everything cleanly. So does **QUIT**: on the MK2, `SHIFT` + turn
+the wheel opens the SYSTEM menu, then push and hold the wheel for 2 s (a
+countdown shows on the right screen, letting go cancels); from the GUI, the
+QUIT button asks "Quit Himmel?"; from a script, `himmel_cmd quit --confirm`.
+Every part stops cleanly (the Lightpad gets its settings back) and
+`himmel.exe` exits with code 0. In a fullscreen output only **Shift+Esc**
 closes the renderer (which the supervisor then restarts); **M** toggles
 span/mirror.
 

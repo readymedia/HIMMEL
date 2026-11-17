@@ -541,6 +541,17 @@ void Mk2Perform::on_button(Button b, const LiveState& s, const Catalog& cat, Com
     const int bi = static_cast<int>(b);
     Text t;
 
+    // ==== ENGINE (quit): in the SYSTEM menu the wheel push starts the QUIT hold. Any other button
+    // closes the menu and does its normal job, so the menu never stands in the way of the show. ====
+    if (sys_ && b != Button::Shift) {
+        if (b == Button::EncoderPush) {
+            if (!quit_sent_) quit_hold_us_ = std::max<uint64_t>(now_us, 1);
+            return;
+        }
+        sys_ = false;
+        quit_hold_us_ = 0;
+    }
+    // ==== end ENGINE (quit) ====
     if (bi >= static_cast<int>(Button::GroupA) && bi <= static_cast<int>(Button::GroupH)) {
         on_group(bi - static_cast<int>(Button::GroupA), s, sink, now_us);
         return;
@@ -708,6 +719,11 @@ void Mk2Perform::on_button(Button b, const LiveState& s, const Catalog& cat, Com
 
 void Mk2Perform::on_button_up(Button b, const LiveState& s, const Catalog& cat, CommandSink& sink, uint64_t now_us) {
     (void)cat;
+    if (b == Button::EncoderPush && quit_hold_us_) {  // ENGINE (quit): let go before 2 s = no quit
+        quit_hold_us_ = 0;
+        if (!quit_sent_) say("QUIT CANCELLED", now_us);
+        return;
+    }
     switch (b) {
         case Button::Shift: shift_ = false; break;
         case Button::Top5:
@@ -959,7 +975,14 @@ void Mk2Perform::on_event(const mk2::Event& e, const LiveState& s, const Catalog
             }
             break;
         case mk2::EventType::EncoderDelta: {
-            if (shift_) break;  // SHIFT + wheel = the system menu (not in 0.1)
+            // ==== ENGINE (quit): SHIFT + wheel opens the SYSTEM menu; in it the wheel never crossfades ====
+            if (shift_ && !sys_) {
+                sys_ = true;
+                quit_hold_us_ = 0;
+                browse_ = false;
+            }
+            if (sys_) break;
+            // ==== end ENGINE (quit) ====
             if (browse_) {  // BROWSE: the wheel scrolls the list; nothing is crossfaded (hardware-mapping §3.1)
                 browse_sel_ = std::clamp(browse_sel_ + e.value, 0, std::max(0, clip_count(cat) - 1));
                 break;
@@ -1138,6 +1161,17 @@ void Mk2Perform::tick(uint64_t now_us, const LiveState& s, const Catalog& cat, C
     set_button_led(leds, Button::Select, held(Button::Select) ? kLedFull : kLedFaint);
     set_button_led(leds, Button::Tempo, held(Button::Tempo) ? kLedFull : kLedFaint);
     set_button_led(leds, Button::Browse, browse_ ? kLedFull : kLedFaint);
+    // ==== ENGINE (quit): the QUIT hold; held 2 s -> one confirmed SystemQuit ====
+    if (sys_) {
+        if (quit_hold_us_ && !held(Button::EncoderPush)) quit_hold_us_ = 0;  // missed the release
+        if (quit_hold_us_ && !quit_sent_ && now_us >= quit_hold_us_ + kQuitHoldUs) {
+            send(make(CommandType::SystemQuit, kNone, kNone, 0, 1.0f), sink);
+            quit_sent_ = true;
+        }
+        draw_system(now_us, screens);
+        return;
+    }
+    // ==== end ENGINE (quit) ====
     if (browse_) {
         draw_browse(now_us, s, cat, screens);
         return;
@@ -1363,7 +1397,39 @@ void Mk2Perform::draw_browse(uint64_t now_us, const LiveState& s, const Catalog&
     c.split(screens[0], screens[1]);
 }
 
+// ==== ENGINE (quit): left = the SYSTEM menu, right = what the push does (the countdown while held).
+void Mk2Perform::draw_system(uint64_t now_us, uint8_t screens[2][mk2::kScreenBytes]) {
+    ui::Screen c;
+    c.clear();
+    ui::ListModel list;
+    list.head.left.set("SYSTEM");
+    list.head.right.set("KEY = BACK");
+    list.count = 1;
+    list.selected = 0;
+    list.items[0].set("QUIT HIMMEL");
+    list.tags[0].set("HOLD");
+    ui::draw_list(c, 0, list);
+    if (quit_sent_) {
+        ui::draw_message(c, 1, "QUIT HIMMEL", "BYE", "STOPPING EVERYTHING");
+    } else if (quit_hold_us_) {
+        const uint64_t held_us = now_us > quit_hold_us_ ? now_us - quit_hold_us_ : 0;
+        const uint64_t left_us = held_us >= kQuitHoldUs ? 0 : kQuitHoldUs - held_us;
+        Text big;
+        big.fixed(static_cast<float>(left_us) / 1e6f, 1).add(" S");
+        ui::draw_message(c, 1, "QUIT HIMMEL", big.view(), "KEEP HOLDING - LET GO = NO");
+        const int bar_w = mk2::kScreenW - 16;  // the hold as a filling bar over a thin rail
+        c.fill(mk2::kScreenW + 8, 47, bar_w, 1);
+        c.fill(mk2::kScreenW + 8, 45, static_cast<int>(bar_w * static_cast<double>(held_us) / kQuitHoldUs), 5);
+    } else {
+        ui::draw_message(c, 1, "QUIT HIMMEL", "HOLD PUSH", "PUSH THE WHEEL FOR 2 S");
+    }
+    c.split(screens[0], screens[1]);
+}
+// ==== end ENGINE (quit) ====
+
 void Mk2Perform::reset() {
+    sys_ = false;  // ENGINE (quit): a reconnect closes the menu and drops a QUIT hold
+    quit_hold_us_ = 0;
     shift_ = false;
     held_ = 0;
     pads_held_ = 0;

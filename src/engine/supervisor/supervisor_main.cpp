@@ -585,6 +585,17 @@ int main(int argc, char** argv) {
                     s->mk2_connected.load() ? "ok" : "off", s->input_to_present_us.load() / 1000.0, ren.restarts,
                     ctl.restarts);
         }
+        // ==== ENGINE (quit): the renderer took a confirmed SystemQuit (command-protocol.md §4d) ====
+        if (auto* s = eshm.get(); s && s->quit_request.load()) {
+            log("quit requested (producer %u) - stopping Himmel", s->quit_request.load() - 1);
+            // The same clean stop as Ctrl+C in this console: every child shares it, and the ones
+            // without a stop request of their own (mk2_controller) let go of their device on it.
+            if (!GenerateConsoleCtrlEvent(CTRL_C_EVENT, 0))
+                log("quit: no console Ctrl+C (error %lu) - the stop requests do it", GetLastError());
+            g_stop.store(true);
+            break;
+        }
+        // ==== end ENGINE (quit) ====
         std::this_thread::sleep_for(std::chrono::milliseconds(50));  // exit seen within 50 ms
     }
 

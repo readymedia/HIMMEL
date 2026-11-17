@@ -68,7 +68,9 @@ T-bar:**
   | `SWING` | Mood (energy) |
   | `TEMPO` | BPM nudge (tap with `TEMPO` alone) |
 
-- `SHIFT` + wheel = the system menu (kept from 2026-11-09).
+- `SHIFT` + wheel = the system menu (kept from 2026-11-09). First entry
+  (2026-11-17): QUIT HIMMEL = push and hold the wheel 2 s, with a countdown;
+  any other button closes the menu and does its normal job.
 - In LIBRARY (`BROWSE`) the wheel scrolls the list. The screen says so, and
   nothing is crossfaded there.
 

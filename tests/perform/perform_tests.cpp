@@ -281,12 +281,12 @@ static void test_wheel_and_take() {
     for (const auto& c : r.sink.got)
         if (c.type == CommandType::Crossfader) sum += c.f[0];
     CHECK(near(sum, -1.0f));
-    // SHIFT + wheel = system menu (no-op in the slice).
+    // SHIFT + wheel = the SYSTEM menu (never a crossfade); PLAY below closes it and still TAKEs.
     r.sink.clear();
     r.down(Button::Shift);
     r.ev(EventType::EncoderDelta, 0, 5);
     r.up(Button::Shift);
-    CHECK(r.sink.count(CommandType::Crossfader) == 0);
+    CHECK(r.sink.count(CommandType::Crossfader) == 0 && r.m.system_menu());
 
     r.sink.clear();
     r.press(Button::Play);
@@ -1142,7 +1142,78 @@ static void dump(const char* path) {
         for (int side = 0; side < 2; ++side) f.write(reinterpret_cast<const char*>(r.screens[side] + y * 32), 32);
 }
 
+// ENGINE (quit): SHIFT + wheel -> SYSTEM menu; QUIT HIMMEL = push and hold the wheel 2 s.
+static void test_system_quit() {
+    std::printf("SYSTEM menu: QUIT HIMMEL needs a 2 s hold of the wheel push\n");
+    Rig r(40, 3);
+    ready(r);
+    // Outside the menu the push is a TAKE, never a quit.
+    r.down(Button::EncoderPush);
+    for (int i = 0; i < 200; ++i) r.tick();
+    r.up(Button::EncoderPush);
+    CHECK(r.sink.count(CommandType::SystemQuit) == 0 && r.sink.count(CommandType::Take) == 1);
+    r.sink.clear();
+    // Open the menu; the wheel in it never crossfades.
+    r.down(Button::Shift);
+    r.ev(EventType::EncoderDelta, 0, 1);
+    r.up(Button::Shift);
+    CHECK(r.m.system_menu());
+    r.ev(EventType::EncoderDelta, 0, 3);
+    r.tick();
+    CHECK(r.sink.got.empty());
+    // Let go after ~1 s: cancelled, nothing sent.
+    r.down(Button::EncoderPush);
+    for (int i = 0; i < 60; ++i) r.tick();  // 0.96 s
+    r.up(Button::EncoderPush);
+    r.tick();
+    CHECK(r.sink.got.empty() && flash_is(r, "QUIT CANCELLED") && r.m.system_menu());
+    // Hold: nothing before 2 s, exactly one confirmed SystemQuit after.
+    r.down(Button::EncoderPush);
+    const uint64_t t0 = r.t;
+    while (r.t < t0 + perform::Mk2Perform::kQuitHoldUs - 20'000) r.tick();
+    CHECK(r.sink.count(CommandType::SystemQuit) == 0);
+    for (int i = 0; i < 5; ++i) r.tick();
+    const Command* q = r.sink.last(CommandType::SystemQuit);
+    CHECK(q && q->f[0] == 1.0f && r.sink.count(CommandType::SystemQuit) == 1 && r.m.quit_sent());
+    for (int i = 0; i < 100; ++i) r.tick();
+    r.up(Button::EncoderPush);
+    CHECK(r.sink.count(CommandType::SystemQuit) == 1 && r.sink.count(CommandType::Take) == 0);
+    // Any other button closes the menu and does its job.
+    Rig r2(40, 3);
+    ready(r2);
+    r2.down(Button::Shift);
+    r2.ev(EventType::EncoderDelta, 0, -1);
+    r2.up(Button::Shift);
+    r2.down(Button::EncoderPush);
+    r2.tick();
+    r2.press(Button::Play);  // closes the menu, drops the hold, TAKEs
+    CHECK(!r2.m.system_menu() && r2.sink.count(CommandType::Take) == 1);
+    for (int i = 0; i < 200; ++i) r2.tick();
+    r2.up(Button::EncoderPush);
+    CHECK(r2.sink.count(CommandType::SystemQuit) == 0);
+    // A reconnect closes the menu.
+    r2.down(Button::Shift);
+    r2.ev(EventType::EncoderDelta, 0, 1);
+    r2.up(Button::Shift);
+    r2.m.reset();
+    CHECK(!r2.m.system_menu());
+}
+
 int main(int argc, char** argv) {
+    if (argc == 3 && std::strcmp(argv[1], "--dump-quit") == 0) {  // the countdown screen, for a look
+        Rig r(40, 3);
+        ready(r);
+        r.down(Button::Shift);
+        r.ev(EventType::EncoderDelta, 0, 1);
+        r.up(Button::Shift);
+        r.down(Button::EncoderPush);
+        for (int i = 0; i < 40; ++i) r.tick();
+        std::ofstream f(argv[2], std::ios::binary);
+        f << "P4\n512 64\n";
+        for (int y = 0; y < 64; ++y)
+            for (int side = 0; side < 2; ++side) f.write(reinterpret_cast<const char*>(r.screens[side] + y * 32), 32);
+        return 0;
+    }
     if (argc == 3 && std::strcmp(argv[1], "--dump-browse") == 0) {
         Rig r(40, 3);
         ready(r);
@@ -1185,6 +1256,7 @@ int main(int argc, char** argv) {
     test_reset_and_seq();
     test_screens();
     test_browse();
+    test_system_quit();
     std::printf("\nperform_tests: %d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

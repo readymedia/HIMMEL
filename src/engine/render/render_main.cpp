@@ -1341,6 +1341,7 @@ int main(int argc, char** argv) {
     if (!cfg.fullscreen && displays->count && displays->d[displays->order[0]].hz > 1.0f)
         frame_period = 1.0 / displays->d[displays->order[0]].hz;
 
+    uint64_t quit_at_us = 0;  // ENGINE (quit): when quit_request was raised
     while (!g_win.quit) {
         // ==== ENGINE (M6): wait only for the shown outputs ====
         // 1. Wait until the shown swap chains can take a frame (max latency 1). A hidden
@@ -1452,6 +1453,19 @@ int main(int argc, char** argv) {
         drain(static_cast<int>(proto::Producer::Perform), *perform_ring);
         if (cmd.blk)
             for (int slot = 1; slot < proto::kProducers; ++slot) drain(slot, cmd.blk->rings[slot]);
+        // ==== ENGINE (quit): a confirmed SystemQuit (74) -> quit_request; the supervisor stops us
+        // and everything else (command-protocol.md §4d). On our own (no supervisor): quit after 3 s.
+        if (model->quit_producer() >= 0) {
+            if (quit_at_us == 0) {
+                quit_at_us = t;
+                if (es) es->quit_request.store(static_cast<uint32_t>(model->quit_producer()) + 1);
+                LOG("QUIT: confirmed by producer %d - asking the supervisor to stop Himmel", model->quit_producer());
+            } else if (t - quit_at_us > 3000000) {
+                LOG("QUIT: no supervisor stopped us in 3 s - quitting on our own");
+                g_win.quit = true;
+            }
+        }
+        // ==== end ENGINE (quit) ====
         // ==== AUDIO (M8): copy the audio block; an external MIDI clock leads the show clock ====
         const bool audio_ok = cfg.audio && !cfg.test_signal && audio_link.read(t, audio_sig, audio_midi);
         {
