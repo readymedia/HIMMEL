@@ -160,7 +160,7 @@ struct LayerTransport {
 struct ClockState {
     float bpm;                 // 20..300
     uint8_t grid;              // GridDiv: the global beat snap
-    uint8_t source;            // 0 = internal, 1 = tapped
+    uint8_t source;            // 0 = internal, 1 = tapped, 2 = MIDI clock leads (M8, D130)
     uint8_t reserved[2];
     double beat;               // running beat count at time_us (beat 0 = the last resync)
     uint64_t time_us;          // engine clock of this sample

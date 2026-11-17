@@ -5,6 +5,8 @@
 //   himmel_render [--outputs N] [--fullscreen] [--size 640x360] [--mode span|mirror]
 //                 [--clip file.mov ...] [--no-overlay] [--preview-fps N] [--stats-csv]
 //                 [--flash-cap HZ] [--test-signal] [--ticker "TEXT"]   (effects: src/engine/fx/, M5)
+//                 [--project FOLDER|FILE.himmelshow] [--no-show-files] [--show-root DIR]   (show: src/show/, M3)
+//                 [--av-offset MS] [--no-audio]   (music: Local\HimmelAudio from himmel_audio.exe, M8)
 //
 // * Show model: DeckModel (2 decks x 4 layers, FX slots on layer / deck / master,
 //   crossfader, TAKE / CUT / black / focus). Every change comes in as a Command:
@@ -22,6 +24,9 @@
 //   placeholder colour.
 // * The MK2: ring 0 of Local\HimmelMk2 -> himmel::perform::Mk2Perform; its LEDs
 //   and screens go back into the block.
+// * The show (M3, src/show/): show commands (types 25..36) go to himmel::show::ShowRuntime,
+//   which turns scenes / undo / dice into ordinary commands on slot 4 and keeps every
+//   file in its own worker thread (Local\HimmelShow, docs/interfaces/show-files.md).
 // * Parked (in himmel_render_legacy.exe): test card, camera + latency test,
 //   Touch FX / Entrancer, the generic-weapon knob pages.
 //
@@ -54,6 +59,7 @@
 #include "himmel/engine/clip_catalog.h"
 #include "himmel/engine/clip_player.h"
 #include "himmel/engine/deck_model.h"
+#include "himmel/engine/reactions.h"
 #include "himmel/engine/engine_shared.h"
 #include "himmel/engine/fx_catalog.h"
 #include "himmel/engine/log_ring.h"
@@ -66,7 +72,10 @@
 #include "himmel/perform/mk2_perform.h"
 #include "himmel/protocol/commands.h"
 #include "himmel/protocol/preview.h"
+#include "himmel/protocol/show.h"
 #include "himmel/protocol/state.h"
+#include "himmel/show/files.h"
+#include "himmel/show/runtime.h"
 #include "slice_shaders.h"
 
 using Microsoft::WRL::ComPtr;
@@ -101,8 +110,13 @@ struct Config {
     int preview_fps = 20;
     std::vector<std::string> clips;
     float flash_cap = 0;       // D65: optional per-show flash cap (flashes/s), 0 = off (default)
-    bool test_signal = false;  // feed the reactions the TestSignal until audio exists (M8)
+    bool test_signal = false;  // feed the reactions the TestSignal instead of the audio block (checks)
+    bool audio = true;         // M8: reactions from Local\HimmelAudio (himmel_audio.exe)
+    float av_offset_ms = 0;    // M8: beat / bar signals this much early (music.md §4 AV offset)
     std::string ticker = "HIMMEL";  // GUESS: the text generator's text until shows carry it (M3)
+    std::string project;            // M3: a project to open (default: the most recent one)
+    bool show_files = true;         // M3: --no-show-files = no project, no autosave (tests)
+    std::string show_root;          // M3: --show-root DIR = projects in DIR/Projects, recent + untitled in DIR/App (tests)
 };
 
 Config parse_args(int argc, char** argv) {
@@ -120,7 +134,12 @@ Config parse_args(int argc, char** argv) {
         else if (a == "--overlay") c.overlay = true, overlay_set = true;
         else if (a == "--flash-cap") c.flash_cap = std::clamp(static_cast<float>(std::atof(next().c_str())), 0.0f, 30.0f);
         else if (a == "--test-signal") c.test_signal = true;
+        else if (a == "--no-audio") c.audio = false;
+        else if (a == "--av-offset") c.av_offset_ms = std::clamp(static_cast<float>(std::atof(next().c_str())), -200.0f, 200.0f);
         else if (a == "--ticker") c.ticker = next();
+        else if (a == "--project") c.project = next();
+        else if (a == "--no-show-files") c.show_files = false;
+        else if (a == "--show-root") c.show_root = next();
         else if (a == "--preview-fps") c.preview_fps = std::clamp(std::atoi(next().c_str()), 15, 30);
         else if (a == "--size") {
             const std::string s = next();
@@ -771,6 +790,18 @@ int main(int argc, char** argv) {
     }
     auto model = std::make_unique<DeckModel>(*catalog);
 
+    // ==== AUDIO (M8): Local\HimmelAudio, mapped once; himmel_audio.exe may come and go ====
+    himmel::engine::AudioLink audio_link;
+    himmel::engine::ReactionFeed reaction_feed;
+    himmel::audio::Signals audio_sig{};
+    himmel::audio::ClockSource audio_midi{};
+    bool audio_was_ok = false, midi_was_leading = false;
+    if (cfg.audio && !cfg.test_signal) {
+        if (audio_link.open()) LOG("audio: reactions listen to %ls (AV offset %.0f ms)", himmel::audio::kBlockName, cfg.av_offset_ms);
+        else LOG("audio: cannot map %ls - reactions stay still", himmel::audio::kBlockName);
+    }
+    // ==== END AUDIO (M8) ====
+
     // ---- state block: restore from a block that survived the last renderer
     StateLink state;
     {
@@ -808,6 +839,39 @@ int main(int argc, char** argv) {
         }
     }
 
+    // ==== SHOW (M3) hook 1/4: Local\HimmelShow + the runtime (its worker opens the last project) ====
+    himmel::engine::ShmBlock show_shm;
+    proto::ShowBlock* show_blk = nullptr;
+    {
+        const auto r = show_shm.open_or_create(proto::kShowShmName, sizeof(proto::ShowBlock));
+        if (r == himmel::engine::ShmBlock::Result::Failed) {
+            LOG("show: cannot map %ls - running without a show block", proto::kShowShmName);
+        } else {
+            show_blk = static_cast<proto::ShowBlock*>(show_shm.data());
+            if (!himmel::engine::header_ok(show_blk->header, proto::kShowMagic, proto::kShowVersion,
+                                           static_cast<uint32_t>(sizeof(proto::ShowBlock)))) {
+                std::memset(static_cast<void*>(show_blk), 0, sizeof(proto::ShowBlock));
+                himmel::engine::write_header(show_blk->header, proto::kShowMagic, proto::kShowVersion,
+                                             static_cast<uint32_t>(sizeof(proto::ShowBlock)));
+            }
+        }
+    }
+    auto show = std::make_unique<himmel::show::ShowRuntime>();
+    {
+        himmel::show::RuntimeConfig sc;
+        sc.disk = cfg.show_files;
+        if (!cfg.project.empty()) sc.open = himmel::show::files::from_utf8(cfg.project);
+        if (!cfg.show_root.empty()) {
+            sc.projects_root = himmel::show::files::from_utf8(cfg.show_root) / "Projects";
+            sc.app_dir = himmel::show::files::from_utf8(cfg.show_root) / "App";
+        }
+        show->start(sc, *catalog, show_blk);
+        LOG("show: %s", cfg.show_files ? (cfg.project.empty() ? "opening the most recent project" : cfg.project.c_str())
+                                       : "no files (--no-show-files)");
+    }
+    uint32_t show_msg_seq = 0;
+    // ==== end SHOW hook 1/4 ====
+
     // ---- GPU + outputs
     Gpu g;
     if (!init_gpu(g)) return 2;
@@ -820,7 +884,7 @@ int main(int argc, char** argv) {
             ok ? "" : " - SOME FAILED (they pass the picture through)");
         if (!report.empty()) LOG("fx: %.200s", report.c_str());
         if (cfg.flash_cap > 0) LOG("fx: flash cap %.1f flashes/s (D65)", cfg.flash_cap);
-        if (cfg.test_signal) LOG("fx: reactions get the test signal (no audio yet, M8)");
+        if (cfg.test_signal) LOG("fx: reactions get the test signal (not the audio block)");
     }
     g_fx = fxg.get();
 
@@ -937,7 +1001,9 @@ int main(int argc, char** argv) {
         auto drain = [&](int slot, proto::CommandRing& ring) {
             proto::Command c;
             for (int k = 0; k < kDrainPerProducer && ring.pop(c); ++k) {
-                const proto::Reject r = model->submit(slot, c, t);
+                // ==== SHOW (M3) hook 2/4: show commands (types 25..39) go to the show runtime ====
+                const proto::Reject r = proto::is_show_command(c.type) ? show->submit(slot, c, t, *model)
+                                                                        : model->submit(slot, c, t);
                 if (r == proto::Reject::None) {
                     ++applied;
                 } else {
@@ -952,7 +1018,33 @@ int main(int argc, char** argv) {
         drain(static_cast<int>(proto::Producer::Perform), *perform_ring);
         if (cmd.blk)
             for (int slot = 1; slot < proto::kProducers; ++slot) drain(slot, cmd.blk->rings[slot]);
+        // ==== AUDIO (M8): copy the audio block; an external MIDI clock leads the show clock ====
+        const bool audio_ok = cfg.audio && !cfg.test_signal && audio_link.read(t, audio_sig, audio_midi);
+        {
+            const himmel::engine::ClockLead lead =
+                cfg.audio && audio_link.alive() ? himmel::engine::midi_lead(audio_midi, t) : himmel::engine::ClockLead{};
+            model->follow_clock(lead.active, lead.bpm, lead.beat, lead.phase, t, dt);
+            if (lead.active != midi_was_leading) {
+                midi_was_leading = lead.active;
+                if (lead.active) LOG("clock: MIDI clock leads (%.1f BPM%s)", lead.bpm, lead.phase ? ", phase locked" : "");
+                else LOG("clock: MIDI clock gone - internal / tap clock keeps %.1f BPM", model->bpm());
+            }
+        }
+        if (audio_ok != audio_was_ok) {
+            audio_was_ok = audio_ok;
+            if (audio_ok) LOG("audio: hearing \"%s\" (%u Hz)", audio_link.input().device, audio_link.input().sample_rate);
+            else LOG("audio: no audio - reactions glide to rest");
+        }
+        // ==== END AUDIO (M8) ====
         model->tick(t);
+        // ==== SHOW (M3) hook 3/4: once per frame, after the model ====
+        show->tick(*model, t);
+        if (show->status().message_seq != show_msg_seq) {
+            show_msg_seq = show->status().message_seq;
+            LOG("show: %s (last recall %u us, %d commands)", show->status().message, show->last_recall_us(),
+                show->last_recall_commands());
+        }
+        // ==== end SHOW hook 3/4 ====
         if (t >= alive_next) {
             alive_next = t + 250000;
             model->set_producer_alive(0, mk2_alive);
@@ -1089,14 +1181,18 @@ int main(int argc, char** argv) {
         g.ctx->Begin(g.q_disjoint[qi].Get());
         g.ctx->End(g.q_begin[qi].Get());
         {
-            // The internal beat clock (tap / BPM, M2); the audio clock feeds it in M8.
+            // The show clock (tap / BPM, M2; MIDI clock leads when it runs, M8).
             himmel::fx::FrameCtx fc;
             fc.time_s = (t - t0) / 1e6;
             fc.beats = std::max(0.0, model->beat(t));
             fc.bpm = static_cast<float>(model->bpm());
             fc.dt = static_cast<float>(dt);
             fc.flash_cap_hz = cfg.flash_cap;
-            if (cfg.test_signal) fc.sig = himmel::fx::TestSignal::at(fc.time_s, fc.beats);  // else silence until M8
+            // ==== AUDIO (M8): the reaction signals ====
+            if (cfg.test_signal) fc.sig = himmel::fx::TestSignal::at(fc.time_s, fc.beats);
+            else reaction_feed.update(audio_ok ? &audio_sig : nullptr,
+                                      model->beat(t + static_cast<int64_t>(cfg.av_offset_ms * 1000.0f)), fc.dt, fc.sig);
+            // ==== END AUDIO (M8) ====
             g_fx->begin_frame(fc);
         }
         const float black[4] = {0, 0, 0, 1};
@@ -1303,6 +1399,7 @@ int main(int argc, char** argv) {
     }
     if (preview.blk)
         for (auto& st : preview.blk->stream) st.active.store(0);
+    show->stop();  // ==== SHOW (M3) hook 4/4: flushes the autosave journal ====
     set_msg("stopped");
     timeEndPeriod(1);
     return exit_code;

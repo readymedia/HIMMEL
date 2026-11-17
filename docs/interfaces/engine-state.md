@@ -48,6 +48,9 @@ their own rate (30 Hz is plenty) and diff.
   that needs both consistent reads `live` first, then `transport`, and may
   see a transport one frame newer. `LayerState.position` and
   `LayerTransport.frame` are both the playhead on screen.
+- `ClockState::source`: 0 = internal, 1 = tapped, 2 = an external MIDI clock
+  leads (M8, D130; Tap / Bpm commands are ignored meanwhile). Additive, no
+  version bump.
 - After a restart the renderer restores the transport settings, cue points,
   BPM and grid from a version 2 block (the HIT layer is never restored).
 

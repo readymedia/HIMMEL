@@ -14,6 +14,9 @@
 //          exists next to himmel.exe). The UI is just another child: it never
 //          talks to the renderer except through the shared blocks, so a dead or
 //          hung UI is restarted without touching the outputs.
+//   --no-audio: do not start himmel_audio.exe (music in, M8). --audio "ARGS": its
+//          arguments, e.g. --audio "--loopback" or --audio "--device Focusrite --channels 1-2"
+//          (default: the Windows default capture device, auto gain on).
 //   --legacy: run the parked pre-slice renderer (himmel_render_legacy.exe: test
 //          card, camera, Touch FX, Entrancer) instead of the deck engine.
 //
@@ -48,6 +51,7 @@
 #include <thread>
 #include <vector>
 
+#include "himmel/audio/block.h"
 #include "himmel/engine/engine_shared.h"
 #include "himmel/mk2/shared.h"
 #include "himmel/mk2/types.h"
@@ -147,6 +151,27 @@ void stop_child(Child& c, DWORD wait_ms) {
 
 std::wstring widen(const std::string& s) { return fs::path(s).wstring(); }
 
+// Local\HimmelAudio, for himmel_audio's heartbeat and stop request (opened, never created).
+struct AudioShm {
+    HANDLE mapping = nullptr;
+    himmel::audio::AudioBlock* b = nullptr;
+    himmel::audio::AudioBlock* get() {
+        if (b) return b;
+        mapping = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, himmel::audio::kBlockName);
+        if (!mapping) return nullptr;
+        b = static_cast<himmel::audio::AudioBlock*>(MapViewOfFile(mapping, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(himmel::audio::AudioBlock)));
+        if (!b) {
+            CloseHandle(mapping);
+            mapping = nullptr;
+        }
+        return b;
+    }
+    ~AudioShm() {
+        if (b) UnmapViewOfFile(b);
+        if (mapping) CloseHandle(mapping);
+    }
+};
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -165,8 +190,8 @@ int main(int argc, char** argv) {
     // Shared for reading (_SH_DENYWR), so the log can be read / tailed while Himmel runs.
     g_logfile = _wfsopen((dir / "logs" / name).c_str(), L"a", _SH_DENYWR);
 
-    bool with_controller = true, with_ui = true, legacy = false;
-    std::wstring render_args, ctl_args;
+    bool with_controller = true, with_ui = true, with_audio = true, legacy = false;
+    std::wstring render_args, ctl_args, audio_args;
     std::string weapons = "lightpad,lumi,nuvj,apc20";
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -175,6 +200,8 @@ int main(int argc, char** argv) {
         else if (a == "--weapons" && i + 1 < argc) weapons = argv[++i];
         else if (a == "--sim") ctl_args = L"--sim";
         else if (a == "--no-ui") with_ui = false;
+        else if (a == "--no-audio") with_audio = false;
+        else if (a == "--audio" && i + 1 < argc) audio_args = widen(argv[++i]);
         else if (a == "--legacy") legacy = true;
         else if (a == "--") {
             for (++i; i < argc; ++i) render_args += widen(argv[i]) + L" ";
@@ -199,6 +226,19 @@ int main(int argc, char** argv) {
         log("ui: %s not found - running without the web GUI", fs::path(ui.exe).filename().string().c_str());
         with_ui = false;
     }
+    // Music in (M8): himmel_audio.exe, heartbeat in Local\HimmelAudio. The renderer never
+    // waits for it: without it the reactions glide to rest.
+    AudioShm ashm;
+    Child aud{"audio", (dir / "himmel_audio.exe").wstring(), audio_args};
+    if (with_audio && !fs::exists(aud.exe, ec)) {
+        log("audio: %s not found - running without music in", fs::path(aud.exe).filename().string().c_str());
+        with_audio = false;
+    }
+    aud.ctx = &ashm;
+    aud.heartbeat = [](void* p) -> uint64_t {
+        auto* b = static_cast<AudioShm*>(p)->get();
+        return b ? b->status.heartbeat_us.load() : 0;
+    };
     ctl.ctx = &mshm;
     ctl.heartbeat = [](void* p) -> uint64_t {
         auto* m = static_cast<himmel::mk2::SharedMemory*>(p);
@@ -252,6 +292,7 @@ int main(int argc, char** argv) {
         weapons.empty() ? "none" : weapons.c_str());
     std::vector<Child*> children = {&ctl};
     for (auto& w : weapon_children) children.push_back(w.get());
+    if (with_audio) children.push_back(&aud);
     children.push_back(&ren);
     if (with_ui) children.push_back(&ui);
     constexpr uint64_t kHungUs = 2000000, kGraceUs = 8000000;  // grace: start-up (GPU, shaders, USB)
@@ -299,6 +340,8 @@ int main(int argc, char** argv) {
     if (auto* s = eshm.get()) s->stop_request.store(1);
     stop_child(ren, 3000);
     stop_child(ui, 1000);  // after the renderer: the outputs never wait for the GUI
+    if (auto* b = ashm.get()) b->status.stop_request.store(1);
+    stop_child(aud, 2000);
     // The drivers put their devices back (config, LEDs) first. They got the console Ctrl+C
     // too; the stop request also reaches them when the window was closed instead.
     for (auto& shm : weapon_shm)

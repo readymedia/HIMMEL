@@ -54,7 +54,16 @@ Merge order: CONTROL first (unblocks playing), then ENGINE, then FX (FX
 likely touches the uber-shader / effect catalog that ENGINE also touches:
 expect conflicts in `src/engine/`; resolve keeping both, rebuild, retest).
 
-### Wave 2 — **ready to start** (wave 1 is merged)
+### Wave 2 — **in progress** (2 of 3 merged 2026-11-17)
+
+| Track | Branch | State |
+|---|---|---|
+| SHOW M3 | `claude/show-m3-projects` | **merged** 2026-11-17 (99d78b5 + 106ffb9 → main f3058d9). Command types 25–36, slot 4 = Show (rate limited, 384 per frame cap), `Local\HimmelShow` (show-block.md), D109–D110 PROPOSED |
+| AUDIO M8 | `claude/audio-m8-reactions` | **merged** 2026-11-17 (cab5ea1 + 73d0ddc). Own block `Local\HimmelAudio` v1 (audio-block.md), `himmel_audio.exe` supervisor child, `ClockState::source` 2 = MIDI leads, D130–D132 PROPOSED (D131 FxReact = command 40, not added yet) |
+| GUI M11 | `claude/gui-m11-v1` | green offline (0a20d77); live checks against main (SHOW + AUDIO) pending |
+
+Merged main: build clean, 14 test programs, `himmel_audio --selftest`, 12 Python selftests, `mk2_e2e.py` PASS.
+Not verified live: a scene recall and an autosave restore in a running `himmel.exe`, and audio reactions under `himmel.exe`. The GUI live run will touch these.
 
 **Wave 2 number ranges (LEAD, 2026-11-17).** These stop the parallel branches colliding:
 

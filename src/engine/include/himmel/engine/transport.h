@@ -29,6 +29,10 @@ public:
     void tap(uint64_t now_us);                 // >= 2 taps set the tempo; every tap lands on a beat
     void nudge(double beats) { anchor_beat_ += beats; }
     void resync(uint64_t now_us);              // beat 0 is now
+    // Follows an external clock (MIDI clock, M8, docs/interfaces/audio-block.md §4):
+    // takes its tempo and, when `phase`, glides the phase onto `beat` (bar-aligned,
+    // the nearest of 4 beats) with a time constant of 2 beats. Never jumps.
+    void follow(double bpm, double beat, bool phase, uint64_t now_us, double dt_s);
     uint32_t taps() const { return static_cast<uint32_t>(tap_n_); }
     bool tapped() const { return tapped_; }
 

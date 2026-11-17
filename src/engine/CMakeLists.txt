@@ -8,26 +8,26 @@ target_include_directories(himmel_engine_shared PUBLIC include)
 target_link_libraries(himmel_engine_shared PUBLIC himmel_media PRIVATE d3d11 mfplat mf mfreadwrite mfuuid ole32 ws2_32 winmm)
 
 # The slice's show model (pure: no GPU, no Windows) - docs/interfaces/command-protocol.md.
-add_library(himmel_engine_model STATIC src/deck_model.cpp src/transport.cpp src/fx_catalog.cpp)
+add_library(himmel_engine_model STATIC src/deck_model.cpp src/transport.cpp src/fx_catalog.cpp src/reactions.cpp)
 target_include_directories(himmel_engine_model PUBLIC include)
-target_link_libraries(himmel_engine_model PUBLIC himmel_protocol himmel_fx)
+target_link_libraries(himmel_engine_model PUBLIC himmel_protocol himmel_fx himmel_audio_block)
 
 # Named shared-memory blocks + the clip catalog (Windows, start-up only).
-add_library(himmel_engine_ipc STATIC src/shm_block.cpp src/clip_catalog.cpp)
+add_library(himmel_engine_ipc STATIC src/shm_block.cpp src/clip_catalog.cpp src/reactions_link.cpp)
 target_include_directories(himmel_engine_ipc PUBLIC include)
-target_link_libraries(himmel_engine_ipc PUBLIC himmel_protocol himmel_media)
+target_link_libraries(himmel_engine_ipc PUBLIC himmel_protocol himmel_media himmel_fx himmel_audio_block)
 
 # The slice engine (decks, FX, previews, MK2 Perform).
 add_executable(himmel_render render/render_main.cpp)
 target_link_libraries(himmel_render PRIVATE himmel_engine_shared himmel_engine_model himmel_engine_ipc himmel_perform
-                      himmel_mk2 himmel_fx_gpu d3d11 dxgi d3dcompiler winmm)
+                      himmel_mk2 himmel_fx_gpu himmel_show d3d11 dxgi d3dcompiler winmm)
 
 # PARKED pre-slice renderer: test card, camera + latency test, Touch FX, Entrancer, weapon knob pages.
 add_executable(himmel_render_legacy render/legacy_main.cpp)
 target_link_libraries(himmel_render_legacy PRIVATE himmel_engine_shared himmel_mk2 himmel_weapon d3d11 dxgi d3dcompiler winmm)
 
 add_executable(himmel supervisor/supervisor_main.cpp)
-target_link_libraries(himmel PRIVATE himmel_engine_shared himmel_mk2 himmel_weapon)
+target_link_libraries(himmel PRIVATE himmel_engine_shared himmel_mk2 himmel_weapon himmel_audio_block)
 
 # Tools: commands from the command line (producer slot 3), preview block -> PNG.
 add_executable(himmel_cmd tools/himmel_cmd_main.cpp)

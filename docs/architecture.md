@@ -24,6 +24,11 @@ flowchart LR
     SUP -- "start, restart,<br/>kill if hung" --> CTL
     SUP -- "start, restart,<br/>kill if hung" --> REN
     SUP -- "start, restart,<br/>kill if hung" --> WPN
+    AUD["himmel_audio.exe<br/>music in"]
+    SHM4[/"Local\HimmelAudio<br/>signals, MIDI clock"/]
+    SUP -- "start, restart,<br/>kill if hung" --> AUD
+    AUD --> SHM4
+    SHM4 --> REN
     WPN <--> DEV
     WPN <--> SHM3
     REN <--> SHM3
@@ -43,6 +48,7 @@ flowchart LR
 | `himmel.exe` | Starts the others in a job object, watches their heartbeats, restarts them (0.25 s, doubling to 10 s if they keep dying), kills one that has been silent for 2 s, logs everything. | The job object closes all children; start it again. (Run it from a service or a watchdog for unattended installs.) |
 | `mk2_controller.exe` | Owns the MK2: reads it at ~750 Hz, publishes events, sends LEDs and screens, reconnects when the cable is pulled. | The renderer keeps playing; it shows "MK2 OFF" and picks the controller up again when it is back (~0.3 s). |
 | `weapon_blocks.exe lightpad\|lumi`, `weapon_nuvj.exe`, `weapon_apc20.exe` | One per weapon (`weapons/README.md`): owns the device over WinMM, publishes events, sends LEDs / pixels / LCD, reconnects. Lets go of the device (settings back, LEDs off) on Ctrl+C or the supervisor's stop request. | The renderer keeps playing and picks the weapon up again. |
+| `himmel_audio.exe` | Music in (M8, `interfaces/audio-block.md`): WASAPI mic / line in / loopback, auto gain, gate, level / bands / spectrum / kick / snare / hat / energy every 5 ms, MIDI clock in; writes `Local\HimmelAudio`. Reopens a lost device by name every second. | The renderer's reactions glide to rest over 1 s and the picture keeps playing; the supervisor restarts it and they come back. |
 | `himmel_render.exe` | The deck engine: model (2 × 4 layers, FX slots, crossfader, TAKE), command ring in, state + preview blocks out, MK2 Perform, outputs. (`himmel_render_legacy.exe`: the parked test card / camera / Touch FX renderer.) | The supervisor restarts it within a second; it restores the show from `Local\HimmelState`. |
 | Later: GUI, workers, bridges | Operator GUI (Dear ImGui), import/analysis workers, sync bridges (Ableton Link, Pro DJ Link). | Same rule: the output keeps going. |
 
@@ -75,6 +81,13 @@ per weapon slot (default slot = the weapon's number):
 
 **`Local\HimmelEngine`** (`src/engine/include/himmel/engine/engine_shared.h`):
 heartbeat, fps, frame times, late frames, input → present latency, stop request.
+
+**`Local\HimmelShow`** (`src/protocol/include/himmel/protocol/show.h`, M3,
+[interfaces/show-files.md](interfaces/show-files.md)): the show status (project,
+dirty dot, the scenes on the page, the scene on each deck, undo depth, locks,
+macros, acks of show commands), the save worker's file status (path, last save,
+autosave / restore, recent projects, missing clips) and one text box per
+producer for paths and names.
 
 All timestamps are `steady_clock` (QueryPerformanceCounter), which is the same
 clock in every process, so latency can be measured across processes.
@@ -110,6 +123,15 @@ instead of stopping the clip.
 Only compare-and-swap moves a slot between threads.
 
 **Camera**: classic lock-free triple buffer (one atomic index swap per frame).
+
+**The show (M3, `src/show/`)**: show commands (types 25–36) go to the
+`ShowRuntime` in the frame loop. It turns recall / morph / undo / dice into
+ordinary commands on slot 4 (only what differs, in one frame) and never
+touches disk. Its **save worker thread** does every file: project save /
+open / export, the autosave journal (live state, ≤ 10 records/s),
+`autosave/show.json`, snapshots every 5 minutes. The frame hands it copies
+through preallocated buffers and SPSC rings; a loaded show comes back as a
+pointer swap at a frame boundary.
 
 ## Inside the controller
 
@@ -170,6 +192,9 @@ src/controller/   himmel_mk2 library: map, input parsing + pad tracker, LED/scre
                   driver run loop, BLOCKS codec + session, NuVJ codec + session
                   app/: weapon_blocks, weapon_nuvj, weapon_apc20, weapon_monitor
 src/media/        himmel_media: MOV reader, HAP decoder; tools/hap_probe
+src/show/         himmel_show_model (show model, looks -> commands, dice), himmel_show
+                  (files, journal, zip, ShowRuntime + save worker); tools/show_cmd;
+                  tests in tests/show/ (show_tests, show_crash_test)
 src/engine/       engine_shared (status block), clip_player, camera_capture,
                   fx/ (himmel_fx: metadata + resolve; himmel_fx_gpu; fx_tests, fx_check),
                   render/ (himmel_render + shaders), supervisor/ (himmel)
