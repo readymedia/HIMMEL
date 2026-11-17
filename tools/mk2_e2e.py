@@ -25,6 +25,7 @@ Run (it starts and stops its own stack unless --attach):
   python tools/mk2_e2e.py --no-latency    skip the input -> glass measurement
   python tools/mk2_e2e.py --runs N        latency samples (default 20)
   python tools/mk2_e2e.py --no-lightpad   no Lightpad (M9) stage, and no weapon drivers
+  python tools/mk2_e2e.py --lightpad-only only the Lightpad stage
 
 The song needs clips: media/*.mov (python tools/make_test_clips.py makes them).
 --no-show-files: the run never opens or writes the owner's project or autosave.
@@ -413,6 +414,17 @@ def lightpad(bin_dir, sim, check):
     import lightpad_sim
     hand = Player(sim)
     pad = lightpad_sim.SimLightpad()
+
+    def sensing():
+        # The simulated Block says nothing until it is touched, and weapon_blocks --sim only finds a
+        # simulator that sends: active sensing (0xFE) every 300 ms, as the NuVJ / APC20 sims do.
+        while not pad.closed:
+            try:
+                pad.udp.sendto(bytes([0xFE]), pad.engine_out)
+            except (OSError, AttributeError):
+                pass
+            time.sleep(0.3)
+    threading.Thread(target=sensing, daemon=True).start()
     try:
         if not check(wait_for(pad.engine_active, timeout=10), "weapon_blocks talks to the simulated Lightpad"):
             return
@@ -671,8 +683,13 @@ def main():
         st = state(bin_dir)
         print("  start: focus %s  xfade %.3f  PROGRAM %s  ack %d rej %d" % (st["focus"], st["xfade"], st["program"],
                                                                          st["ack"], st["rej"]))
-        print("basic")
-        basic(bin_dir, sim, check)
+        if "--lightpad-only" in args:
+            print("Lightpad (M9)")
+            lightpad(bin_dir, sim, check)
+            args.append("--basic")
+        else:
+            print("basic")
+            basic(bin_dir, sim, check)
         if "--basic" not in args:
             print("song (from the MK2 alone)")
             song(bin_dir, sim, check)

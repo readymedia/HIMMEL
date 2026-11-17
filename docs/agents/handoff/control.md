@@ -1,8 +1,8 @@
 # CONTROL handoff
-Updated: 2026-11-17 by the CONTROL wave-3 session (M4 MK2 Perform v4) · Branch: claude/control-m4-perform · Last commit: see git log
+Updated: 2026-11-17 by the CONTROL wave-3 session (M4 merged; M9 Lightpad) · Branch: claude/control-m9-lightpad · Last commit: see git log
 
 ## State in one paragraph
-MK2: verified map, C++ controller (`src/controller`, shared memory `Local\HimmelMk2`, LEDs, screens, reconnect, `--sim` over UDP 8766), screen pages (`pages.cpp`), Python live view + simulator + games. Generic weapon block + drivers for Lightpad / LUMI / NuVJ / APC20 (`weapons/README.md`). **New (M4, 2026-11-17): `himmel::perform::Mk2Perform` plays Perform v4** (`src/perform/`, `docs/design/perform.md`, `hardware-mapping.md` §3): focus PREP / PLAY with double-tap, wheel = TAKE, Top buttons (locks, FREEZE / STROBE / BLACK / ASSIST), knob pages PLAY / CLIP / LAYER / FX / MIX, knobs 5–8 = the PROGRAM scene's macros, pads CLIPS / SLICE / LOOKS / FX PADS (+ MOODS stub), pad targets, PRESS, HIT, `REC` / `ERASE` / `ENTER`, both screens. 219 unit checks in `perform_tests.exe`. **A whole song is played from the MK2 alone** in `himmel.exe --sim` (`python tools/mk2_e2e.py`: build 3 scenes with pads + REC, LOOKS recall, wheel TAKE, ENTER × 3, macro, BLACK, FX PAD, PLAY-focus edit + variation, ERASE undo, SOLO HIT; PASS) and **input → glass is measured: median 32 ms, p90 38 ms, max 40 ms** (`docs/measurements/2026-11-17-control-m4-input-to-glass.md`). M9 (Lightpad TOUCH / MIX / SCRUB) not started.
+MK2: verified map, C++ controller (`src/controller`, shared memory `Local\HimmelMk2`, LEDs, screens, reconnect, `--sim` over UDP 8766), screen pages (`pages.cpp`), Python live view + simulator + games. Generic weapon block + drivers for Lightpad / LUMI / NuVJ / APC20 (`weapons/README.md`). **New (M4, 2026-11-17): `himmel::perform::Mk2Perform` plays Perform v4** (`src/perform/`, `docs/design/perform.md`, `hardware-mapping.md` §3): focus PREP / PLAY with double-tap, wheel = TAKE, Top buttons (locks, FREEZE / STROBE / BLACK / ASSIST), knob pages PLAY / CLIP / LAYER / FX / MIX, knobs 5–8 = the PROGRAM scene's macros, pads CLIPS / SLICE / LOOKS / FX PADS (+ MOODS stub), pad targets, PRESS, HIT, `REC` / `ERASE` / `ENTER`, both screens. 219 unit checks in `perform_tests.exe`. **A whole song is played from the MK2 alone** in `himmel.exe --sim` (`python tools/mk2_e2e.py`: build 3 scenes with pads + REC, LOOKS recall, wheel TAKE, ENTER × 3, macro, BLACK, FX PAD, PLAY-focus edit + variation, ERASE undo, SOLO HIT; PASS) and **input → glass is measured: median 32 ms, p90 38 ms, max 40 ms** (`docs/measurements/2026-11-17-control-m4-input-to-glass.md`). **M9 (2026-11-17): `himmel::perform::LightpadPerform`** plays the Block next to the MK2: TOUCH (Touch FX on PROGRAM), MIX (a real crossfader with soft takeover against the wheel, top row TAKE, bottom row CUT) and SCRUB, with its 15 × 15 LEDs; `himmel_render` reads the Lightpad's weapon slot itself. 50 checks in `lightpad_tests.exe`; `mk2_e2e.py` has a Lightpad stage against the simulated Block (`weapon_blocks.exe lightpad --sim`).
 
 ## Perform mapping (M4)
 `docs/design/perform.md` v4 wins; owner choices are PROPOSED D160–D162 in `docs/decisions.md`. Focus is a **role** (PREP = the PREVIEW deck, PLAY = the PROGRAM deck) + a layer; after a TAKE the rows keep meaning prepare / live, and the mapper re-sends `Focus` for the deck that now has the role. A focus set by the GUI is adopted.
@@ -51,12 +51,27 @@ MK2: verified map, C++ controller (`src/controller`, shared memory `Local\Himmel
 
 **Screens** (left = PREVIEW, right = PROGRAM; the focus side's header inverted): header "PREVIEW B 3b*" (scene pad + variation, `*` = edited) / pad mode + page; "PROGRAM A 1a" / ON AIR · TAKE · BLACK · FREEZE · MORPH. Row 2: the 4 layers over the knobs (focused cell inverted, muted struck through, `!` = missing) + opacity bars. Row 3 left: a flash message for 1.5 s, inverted ("UNDO", "PAD 6 > LAYER 2", the show's own "3b saved"), else page + focused layer + FX; right: TAKE bar + % + BPM with a beat dot. Bottom: knob labels / values / bars over the physical knobs; knobs 5–8 = macro names. Top 1–8 labels are not on the screens (no room; the LEDs show them). Sample: `perform_tests --dump file.pbm`.
 
+## Lightpad mapping (M9)
+`docs/design/hardware-mapping.md` §5 "Block". PROPOSED D163 in `docs/decisions.md`. Code: `src/perform/include/himmel/perform/lightpad_perform.h`. `himmel_render` finds the first weapon slot whose header says `lightpad` (checked every second), drains its ring 0 into the mapper (commands on producer slot 0, like the MK2) and writes the mapper's 15 × 15 picture into the slot's `pixel` output (on change, ≤ 30 Hz). The local sink now numbers slot-0 commands itself (two mappers share the slot).
+
+| Input | TOUCH (default) | MIX | SCRUB |
+|---|---|---|---|
+| Finger down / move | X = which effect (the first ≤ 5 catalog effects, not generators, left → right), Y = amount (mix, top = full), pressure = PRESS; in master FX slot 2 | Middle rows: the crossfader, absolute (left = deck A, right = deck B), **soft takeover**: the finger drives it only after it touches (within 0.03) or crosses the fader; if the wheel / a TAKE moves the fader under it (> 0.03 from what we sent, after 120 ms) it lets go until it catches the fader again. Top row = TAKE, bottom row = CUT (on touch) | X = the focused layer's playhead between in and out (`LayerScratch` hold, absolute); pressure = the layer's FX slot 1 PRESS |
+| Second finger | X = param 2 of the touch effect | — | — |
+| Lift (last finger) | The effect goes off (`FxSet` −1), unless held | Let go of the fader | Let go of the playhead (back to the play mode) |
+| Mode, single tap | HOLD on / off (the effect stays after the lift) | — | — |
+| Mode, double tap (< 400 ms) | → MIX | → SCRUB | → TOUCH |
+| LEDs | One colour band per effect, the active one filled to its amount; red border (PROGRAM), full while held; white dot per finger | Top row amber (full while a TAKE runs), bottom row dim red; the track red on the PROGRAM side, green on the PREVIEW side; **white line = the crossfader**; a finger that has not caught it blinks blue, a caught finger is white | The clip's colour, its playhead column bright, the finger column white; top / bottom rows green (focus on PREVIEW) or red (PROGRAM); an X when the focused layer is empty |
+
+Not built (M9 follow-ups): Y = speed in SCRUB; LOOKS and MOOD modes; `SHIFT` + `PAD MODE` on the MK2 to switch the Block's mode; the strip under the finger in SCRUB glowing the clip colour (the whole band glows instead).
+
 ## Done (with commits)
+- **M9 (2026-11-17, branch `claude/control-m9-lightpad`):** `LightpadPerform` + `lightpad_tests` (50 checks), the Lightpad slot in `render_main.cpp` (ENGINE file: `LightpadLink`, ~45 lines, `himmel_render` links `himmel_weapon`), `mk2_e2e.py` Lightpad stage (the stack now starts with `--weapons lightpad`; `--no-lightpad` = the old way), D163.
 - **M4 (2026-11-17, branch `claude/control-m4-perform`):** the mapper above, `set_context(ShowStatus*, TransportSection*)` (one call in `render_main.cpp`), 219 unit checks, `mk2_chain_tests` updated (knob 1 opacity now on the LAYER page), `tools/mk2_e2e.py` = basic + song + input → glass, measurement doc, D160–D162.
 - S2 slice mapper (branch `claude/control-slice-perform`). Earlier history: `CLAUDE.md` "Next steps" and `docs/roadmap.md`.
 
 ## In progress
-- Nothing. M4 is ready to merge; M9 (Lightpad) not started.
+- Nothing. M4 merged (main a9f6198); M9 ready to merge.
 
 ## Done 2026-11-16: MK2 input end to end (owner: "neither the sim nor the MK2 drives the engine")
 - **Measured, not guessed.** On main (35e662e) with exactly ONE simulator, the whole chain works: scripted `SimMk2`, the live view over HTTP, and clicks in the browser page all reached the engine (every group, 12 quick presses, knob 1, wheel +6 = 0.200, PLAY TAKE), and the engine's Perform screens / LEDs showed on the page.
@@ -74,11 +89,12 @@ MK2: verified map, C++ controller (`src/controller`, shared memory `Local\Himmel
 
 ## Next up (ordered)
 1. The owner plays M4 on the real MK2 under plain `himmel.exe` (every MK2 Live page closed) and settles D160–D162 (and the older D97–D99, now mostly replaced by D160–D161).
-2. M9: Lightpad Block (TOUCH / MIX = fader with soft takeover against the wheel / SCRUB) through the generic weapon block (`Local\HimmelWeapon2`), a `LightpadPerform` mapper next to `Mk2Perform`.
+2. The owner plays the Block (MIX against the wheel, TOUCH, SCRUB) on the real Lightpad M under `himmel.exe --weapons lightpad` and settles D163. Then the M9 follow-ups listed under "Lightpad mapping (M9)".
 3. Gaps left in M4 (each needs another track first): hold a LOOKS pad = morph over the hold time; SCENE kits (needs the kit in the show block, SHOW v2) and KitSet from the MK2; LAYER page PLACE / ZOOM / PAN (ENGINE M6 places); OUTPUTS on `NAVIGATE` (M6); MOODS (SHOW moods); ASSIST; real FREEZE (an engine freeze-frame instead of pausing); `DUPLICATE` (copy layer / scene to PREVIEW needs a command); `AUTO WRITE` (reactions, M8 / D131); `REC` + empty clip pad = SAMPLE; SLICE hold A + tap B = in / out; `VOLUME` / `SWING` + wheel; CONTROL / STEP / BROWSE / SAMPLING views.
 - Older items kept: `roles` section in the profiles; Block SCRUB, LUMI SLICE KEYS; M13 OSC; M6 display drop-out with ENGINE.
 
 ## GUESSES
+- `GUESS:` Lightpad MIX is absolute (left = deck A, right = deck B, like a DJ fader); pickup 0.03, takeover gap 0.03, state lag 120 ms; TOUCH zones = the first 5 non-generator catalog effects; Mode double-tap 400 ms (D163). Owner to play. Medium.
 - `GUESS:` every tuning number in `mk2_perform.cpp` "tuning" (step sizes 100 / 150 raw units, speed 2× and fades 5 s per turn, BPM 40 per turn, SHIFT = 1/10, pad floor opacity 0.2, double-tap 350 ms, flash 1.5 s, PRESS deadband 64, SLICE loop above pressure 1200, stutter 1/4 beat, scratch 0.05 s per detent, TEMPO 0.5 BPM per detent). Owner to feel them. Confidence: medium.
 - `GUESS:` velocity sets the opacity only on PREVIEW (a PROGRAM launch may wait for the grid, so its opacity is left alone). Medium.
 - `GUESS:` FREEZE = pause the PROGRAM layers; STROBE = the effect named "Strobe" in master FX slot 4; FX PADS = catalog effect *n* in master FX slot 3; PANIC = black (D161). Medium-low: these wait for real engine features.
@@ -88,6 +104,7 @@ MK2: verified map, C++ controller (`src/controller`, shared memory `Local\Himmel
 - The input → glass number covers UDP + engine + DWM, not USB and not the panel (see the measurement doc).
 
 ## Open questions for the owner
+- PROPOSED D163 (Lightpad: MIX absolute A ↔ B with soft takeover, TOUCH zones = the first 5 effects in master FX slot 2, Mode tap = hold / double-tap = next mode).
 - PROPOSED D160 (knob pages, knobs 5–8 always macros), D161 (stand-ins for FREEZE / STROBE / FX PADS / PANIC / NOTE REPEAT / GRID / dice buttons), D162 (session pad targets, REC / ERASE on release, LOOKS fires on the hit) in `docs/decisions.md`.
 
 ## How to build / run / test this track
@@ -103,6 +120,8 @@ VS 2022 Build Tools' bundled CMake: `cmake -S . -B build -G "Visual Studio 17 20
 - `pages.h`'s `draw_perform` fills the whole screen with knob slots, so the slice screen is drawn by the mapper itself with the `pages.h` helpers (`text_in`, `text_anchored`, `kKnobColumn`); no controller change was needed.
 - `himmel_cmd quit` is not a command (it prints the usage). `mk2_e2e.py` stops its stack with `taskkill /T /F` on the supervisor; a stack you start by hand must be stopped the same way, or the next e2e run plays against two stacks.
 - Reading the composed desktop (GDI on the screen DC) waits for the next DWM frame: one poll = one 16.5 ms frame. Sample the whole output (StretchBlt to a few samples) and judge the mean: the test clips flash in the middle.
+- The simulated Lightpad (`lightpad_sim.SimLightpad`) sends nothing until it is touched, and `weapon_blocks --sim` only finds a simulator that sends: `mk2_e2e.py` sends active sensing (0xFE) every 300 ms for it, like the NuVJ / APC20 sims. A live view's Lightpad does the same job when someone touches it.
+- Several agents share this PC. A run that collides with another stack shows "MK2 lost (a different simulator is playing now)" in `logs\mk2-*.log`: check that first when an e2e run fails in odd places, and wait until `tasklist` has been free for a while (another agent may be about to start).
 - Git Bash turns `-- /m` into a path for MSBuild ("Only one project can be specified"): use `cmake --build ... --parallel`.
 
 
