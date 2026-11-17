@@ -40,6 +40,10 @@ bool find_sequence(const std::vector<fs::path>& files, Candidate& out);
 // imported as stills). Folders in `skip` (and their children) are left out.
 std::vector<Candidate> scan_folder(const fs::path& root, const std::vector<fs::path>& skip = {});
 
+// One file, or one folder that holds an image sequence (its own files only), as a
+// candidate. False when it is not importable.
+bool candidate_from_path(const fs::path& p, Candidate& out);
+
 // A file is "settled" once its size and time stamp did not change for `settle_ms`.
 class SettleTracker {
 public:

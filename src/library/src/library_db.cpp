@@ -298,8 +298,9 @@ std::string LibraryDb::unique_name(const std::string& base, int64_t self_id) {
 
 bool LibraryDb::upsert(ClipRecord& r) {
     if (!db_ || read_only_) return false;
-    if (r.state != State::Ready) r.ready_order = 0;
-    else if (r.ready_order == 0) {
+    // v2: ready_order is given the first time a row turns ready and then kept (a re-analysed or
+    // removed clip keeps its catalog place); a caller that wants a new place sets it to 0.
+    if (r.state == State::Ready && r.ready_order == 0) {
         Stmt m(db_, "SELECT coalesce(max(ready_order),0)+1 FROM clips");
         r.ready_order = m && sqlite3_step(m.s) == SQLITE_ROW ? sqlite3_column_int64(m.s, 0) : 1;
     }
@@ -336,6 +337,34 @@ bool LibraryDb::remove(int64_t id) {
     if (!s) return false;
     sqlite3_bind_int64(s.s, 1, id);
     return sqlite3_step(s.s) == SQLITE_DONE;
+}
+
+std::string LibraryDb::meta_get(const std::string& key) {
+    if (!db_) return {};
+    Stmt s(db_, "SELECT value FROM meta WHERE key=?");
+    if (!s) return {};
+    sqlite3_bind_text(s.s, 1, key.c_str(), -1, SQLITE_TRANSIENT);
+    return sqlite3_step(s.s) == SQLITE_ROW ? text_at(s.s, 0) : std::string{};
+}
+
+bool LibraryDb::meta_set(const std::string& key, const std::string& value) {
+    if (!db_ || read_only_) return false;
+    Stmt s(db_, "INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)");
+    if (!s) return false;
+    sqlite3_bind_text(s.s, 1, key.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(s.s, 2, value.c_str(), -1, SQLITE_TRANSIENT);
+    return sqlite3_step(s.s) == SQLITE_DONE;
+}
+
+bool LibraryDb::source_info(const std::string& path, int64_t& size, int64_t& mtime) {
+    if (!db_) return false;
+    Stmt s(db_, "SELECT size, mtime FROM sources WHERE path=? ORDER BY rowid DESC LIMIT 1");
+    if (!s) return false;
+    sqlite3_bind_text(s.s, 1, path.c_str(), -1, SQLITE_TRANSIENT);
+    if (sqlite3_step(s.s) != SQLITE_ROW) return false;
+    size = sqlite3_column_int64(s.s, 0);
+    mtime = sqlite3_column_int64(s.s, 1);
+    return true;
 }
 
 bool LibraryDb::begin() { return exec("BEGIN IMMEDIATE;"); }
@@ -375,6 +404,12 @@ int LibraryDb::rebuild_from_sidecars(const std::filesystem::path& root) {
         if (it->path().extension() != ".json") continue;
         ClipRecord r;
         if (!read_sidecar(it->path(), r)) continue;
+        if (r.state == State::Removed) {  // v2: tombstones come back as tombstones
+            r.id = 0;
+            r.stage_done = 0;
+            if (upsert(r)) ++made;
+            continue;
+        }
         const std::filesystem::path play = root / std::filesystem::path(std::u8string(r.play_path.begin(), r.play_path.end()));
         if (r.play_path.empty() || !std::filesystem::exists(play, ec)) continue;
         r.id = 0;
