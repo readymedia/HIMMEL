@@ -132,7 +132,8 @@ Everything after `--` goes to the renderer:
 
 Supervisor options: `--no-controller` (renderer only), `--no-curtains` (no black
 windows behind the outputs; by default a crashed or restarting renderer shows
-black, not the desktop), `--sim` (no MK2: play
+black, not the desktop), `--reserve-gb N` (passed to `himmel_ingest`: the free disk
+space in GB the library import leaves for the show; MEDIA also keeps it as a stored setting), `--sim` (no MK2: play
 Himmel from the simulated MK2 in the browser, see below). The supervisor logs to
 `build\bin\Release\logs\himmel-YYYY-MM-DD.log`, restarts a crashed part within
 0.25 s and kills and restarts a part that hangs for 2 s. **Ctrl+C** in its
