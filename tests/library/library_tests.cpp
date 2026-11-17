@@ -4,6 +4,14 @@
 // sidecars, the SQLite index, the watch-folder scan, throttling, ffmpeg
 // command lines and the engine's library feed. No hardware, no ffmpeg needed
 // (one round trip through ffmpeg.exe runs only when it is on PATH).
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -612,6 +620,49 @@ static void test_ingest_commands() {
     CHECK(make_ingest(c, IngestCommandType::Remove, 7) && c.type == 62 && c.clip == 7 && c.path[0] == 0);
 }
 
+// himmel_ingest's command line (wave 6): an unknown / incomplete argument or --help prints
+// the usage and exits 2, at once, and never creates a library (also not the default one).
+static int run_ingest(const std::string& args, std::string& out) {
+    wchar_t self[MAX_PATH];
+    GetModuleFileNameW(nullptr, self, MAX_PATH);
+    const fs::path exe = fs::path(self).parent_path() / "himmel_ingest.exe";
+    out.clear();
+    const std::string cmd = "\"\"" + ingest::u8path(exe) + "\" " + args + " 2>&1\"";
+    FILE* p = _popen(cmd.c_str(), "r");
+    if (!p) return -1;
+    char buf[512];
+    while (std::fgets(buf, sizeof(buf), p)) out += buf;
+    return _pclose(p);
+}
+
+static void test_ingest_cli() {
+    const fs::path d = temp_dir("cli");
+    const std::string lib = "\"" + ingest::u8path(d / "lib") + "\"";
+    // A worker that started would never exit by itself, so "returns in < 10 s with code 2" proves
+    // nothing was started; the temp --library proves nothing was created. (The default library is
+    // not compared: the owner's own himmel_ingest may be writing it while the tests run.)
+    std::error_code ec;
+    const bool def_existed = fs::exists(default_library_root(), ec);
+    std::string out;
+    for (const std::string& args : std::vector<std::string>{"--bogus", "--help", "--library", "--library " + lib + " --bogus",
+                                   "--library " + lib + " --mode turbo", "--library " + lib + " --canvas 12",
+                                   "--library " + lib + " --quality best", "--library " + lib + " --watch",
+                                   "--library --once", "-x " + lib}) {
+        const auto t0 = std::chrono::steady_clock::now();
+        const int rc = run_ingest(args, out);
+        CHECK(std::chrono::steady_clock::now() - t0 < std::chrono::seconds(10));  // nothing started
+        if (rc != 2 || out.find("usage: himmel_ingest") == std::string::npos)
+            std::printf("  himmel_ingest %s -> %d\n%s", args.c_str(), rc, out.c_str());
+        CHECK(rc == 2);
+        CHECK(out.find("usage: himmel_ingest") != std::string::npos);
+        CHECK(!fs::exists(d / "lib", ec));  // no library created
+    }
+    CHECK(run_ingest("--bogus", out) == 2 && out.find("unknown argument --bogus") != std::string::npos);
+    CHECK(fs::exists(default_library_root(), ec) == def_existed);  // never created by a bad command line
+    // --send with no verb prints its own usage and exits 2 too (it never starts a worker).
+    CHECK(run_ingest("--send", out) == 2 && out.find("usage") != std::string::npos);
+}
+
 int main() {
     test_hash();
     test_judder();
@@ -623,6 +674,7 @@ int main() {
     test_ffmpeg_args();
     test_feed();
     test_ingest_commands();
+    test_ingest_cli();
     test_ffmpeg_round_trip();
     std::printf("library_tests: %d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;

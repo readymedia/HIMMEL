@@ -1,5 +1,5 @@
 # MEDIA handoff
-Updated: 2026-11-17 by the MEDIA wave-5 agent (ingest commands) · Branch: `claude/media-ingest-commands` (from main e8e0e88) · Green: build, 19 test programs, himmel_audio --selftest, himmel_ingest --selftest, 12 Python selftests, mk2_e2e.py PASS on merged main (LEAD; the agent's own runs overlapped another stack)
+Updated: 2026-11-17 by the MEDIA wave-6 agent (CLI fixes) · Branch: `claude/media-cli-fixes` (from main 93b8640) · Green: build, test programs, himmel_ingest --selftest; e2e pending (LEAD runs it; agents run no stack this wave)
 
 ## State in one paragraph
 M7 ingest works end to end. `himmel_ingest.exe` watches folders, probes with
@@ -124,6 +124,43 @@ Nothing. Waiting for the LEAD's merge.
   mode auto|full|background|hold | unwatch PATH` talks to the running worker.
 - `python tools/make_ingest_test_set.py` then `python tools/ingest_measure.py`
   (refuses to run while another Himmel stack runs).
+- `himmel_ingest --help` prints the usage. An unknown or incomplete argument
+  (`--library` with no folder) prints it too and exits 2 before anything is
+  opened, created or started (wave 6; `library_tests` checks it).
+
+### Recipe: the whole of Himmel on a temp library (GUI library buttons, live)
+Never with the owner's library, autosave or show files. **One stack per machine:**
+the `Local\Himmel*` blocks are shared, so first check that `tasklist` shows no
+`himmel*` process. Never start a second stack next to the owner's.
+
+```bat
+rem 1. A temp root with a few test clips in its drop folder (cmd.exe)
+set T=%TEMP%\himmel_libtest
+python tools\make_ingest_test_set.py --out %T%\Library\originals --count 8
+rem    (under 10: one item of each kind, 7 in all: video, alpha, hap, still, gif, svg, sequence; needs ffmpeg on PATH)
+
+rem 2. Start the stack on it: everything after "--" goes to the renderer, and the
+rem    supervisor passes the same library to himmel_ingest and himmel_ui
+build\bin\Release\himmel.exe --sim -- --show-root %T% --size 960x540
+```
+
+- `--show-root %T%` puts **both** the library (`%T%\Library`: DB, `hap\`,
+  `meta\`, `thumbs\`) **and** the show / project / autosave files under `%T%`,
+  so nothing of the owner's is read or written. `-- --library DIR` alone moves
+  only the library (shows would still use the default folder: pair it with
+  `--no-show-files`).
+- The 8 items import in the background while the show runs (`himmel_ingest`
+  log: `%T%\Library\ingest.log`). They appear in the GUI library and in the
+  engine catalog as they turn READY.
+- GUI library buttons = commands 60–67. To compare with the GUI, the same
+  commands can be sent by hand to the running worker:
+  `build\bin\Release\himmel_ingest.exe --send rescan`, `--send remove 3`,
+  `--send import %TEMP%\some_folder watch`, `--send relink 0 %TEMP%\moved` …
+  (`--send` alone lists the verbs). Each prints the reply.
+- Quick checks: `himmel_ingest --library %T%\Library --status` (counts);
+  `sqlite3`/Python on `%T%\Library\himmel-library.db` (`state` column).
+- When done: stop the stack the normal way (Ctrl+C in its console / close the
+  supervisor window), then `rmdir /s /q %T%`.
 
 ## Gotchas found
 - The gyan.dev ffmpeg's mjpeg encoder refuses limited-range YUV from a PNG
