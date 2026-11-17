@@ -172,6 +172,23 @@ def main():
     if busy:
         print("Another Himmel stack runs (%s): one stack per machine. Stop it first." % ", ".join(n for n, _ in busy))
         return 2
+    # Wave 7 stack lock (LEAD 2026-11-17): mkdir is atomic; whoever holds %TEMP%\himmel_stack.lock runs a stack.
+    lock = os.path.join(tempfile.gettempdir(), "himmel_stack.lock")
+    try:
+        os.mkdir(lock)
+    except FileExistsError:
+        print("The stack lock is taken (%s): someone else runs a stack. Try again later." % lock)
+        return 2
+    with open(os.path.join(lock, "owner.txt"), "w", encoding="utf-8") as f:
+        f.write("gui_flow_e2e.py (GUI wave 7) pid %d %s\n" % (os.getpid(), time.strftime("%H:%M:%S")))
+    try:
+        return run(port, keep)
+    finally:
+        shutil.rmtree(lock, ignore_errors=True)
+
+
+def run(port, keep):
+    skipped = []
     tmp = tempfile.mkdtemp(prefix="himmel_gui_flow_")
     src = os.path.join(tmp, "My Clips")
     n_src = make_sources(src)
@@ -201,12 +218,36 @@ def main():
         ck(disk.get("ok") and disk.get("free", 0) > 0, "GET /library/disk: %.1f GB free" % (disk.get("free", 0) / 1e9))
         r = br.post("/library/cmd", {"type": "Import", "path": src})
         ck(r.get("ok"), "Import accepted by the bridge (seq %s)" % r.get("seq"))
-        reply = wait_for(lambda: next((x for x in ((br.event("library") or {}).get("cmd") or {}).get("replies", []) if x["seq"] == r.get("seq")), None), 15)
-        ck(reply and reply["status"] == "Accepted" and reply["count"] == n_src, "the worker queued %s of %d" % (reply and reply["count"], n_src))
+        reply = wait_for(lambda: next((x for x in ((br.event("library") or {}).get("cmd") or {}).get("replies", []) if x["seq"] == r.get("seq")), None), 90)
+        print("  reply:", reply)
+        guard = bool(reply) and reply["status"] == "NoSpace"
+        if guard:
+            # The disk guard (MEDIA D180) refused: on a full dev disk that is the right answer. Check that the user
+            # gets the plain-words message and the plan, then play the rest of the flow with the media/ test clips.
+            lib = br.event("library") or {}
+            pl = lib.get("plan") or {}
+            ck(bool(reply.get("message")) and pl.get("refused") and pl.get("mine"),
+               "DISK GUARD refused the import, shown as: \"%s\"" % (pl.get("message") or reply.get("message")))
+            print("  SKIP  the import and progress checks: the disk guard keeps %.0f GB free and %.1f GB are free" %
+                  ((lib.get("disk") or {}).get("reserve", 0) / 1e9, (lib.get("disk") or {}).get("free", 0) / 1e9))
+            skipped.append("import + progress (disk guard)")
+        else:
+            ck(reply and reply["status"] == "Accepted" and reply["count"] == n_src, "the worker queued %s of %d" % (reply and reply["count"], n_src))
+
+        print("1b. drag-drop upload (POST /library/upload)")
+        bad = br.get("/library/upload?name=notes.txt&size=10")
+        ck(not bad.get("ok"), "a .txt is refused: %s" % bad.get("error"))
+        bad = br.get("/library/upload?name=" + urllib.parse.quote("..\\x.mp4") + "&size=10")
+        ck(not bad.get("ok"), "a name with a folder part is refused")
+        bad = br.get("/library/upload?name=big.mp4&size=%d" % (9 << 30))
+        ck(not bad.get("ok"), "a 9 GB file is refused (cap)")
+        if guard:
+            bad = br.get("/library/upload?name=small.mp4&size=1000")
+            ck(not bad.get("ok") and "disk" in bad.get("error", "").lower(), "an upload is refused by the disk guard too: %s" % bad.get("error"))
 
         print("2. watch the progress")
         seen_jobs, t0, last = set(), time.time(), None
-        while time.time() - t0 < 180:
+        while not guard and time.time() - t0 < 180:
             e = br.event("library", 3) or {}
             if e.get("job", {}).get("name"):
                 seen_jobs.add(e["job"]["name"])
@@ -214,25 +255,41 @@ def main():
             if e and e.get("queued", 1) == 0 and e.get("working", 1) == 0 and e.get("ready_total", 0) + e.get("failed_total", 0) >= n_src:
                 break
             time.sleep(0.3)
-        ck(last and last.get("ready_total") == n_src and last.get("failed_total") == 0,
-           "all %d imported in %.0f s (ready %s, failed %s)" % (n_src, time.time() - t0, last and last.get("ready_total"), last and last.get("failed_total")))
-        ck(len(seen_jobs) >= 2, "the current file was shown during the import (%d names seen)" % len(seen_jobs))
+        if not guard:
+            ck(last and last.get("ready_total") == n_src and last.get("failed_total") == 0,
+               "all %d imported in %.0f s (ready %s, failed %s)" % (n_src, time.time() - t0, last and last.get("ready_total"), last and last.get("failed_total")))
+            ck(len(seen_jobs) >= 2, "the current file was shown during the import (%d names seen)" % len(seen_jobs))
+            pg = (last or {}).get("progress") or {}
+            ck(pg.get("total", 0) >= n_src and pg.get("done") == pg.get("total"), "the worker's batch progress: %s of %s" % (pg.get("done"), pg.get("total")))
 
-        print("3. library clips -> layers")
-        st = wait_for(lambda: (lambda s: s if s and len(s["catalog"]["clips"]) >= n_cat0 + n_src else None)(br.state()), 15) or br.state()
+        print("3. library clips -> layers" if not guard else "3. clips -> layers (media/ test clips: nothing was imported)")
+        st = wait_for(lambda: (lambda s: s if s and len(s["catalog"]["clips"]) >= n_cat0 + (0 if guard else n_src) else None)(br.state()), 15) or br.state()
         rows = br.get("/library/clips")["clips"]
         ck(all("order" in x for x in rows), "library rows carry their ready order")
         cmap = catalog_map(rows, st["catalog"]["clips"])
-        ck(len(cmap) == n_src, "every ready row maps to an engine catalog id (%d of %d)" % (len(cmap), n_src))
+        if guard:
+            cmap = {-(k + 1): c["id"] for k, c in enumerate(st["catalog"]["clips"][:2])}   # media clips, no library id
+        ck(len(cmap) == (2 if guard else n_src), "every ready row maps to an engine catalog id (%d)" % len(cmap))
+        clips = st["catalog"]["clips"]
+        if clips and "lib" in clips[0]:   # catalog v3 (state v4): the engine publishes the library id
+            by_lib = {}
+            for c in clips:
+                if c["lib"] > 0:
+                    by_lib[c["lib"]] = c["id"]
+            ck(all(by_lib.get(r["id"]) == cmap[r["id"]] for r in rows if r["id"] in cmap),
+               "the name mapping agrees with the engine's library ids (catalog v3)")
         ids = list(cmap.values())
         names_ok = all(st["catalog"]["clips"][cmap[x["id"]]]["name"].replace(" (lib)", "").lower().startswith(x["name"].lower()[:20]) for x in rows if x["id"] in cmap)
         ck(names_ok, "the mapped catalog names match the rows")
         live = st["live"]
         pd = 1 - live["program_deck"]
-        br.cmd([{"type": "LayerClip", "deck": pd, "layer": 0, "value": ids[0]}, {"type": "LayerClip", "deck": pd, "layer": 1, "value": ids[1]},
-                {"type": "Focus", "deck": pd, "layer": 0}])
+        lib_ids = list(cmap.keys())
+        v3 = bool(clips) and "lib" in clips[0] and not guard
+        first = {"type": "LayerClipLib", "deck": pd, "layer": 0, "value": lib_ids[0]} if v3 else {"type": "LayerClip", "deck": pd, "layer": 0, "value": ids[0]}
+        r0 = br.cmd([first, {"type": "LayerClip", "deck": pd, "layer": 1, "value": ids[1]}, {"type": "Focus", "deck": pd, "layer": 0}])
+        ck(all(x.get("ok") for x in r0), "the bridge took %s + LayerClip" % first["type"])
         st = wait_for(lambda: (lambda s: s if s["live"]["deck"][pd]["layer"][0]["clip"] == ids[0] and s["live"]["deck"][pd]["layer"][1]["clip"] == ids[1] else None)(br.state()), 5)
-        ck(bool(st), "two library clips are on PREVIEW A and B")
+        ck(bool(st), "two clips are on PREVIEW A and B")
 
         print("4. TAKE + an effect")
         br.cmd({"type": "Take", "value": 500})
@@ -283,8 +340,26 @@ def main():
                     [[(l["clip"], l["opacity"], l["blend"], l["mute"], l["speed"], [(f["effect"], f.get("mix"), f.get("param")) for f in l["fx"]])
                       for l in d["layer"]] for d in L["deck"]], L["master_fx"]]
         ck(onair(before) == onair(after), "what is on air is identical before and after (clips, mix, effects)")
+        # Upload one more clip mid-show (as a drop from the desktop) and see it imported by the watch folder.
+        up_src = os.path.join(src, sorted(f for f in os.listdir(src) if f.endswith(".mp4"))[0]) if any(f.endswith(".mp4") for f in os.listdir(src)) else None
+        if up_src and not guard:
+            data = open(up_src, "rb").read()
+            # different content, so it is a new clip: append a byte the decoder ignores is not safe; use another lavfi clip
+            ff = shutil.which("ffmpeg")
+            up = os.path.join(tempfile.gettempdir(), "himmel_upload_test.mp4")
+            subprocess.run([ff, "-v", "error", "-y", "-f", "lavfi", "-i", "rgbtestsrc=s=320x180:r=25", "-t", "3", "-pix_fmt", "yuv420p", "-c:v", "libx264", up], check=False)
+            data = open(up, "rb").read()
+            req = urllib.request.Request(br.base + "/library/upload?name=dropped%20clip.mp4", data=data, method="POST",
+                                         headers={"Content-Type": "application/octet-stream"})
+            with urllib.request.urlopen(req, timeout=30) as rr:
+                ur = json.loads(rr.read().decode("utf-8"))
+            ck(ur.get("ok") and ur.get("bytes") == len(data), "upload accepted: %s (%s bytes)" % (ur.get("name"), ur.get("bytes")))
+            got = wait_for(lambda: next((x for x in br.get("/library/clips")["clips"] if x["name"].startswith("dropped clip") and x["state"] == "ready"), None), 90, 1.0)
+            ck(bool(got), "the uploaded clip was imported by the watch folder (ready)")
+            os.remove(up)
+            n_src += 1
         rows2 = br.get("/library/clips")
-        ck(rows2.get("ok") and len(rows2["clips"]) == n_src, "the new bridge lists the library")
+        ck(rows2.get("ok") and len(rows2["clips"]) == (0 if guard else n_src), "the new bridge lists the library (%d rows)" % len(rows2.get("clips", [])))
 
         print("8. quit")
         br.cmd({"type": "SystemQuit", "value": 1})
@@ -301,6 +376,8 @@ def main():
             print("kept", tmp)
         else:
             shutil.rmtree(tmp, ignore_errors=True)
+    if skipped:
+        print("SKIPPED: " + "; ".join(skipped))
     print("PASS (%d checks)" % ck.n if ck.failed == 0 else "FAILED: %d of %d check(s)" % (ck.failed, ck.n))
     return 0 if ck.failed == 0 else 1
 

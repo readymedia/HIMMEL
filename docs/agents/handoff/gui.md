@@ -49,6 +49,23 @@ the bridge opens only a v3 library block.
   → **kills himmel_ui mid-show** (new PID, renderer PID the same, on-air state identical) → SystemQuit.
   **PASS, 27 checks** (2026-11-17, before the v3 merge; re-run it after MEDIA's worker code lands).
 
+### Done after the LEAD's wave-7 notes (merged MEDIA `ae2797e` + ENGINE `e677b95`)
+- **Catalog v3 (state v4):** the bridge builds the `catalog` event from the clip pages (`clip_pages.h`): every id up to
+  8192 with `lib` (library id) and `state`; clip ids above 255 pass the codec. The page maps library rows by `lib`
+  (D172's name rule is the fallback for an older engine). A ready library card the catalog has not got yet loads with
+  **`LayerClipLib` (75)**; the engine's `NotReady` / `Missing` refusals are toasts in plain words.
+- **QUIT / confirm (D175):** H.confirm replaces every `window.confirm`; **⏻ QUIT** next to BLACK. ![](gui-w7/10-quit-confirm.jpg)
+- **Upload (D176):** files dropped on the LIBRARY page are checked, then streamed with a progress line; refusals
+  are listed in plain words.
+- **No page-side disk threshold:** DISK LOW comes only from the worker's guard; the conform option shows "≈2.5× disk".
+- Tests: `ui_bridge_tests` **484 checks**; clean rebuild; all 20 test programs, every selftest, `mk2_e2e.py` PASS
+  (median input → glass 31 ms); `gui_flow_e2e.py` **PASS 31 checks** with the import + progress step SKIPPED.
+- **Blocker for the live import check:** MEDIA's guard keeps max(10 GB, 10 %) free = 102 GB on this laptop's 1 TB C:
+  with 22.8 GB free, so every Import is refused `NoSpace` ("needs ~688 MB for 7 clips; 22.8 GB free, 102.3 GB kept
+  free; 0 fit"); the e2e checks that refusal (and the upload refusal) instead. himmel.exe cannot pass `--reserve-gb`
+  to himmel_ingest yet (asked the LEAD). The import part passed live before the v3 merge (27-check run).
+- Stack runs follow the LEAD's lock (`%TEMP%\himmel_stack.lock`); `gui_flow_e2e.py` takes and frees it itself.
+
 ### Screenshots (live, `himmel.exe --sim` on a temp show root, 2026-11-17)
 1. Import dialog: ![](gui-w7/01-import-dialog.jpg)
 2. Import progress, n of m: ![](gui-w7/02-import-progress.jpg)
