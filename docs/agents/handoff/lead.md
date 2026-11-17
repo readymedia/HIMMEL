@@ -246,7 +246,7 @@ Owner's verdict: "not ready for user testing yet". He could not get library clip
 - Rules as before: no agent runs a stack, builds in the main checkout, or stops a Himmel process it did not start. The LEAD merges in its own worktree.
 
 **Wave 7 — done 2026-11-17.** Merged in `claude/lead-wave7`, fast-forwarded to main. Green: clean build, 20 test programs, every selftest, `mk2_e2e.py` 94 checks, `quit_check.py`, `tools/gui_flow_e2e.py` 35 checks (imports 7 of 7). **Done-when met:** the LEAD walked start → import → layers → TAKE → FX → scene → project → quit in the browser alone (`docs/qa/2026-11-17-wave7-first-user-flow.md`).
-- MEDIA ae2797e + e04a2f3: library block v3, disk guard, HOLD/AUTO stored, ClearQueue 68, Library 69, SetReserve 100, import options. D180 reserve = clamp(5 %, 2 GB, 20 GB), PROPOSED, **owner question open** (his 1 TB disk with ~7 GB free still refuses until he lowers "Keep free on disk").
+- MEDIA ae2797e + e04a2f3: library block v3, disk guard, HOLD/AUTO stored, ClearQueue 68, Library 69, SetReserve 100, import options. D180 reserve = clamp(5 %, 2 GB, 20 GB), **DECIDED by the owner 2026-11-17** (his 1 TB disk with ~7 GB free still refuses until he lowers "Keep free on disk").
 - ENGINE 1e02044 + 7ffb39c: state v4 clip pages (8192 ids, library_id), LayerClipLib 75, Smooth Auto (Even / Blend), pre-roll, `--reserve-gb` pass-through, `Mk2Perform::set_clips` hook.
 - GUI 41a839c + 217fffd: clips onto layers everywhere, library at scale, wizard 5–7, H.confirm everywhere, visible QUIT, Keep free on disk.
 - Stack lock `%TEMP%\himmel_stack.lock` (mkdir) is the rule for every stack from now on.
