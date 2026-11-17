@@ -72,7 +72,9 @@ uint32_t average_rgb(media::HapTexture t, const uint8_t* d, size_t bytes) {
     return (byte(r) << 16) | (byte(g) << 8) | byte(bl);
 }
 
-void probe(const std::string& path, protocol::ClipInfo& info) {
+}  // namespace
+
+void probe_clip(const std::string& path, protocol::ClipInfo& info) {
     info.codec = 3;
     info.thumb_rgb = 0x404040;  // GUESS: grey for a file we cannot read
     const std::wstring w = utf8_path(path).wstring();
@@ -104,6 +106,8 @@ void probe(const std::string& path, protocol::ClipInfo& info) {
     CloseHandle(h);
 }
 
+namespace {
+void probe(const std::string& path, protocol::ClipInfo& info) { probe_clip(path, info); }
 }  // namespace
 
 std::vector<std::string> find_media_clips() {
@@ -129,6 +133,14 @@ std::vector<std::string> find_media_clips() {
     }
     std::sort(out.begin(), out.end());
     return out;
+}
+
+void clip_info_for(const std::string& path, protocol::ClipInfo& info) {
+    std::memset(&info, 0, sizeof(info));
+    const auto stem = utf8_path(path).stem().u8string();
+    std::snprintf(info.name, sizeof(info.name), "%.*s", static_cast<int>(std::min<size_t>(stem.size(), protocol::kNameLen - 1)),
+                  reinterpret_cast<const char*>(stem.data()));
+    probe(path, info);
 }
 
 void fill_clip_catalog(protocol::Catalog& c, const std::vector<std::string>& paths) {

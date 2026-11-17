@@ -7,7 +7,11 @@ size changed, so every reader is rebuilt with the new header (a version 1
 reader sees a mismatch and stays disconnected, as §2 says)
 (D90). **Version 3 (AUDIO, 2026-11-17, D131): the reaction table is
 appended** after the transport section; the sections before it are
-unchanged, the size changed, so every reader is rebuilt again. Header: [`src/protocol/include/himmel/protocol/state.h`](../../src/protocol/include/himmel/protocol/state.h)
+unchanged, the size changed, so every reader is rebuilt again. **Version 4
+(ENGINE wave 7, 2026-11-17, D190): catalog v3 - the clip pages and the
+playback section are appended** after the reaction table; every section
+before them is unchanged (the `catalog` section is now the window of clip ids
+0..255), the size changed (~1 MB), so every reader is rebuilt again. Header: [`src/protocol/include/himmel/protocol/state.h`](../../src/protocol/include/himmel/protocol/state.h)
 (source of truth for the layout). Writer: `himmel_render` only. Readers: the
 GUI bridge, weapon mappers, tools. Change rules as in
 [`command-protocol.md`](command-protocol.md).
@@ -20,6 +24,8 @@ GUI bridge, weapon mappers, tools. Change rules as in
 | `live` (`LiveState`, ~8 KB) | `live_seq` | when something changed, at most once per frame, and at least every 250 ms | the whole show model on air: crossfader, `program_deck`, TAKE progress, black, focus, 2 decks × 4 layers (clip, blend, mute, playing, missing, opacity, speed, position, 4 FX slots), deck FX, master FX, per-producer acks / refusals / alive |
 | `catalog` (`Catalog`, ~25 KB) | `catalog_seq` | when the clip or effect list changes | clips (name, size, fps, length, codec, placeholder colour) and effects (name, param names and defaults) |
 | `transport` (`TransportSection`, ~2 KB, v2) | `transport_seq` | together with `live` | the beat clock (BPM, beat, grid, tapped), per layer a `LayerTransport` (every `LayerParam` setting; status: phase, frame on screen, glided speed, fade gain, transition progress, beat loop, scratch, waiting launch + beats left, loops, the loaded clip's 16 cue points), and the **HIT layer** (`LayerState` + `LayerTransport`) |
+| `playback` (`PlaybackSection`, ~150 B, v4) | `playback_seq` | together with `live` | the global frame smoothing (`FrameSmooth`), the refresh the playheads step on, and per layer (8 + HIT) its setting, the mode in use, `loading` (pre-roll: the old picture stays until the new clip's first frame), the clip's fps, refreshes per frame, and the measured cadence (`judder`, `irregular`, last 5 s) |
+| `clips` + `clip_page[128]` (catalog v3, ~800 KB, v4) | one seqlock **per page** | when a clip is added or its state changes, only the pages that changed | every clip id up to `kMaxCatalogClips` (8192), 64 per page: `ClipEntry` = `ClipInfo` + `library_id` + `state` (`ClipState`: Ready / Missing / Removed / Busy) + `gen`. Header: `count`, `gen`, `capacity`, `page_size`, `full`, `page_gen[128]`. Reader helper: `himmel/protocol/clip_pages.h` (`ClipPagesCopy`, `read_clip_pages`) |
 | `react` (`ReactionSection`, ~8 KB, v3) | `react_seq` | every frame while any FX slot holds an effect, else together with `live` | per FX slot (layers, decks, master, same order as `live`) and per knob 0..3 a `ReactionEntry`: where it comes from (`source`: Default / Custom / Off), the reaction in use (signal, mode, curve, amount, attack / release ms, threshold, range lo / hi, quantise / hold beats; a Default entry mirrors the effect's default reaction), and live `env` (envelope 0..1) and `value` (the knob as the shader gets it, for the "knob ghosts"); `gen` bumps on every settings change. Changed with `FxReact` ([`command-protocol.md`](command-protocol.md) §4d) |
 
 Outputs (M6) are **not** in this block: output slots, displays, canvas size,
@@ -70,6 +76,22 @@ their own rate (30 Hz is plenty) and diff.
   clips that turn ready are appended (ids of existing clips never change);
   `catalog_seq` changes each time. Re-read the catalog on every change
   ([`library-db.md`](library-db.md) §8). Additive, no version bump.
+- **Catalog v3 (version 4, wave 7).** The engine can hold up to
+  `kMaxCatalogClips` (8192) clips; clip id = index, append-only, ids never
+  move. The `catalog` section keeps ids 0..255 (`clip_count` = at most 256),
+  so a reader that only needs a short list keeps working; everything else
+  reads the clip pages: poll `clips.gen` (one value), then `read_clip_pages`
+  copies only the pages whose `page_gen` changed (one seqlock per page, ~6 KB
+  each). A reader that sees a new `live.epoch` resets its copy. A clip whose
+  file is gone or still being written keeps its id and says so in `state`
+  (a low-priority file watch in the renderer checks every clip in turn,
+  ~0.5 s for 300 clips, ~16 s for 8192, and at once when a layer loads it);
+  loading it with `LayerClipLib` is refused, with `LayerClip` it shows the
+  placeholder as before. A library clip that turns ready again (re-import,
+  re-analyse) keeps its id; one with a new file gets a new id and
+  `LayerClipLib` picks the newest ready one. `LayerState.clip` stays `int16_t`.
+- After a restart the renderer restores clips with ids >= 256 too (from the
+  previous renderer's clip pages: library id first, then name).
 - After a restart the renderer restores the transport settings, cue points,
   BPM and grid from a version 2 block (the HIT layer is never restored).
 - **Reactions (v3):** after a restart the renderer restores the reaction

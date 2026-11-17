@@ -17,7 +17,9 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 
+#include "himmel/engine/clip_directory.h"
 #include "himmel/engine/output_model.h"
 #include "himmel/engine/transport.h"
 #include "himmel/protocol/commands.h"
@@ -40,6 +42,13 @@ class DeckModel {
 public:
     // `catalog` is the engine's catalog; it must outlive the model. Ids are checked against it.
     explicit DeckModel(const protocol::Catalog& catalog);
+
+    // Catalog v3 (wave 7): clip ids, geometry, names and library ids come from this directory
+    // (up to kMaxCatalogClips) instead of `catalog.clip` (ids < 256). Must outlive the model.
+    void set_clips(const ClipDirectory* clips) { clips_ = clips; }
+    const ClipDirectory* clips() const { return clips_; }
+    int clip_total() const;                          // ids 0..clip_total()-1 are valid
+    const protocol::ClipInfo* clip_info(int id) const;  // nullptr = no such id
 
     // Back to the empty show (every layer empty, crossfader on A, no FX).
     void reset();
@@ -73,6 +82,22 @@ public:
     // `now_us` (M6): a producer that goes quiet lets go of a held IDENTIFY.
     void set_producer_alive(int producer, bool alive, uint64_t now_us = 0);
     void set_epoch(uint32_t epoch) { live_.epoch = epoch; }
+    // Wave 7 pre-roll: while a slot's new clip loads (no first frame yet) its playhead holds
+    // the start frame, so the clip starts on its first frame when it shows.
+    void set_loading(int slot, bool loading) { loading_[slot] = loading; }
+    bool loading(int slot) const { return loading_[slot]; }
+    // Wave 7 frame smoothing: the display refresh the playheads step on (Even / Blend), Hz (0 = unknown).
+    void set_refresh_hz(double hz) { refresh_hz_ = hz > 1.0 ? hz : 0.0; }
+    double refresh_hz() const { return refresh_hz_; }
+    protocol::FrameSmooth frame_smooth() const { return smooth_global_; }  // the global setting
+    uint8_t smooth_setting(int slot) const { return smooth_[slot]; }        // FrameSmooth or kSmoothFollow
+    // The mode in use for a slot now (never Auto): Auto picks Even when the refresh is a
+    // whole multiple of the clip's frame rate at the current speed, else Blend.
+    protocol::FrameSmooth smooth_in_use(int slot) const;
+    // Blend: the second frame and its weight 0..1 (weight 0 = show frame(slot) alone).
+    void blend_frames(int slot, int64_t& next, float& weight) const;
+    // Refreshes per clip frame at the current speed (0 = unknown / paused).
+    double refreshes_per_frame(int slot) const;
 
     // Bumped on every jump of a layer's playhead (LayerJump, cue jump, Restart,
     // a new clip); jump_to() = where to (0..1 of the clip). The renderer uses it
@@ -84,7 +109,10 @@ public:
     // ---- transport, per slot (0..7 = deck * 4 + layer, kHitSlot = HIT) ----
     const protocol::LayerState& layer(int slot) const;
     const protocol::LayerTransport& layer_transport(int slot) const;
-    int64_t frame(int slot) const { return ph_[slot].frame(); }     // the frame to show, -1 = none
+    // The frame to show, -1 = none. On the refresh grid (wave 7, Even / Blend with a known refresh)
+    // a position a hair below a frame boundary (floating point: 5 x 0.4 = 1.99999...) counts as
+    // the boundary, so the cadence never flips between 3-2 and 2-3.
+    int64_t frame(int slot) const;
     int direction(int slot) const { return ph_[slot].direction(); } // read-ahead direction
     // The frames a jump can land on (cue points, else the 16 equal slices of
     // in..out): the decode worker keeps them decoded so a jump shows next frame.
@@ -117,9 +145,12 @@ public:
     // Returns the number of layers whose clip could not be found by name.
     // With `old_react` (a version 3 block) each slot whose effect came back keeps its
     // Custom / Off reactions (D131).
+    // With `old_clips` (a version 4 block's clip pages) clip ids >= 256 come back too, matched
+    // by library id first, then by name.
     int restore(const protocol::LiveState& old_live, const protocol::Catalog& old_catalog,
                 const protocol::TransportSection* old_transport = nullptr,
-                const protocol::ReactionSection* old_react = nullptr);
+                const protocol::ReactionSection* old_react = nullptr,
+                const ClipDirectory* old_clips = nullptr);
 
     // ---- per-knob reactions (D131, FxReact) ----
     // Start-up: each effect's Default row (engine::react_defaults), indexed by effect
@@ -187,6 +218,13 @@ private:
     void tick_transport(uint64_t now_us);
 
     const protocol::Catalog& catalog_;
+    const ClipDirectory* clips_ = nullptr;
+    bool loading_[kLayerSlots] = {};
+    double refresh_hz_ = 0.0;
+    double frame_bias(int slot) const;  // kFrameBias on the refresh grid, else 0
+    double grid_acc_ = 0.0;     // Even / Blend: wall time not yet stepped on the refresh grid
+    protocol::FrameSmooth smooth_global_ = protocol::FrameSmooth::Auto;
+    uint8_t smooth_[kLayerSlots] = {};  // set to kSmoothFollow in reset()
     protocol::LiveState live_{};
     protocol::TransportSection transport_{};
     protocol::ReactionSection react_{};
@@ -206,8 +244,10 @@ private:
     uint32_t trans_gen_[kLayerSlots] = {};
     uint32_t jump_gen_[kLayerSlots] = {};
     float jump_to_[kLayerSlots] = {};
-    float cues_[protocol::kMaxClips][protocol::kCuePoints] = {};  // per clip id; < 0 = not set
-    float resume_[protocol::kMaxClips] = {};                      // StartPos::Continue, 0..1
+    // Per clip id (catalog v3: kMaxCatalogClips), allocated once in the constructor.
+    using CueRow = float[protocol::kCuePoints];
+    std::unique_ptr<CueRow[]> cues_;    // < 0 = not set
+    std::unique_ptr<float[]> resume_;   // StartPos::Continue, 0..1
     // TAKE
     float take_from_ = 0.f, take_to_ = 1.f;
     uint64_t take_start_us_ = 0;

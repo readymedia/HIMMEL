@@ -20,6 +20,12 @@
 #include "himmel/protocol/show.h"
 #include "himmel/protocol/state.h"
 
+// ==== ENGINE (catalog v3) ====
+namespace himmel::engine {
+class ClipDirectory;
+}
+// ==== end ENGINE (catalog v3) ====
+
 namespace himmel::perform {
 
 // Where the mapper puts its commands. The engine implements it (validates and
@@ -49,6 +55,11 @@ public:
     // BROWSE (MEDIA M7 follow-up): ready library clips left out of the catalog because it is
     // full (Local\HimmelLibrary catalog_full, from the renderer's library feed). Per frame.
     void set_library(uint32_t catalog_full) { catalog_full_ = catalog_full; }
+    // ==== ENGINE (catalog v3, wave 7): every clip the engine has (up to 8192), for BROWSE past
+    // id 255. Set once by the renderer (render thread only; count() / info(id) / entry(id).library_id
+    // / state(id)). Not used yet: CONTROL wave 8. The `catalog` argument stays the ids < 256 window.
+    void set_clips(const engine::ClipDirectory* clips) { clips_ = clips; }
+    // ==== end ENGINE (catalog v3) ====
 
     // One MK2 event (from the Local\HimmelMk2 ring). `state` is the engine's
     // latest LiveState / Catalog (the engine passes its own copy).
@@ -159,6 +170,7 @@ private:
     bool browse_ = false;
     int browse_sel_ = 0;
     uint32_t catalog_full_ = 0;
+    const engine::ClipDirectory* clips_ = nullptr;  // ENGINE (catalog v3): see set_clips()
     void browse_load(const protocol::LiveState& s, const protocol::Catalog& cat, CommandSink& sink, uint64_t now_us);
     void draw_browse(uint64_t now_us, const protocol::LiveState& s, const protocol::Catalog& cat,
                      uint8_t screens[2][mk2::kScreenBytes]);

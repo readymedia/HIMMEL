@@ -22,7 +22,7 @@ cbuffer Layer : register(b0) {
                        // mode: 0 HAP rgb, 1 HAP rgba, 2 Hap Q YCoCg, 3 HAP alpha only, 4 solid colour, 5 render target,
                        //       6 transparent (an empty layer under a generator)
     float4 l_color;    // solid colour (placeholder)
-    float4 l_blend;    // x = BlendMode
+    float4 l_blend;    // x = BlendMode, y = wave 7 frame blend: weight of tex4 (the next clip frame), 0 = off
 };
 cbuffer Mix : register(b2) {
     float4 m_info;     // crossfader 0 (A) .. 1 (B)
@@ -42,6 +42,7 @@ cbuffer Down : register(b4) {
 Texture2D tex0 : register(t0);
 Texture2D tex1 : register(t1);
 Texture2D tex3 : register(t3);     // ps_blit: the IDENTIFY picture (R8)
+Texture2D tex4 : register(t4);     // layer source: the next clip frame (wave 7 frame blend)
 SamplerState lin : register(s0);
 SamplerState pnt : register(s1);
 SamplerState wrap : register(s2);
@@ -65,15 +66,8 @@ float3 hsv(float h, float s, float v) {
 float luma(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
 
 // ---------------------------------------------------------------- layer source
-// tex1 = the clip's BC texture or a render target.
-float4 layer_src(float2 uv) {
-    float mode = l_info.z;
-    if (mode > 5.5) return 0;                              // transparent
-    if (mode > 4.5) return tex1.Sample(lin, uv);          // render target (layer with FX), identity
-    float2 cu = (uv - 0.5) * l_xform.xy + 0.5 + l_xform.zw;  // the layer's place (M6)
-    if (any(cu < 0) || any(cu > 1)) return 0;
-    if (mode > 3.5) return float4(l_color.rgb, 1);         // placeholder colour
-    float4 c = tex1.Sample(lin, cu * l_info.xy);
+// One HAP texel as RGBA (mode as in l_info.z: 0 rgb, 1 rgba, 2 Hap Q YCoCg, 3 alpha only).
+float4 hap_decode(float4 c, float mode) {
     float3 rgb = c.rgb;
     float a = 1;
     if (mode > 2.5) { rgb = c.rrr; }
@@ -85,6 +79,20 @@ float4 layer_src(float2 uv) {
     }
     else if (mode > 0.5) { a = c.a; }
     return float4(saturate(rgb), a);
+}
+
+// tex1 = the clip's BC texture or a render target; tex4 = the next clip frame (frame blend).
+float4 layer_src(float2 uv) {
+    float mode = l_info.z;
+    if (mode > 5.5) return 0;                              // transparent
+    if (mode > 4.5) return tex1.Sample(lin, uv);          // render target (layer with FX), identity
+    float2 cu = (uv - 0.5) * l_xform.xy + 0.5 + l_xform.zw;  // the layer's place (M6)
+    if (any(cu < 0) || any(cu > 1)) return 0;
+    if (mode > 3.5) return float4(l_color.rgb, 1);         // placeholder colour
+    float4 o = hap_decode(tex1.Sample(lin, cu * l_info.xy), mode);
+    // Wave 7 frame blend: mix in the next clip frame (decoded first: YCoCg does not lerp encoded).
+    if (l_blend.y > 0.0005) o = lerp(o, hap_decode(tex4.Sample(lin, cu * l_info.xy), mode), l_blend.y);
+    return o;
 }
 
 float4 ps_source(VSOut i) : SV_Target { return layer_src(i.uv); }

@@ -95,7 +95,11 @@ int LibraryFeed::poll_once() {
         }
         const uint32_t n = table_->size();
         const auto u8 = play.u8string();
-        if (table_->append(std::string(u8.begin(), u8.end()), clip_info_from(r, *table_, n), r.id) < 0) {
+        const std::string play8(u8.begin(), u8.end());
+        // ==== ENGINE (catalog v3): ready again (re-import / re-analyse) -> same engine id, no duplicate ====
+        if (table_->find(r.id, play8) >= 0) continue;
+        // ==== end ENGINE (catalog v3) ====
+        if (table_->append(play8, clip_info_from(r, *table_, n), r.id) < 0) {
             skipped.fetch_add(1, std::memory_order_relaxed);
             catalog_full.fetch_add(1, std::memory_order_relaxed);  // the clip stays in the library
             continue;

@@ -31,7 +31,7 @@ static void test_sizes() {
     std::printf("sizes\n");
     static_assert(sizeof(Command) == 32);
     static_assert(sizeof(CommandBlock) < 512 * 1024);
-    static_assert(sizeof(StateBlock) < 256 * 1024);
+    static_assert(sizeof(StateBlock) < 1024 * 1024);  // v4: + clip pages (~800 KB)
     static_assert(sizeof(PreviewBlock) < 12 * 1024 * 1024);
     static_assert(kPreviewBytes == 480u * 270u * 4u);
     std::printf("  CommandBlock %zu B, StateBlock %zu B, PreviewBlock %zu B\n", sizeof(CommandBlock),
@@ -137,7 +137,7 @@ static void test_react_packing() {
     static_assert(sizeof(ReactionSection) == (kDecks * kLayersPerDeck * kFxSlots + kDecks * kFxSlots + kFxSlots) *
                                                  kReactParams * sizeof(ReactionEntry) + 8);
     static_assert(offsetof(StateBlock, react) > offsetof(StateBlock, transport));
-    static_assert(kStateVersion == 3);
+    static_assert(kStateVersion == 4);  // v4: clip pages (wave 7)
     ReactArgs a;
     a.op = ReactOp::Set;
     a.signal = ReactSignal::Drop;

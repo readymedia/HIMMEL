@@ -61,6 +61,7 @@ enum class OutputParam : uint8_t {
     Mode = 4,        // i = CanvasMode. Rebuilds the canvas
     Adopt = 5,       // slot = output in state Other: take the new display (i = 1), or keep waiting (i = 0)
     SimLost = 6,     // slot = output; i = 1 act as if its display was pulled, 0 = it came back (tests on one screen)
+    FrameSmooth = 7, // i = FrameSmooth (state.h): the global frame smoothing for clips (wave 7); shown in `frame_smooth`
     Count
 };
 
@@ -116,7 +117,8 @@ struct OutputsSection {
     uint32_t identify_ms_left;
     uint32_t displays;        // displays Windows reports now
     uint8_t config_by_command; // 1 = preset / mode / blend / refresh were changed by a command (kept over a restart)
-    uint8_t reserved[3];
+    uint8_t frame_smooth;     // wave 7: the global FrameSmooth (state.h); additive (was reserved[0])
+    uint8_t reserved[2];
     OutputInfo out[kMaxOutputs];
     LayerPlaceInfo layer[kPlaceSlots];
 };

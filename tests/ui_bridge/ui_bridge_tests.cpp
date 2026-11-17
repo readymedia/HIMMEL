@@ -241,7 +241,7 @@ static void test_transport_commands() {
     CHECK(!P(R"({"type":"LayerSet","deck":0,"layer":1,"param":"Mode","value":9})").ok);
     CHECK(!P(R"({"type":"LayerSet","deck":0,"layer":1,"param":"Mode","value":"Wobble"})").ok);
     CHECK(!P(R"({"type":"LayerSet","deck":0,"layer":1,"param":"Nope","value":1})").ok);
-    CHECK(!P(R"({"type":"LayerSet","deck":0,"layer":1,"param":29,"value":1})").ok);
+    CHECK(!P(R"({"type":"LayerSet","deck":0,"layer":1,"param":30,"value":1})").ok);
     CHECK(!P(R"({"type":"LayerSet","deck":0,"layer":1,"value":1})").ok);
     // floats clamp like the engine; relative only for floats
     r = P(R"({"type":"LayerSet","deck":1,"layer":3,"param":"Beats","value":100})");

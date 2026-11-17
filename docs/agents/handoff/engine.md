@@ -1,7 +1,25 @@
 # ENGINE handoff
-Updated: 2026-11-17 by the ENGINE M6 session · Branch: `claude/engine-m6-spout` (M6 itself merged on main) · Last commit: see `git log` on the branch
+Updated: 2026-11-17 by the ENGINE wave 7 session · Branch: `claude/engine-w7-catalog` · Last commit: see `git log` on the branch
 
 ## State in one paragraph
+**WAVE 7 (2026-11-17, branch `claude/engine-w7-catalog`): import -> load -> play.**
+Catalog v3: the engine holds up to 8192 clips (`kMaxCatalogClips`), and
+`Local\HimmelState` v4 appends **clip pages** (64 clips per page, one seqlock
+each, `ClipEntry` = ClipInfo + library id + `ClipState`) and a **playback
+section**; the `catalog` section is unchanged and is the window of ids 0..255.
+`ClipDirectory` (pure, in `himmel_engine_model`) is the renderer's list of
+every clip, kept in step with the clip table and a low-priority **file watch**
+(`ClipWatch`: Ready / Missing / Busy). **`LayerClipLib` (75)** loads by library
+id (refused `NotReady` / `Missing`). **Pre-roll:** the decode worker decodes
+the start frame (+4) before it hands a new clip over, the old picture stays
+until then, the playhead waits. **Frame smoothing** (`FrameSmooth`: Auto /
+Off / Blend / Even; global `OutputConfig` 7, per layer `LayerSet` 29): the
+playheads step on the display's refresh grid (Even), and Blend mixes the two
+nearest frames from a second texture per clip. Auto = Even when the refresh is
+a whole multiple of the clip fps, else Blend. Cadence is measured per layer
+(`CADENCE` log lines every 5 s, `judder` / `irregular` in the playback
+section, `himmel_cmd playback`). Tests: `catalog_tests.exe`. D190–D193 PROPOSED.
+
 **QUIT (2026-11-17, branch `claude/engine-quit`).** `SystemQuit` (74) with
 `f[0]` = 1 (confirmed; only from Perform, Gui or Tool) sets `quit_request` in
 `EngineStatus` (v2). The supervisor then runs the Ctrl+C stop (renderer, GUI,
@@ -38,6 +56,25 @@ when its producer goes quiet (LEAD condition). The first M6 commit (3e8d15b) is
 merged on main (dcc01f9); Spout + the IDENTIFY release are the follow-up.
 
 ## Done (with commits)
+- **Wave 7 (`claude/engine-w7-catalog`):**
+  - `protocol/state.h` v4 (`ClipState`, `ClipEntry`, `ClipPage*`, `FrameSmooth`,
+    `PlaybackSection`), `protocol/clip_pages.h` (reader), commands.h
+    (`LayerClipLib` 75, `LayerParam::Smooth` 29, `Reject::NotReady` / `Missing`),
+    outputs.h (`OutputParam::FrameSmooth` 7, `frame_smooth`).
+  - `clip_directory.h/.cpp` (paging writer, window mirror, find by library id /
+    name), `clip_watch.h/.cpp` (file states), `DeckModel`: `set_clips()`, ids up
+    to 8192 (cues / resume on the heap, allocated once), `LayerClipLib`,
+    restore by library id from the old block's pages, refresh grid + frame bias,
+    `smooth_in_use()`, `blend_frames()`, `set_loading()`.
+  - `ClipPlayer::load(index, start_frame, dir)` pre-roll, a second texture per
+    clip; `slice_shaders.h`: `hap_decode()`, `tex4` + `l_blend.y` blend.
+  - `render_main.cpp`: directory + watch at start-up, media/ beyond 256 clips
+    (`clip_info_for`), pages published on change, old picture during load,
+    two-texture uploads, cadence measurement, playback section, `CADENCE` lines.
+  - `himmel_cmd`: `clips [from [n]]`, `cliplib D L LIBID`, `smooth MODE`,
+    `set D L smooth MODE|global`, `playback`.
+  - Library (MEDIA's files, minimal): `ClipTable` capacity 8192 + `find()`, the
+    feed does not append a clip that turned ready again twice.
 - **M6 (this branch, `claude/engine-m6-outputs`):**
   - `protocol/outputs.h` (new block, enums), commands 70–73 appended to
     `commands.h` (`Count` = 74); `protocol_tests` asserts the wave-3 ranges.

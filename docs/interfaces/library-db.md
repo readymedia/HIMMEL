@@ -210,7 +210,9 @@ With no show running the import uses every core (normal priority).
   every second (or when `ready_seq` changes) reads `ready` rows with a
   `ready_order` above the last one it saw (ids are given at queue time, so a
   clip queued early can turn ready late), and appends them to a fixed table
-  (capacity `kMaxClips`, preallocated). The catalog entry comes from the row
+  (capacity `kMaxCatalogClips` = 8192 since ENGINE wave 7, was `kMaxClips` =
+  256; preallocated). A row whose library id and HAP path are already in the
+  table (it turned ready again) is not appended twice. The catalog entry comes from the row
   (size, fps, length, codec; the placeholder colour is the clip's average
   colour); the feed never opens the HAP file.
 - The frame loop sees the published count rise (an atomic), copies the new
@@ -228,6 +230,11 @@ With no show running the import uses every core (normal priority).
   finds its library clips by name.
 - Readers of `Local\HimmelState` must re-read the catalog whenever
   `catalog_seq` changes; it now grows while the show runs.
+- **Wave 7 (catalog v3):** clips past id 255 are in the state block's clip
+  pages (`engine-state.md` version 4), with their library id; the GUI and
+  the MK2 load a library clip with `LayerClipLib` (command 75, by library id)
+  and need no catalog index at all. The renderer's file watch marks a clip
+  whose HAP file was deleted (`Remove`) as `Missing`.
 
 ## 9. Not in version 1 (append later)
 
