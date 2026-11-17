@@ -64,9 +64,9 @@ default and stay PROPOSED (D94–D100 are run that way).
 | 1 | CONTROL · `claude/control-mk2-input` | MK2 (sim + real) drives the engine, with an end-to-end check |
 | 1 | ENGINE · `claude/engine-m2-transport` | M2 clip transport; supervisor log read-sharing fix |
 | 1 | FX · `claude/fx-m5-effects` | M5 tier-1 effects + generators, metadata with default reaction, PRESS / scopes, optional cap |
-| 2 | SHOW · `claude/show-m3-projects` | M3 projects, scenes, kits, songs, undo |
+| 2 | SHOW · `claude/show-m3-projects` | M3 projects, scenes, kits, songs, undo — **merged 2026-11-17** |
 | 2 | GUI · `claude/gui-m11-v1` | M11 GUI v1 on the new engine features |
-| 2 | AUDIO · `claude/audio-m8-reactions` | M8 audio-reactive everything |
+| 2 | AUDIO · `claude/audio-m8-reactions` | M8 audio-reactive everything — **merged 2026-11-17** |
 | 3 | MEDIA · `claude/media-m7-ingest` | M7 ingest |
 | 3 | ENGINE · `claude/engine-m6-outputs` | M6 outputs, curtains, displays by identity |
 | 3 | CONTROL · `claude/control-m9-lightpad` | M9 Lightpad TOUCH / MIX / SCRUB, then M13 OSC |
