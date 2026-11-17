@@ -1173,6 +1173,7 @@ const char* command_name(CommandType t) {
                                              "recall", "save", "undo", "reset", "dice", "locks", "project", "select",
                                              "kit", "macroset", "macro", "song"};
     switch (t) {  // M6 (types 70..73)
+        case CommandType::FxReact: return "react";  // AUDIO (40), D131
         case CommandType::OutputBlack: return "outblack";
         case CommandType::Identify: return "identify";
         case CommandType::LayerPlace: return "place";
