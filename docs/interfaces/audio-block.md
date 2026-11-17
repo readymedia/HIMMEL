@@ -33,11 +33,11 @@ All values 0..1, smoothed with their own attack / release, auto-gained.
 | 1 | `bass` | Band < 150 Hz (biquads), each band normalised by its own slow peak (~30 s release) |
 | 2 | `mid` | 150 Hz – 2.5 kHz, as bass |
 | 3 | `high` | > 2.5 kHz, as bass |
-| 4 | `kick` | Onset envelope: jumps to the hit's strength at an onset in the kick band (40–120 Hz), releases over ~150 ms |
-| 5 | `snare` | Same, snare band (150–400 Hz body + 2–6 kHz noise, both must rise) |
-| 6 | `hat` | Same, > 7 kHz, release ~60 ms |
+| 4 | `kick` | Onset envelope: jumps to the hit's strength (0.6–1) at an onset in the kick band (40–120 Hz) that is louder than the snare body band, releases over ~150 ms |
+| 5 | `snare` | Same, 2–6 kHz noise onset with the 150–400 Hz body near its own peak and the noise within 8 dB of the body; decided on the hop after the onset (+5 ms) |
+| 6 | `hat` | Same, > 7 kHz when it is not a snare, release ~60 ms |
 | 7 | `onset` | max(kick, snare, hat) |
-| 8 | `energy` | Slow loudness (one-pole, ~16 s ≈ 8 bars at 120 BPM), against the 30 s peak |
+| 8 | `energy` | Slow loudness (one-pole, ~16 s ≈ 8 bars at 120 BPM) against its own slow peak (falls 24 dB over 120 s): 1 = as loud as the loudest part lately, lower in a breakdown |
 | 9, 10 | `build`, `drop` | 0 in version 1 (0.2) |
 | 11–15 | — | spare (append only) |
 
@@ -68,8 +68,9 @@ arrived, so a reader can measure the age.
 - **Device:** part of the friendly name, case-insensitive; empty = the
   Windows default (console role) for that mode.
 - **Gain:** manual `gain_db` + **auto gain** (default on): the RMS is pulled
-  towards −18 dBFS over ~10 s, between −12 and +36 dB of extra gain, never
-  faster up than down. A quiet room mic and a hot line both work.
+  towards −18 dBFS, between −12 and +36 dB of extra gain: fast for the first
+  3 s after the input opens (0.5 s), then up over 5 s and down over 1.5 s
+  (never faster up than down). A quiet room mic and a hot line both work.
 - **Gate:** below `gate_db` (default −60 dBFS raw RMS, with 3 dB hysteresis)
   `level` and the bands fall to 0, auto gain freezes, and onsets are ignored.
 - **Unplug / replug:** a lost device (`AUDCLNT_E_DEVICE_INVALIDATED`, no
@@ -124,11 +125,29 @@ clock**). himmel_audio adds the external sources:
 
 ## 6. Tools
 
-- `himmel_audio.exe [--device NAME | --loopback [NAME]] [--channels 1|2|N-M]
-  [--gain DB] [--no-auto-gain] [--gate DB] [--midi-clock NAME] [--monitor]`
-  — `--list` prints the endpoints and MIDI ports; `--selftest` runs the
-  analysis on synthetic drums and the block round trip (no device).
-- `audio_tests.exe` (no hardware): filters, onset timing on synthetic kicks /
-  snares / hats, auto gain and gate, the MIDI clock tracker, the block
-  layout, the engine's signal feed (glide to rest, AV offset) and zoom pulse
-  through the FX resolver.
+- `himmel_audio.exe [--device NAME | --loopback [NAME]] [--channels 1|2|N|N-M]
+  [--gain DB] [--no-auto-gain] [--gate DB] [--sensitivity 0..1]
+  [--midi-clock NAME] [--monitor] [--record FILE [SECONDS]]`
+  - `--list`: the capture / render endpoints and MIDI ports.
+  - `--selftest`: synthetic drums through the analysis + the MIDI clock + the
+    block round trip (no device), exit 0 / 1.
+  - `--play-drums [DEVICE] [--bpm N] [--seconds S] [--level L]`: a test
+    player (the synthetic kit) to a render endpoint, e.g. into a virtual
+    cable whose other end is captured as a line in.
+  - `--record FILE [S]`: the first seconds of the mono input as raw float32
+    (48 kHz); `--analyse FILE`: prints every onset found in such a file.
+  - Only one himmel_audio runs at a time (named mutex
+    `Local\HimmelAudioSingle`); a second one exits with code 3.
+- `audio_probe.exe [--seconds S] [--quiet]`: the renderer's music path
+  without a renderer (the engine's `AudioLink` + `ReactionFeed` + zoom pulse
+  through the FX resolver at 60 Hz): kicks seen, signal age, glide to rest.
+  Read-only, safe next to a running stack.
+- `audio_tests.exe` (no hardware): filters + FFT, onset timing on synthetic
+  drums (line level, far mic, a clean digital source, 44.1 kHz / 174 BPM,
+  the beat anywhere inside a hop), which drum makes which onset, no false
+  kicks on a held bass, gate / auto gain / clipping, the MIDI clock tracker,
+  the block layout, the engine feed (glide to rest, beat / bar pulses, MIDI
+  lead), `BeatClock::follow`, the Tap / Bpm lock-out while MIDI leads, and
+  zoom pulse hitting within 2 frames of every kick.
+
+Measurements: [`measurements/2026-11-17-audio-m8.md`](../measurements/2026-11-17-audio-m8.md).

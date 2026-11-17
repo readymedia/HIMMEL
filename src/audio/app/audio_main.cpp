@@ -489,6 +489,14 @@ int main(int argc, char** argv) {
             return 0;
         }
     }
+    // One writer per block: a second himmel_audio (a stray manual start next to the
+    // supervisor's) exits at once instead of fighting over Local\HimmelAudio.
+    HANDLE single = CreateMutexW(nullptr, FALSE, L"Local\\HimmelAudioSingle");
+    if (single && GetLastError() == ERROR_ALREADY_EXISTS) {
+        log("another himmel_audio is running - exiting");
+        CloseHandle(single);
+        return 3;
+    }
     SetConsoleCtrlHandler(on_console, TRUE);
     timeBeginPeriod(1);
 

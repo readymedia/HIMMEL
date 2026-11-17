@@ -31,3 +31,10 @@ add_test(NAME himmel_audio_selftest COMMAND himmel_audio --selftest)
 if(MSVC)
     target_compile_options(audio_tests PRIVATE /W4 /permissive- /utf-8)
 endif()
+
+# The renderer's music path without a renderer (live check against himmel_audio).
+add_executable(audio_probe tools/audio_probe_main.cpp)
+target_link_libraries(audio_probe PRIVATE himmel_engine_ipc himmel_engine_model winmm)
+if(MSVC)
+    target_compile_options(audio_probe PRIVATE /W4 /permissive- /utf-8)
+endif()

@@ -18,5 +18,5 @@ LEAD; then both sides are built. See `docs/agents/README.md`.
 | [`effect-metadata.md`](effect-metadata.md) (`fx/<id>/effect.json`, PRESS, scopes, reactions, flash cap, shader contract) | FX → ENGINE / SHOW / GUI | **Version 1, 2026-11-16** (M5) |
 | `library-db.md` + sidecar JSON | MEDIA → SHOW / GUI | **Phase 3** |
 | `show-files.md` (`himmel-show/1`: banks, scenes, cues, songs, moods) | SHOW ↔ GUI | **Phase 5** |
-| `audio-block.md` (signals, clock) | AUDIO → ENGINE / SHOW | **Phase 7** |
+| [`audio-block.md`](audio-block.md) (`Local\HimmelAudio`: signals, input, MIDI clock, config) | AUDIO → ENGINE / GUI | **Version 1, 2026-11-17** (M8) |
 | `table-format.md` (`himmel-table/1`) | GUI (table) ↔ ENGINE | **Phase 10** (draft in `docs/vj-table-design.md`) |
