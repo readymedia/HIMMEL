@@ -219,6 +219,13 @@ The wave 5 follow-ups. **The owner's show runs from the main checkout**: nobody 
 | SHOW (show-m3) | scenes / looks / variations save and recall the per-knob reactions (state v3 `ReactionSection`, FxReact); a recall applies FxSet, then the saved reactions; old show files load with Default | `src/show/`, `docs/interfaces/show-block.md`, show file format, `docs/agents/handoff/show.md` | `show_tests` round-trip a scene with Custom + Off rows; an old file loads |
 | MEDIA (media-m7) | `himmel_ingest`: unknown args or `--help` print usage and exit 2 (never start a worker); `himmel_cmd` prints `react` for FxReact (one line in `himmel_cmd_main.cpp`); a `--library <temp>` recipe in the handoff so the LEAD can check the GUI library buttons live | `src/library/`, `himmel_ingest`, that one line, `docs/agents/handoff/media.md` | tests / selftest green; `--help` starts nothing |
 
+**Wave 6 — done 2026-11-17.** Merged in the LEAD worktree (`claude/lead-wave6`), checked there while the owner's show ran, then e2e once the show was stopped; fast-forwarded to main. Green: build, 19 test programs, every selftest, `mk2_e2e.py` 94 checks, `quit_check.py`.
+- CONTROL a434717 → 87fb70a: `Local\HimmelMk2` v2 with `Status.stop_request`; the controller lets go in ~60 ms (LEDs off, "stopped" page). **Quit now 1.46 s** (was 4.5 s).
+- MEDIA 50a237b → ad6b7b9: `himmel_ingest` bad args / `--help` = usage, exit 2, nothing opened; `command_name(FxReact)` = "react"; temp-library recipe in `handoff/media.md`.
+- SHOW f49425a → 75acc8e: looks / scenes / variations / undo / live.json keep per-knob reactions (Custom + Off); journal v2 (a v1 journal is not restored, the show comes from the last save).
+- The owner could not stop his show; `himmel_cmd quit --confirm` stopped it cleanly. Ask him what he tried (GUI ⋯ → Quit uses `window.confirm`).
+- Open: the GUI library buttons live on a temp library (recipe ready); `mk2_chain_tests` flaked once under load (SHOW saw it, passed on re-run).
+
 **Old wave 4 candidates (now done or folded in):**
 - GUI: the SHOW and AUDIO panels, the reaction editor and the wizard (rest of M11);
 - M9 / M13 if CONTROL did not reach them;
