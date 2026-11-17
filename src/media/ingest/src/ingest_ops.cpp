@@ -173,7 +173,7 @@ EnqueueResult IngestOps::enqueue(const Candidate& c, bool revive_removed, const 
 // ---- the commands ----
 
 IngestReply IngestOps::apply(const IngestCommand& c) {
-    if (c.type < library::kIngestFirst || c.type > library::kIngestLast)
+    if (!library::is_ingest_type(c.type))
         return make_reply(IngestStatus::UnknownType, 0, 0, "unknown ingest command %u", c.type);
     if (!std::memchr(c.path, 0, sizeof(c.path))) return make_reply(IngestStatus::BadPath, 0, c.clip, "the path is not terminated");
     const fs::path p = from_utf8(c.path);
@@ -225,6 +225,17 @@ IngestReply IngestOps::apply(const IngestCommand& c) {
         case IngestCommandType::Library:
             if (const char* e = need_path(false)) return make_reply(IngestStatus::BadPath, 0, 0, "%s", e);
             return host_.library_command(c);
+        case IngestCommandType::SetReserve: {
+            if (c.i < 0 || c.i > 10000) return make_reply(IngestStatus::BadValue, 0, 0, "the reserve is 0 (default) or 1..10000 GB, not %d", c.i);
+            db_.meta_set("reserve_gb", std::to_string(c.i));
+            const uint64_t bytes = static_cast<uint64_t>(c.i) * kGB;
+            host_.set_reserve(bytes);
+            const DiskSpace d = host_.disk();
+            if (c.i == 0)
+                return make_reply(IngestStatus::Ok, 0, 0, "the disk guard keeps the default free (%s on this disk)",
+                                  d.known ? human_bytes(reserve_for(d.total)).c_str() : "5 %, 2..20 GB");
+            return make_reply(IngestStatus::Ok, 0, 0, "the disk guard keeps %d GB free", c.i);
+        }
     }
     return make_reply(IngestStatus::UnknownType, 0, 0, "ingest command %u is not used yet", c.type);
 }
@@ -413,6 +424,11 @@ uint64_t IngestOps::queue_need() {
             if (!(r.stage_done & library::kStageConvert))
                 n += static_cast<uint64_t>(std::max<int64_t>(r.import.est_bytes, kSideBytes));
     return n;
+}
+
+uint64_t IngestOps::stored_reserve(library::LibraryDb& db) {
+    const long long gb = std::atoll(db.meta_get("reserve_gb").c_str());
+    return gb > 0 && gb <= 10000 ? static_cast<uint64_t>(gb) * kGB : 0;
 }
 
 library::IngestModeRequest IngestOps::stored_mode(library::LibraryDb& db) {

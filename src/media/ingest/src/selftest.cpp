@@ -57,6 +57,9 @@ struct TestHost : OpsHost {
     }
     DiskSpace disk() override { return fake; }
     bool moving() override { return busy; }
+    uint64_t reserve_set = 0;
+    uint64_t reserve(uint64_t total) override { return reserve_for(total, reserve_set); }
+    void set_reserve(uint64_t b) override { reserve_set = b; }
     void on_plan(const library::IngestPlan& p) override { plan = p, ++plans; }
 };
 
@@ -116,8 +119,20 @@ void run_v3(library::LibraryDb& db, IngestOps& ops, TestHost& host, const fs::pa
        "Clear queue leaves nothing unfinished (" + std::to_string(unfinished()) + "): " + r.message);
     const int ready_before = db.count(static_cast<int>(State::Ready));
 
-    // A fake small disk: 100 GB, 15 GB free -> reserve 10 GB, room for 5 GB. 2 GB per clip.
+    // The reserve: the default rule on a 100 GB disk is 5 GB; SetReserve 10 stores 10 GB.
     host.fake = {15 * kGB, 100 * kGB, true};
+    ck(host.reserve(100 * kGB) == 5 * kGB, "default reserve on 100 GB: 5 GB");
+    r = send(IngestCommandType::SetReserve, 0, {}, 0, 10001);
+    ck(st(r) == IngestStatus::BadValue, "SetReserve 10001 GB: BadValue");
+    r = send(IngestCommandType::SetReserve, 0, {}, 0, 10);
+    ck(st(r) == IngestStatus::Ok && host.reserve(100 * kGB) == 10 * kGB && IngestOps::stored_reserve(db) == 10 * kGB,
+       std::string("SetReserve 10 is stored: ") + r.message);
+    {
+        library::LibraryDb again;
+        again.open(root / library::kDbFile, true);
+        ck(IngestOps::stored_reserve(again) == 10 * kGB, "a restarted worker reads the reserve back");
+    }
+    // A fake small disk: 100 GB, 15 GB free, reserve 10 GB -> room for 5 GB. 2 GB per clip.
     host.per_clip = static_cast<int64_t>(2 * kGB);
     const fs::path batch = tmp / "batch";
     for (int k = 0; k < 4; ++k) write_file(batch / ("clip" + std::to_string(k) + ".mp4"), 100 + k, 5000 + k);
@@ -211,6 +226,11 @@ void run_v3(library::LibraryDb& db, IngestOps& ops, TestHost& host, const fs::pa
         ck(!IngestOps::touches(c, 0, cancel), "Clear queue with no job runs at once");
     }
     send(IngestCommandType::ClearQueue, 0, {});
+    r = send(IngestCommandType::SetReserve, 0, {}, 0, 0);
+    ck(st(r) == IngestStatus::Ok && IngestOps::stored_reserve(db) == 0 && host.reserve(100 * kGB) == 5 * kGB,
+       std::string("SetReserve 0: back to the default: ") + r.message);
+    r = send(static_cast<IngestCommandType>(101), 0, {});
+    ck(st(r) == IngestStatus::UnknownType, "101 (free in 100..119): UnknownType");
 }
 
 }  // namespace

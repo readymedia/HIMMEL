@@ -41,7 +41,7 @@ DiskSpace disk_space(const fs::path& p) {
 
 uint64_t reserve_for(uint64_t total, uint64_t override_bytes) {
     if (override_bytes > 0) return override_bytes;
-    return std::max<uint64_t>(10 * kGB, total / 10);
+    return std::clamp<uint64_t>(total / 20, 2 * kGB, 20 * kGB);
 }
 
 double conform_fps(double fps, int hz) {

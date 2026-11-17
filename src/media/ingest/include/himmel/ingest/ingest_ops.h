@@ -37,6 +37,7 @@ public:
     }
     virtual DiskSpace disk() { return {}; }                  // the library's disk
     virtual uint64_t reserve(uint64_t total) { return reserve_for(total); }
+    virtual void set_reserve(uint64_t bytes) { (void)bytes; }   // SetReserve (100): 0 = the default rule
     virtual bool moving() { return false; }                  // a library move runs: most commands are Busy
     virtual void on_plan(const library::IngestPlan&) {}      // publish an Import's estimate
     // Library (69): switch / move. The worker does it (it owns the DB handle).
@@ -66,6 +67,8 @@ public:
     uint64_t queue_need();
     // v3: the stored mode (meta 'mode'), Auto when none.
     static library::IngestModeRequest stored_mode(library::LibraryDb& db);
+    // The reserve set with SetReserve (meta 'reserve_gb'), in bytes; 0 = the default rule.
+    static uint64_t stored_reserve(library::LibraryDb& db);
     std::vector<fs::path> watch_folders();          // fixed + stored (meta 'watch')
     std::vector<fs::path> skip_folders() const;     // the library's own folders
     int retry_pending_deletes();                    // files that were busy at Remove time

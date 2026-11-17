@@ -25,7 +25,8 @@ struct DiskSpace {
 // Free / total bytes of the disk that holds `p` (the nearest existing parent folder).
 DiskSpace disk_space(const fs::path& p);
 
-// The reserve the guard keeps free: max(10 GB, 10 % of the disk), or `override_bytes` when > 0.
+// The reserve the guard keeps free: clamp(5 % of the disk, 2 GB, 20 GB) (D180, PROPOSED), or
+// `override_bytes` when > 0 (SetReserve, --reserve-gb).
 uint64_t reserve_for(uint64_t total, uint64_t override_bytes = 0);
 
 // What a clip becomes after the options (sizes rounded down to a multiple of 4, never up).
