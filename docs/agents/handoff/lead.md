@@ -226,6 +226,25 @@ The wave 5 follow-ups. **The owner's show runs from the main checkout**: nobody 
 - The owner could not stop his show; `himmel_cmd quit --confirm` stopped it cleanly. Ask him what he tried (GUI ⋯ → Quit uses `window.confirm`).
 - Open: the GUI library buttons live on a temp library (recipe ready); `mk2_chain_tests` flaked once under load (SHOW saw it, passed on re-run).
 
+### Wave 7 — started 2026-11-17 (after the owner's first user test)
+Owner's verdict: "not ready for user testing yet". He could not get library clips onto layers, the import side lacks a lot, and 89 AI clips (~17 GB of HAP) nearly filled 7 GB of free disk. The parent session set HOLD, removed the 72 queued clips (14 remain) and set the mode back to AUTO.
+
+**Done when (the wave as a whole):** a first-time user, in the browser alone, can go **start → import a folder → put clips on layers → play → add effects → save a scene → save the project** with no terminal and no docs. The LEAD runs exactly that flow after merging, on a temp library (`handoff/media.md` recipe), and records it in `docs/qa/`.
+
+| Track · session · branch | Task | Decisions |
+|---|---|---|
+| GUI · gui-w7 (local_210ce077) · `claude/gui-w7-flows` | library → layer (drag, double-click, Load to…, picker from an empty slot); library view at scale (search, filter, multi-select, clear queue, progress, disk); clip editor drawer; wizard 5+; scene / kit editor gaps; help everywhere | D170–D179 |
+| MEDIA · media-w7 (local_0e3d6e91) · `claude/media-w7-import` | disk-space guard; persistent HOLD / AUTO; clear queue; progress fields; import options (selection, downscale, HAP vs HAP Q, dry run); library location / move; judder: source-fps metadata | D180–D189 |
+| ENGINE · engine-w7 (local_c5d09b0c) · `claude/engine-w7-catalog` | catalog v3 paging (past 256); load by library id; smooth 24 / 30 fps on 60 Hz; fixes on import → load → play | D190–D199 |
+
+**LEAD calls (protocol):**
+- `Local\HimmelState`: only ENGINE changes it this wave (catalog v3 paging = state **v4**). It must be additive after the v3 `ReactionSection`, and its contract is pushed first.
+- `HimmelCommands` CommandTypes: ENGINE **75–79** (e.g. load by library id). GUI **50–59** if it needs engine commands. Count moves with ENGINE.
+- Library block (`Local\HimmelLibrary`) ingest codes are their own namespace. MEDIA uses **68–69**, then **100–119** if more are needed. Any block version bump is pushed as a contract first. GUI builds on both contracts.
+- **Judder:** playback-side first. ENGINE owns smooth playback (cadence / frame blend, cheap, on by default where the fps does not divide the refresh). MEDIA records source fps and cadence metadata, and an import-time conform stays an **option, off by default** (it costs disk and changes the clip). ENGINE and MEDIA agree on the metadata fields through the LEAD.
+- CONTROL's MK2 BROWSE moves to catalog v3 after ENGINE lands (a wave 8 item).
+- Rules as before: no agent runs a stack, builds in the main checkout, or stops a Himmel process it did not start. The LEAD merges in its own worktree.
+
 **Old wave 4 candidates (now done or folded in):**
 - GUI: the SHOW and AUDIO panels, the reaction editor and the wizard (rest of M11);
 - M9 / M13 if CONTROL did not reach them;

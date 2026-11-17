@@ -76,6 +76,9 @@ default and stay PROPOSED (D94–D100 are run that way).
 | 6 | CONTROL · control-m4 session | `mk2_controller` stop_request (quit < 2 s) — **merged 2026-11-17** |
 | 6 | SHOW · show-m3 session | scenes save and recall per-knob reactions — **merged 2026-11-17** |
 | 6 | MEDIA · media-m7 session | `himmel_ingest --help` = usage; `himmel_cmd` names FxReact — **merged 2026-11-17** |
+| 7 | GUI · `claude/gui-w7-flows` | library → layer, library at scale, clip drawer, wizard 5+, help (D170–D179) |
+| 7 | MEDIA · `claude/media-w7-import` | disk guard, HOLD / AUTO, queue, import options, library move (D180–D189) |
+| 7 | ENGINE · `claude/engine-w7-catalog` | catalog v3 paging, load by library id, smooth 24/30 on 60 Hz (D190–D199) |
 
 ## 1. What we have to build on
 
