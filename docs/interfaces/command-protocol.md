@@ -237,6 +237,32 @@ What happens:
 
 A renderer restart clears `quit_request` (the block is recreated).
 
+## 4f. Clips by library id, frame smoothing (ENGINE wave 7, 2026-11-17, D190–D193)
+
+| Type | Targets | Argument | Notes |
+|---|---|---|---|
+| `LayerClipLib` (75) | deck (or `kHitDeck`), layer | `i` = library id (> 0, `library-db.md`) | Loads the engine clip that has this library id, with the same rules as `LayerClip` (transition, pre-roll, start at the range start). Refused `NotReady` (6) when no clip in the catalog has that library id (yet: it may still be importing), `Missing` (7) when its file is gone, still being written / locked, or removed (the clip's `ClipState` in the state block's clip pages), `BadValue` for `i` <= 0. Ids above the 32-bit range are not supported (library ids are SQLite row ids from 1). |
+| `LayerSet` `Smooth` (param 29) | deck (or `kHitDeck`), layer | `i` = `FrameSmooth` (Auto 0, Off 1, Blend 2, Even 3), or -1 = follow the global setting (default) | Per-layer frame smoothing. |
+| `OutputConfig` `FrameSmooth` (param 7) | — | `i` = `FrameSmooth` | The global frame smoothing (default Auto). Shown in `Local\HimmelOutputs` `frame_smooth` and in the state block's playback section. Works without an output model. |
+
+New refusals, appended to `Reject`: `NotReady` (6), `Missing` (7).
+`kCommandVersion` stays 1 (types and enum values are appended).
+
+What the smoothing modes do (`design/clips-and-playback.md`; measured in
+`docs/agents/handoff/engine.md`):
+- **Off**: the frame nearest the wall-clock playhead (versions before wave 7).
+  The frame loop's wake-up jitter (±1–3 ms) moves frame boundaries, so a
+  30 fps clip on 60 Hz shows 1-3-2-2 instead of 2-2-2 when its phase sits near
+  a boundary.
+- **Even**: the playhead steps on the display's refresh grid (whole refresh
+  periods; a missed refresh counts 2), so 30 @ 60 is exactly 2-2-2 and
+  24 @ 60 is exactly 3-2-3-2 (the best a single frame can do).
+- **Blend**: the same grid, and the two nearest frames are mixed by the
+  playhead's fraction (one extra texture per layer, one extra texture sample
+  in the layer pass; each clip frame is still uploaded once).
+- **Auto** (default): Even when the refresh is a whole multiple of the clip's
+  frame rate at the current speed (30 @ 60, 25 @ 50, 60 @ 60), else Blend.
+
 ## 5. Validation (the engine, before anything else)
 
 1. Unknown `type` → refused (`Reject::UnknownType`).
