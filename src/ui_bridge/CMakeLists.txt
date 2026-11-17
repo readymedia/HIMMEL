@@ -11,7 +11,7 @@ add_executable(himmel_ui src/ui_main.cpp src/panels_link.cpp)
 # The MK2 mirror reads Local\HimmelMk2 (header-only types from the controller, no hidapi).
 target_include_directories(himmel_ui PRIVATE src ${PROJECT_SOURCE_DIR}/src/controller/include)
 # The LIBRARY panel reads the library DB read-only (himmel_library: SQLite, already in the build).
-target_link_libraries(himmel_ui PRIVATE himmel_ui_core himmel_library ws2_32)
+target_link_libraries(himmel_ui PRIVATE himmel_ui_core himmel_library ws2_32 shell32 ole32)
 
 add_executable(fake_engine tools/fake_engine_main.cpp)
 target_link_libraries(fake_engine PRIVATE himmel_ui_core winmm)

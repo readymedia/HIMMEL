@@ -13,6 +13,7 @@
 // engine validates everything again (command-protocol.md §5).
 #pragma once
 
+#include "himmel/protocol/clip_pages.h"
 #include <string>
 #include <string_view>
 
@@ -49,7 +50,9 @@ nlohmann::json command_to_json(const protocol::Command& c);
 // The live view without frame / time_us / fps (those go in the 1 Hz "bridge" event),
 // so two equal models give equal text and the bridge only sends changes.
 nlohmann::json live_to_json(const protocol::LiveState& s);
-nlohmann::json catalog_to_json(const protocol::Catalog& c);
+// With `pages` (catalog v3, state v4) the clip list comes from the clip pages: every id, plus "lib"
+// (library id, 0 = not from the library) and "state"; else from the 256-clip catalog section.
+nlohmann::json catalog_to_json(const protocol::Catalog& c, const protocol::ClipPagesCopy* pages = nullptr);
 
 // State v2 transport section (M2): clock settings, per layer the LayerParam settings and
 // the playhead status, the HIT layer. Enums as names (the same names LayerSet accepts).

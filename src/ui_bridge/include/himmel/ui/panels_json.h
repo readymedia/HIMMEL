@@ -41,6 +41,18 @@ struct LibraryCounts {
     uint64_t ready_seq = 0;
 };
 nlohmann::json library_block_to_json(const LibraryCounts& c, const library::IngestJob& job);
+// Library block v3 (MEDIA wave 7, library-db.md §11): the disk guard, the stored mode, the batch
+// progress, the last import plan and the library location / move. Merged into the "library" event as
+// {stored_mode, disk_low, disk{free, total, reserve, library_bytes, queue_bytes}, progress{done, total,
+//  clip, file, file_progress, eta_s, bytes_written, file_bytes, error_clip, error}, plan{seq, mine,
+//  dry_run, fits, refused, clips, known, fit_clips, need_bytes, queue_bytes, free_bytes, reserve_bytes,
+//  message}, root{path, move_state, move_progress, move_done_bytes, move_total_bytes, move_to, move_message}}.
+struct LibraryV3 {
+    uint32_t stored_mode = 0, disk_low = 0;
+    uint64_t disk_free = 0, disk_total = 0, disk_reserve = 0, library_bytes = 0, queue_bytes = 0;
+};
+void library_v3_to_json(nlohmann::json& j, const LibraryV3& v, const library::IngestProgress& p,
+                        const library::IngestPlan& plan, const library::LibraryRoot& root, int my_producer);
 
 // The page's AUDIO input picker -> AudioConfig (only the keys given change `cfg`).
 //   {"device": "Microphone", "mode": "Capture"|"Loopback", "channel_first": 0, "channel_count": 1|2,
@@ -85,9 +97,32 @@ nlohmann::json show_doc_for_page(const nlohmann::json& doc);
 
 // POST /library/cmd (MEDIA, library-db.md §10): {"type": "Import" | "Rescan" | "Remove" | "Relink" |
 // "Reanalyse" | "Retry" | "Mode" | "Unwatch", "clip": library id (0 = all), "path": absolute,
-// "watch" / "force" / "thumbs": true, "mode": "Auto" | "Full" | "Background" | "Hold"} -> an IngestCommand
+// "watch" / "force" / "thumbs": true, "mode": "Auto" | "Full" | "Background" | "Hold"} -> an IngestCommand.
+// v3 (wave 7): "ClearQueue"; "Library" (path, "move", "force"); Import options "height" (0 or 144..4320),
+// "hapq", "skip_known", "dry_run", "fit", "list" (path = a list file), "conform_hz" (0 | 50 | 60)
 // (seq is stamped when it is pushed). False with `error` for anything the worker would refuse anyway.
 bool ingest_command_from_json(const nlohmann::json& j, library::IngestCommand& c, std::string& error);
 nlohmann::json ingest_reply_to_json(const library::IngestReply& r);
+
+// GUI wave 7 (the import path dialog, GET /fs/list): what a file name would import as
+// (library-db.md §2): "video" | "still" | "vector" | "animation", or "" when it is not importable.
+// Case-insensitive on the extension.
+std::string import_kind_of(const std::string& file_name);
+// The folder above `path` for the dialog's "up" button: "C:\Clips\Club" -> "C:\Clips",
+// "C:\Clips" -> "C:\", "C:\" -> "" (= the drive list), "\\srv\share" -> "" too.
+std::string parent_dir_of(const std::string& path);
+// The import queue's ETA: `left` items at `per_item_s` seconds each, in whole seconds (capped at
+// 24 h); 0 when nothing is left, -1 when the rate is unknown.
+int eta_seconds(int left, double per_item_s);
+
+// POST /library/upload?name=<file> (GUI wave 7, drag-drop from the desktop; import by path is preferred).
+// The file name: no folder parts, no control characters, not "." / "..", at most 200 bytes, and a media
+// extension (import_kind_of). Empty string = OK, else the reason.
+std::string upload_name_error(const std::string& name);
+// The size and disk check, from the library block v3 guard (library-db.md §11.1): refused when the size is
+// 0 or above `cap`, when the worker holds the queue (`disk_low`), or when `free - size` would eat into
+// `reserve`. `have_guard` = the v3 numbers are there (else refused: no guard, no upload). "" = OK.
+std::string upload_space_error(uint64_t size, uint64_t cap, bool have_guard, uint64_t free, uint64_t reserve, bool disk_low);
+inline constexpr uint64_t kUploadCapBytes = 8ull << 30;   // 8 GB per file
 
 }  // namespace himmel::ui

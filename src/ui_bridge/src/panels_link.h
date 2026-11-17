@@ -53,4 +53,17 @@ nlohmann::json panels_show_document();
 // library block. {"ok": true, "seq"} when queued; the reply comes back in the "library" event ("cmd").
 nlohmann::json panels_ingest_command(const nlohmann::json& body);
 
+// GET /fs/list?path=&all=1 (GUI wave 7, the import path dialog): sub-folders and importable files of
+// a folder ("all" = every file), sorted by name; path "" = the drives and a few places. Read-only.
+nlohmann::json panels_fs_list(const std::string& path_utf8, bool all_files);
+// GET /library/disk: free space on the library's drive and what the library itself stores (HAP,
+// stills, thumbnails, sidecars, the DB; never the originals). Cached for 5 s.
+nlohmann::json panels_library_disk();
+// POST /library/open-originals: opens Explorer at <library>\originals (the watched drop folder).
+nlohmann::json panels_open_originals();
+// POST /library/upload (GUI wave 7): the library block v3 disk guard numbers (false = no v3 worker, or a
+// read-only bridge) and the folder uploads go to (<library>\originals, the watched drop folder; "" = none).
+bool panels_upload_guard(uint64_t& free, uint64_t& reserve, bool& disk_low);
+std::filesystem::path panels_upload_dir();
+
 }  // namespace himmel::ui

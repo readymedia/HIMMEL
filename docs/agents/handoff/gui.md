@@ -1,7 +1,95 @@
 # GUI handoff
-Updated: 2026-11-17 by the GUI agent (wave 5, M11 part 3) · Branch: claude/gui-m11-part3 · Last commit: see `git log claude/gui-m11-part3`
+Updated: 2026-11-17 by the GUI agent (wave 7) · Branch: `claude/gui-w7-flows` · Last commit: see `git log claude/gui-w7-flows`
 
-## State in one paragraph
+## Wave 7: the first-time user's whole flow (2026-11-17)
+The owner stopped his user test: "I found no way to get the clips onto layers", and the 89-file import nearly filled
+his disk. This wave makes the flow **start → import a folder → watch progress → clips onto layers → TAKE → an
+effect → save a scene → save the project** work in the browser without help. No new CommandTypes; the branch
+merges MEDIA's wave-7 contract commit `131a896` (library block **v3**), so **merge MEDIA wave 7 first (or together)**:
+the bridge opens only a v3 library block.
+
+### Done
+- **Clips onto layers from anywhere** (`gui/flows.js`, D171):
+  - drag a clip (or several selected cards) onto a strip, a monitor (= its deck's next free layer), the LIBRARY
+    dock, a wizard layer or a BUILD kit pad;
+  - double-click = the focused layer; ⋯ / right-click / LOAD ▾ = *Load to…* (focused, next free PREVIEW, A–D, E–H, HIT);
+  - the **+** on a strip and an empty layer's name ("empty · + clip") open a **clip picker** with thumbnails;
+  - group letters on every card and list item show **which layers a clip is on** (green PREVIEW, red PROGRAM).
+  - Library row → engine catalog id by ready order + name (D172, GUESS until the catalog carries the library id).
+- **LIBRARY view** (`gui/library.js`, D174): search; filters state (incl. playable / on a layer now), kind, energy,
+  fps, tag / mood / loop style; sort; multi-select (click, Ctrl, Shift, Ctrl + A) with LOAD TO… / REANALYSE / RETRY /
+  REMOVE…; cards drawn 300 at a time; a sticky **layer dock** (PREVIEW A–D, PROGRAM E–H, both decks); empty state
+  with IMPORT FOLDER….
+  - **Import**: IMPORT FOLDER… / IMPORT FILES… open a path dialog (drives, places, folders, importable files with
+    sizes; `GET /fs/list`); options (max 1080p / 720p, HAP Q, skip removed clips, conform 50 / 60) and
+    **ESTIMATE DISK** (dry run); a NoSpace refusal offers **IMPORT THE n THAT FIT** or **MOVE LIBRARY…**.
+    Files dropped on the page are explained (a browser never gives the path) with OPEN DROP FOLDER (Explorer).
+  - **Progress**: "Importing n of m · file · stage % · about N min left", plain-words errors, DISK LOW, PAUSE /
+    RESUME (HOLD), **CLEAR QUEUE** (68); the mode chips AUTO / BACKGROUND / FULL / HOLD show the stored mode.
+  - **Disk**: free / total and the library's size on the status line (the worker's v3 guard, else `GET /library/disk`).
+  - MOVE LIBRARY… (Library 69 + move) with the move's progress on the status line; judder badged only for the
+    show's refresh.
+- **Clip editor drawer** additions: in / out in seconds, IN / OUT at the playhead, FULL, length, speed slider +
+  0.5x / 1x / 2x, brackets snap to analysed cuts (Alt = no snap), Shift + drag = move in and out together, **TRY ON
+  PREVIEW** for a layer on air, an empty layer offers CHOOSE A CLIP….
+- **Wizard steps 5–7** (D170): LAYERS, TAKE + FX, SAVE, each with a live checklist; step 1 has the real import
+  buttons and the progress bar.
+- **BUILD**: kit pads take dropped clips (several = consecutive pads), a clip shelf to drag from, a search box in the
+  pad editor, an empty state with SAVE PREVIEW AS A SCENE.
+- **Tooltips**: an audit script found every visible button / select / input in all views and wizard steps; each
+  has a tooltip now (0 left).
+- **Bridge**: `GET /fs/list`, `GET /library/disk`, `POST /library/open-originals`; rows carry `order`, `added`,
+  `ready_unix`; library block v3 → the `library` event gains `stored_mode`, `disk_low`, `disk{}`, `progress{}`,
+  `plan{}`, `root_info{}`; ingest commands ClearQueue / Library, Import options (`height`, `hapq`, `skip_known`,
+  `dry_run`, `fit`, `conform_hz`, `files` → a list file in %TEMP%); the bridge follows `root.path` after a move;
+  `/names` gains `panels.ingest`. `ui_bridge_tests` **463 checks** (31 new).
+- **e2e**: `tools/gui_flow_e2e.py` starts `himmel.exe --sim --no-weapons -- --show-root <temp>` (refuses when any
+  himmel process runs), imports a folder (7 files: the 4 HAP test clips + 3 H.264), watches progress, maps rows to
+  catalog ids, LayerClip ×2 → TAKE → FxSet → in / out / cue / beat loop / mode / speed → SceneSave → Project SaveAs
+  → **kills himmel_ui mid-show** (new PID, renderer PID the same, on-air state identical) → SystemQuit.
+  **PASS, 27 checks** (2026-11-17, before the v3 merge; re-run it after MEDIA's worker code lands).
+
+### Done after the LEAD's wave-7 notes (merged MEDIA `ae2797e` + ENGINE `e677b95`)
+- **Catalog v3 (state v4):** the bridge builds the `catalog` event from the clip pages (`clip_pages.h`): every id up to
+  8192 with `lib` (library id) and `state`; clip ids above 255 pass the codec. The page maps library rows by `lib`
+  (D172's name rule is the fallback for an older engine). A ready library card the catalog has not got yet loads with
+  **`LayerClipLib` (75)**; the engine's `NotReady` / `Missing` refusals are toasts in plain words.
+- **QUIT / confirm (D175):** H.confirm replaces every `window.confirm`; **⏻ QUIT** next to BLACK. ![](gui-w7/10-quit-confirm.jpg)
+- **Upload (D176):** files dropped on the LIBRARY page are checked, then streamed with a progress line; refusals
+  are listed in plain words.
+- **No page-side disk threshold:** DISK LOW comes only from the worker's guard; the conform option shows "≈2.5× disk".
+- Tests: `ui_bridge_tests` **484 checks**; clean rebuild; all 20 test programs, every selftest, `mk2_e2e.py` PASS
+  (median input → glass 31 ms); `gui_flow_e2e.py` **PASS 31 checks** with the import + progress step SKIPPED.
+- **Blocker for the live import check:** MEDIA's guard keeps max(10 GB, 10 %) free = 102 GB on this laptop's 1 TB C:
+  with 22.8 GB free, so every Import is refused `NoSpace` ("needs ~688 MB for 7 clips; 22.8 GB free, 102.3 GB kept
+  free; 0 fit"); the e2e checks that refusal (and the upload refusal) instead. himmel.exe cannot pass `--reserve-gb`
+  to himmel_ingest yet (asked the LEAD). The import part passed live before the v3 merge (27-check run).
+- Stack runs follow the LEAD's lock (`%TEMP%\himmel_stack.lock`); `gui_flow_e2e.py` takes and frees it itself.
+
+### Screenshots (live, `himmel.exe --sim` on a temp show root, 2026-11-17)
+1. Import dialog: ![](gui-w7/01-import-dialog.jpg)
+2. Import progress, n of m: ![](gui-w7/02-import-progress.jpg)
+3. Library cards on layers (dock + group letters, multi-select): ![](gui-w7/03-library-on-layers.jpg)
+4. Clip picker from an empty PROGRAM layer: ![](gui-w7/04-clip-picker-empty-layer.jpg)
+5. Wizard 5 LAYERS: ![](gui-w7/05-wizard-layers.jpg)
+6. Wizard 6 TAKE + FX: ![](gui-w7/06-wizard-take-fx.jpg)
+7. Wizard 7 SAVE (scene + project): ![](gui-w7/07-wizard-save.jpg)
+8. Clip editor drawer (in / out in seconds, TRY ON PREVIEW): ![](gui-w7/08-clip-editor.jpg)
+9. BUILD: a clip dropped on kit pad 13, the clip shelf: ![](gui-w7/09-build-kit-drop.jpg)
+
+### Not checked live / open
+- The v3 fields (progress, disk guard, ClearQueue, estimate, NoSpace, move) are unit-tested in the bridge but not
+  live: MEDIA's worker code was not on its branch yet (only the contract). Check them once it merges.
+- e2e after the v3 merge: not re-run, because ENGINE w7 had a `himmel_ingest` running on the same machine.
+- Hover-to-play, a colour wheel and "find similar" (gui.md §6) are not built.
+
+### GUESSES (wave 7)
+- `GUESS:` library row ↔ catalog id by ready order + name (D172).
+- `GUESS:` "wizard steps 5+" = steps that walk the rest of the first show (D170).
+- `GUESS:` HAP needs about 5× the source bytes, for the warning in the path dialog when no dry run is available.
+- `GUESS:` double-click a library card loads onto the focused layer even when that is PROGRAM (a toast says "on air").
+
+## State in one paragraph (wave 5)
 M11 part 1 (on main) made every wave-1 engine feature reachable from the browser: transport, the CLIP editor, the
 effect browser, PRESS, presets, generators, HIT, clock, the MK2 picture and a settings stub. Part 2 adds a panel for
 every block of waves 2–3. Each block is **optional**: missing or the wrong version gives `{"present": false}` and the
@@ -136,7 +224,9 @@ already on main and merged into this branch; MEDIA's contract commit is in, its 
 
 ## How to build / run / test this track
 - Build: `cmake --build build --config Release --target himmel_ui fake_engine ui_bridge_tests`
-- Test: `build\bin\Release\ui_bridge_tests.exe` (358 checks, also in ctest); `node --check gui/app.js gui/panels.js gui/views.js`.
+- Test: `build\bin\Release\ui_bridge_tests.exe` (463 checks, also in ctest); `node --check` on every `gui/*.js`.
+- e2e (one stack per machine; it refuses while any himmel process runs): `python tools/gui_flow_e2e.py` (`--keep` keeps the temp root).
+- Live, wave 7: launch config `himmel-gui-w7-test` (`--show-root %TEMP%\himmel_gui_w7`); check `tasklist` first.
 - Run (test data only): launch config `himmel-sim-test`. It runs `himmel.exe --sim -- --show-root build/test-show-root`;
   the children run in `build/bin/Release`, so the root lands in `build/bin/Release/build/test-show-root`. Then open
   http://127.0.0.1:8790. Read-only second view: launch config `himmel-ui-watch`.

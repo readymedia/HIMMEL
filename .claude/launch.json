@@ -161,6 +161,20 @@
       ],
       "port": 8783,
       "url": "http://127.0.0.1:8783"
+    },
+    {
+      "name": "himmel-gui-w7-test",
+      "runtimeExecutable": "build/bin/Release/himmel.exe",
+      "runtimeArgs": [
+        "--sim",
+        "--",
+        "--show-root",
+        "C:/Users/magnu/AppData/Local/Temp/himmel_gui_w7",
+        "--size",
+        "960x540"
+      ],
+      "port": 8790,
+      "url": "http://127.0.0.1:8790"
     }
   ]
 }

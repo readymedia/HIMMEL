@@ -38,7 +38,8 @@ static void test_layer_commands() {
     CHECK(r.ok && r.cmd.i == -1);
     CHECK(!P(R"({"type":"LayerClip","deck":0,"layer":0,"value":14})").ok);   // not in the catalog
     CHECK(P(R"({"type":"LayerClip","deck":0,"layer":0,"value":200})", CatalogLimits{}).ok);  // unknown catalog: engine checks
-    CHECK(!P(R"({"type":"LayerClip","deck":0,"layer":0,"value":256})", CatalogLimits{}).ok);  // over kMaxClips
+    CHECK(P(R"({"type":"LayerClip","deck":0,"layer":0,"value":256})", CatalogLimits{}).ok);   // catalog v3: ids above 255
+    CHECK(!P(R"({"type":"LayerClip","deck":0,"layer":0,"value":8192})", CatalogLimits{}).ok);  // over kMaxCatalogClips
     CHECK(!P(R"({"type":"LayerClip","deck":0,"layer":0,"value":-2})").ok);
     CHECK(!P(R"({"type":"LayerClip","deck":0,"layer":0})").ok);
     CHECK(!P(R"({"type":"LayerClip","deck":0,"layer":0,"value":1.5})").ok);
@@ -823,6 +824,103 @@ static void test_part3() {
     }
 }
 
+// GUI wave 7: the import path dialog and the queue ETA (pure helpers).
+static void test_wave7() {
+    using namespace himmel::ui;
+    CHECK(import_kind_of("a.MOV") == "video" && import_kind_of("x.mp4") == "video" && import_kind_of("clip.webm") == "video");
+    CHECK(import_kind_of("p.PNG") == "still" && import_kind_of("p.jpeg") == "still" && import_kind_of("logo.svg") == "vector");
+    CHECK(import_kind_of("g.gif") == "animation" && import_kind_of("notes.txt").empty() && import_kind_of("noext").empty());
+    CHECK(import_kind_of(".mov") == "video" && import_kind_of("trail.").empty());
+    CHECK(parent_dir_of(R"(C:\Clips\Club)") == R"(C:\Clips)");
+    CHECK(parent_dir_of(R"(C:\Clips\Club\)") == R"(C:\Clips)");
+    CHECK(parent_dir_of(R"(C:\Clips)") == R"(C:\)");
+    CHECK(parent_dir_of(R"(C:\)").empty() && parent_dir_of("C:").empty() && parent_dir_of("").empty());
+    CHECK(parent_dir_of("D:/a/b") == "D:/a");
+    CHECK(parent_dir_of(R"(\\srv\share)").empty() && parent_dir_of(R"(\\srv\share\x)") == R"(\\srv\share)");
+    CHECK(eta_seconds(0, 3.0) == 0 && eta_seconds(4, 2.5) == 10 && eta_seconds(3, 0) == -1 && eta_seconds(3, -1) == -1);
+    CHECK(eta_seconds(100000, 10.0) == 86400 && eta_seconds(2, 1e9) == -1);
+    CHECK(url_decode("C%3A%5CClips%5CMy+Club") == R"(C:\Clips\My Club)");
+    CHECK(url_decode("%E2%9C%93") == "\xE2\x9C\x93" && url_decode("100%") == "100%" && url_decode("%zz") == "%zz");
+
+    // Library block v3 (MEDIA wave 7, library-db.md §11): the new commands and Import options.
+    namespace lib = himmel::library;
+    using nlohmann::json;
+    lib::IngestCommand ic;
+    std::string err;
+    CHECK(ingest_command_from_json(json{{"type", "ClearQueue"}}, ic, err) && ic.type == 68 && ic.path[0] == 0);
+    CHECK(ingest_command_from_json(json{{"type", "Library"}, {"path", R"(E:\Himmel Library)"}, {"move", true}}, ic, err) &&
+          ic.type == 69 && (ic.flags & lib::kIngestMove) && std::string(ic.path) == R"(E:\Himmel Library)");
+    CHECK(!ingest_command_from_json(json{{"type", "Library"}}, ic, err));   // needs a path
+    CHECK(ingest_command_from_json(json{{"type", "Import"}, {"path", R"(D:\Clips)"}, {"height", 720}, {"hapq", true},
+                                        {"skip_known", true}, {"dry_run", true}, {"fit", true}, {"conform_hz", 60}}, ic, err) &&
+          ic.i == 720 && ic.conform_hz == 60 && (ic.flags & lib::kIngestHapQ) && (ic.flags & lib::kIngestSkipKnown) &&
+          (ic.flags & lib::kIngestDryRun) && (ic.flags & lib::kIngestFit) && !(ic.flags & lib::kIngestList));
+    CHECK(ingest_command_from_json(json{{"type", "Import"}, {"path", R"(C:\t\list.txt)"}, {"list", true}}, ic, err) &&
+          (ic.flags & lib::kIngestList) && ic.i == 0 && ic.conform_hz == 0);
+    CHECK(!ingest_command_from_json(json{{"type", "Import"}, {"path", R"(D:\Clips)"}, {"height", 100}}, ic, err));
+    CHECK(!ingest_command_from_json(json{{"type", "Import"}, {"path", R"(D:\Clips)"}, {"height", 5000}}, ic, err));
+    CHECK(!ingest_command_from_json(json{{"type", "Import"}, {"path", R"(D:\Clips)"}, {"conform_hz", 30}}, ic, err));
+    CHECK(ingest_command_from_json(json{{"type", "Import"}, {"path", R"(D:\Clips)"}, {"height", 0}}, ic, err) && ic.i == 0);
+    lib::IngestReply rep{};
+    rep.seq = 9; rep.type = 60; rep.status = static_cast<uint8_t>(lib::IngestStatus::NoSpace);
+    json rj = ingest_reply_to_json(rep);
+    CHECK(rj["status"] == "NoSpace" && rj["ok"] == false && rj["type"] == "Import");
+    rep.type = 69; rep.status = static_cast<uint8_t>(lib::IngestStatus::Busy);
+    rj = ingest_reply_to_json(rep);
+    CHECK(rj["status"] == "Busy" && rj["type"] == "Library");
+    LibraryV3 v;
+    v.stored_mode = 3; v.disk_low = 1; v.disk_free = 7300000000ull; v.disk_total = 500000000000ull; v.disk_reserve = 10000000000ull;
+    v.library_bytes = 123; v.queue_bytes = 17200000000ull;
+    auto prog = std::make_unique<lib::IngestProgress>();
+    prog->done = 3; prog->total = 86; prog->clip = 41; prog->file_progress = 0.4567f; prog->eta_s = 1260;
+    std::snprintf(prog->file, sizeof prog->file, "beach.mp4");
+    std::snprintf(prog->error, sizeof prog->error, "The disk is full.");
+    auto plan = std::make_unique<lib::IngestPlan>();
+    plan->seq = 4; plan->producer = 1; plan->refused = 1; plan->clips = 86; plan->fit_clips = 0; plan->need_bytes = 17200000000ull;
+    std::snprintf(plan->message, sizeof plan->message, "needs ~17.2 GB for 86 clips");
+    auto rt = std::make_unique<lib::LibraryRoot>();
+    std::snprintf(rt->path, sizeof rt->path, R"(E:\Lib)");
+    rt->move_state = static_cast<uint32_t>(lib::MoveState::Copying); rt->move_progress = 0.25f;
+    json lj;
+    library_v3_to_json(lj, v, *prog, *plan, *rt, 1);
+    CHECK(lj["stored_mode"] == "Hold" && lj["disk_low"] == true && lj["disk"]["free"] == 7300000000ull && lj["disk"]["queue_bytes"] == 17200000000ull);
+    CHECK(lj["progress"]["done"] == 3 && lj["progress"]["total"] == 86 && lj["progress"]["file"] == "beach.mp4" &&
+          lj["progress"]["eta_s"] == 1260 && std::fabs(lj["progress"]["file_progress"].get<double>() - 0.457) < 1e-9 &&
+          lj["progress"]["error"] == "The disk is full.");
+    CHECK(lj["plan"]["mine"] == true && lj["plan"]["refused"] == true && lj["plan"]["clips"] == 86 && lj["plan"]["message"] == "needs ~17.2 GB for 86 clips");
+    CHECK(lj["root_info"]["path"] == R"(E:\Lib)" && lj["root_info"]["move_state"] == "Copying");
+    library_v3_to_json(lj, v, *prog, *plan, *rt, 3);
+    CHECK(lj["plan"]["mine"] == false);
+    // POST /library/upload refusals (LEAD conditions): names, size cap, the disk guard.
+    CHECK(upload_name_error("clip.mp4").empty() && upload_name_error("Beach Day (2).MOV").empty() && upload_name_error("logo.svg").empty());
+    CHECK(!upload_name_error("").empty() && !upload_name_error("..").empty() && !upload_name_error("notes.txt").empty());
+    CHECK(!upload_name_error(R"(..\evil.mp4)").empty() && !upload_name_error("a/b.mp4").empty() && !upload_name_error("C:x.mp4").empty());
+    CHECK(!upload_name_error("x.mp4 ").empty() && !upload_name_error("x.exe").empty() && !upload_name_error(std::string("a\x01.mp4")).empty());
+    CHECK(!upload_name_error(std::string(250, 'a') + ".mp4").empty());
+    const uint64_t GB = 1ull << 30;
+    CHECK(upload_space_error(GB, kUploadCapBytes, true, 50 * GB, 10 * GB, false).empty());
+    CHECK(!upload_space_error(0, kUploadCapBytes, true, 50 * GB, 10 * GB, false).empty());              // empty
+    CHECK(!upload_space_error(9 * GB, kUploadCapBytes, true, 500 * GB, 10 * GB, false).empty());        // above the cap
+    CHECK(!upload_space_error(GB, kUploadCapBytes, false, 50 * GB, 10 * GB, false).empty());            // no guard
+    CHECK(!upload_space_error(GB, kUploadCapBytes, true, 50 * GB, 10 * GB, true).empty());              // disk_low
+    CHECK(!upload_space_error(2 * GB, kUploadCapBytes, true, 11 * GB, 10 * GB, false).empty());         // into the reserve
+    CHECK(!upload_space_error(2 * GB, kUploadCapBytes, true, GB, 0, false).empty());                    // bigger than free
+    CHECK(upload_space_error(GB, kUploadCapBytes, true, 11 * GB, 10 * GB, false).empty());              // exactly fits
+    // LayerClipLib (75, ENGINE wave 7) and clip ids above 255 (catalog v3).
+    {
+        himmel::ui::CatalogLimits lim{1000, 10};
+        auto r1 = command_from_json(json{{"type", "LayerClipLib"}, {"deck", 0}, {"layer", 1}, {"value", 42}}, lim);
+        CHECK(r1.ok && r1.cmd.type == himmel::protocol::CommandType::LayerClipLib && r1.cmd.i == 42 && r1.cmd.layer == 1);
+        CHECK(!command_from_json(json{{"type", "LayerClipLib"}, {"deck", 0}, {"layer", 1}, {"value", 0}}, lim).ok);
+        CHECK(!command_from_json(json{{"type", "LayerClipLib"}, {"deck", 0}, {"layer", 1}}, lim).ok);
+        CHECK(command_from_json(json{{"type", "LayerClip"}, {"deck", 0}, {"layer", 0}, {"value", 700}}, lim).ok);
+        CHECK(!command_from_json(json{{"type", "LayerClip"}, {"deck", 0}, {"layer", 0}, {"value", 1000}}, lim).ok);
+        CHECK(command_to_json(r1.cmd)["type"] == "LayerClipLib");
+    }
+    json nm = panels_names();
+    CHECK(nm["ingest"].size() == 10 && nm["ingest"][8] == "ClearQueue" && nm["ingest"][9] == "Library");
+}
+
 int main() {
     test_layer_commands();
     test_fx_commands();
@@ -835,6 +933,7 @@ int main() {
     test_panel_json();
     test_http();
     test_part3();
+    test_wave7();
     std::printf("\n%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

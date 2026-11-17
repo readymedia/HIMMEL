@@ -26,6 +26,9 @@ bool parse_http_head(std::string_view head, HttpRequest& out);
 // Value of `key` in a raw query string ("a=1&since=42"), or "" if absent.
 std::string query_param(std::string_view query, std::string_view key);
 
+// Percent-decoding of a query value ('+' = space); a bad escape is kept as it is.
+std::string url_decode(std::string_view s);
+
 // A static path is safe if it only has [A-Za-z0-9_.-/] and no "..".
 bool safe_static_path(std::string_view path);
 

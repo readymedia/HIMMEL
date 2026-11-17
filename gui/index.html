@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="m11.css">
 <link rel="stylesheet" href="panels.css">
 <link rel="stylesheet" href="build.css">
+<link rel="stylesheet" href="flows.css">
 </head>
 <body>
 <header id="top">
@@ -43,6 +44,7 @@
   <div class="spacer"></div>
   <div class="hint" id="armHint"></div>
   <button class="black" id="blackBtn" title="Master black (the outputs stay alive)">BLACK</button>
+  <button class="quitBtn" id="quitBtn" title="Quit Himmel: asks first, then the outputs go dark and every Himmel program stops (the autosave keeps your work)">⏻ QUIT</button>
 </header>
 
 <!-- ====================================================================== PERFORM -->
@@ -84,7 +86,7 @@
 
   <aside class="library">
     <div class="libtabs">
-      <button data-lib="clips" class="on">CLIPS</button>
+      <button data-lib="clips" class="on" title="The clips the engine can play (the media folder and every ready library clip)">CLIPS</button>
       <button data-lib="gens" title="Generators: effects that paint a picture. On an empty layer they are the source.">GENERATORS</button>
     </div>
     <div class="libhead"><input id="clipFilter" type="search" placeholder="filter" autocomplete="off"></div>
@@ -95,9 +97,9 @@
   <section class="inspector" id="inspector">
     <div class="tabs">
       <button data-tab="clip" class="on" id="tabClip" title="The clip editor: transport, in / out, cue points, beat loop">CLIP</button>
-      <button data-tab="layer" id="tabLayer">LAYER FX</button>
-      <button data-tab="deck" id="tabDeck">DECK FX</button>
-      <button data-tab="master" id="tabMaster">MASTER FX</button>
+      <button data-tab="layer" id="tabLayer" title="The 4 effect slots of the focused layer">LAYER FX</button>
+      <button data-tab="deck" id="tabDeck" title="The 4 effect slots of the focused deck (over all its layers)">DECK FX</button>
+      <button data-tab="master" id="tabMaster" title="The 4 master effect slots (over everything on air)">MASTER FX</button>
       <button data-tab="hit" id="tabHit" title="The HIT layer (one-shots on top of PROGRAM)">HIT</button>
       <button data-tab="scenes" id="tabScenes" class="hidden" title="Scenes of the bank / song: recall, save (REC), rename, dice and locks, macros">SCENES</button>
       <div class="layerbar" id="layerBar">
@@ -121,8 +123,10 @@
 <main id="start" class="view hidden">
   <div class="wizbar" id="wizBar">
     <button data-step="0" class="hidden" title="The start screen: new / open / recent project, autosave, health"><b>0</b> PROJECT</button>
-    <button data-step="1"><b>1</b> CLIPS</button><button data-step="2"><b>2</b> WEAPON</button>
-    <button data-step="3"><b>3</b> OUTPUTS</button><button data-step="4"><b>4</b> PLAY</button>
+    <button data-step="1" title="Import clips"><b>1</b> CLIPS</button><button data-step="2" title="The controller(s) you play with"><b>2</b> WEAPON</button>
+    <button data-step="3" title="Where the picture goes: outputs, resolution, IDENTIFY"><b>3</b> OUTPUTS</button><button data-step="4" title="Sound in and the health check"><b>4</b> SOUND</button>
+    <button data-step="5" title="Put clips on the PREVIEW layers"><b>5</b> LAYERS</button><button data-step="6" title="TAKE: PREVIEW goes on air; add an effect"><b>6</b> TAKE + FX</button>
+    <button data-step="7" title="Save a scene and the project"><b>7</b> SAVE</button>
   </div>
   <div class="wizbody" id="wizBody"></div>
 </main>
@@ -143,8 +147,9 @@
 <!-- ====================================================================== LIBRARY -->
 <main id="library" class="view hidden">
   <div class="pagewrap">
-    <div class="libtop"><h2>Library</h2><span class="dim" id="libCount"></span></div>
-    <div class="libhead" id="libHead"></div>
+    <div class="libtop"><h2>Library</h2><span class="dim" id="libCount"></span>
+      <span class="dim lbhelp">Import clips, then drag them onto a layer below (or double-click = the focused layer, LOAD ▾ = choose).</span></div>
+    <div class="libhead2" id="libHead"></div>
     <div class="libgrid" id="libGrid"></div>
   </div>
 </main>
@@ -187,6 +192,8 @@
 <div id="toasts"></div>
 <template id="cvTpl"><canvas width="480" height="270"></canvas></template>
 <script src="app.js"></script>
+<script src="flows.js"></script>
+<script src="library.js"></script>
 <script src="panels.js"></script>
 <script src="views.js"></script>
 <script src="build.js"></script>

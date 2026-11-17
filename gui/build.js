@@ -15,6 +15,7 @@
 (() => {
   const $ = id => document.getElementById(id);
   const { el, send, toast } = window.H;
+  const H = window.H;
   const S = window.S;
 
   const B = { adds: [0, 0, 0, 0], doc: null, at: 0, key: '', fetching: false, again: 0, sel: -1, pad: 12, built: false, rkey: '' };
@@ -106,7 +107,7 @@
             btn('BPM', 'The song\'s tempo (0 = none)', () => songBpm(i, so.bpm || 0)),
             btn('↑', 'Move up in the setlist', () => i > 0 && send({ type: 'SongEdit', param: 'Move', value: i, slot: i - 1 })),
             btn('↓', 'Move down', () => i + 1 < songs.length && send({ type: 'SongEdit', param: 'Move', value: i, slot: i + 1 })),
-            btn('✕', 'Delete the song and its scenes', () => confirm(`Delete "${so.name}" and its scenes?`) && send({ type: 'SongEdit', param: 'Delete', value: i }), 'bad'));
+            btn('✕', 'Delete the song and its scenes', async () => await H.confirm(`Delete "${so.name}" and its scenes?`) && send({ type: 'SongEdit', param: 'Delete', value: i }), 'bad'));
           r.append(tools);
         }
         list.append(r);
@@ -125,7 +126,7 @@
     const pd = previewDeck();
     sh.pads.forEach((p, k) => {
       if (!p.used) return;
-      const r = el('button', 'bdscene' + (k === B.sel ? ' sel' : ''));
+      const r = el('button', 'bdscene' + (k === B.sel ? ' sel' : '')); r.title = `Scene ${k + 1} ${p.name}: click = show it here · double-click = REHEARSE (load to PREVIEW)`;
       const sw = el('i'); sw.style.background = '#' + (p.rgb ?? 0x404040).toString(16).padStart(6, '0');
       const sc = docScene(k);
       const nl = sc ? (sc.look?.layers || []).filter(x => x?.clip?.name).length : 0;
@@ -162,7 +163,16 @@
   function renderMid() {
     const sh = S.show, M = B.mid; M.textContent = '';
     const k = B.sel, p = sh.pads[k];
-    if (k < 0 || !p?.used) { M.append(el('div', 'empty', 'Pick a scene on the left (double-click = REHEARSE on PREVIEW).')); return; }
+    if (k < 0 || !p?.used) {
+      const e = el('div', 'empty');
+      if (!sh.scene_count) {
+        e.append(el('div', null, 'No scenes yet. A scene is the look of a deck (its clips, effects, reactions and macros) saved on a pad.'),
+          el('div', 'dim', 'Put clips on the PREVIEW layers (PERFORM or LIBRARY), then save the PREVIEW deck as scene 1.'));
+        const b = btn('SAVE PREVIEW AS A SCENE', 'SceneSave of the PREVIEW deck on the next free pad (REC on the MK2)', () => send({ type: 'SceneSave', deck: previewDeck(), value: -1 }), 'primary');
+        e.append(b);
+      } else e.append(el('div', null, 'Pick a scene on the left (double-click = REHEARSE on PREVIEW).'));
+      M.append(e); return;
+    }
     const sc = docScene(k), ed = editable(k);
     const head = el('div', 'bdshead');
     head.append(el('span', 'bdsname', `${k + 1} ${p.name}`));
@@ -171,7 +181,7 @@
     head.append(ed ? el('span', 'chip prevchip', 'PREVIEW · rehearsing') :
       btn('REHEARSE = load to PREVIEW', 'Recall this scene into the PREVIEW deck (a cut) so you can edit its kit and macros', () => rehearse(k), 'primary'));
     head.append(btn('RENAME', 'Rename the scene', async () => { const n = await ask(`RENAME SCENE ${k + 1}`, p.name); if (n) send({ type: 'SongEdit', param: 'RenameScene', slot: k, text: n }); }));
-    if (sh.use_setlist && sh.song >= 0) head.append(btn('✕', 'Remove this scene from the song', () => confirm(`Remove "${p.name}" from the song?`) && send({ type: 'SongEdit', param: 'RemoveScene', value: sh.song, slot: k }), 'bad'));
+    if (sh.use_setlist && sh.song >= 0) head.append(btn('✕', 'Remove this scene from the song', async () => await H.confirm(`Remove "${p.name}" from the song?`) && send({ type: 'SongEdit', param: 'RemoveScene', value: sh.song, slot: k }), 'bad'));
     M.append(head);
     if (!sc) { M.append(el('div', 'dim', B.doc?.ok === false ? 'The show document is not readable: ' + (B.doc.error || '') : 'Reading the show document…')); return; }
     // Layers.
@@ -316,12 +326,54 @@
       b.append(el('span', 'bdpn', String(i + 1)), el('span', 'bdpname', lab.n || '—'));
       if (lab.tag) b.append(el('span', 'bdptag t-' + lab.tag, lab.tag));
       b.addEventListener('click', () => { B.pad = i; B.rkey = ''; window.H.invalidate(); });
+      b.title = `Pad ${i + 1}: ${lab.n || 'empty'}` + (ed ? ' · click = edit · drop a clip here = this pad plays it' : '');
+      if (ed) {
+        b.addEventListener('dragover', e => { if (e.dataTransfer.types.includes('text/x-himmel-clip')) { e.preventDefault(); b.classList.add('dropover'); } });
+        b.addEventListener('dragleave', () => b.classList.remove('dropover'));
+        b.addEventListener('drop', e => {
+          b.classList.remove('dropover');
+          const ids = window.Flows.dragIds(e);
+          if (!ids.length) return;
+          e.preventDefault();
+          const tgt = p && (p.kind === 'clip' || p.kind === 'cue') ? (TAG_FILE[p.target] || 'Selected') : 'Selected';
+          // Several clips fill this pad and the next ones (pad numbers up, max 16).
+          ids.filter(x => typeof x === 'number').slice(0, 16 - i).forEach((id, k) => send({ type: 'KitSet', deck: previewDeck(), slot: i + k, param: 'Clip', layer: tgt, value: id }));
+          B.pad = i; B.rkey = '';
+          toast(ids.length > 1 ? `${Math.min(ids.length, 16 - i)} clips → pads ${i + 1}…` : `Pad ${i + 1} → ${window.Flows.nameOf(ids[0])}`);
+        });
+      }
       grid.append(b);
     }
     R.append(grid);
     if (!sc) { R.append(el('div', 'dim', 'Reading the show document…')); return; }
-    if (!kit.some(Boolean)) R.append(el('div', 'dim', 'No scene kit: the pads play the BANK kit (the bank\'s clips on the selected layer).'));
+    if (!kit.some(Boolean)) R.append(el('div', 'dim', 'No scene kit: the pads play the BANK kit (the bank\'s clips on the selected layer).' + (ed ? ' FILL KIT proposes one, or drag clips from the clip list / LIBRARY onto pads.' : '')));
     R.append(padEditor(kit[B.pad] || null, ed));
+    if (ed) R.append(clipShelf());
+  }
+  // A shelf of clips to drag onto the pads (GUI w7): the catalog with library thumbnails, filterable.
+  function clipShelf() {
+    const box = el('div', 'bdshelf');
+    const q = el('input'); q.type = 'search'; q.placeholder = 'clips: find…'; q.value = B.shelfQ || '';
+    q.addEventListener('keydown', e => e.stopPropagation());
+    const list = el('div', 'bdshelfl');
+    const fill = () => {
+      list.textContent = '';
+      const f = (B.shelfQ = q.value.trim().toLowerCase());
+      for (const c of (S.cat?.clips || []).filter(c => !f || c.name.toLowerCase().includes(f)).slice(0, 80)) {
+        const it = el('div', 'bdsc'); it.draggable = true;
+        const u = window.Flows.thumbUrl(window.Flows.rowOf(c.id));
+        it.style.background = u ? `center / cover url(${u})` : window.H.rgb(c.thumb_rgb);
+        it.append(el('span', null, c.name.replace(/\.mov$/i, '')));
+        it.title = c.name + ' · drag onto a pad';
+        it.addEventListener('dragstart', e => window.Flows.setDrag(e, c.id));
+        list.append(it);
+      }
+      if (!list.children.length) list.append(el('div', 'dim', S.cat?.clips?.length ? 'Nothing matches.' : 'No clips yet: import some in LIBRARY.'));
+    };
+    q.addEventListener('input', fill);
+    fill();
+    box.append(el('span', 'lbl', 'drag clips onto pads'), q, list);
+    return box;
   }
   function padEditor(p, ed) {
     const box = el('div', 'bdpaded');
@@ -359,7 +411,19 @@
     else if (kind === 'Effect') { const e = (S.cat?.effects || []).find(x => x.name === p.name); if (e) item.value = e.id; }
     else if (kind === 'Scene') item.value = p.id ?? 0;
     else if (kind === 'Action') item.value = ACTIONS[p.id ?? 0];
-    const row = el('div', 'bdpadrow'); row.append(el('span', 'lbl', 'holds'), kSel, item);
+    const q = el('input'); q.type = 'search'; q.placeholder = 'find…'; q.className = 'bdfind'; q.title = 'Filter the list (clip or effect name)';
+    q.addEventListener('keydown', e => e.stopPropagation());
+    q.addEventListener('input', () => {
+      const f = q.value.trim().toLowerCase();
+      let first = null;
+      for (const o of item.options) { const hit = !f || o.textContent.toLowerCase().includes(f); o.hidden = !hit; if (hit && !first) first = o; }
+      if (first && item.selectedOptions[0]?.hidden) item.value = first.value;
+    });
+    kSel.addEventListener('change', () => { q.value = ''; q.classList.toggle('hidden', !['Clip', 'Effect'].includes(kSel.value)); });
+    q.classList.toggle('hidden', !['Clip', 'Effect'].includes(kind));
+    kSel.title = 'What the pad does: a clip, a cue point, an effect hit, a scene or an action';
+    item.title = 'Which clip / cue / effect / scene / action';
+    const row = el('div', 'bdpadrow'); row.append(el('span', 'lbl', 'holds'), kSel, q, item);
     const set = btn('SET PAD', 'KitSet on the scene on PREVIEW', () => {
       const kv = kSel.value;
       const c = { type: 'KitSet', deck: previewDeck(), slot: B.pad, param: kv };
@@ -374,8 +438,8 @@
   }
   // "Fill kit" (perform.md §4.2, GUESS: the default layout): 13–16 backgrounds → L1, 9–12 overlays
   // (alpha first) → L3, 5–8 effect hits, 1–2 HIT clips, 3 BLACK, 4 NEXT SCENE.
-  function fillKit(sc) {
-    if ((sc?.kit || []).some(Boolean) && !confirm('Replace the kit of this scene with the default layout?')) return;
+  async function fillKit(sc) {
+    if ((sc?.kit || []).some(Boolean) && !await H.confirm('Replace the kit of this scene with the default layout?')) return;
     const d = previewDeck(), clips = S.cat?.clips || [], fx = (S.cat?.effects || []).filter(e => e.kind !== 'generator');
     if (!clips.length) return toast('The engine has no clips yet', 'bad');
     const alpha = clips.filter(c => c.codec === 1), plain = clips.filter(c => c.codec !== 1);

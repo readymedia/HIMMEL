@@ -9,11 +9,16 @@
 (() => {
   const $ = id => document.getElementById(id);
   const { el } = window.H;
+  const H = window.H;
   const S = window.S;
 
   // ================================================================ start wizard
   const W = { step: 1, auto: true };
-  const NEXT = { 0: 'Next: clips', 1: 'Next: weapon', 2: 'Next: outputs', 3: 'Next: play', 4: 'Open Perform' };
+  // GUI w7 (D170): steps 5–7 walk a first-time user through the show itself: clips onto layers,
+  // TAKE + an effect, a scene + the project saved. Each has a live checklist from the engine's state.
+  const NEXT = { 0: 'Next: clips', 1: 'Next: weapon', 2: 'Next: outputs', 3: 'Next: sound', 4: 'Next: layers', 5: 'Next: TAKE + effects', 6: 'Next: save', 7: 'Open Perform' };
+  const LAST = 7;
+  const TITLES = ['Start: your project', 'Add clips', 'Choose your weapon', 'Set outputs', 'Sound and health', 'Put clips on layers', 'TAKE and add an effect', 'Save a scene and the project'];
 
   function card(title, body, cls) {
     const c = el('div', 'wcard' + (cls ? ' ' + cls : ''));
@@ -23,10 +28,11 @@
   }
   function wizNav() {
     const nav = el('div', 'wiznav');
-    if (W.step > (S.show?.present ? 0 : 1)) { const b = el('button', null, '◀ Back'); b.addEventListener('click', () => go(W.step - 1)); nav.append(b); }
+    if (W.step > (S.show?.present ? 0 : 1)) { const b = el('button', null, '◀ Back'); b.title = 'The step before'; b.addEventListener('click', () => go(W.step - 1)); nav.append(b); }
     nav.append(el('div', 'spacer'));
     const n = el('button', 'primary', NEXT[W.step] + ' ▶');
-    n.addEventListener('click', () => (W.step < 4 ? go(W.step + 1) : window.setView('perform')));
+    n.title = W.step < LAST ? 'The next step (you can always come back: click a step in the bar above)' : 'Play the show in PERFORM';
+    n.addEventListener('click', () => (W.step < LAST ? go(W.step + 1) : window.setView('perform')));
     nav.append(n);
     return nav;
   }
@@ -43,19 +49,24 @@
       b.classList.toggle('on', +b.dataset.step === W.step);
     }
     const key = W.step + '|' + stepKey(W.step);
-    if (W.key === key) { if (W.step === 4 && W.u) window.Panels.W.updatePicker(W.u); return; }
+    if (W.key === key) { if (W.step === 4 && W.u) window.Panels.W.updatePicker(W.u); if (W.step === 1) stepProgress(); return; }
     W.key = key;
     const body = $('wizBody'); body.textContent = '';
-    body.append(el('h2', null, ['Start: your project', 'Add clips', 'Choose your weapon', 'Set outputs', 'Play'][W.step]));
+    body.append(el('h2', null, TITLES[W.step]));
     W.u = null;
-    ({ 0: step0, 1: step1, 2: step2, 3: step3, 4: step4 })[W.step](body);
+    ({ 0: step0, 1: step1, 2: step2, 3: step3, 4: step4, 5: step5, 6: step6, 7: step7 })[W.step](body);
     body.append(wizNav());
     if (W.u) window.Panels.W.updatePicker(W.u);
   }
   function stepKey(step) {
     const b = S.bridge, m = S.mk2, L = S.live, lib = S.library, o = S.outputs, a = S.audio;
     if (step === 0) { const sh = S.show, f = sh?.files; return JSON.stringify([sh?.present, sh?.project, sh?.dirty, sh?.busy, f?.path, f?.recent, f?.restored, f?.saved_unix, f?.autosave_unix, f?.missing_count, b?.engine, S.cat?.clips.length, m?.connected, o?.count]); }
-    if (step === 1) return JSON.stringify([S.cat?.clips.length ?? -1, S.cat?.effects.length ?? -1, lib?.present, lib?.alive, lib?.queued, lib?.working, lib?.ready_total, lib?.failed_total, lib?.job?.name, lib?.catalog_full]);
+    if (step === 1) return JSON.stringify([S.cat?.clips.length ?? -1, S.cat?.effects.length ?? -1, lib?.present, lib?.alive, lib?.ready_total, lib?.failed_total, lib?.catalog_full, !!(lib?.queued || lib?.working)]);
+    if (step >= 5) {
+      const lay = L ? L.deck.map(d => d.layer.map(x => [x.clip, x.fx.filter(f => f.effect >= 0).length])) : null;
+      const sh = S.show;
+      return JSON.stringify([step, b?.engine, S.cat?.clips.length, !!window.Flows?.rows(), lay, L?.program_deck, L?.focus_deck, L?.focus_layer, sh?.scene_count, sh?.dirty, sh?.files?.path, sh?.project, sh?.pads?.map(p => p.used)]);
+    }
     if (step === 2) return JSON.stringify([m?.present, m?.connected, m?.alive, (m?.pressed || []).join('+'), L?.producer?.[0]?.alive, L?.producer?.[1]?.alive, S.weapons, a?.present]);
     if (step === 3) return JSON.stringify([b?.preview, b?.engine, o]);
     // Step 4 holds a live meter: rebuilt only when the input changes; the meter updates in place.
@@ -83,15 +94,15 @@
       body.append(card('AUTOSAVE', c));
     }
     const row = el('div', 'wstart');
-    const sure = cmd => () => { if (!sh.dirty || confirm('Unsaved changes are lost (the autosave keeps them). Go on?')) send(cmd); };
-    const big = (title, sub, fn, cls) => { const x = el('button', 'wproj' + (cls ? ' ' + cls : '')); x.append(el('b', null, title), el('span', 'dim', sub)); x.addEventListener('click', fn); return x; };
+    const sure = cmd => async () => { if (!sh.dirty || await H.confirm('Unsaved changes are lost (the autosave keeps them). Go on?')) send(cmd); };
+    const big = (title, sub, fn, cls) => { const x = el('button', 'wproj' + (cls ? ' ' + cls : '')); x.title = title + ': ' + sub; x.append(el('b', null, title), el('span', 'dim', sub)); x.addEventListener('click', fn); return x; };
     row.append(
       big('Keep playing', `${sh.project}${sh.dirty ? ' (unsaved changes)' : ''}`, () => go(1), 'sel'),
       big('New project · 3 screens', 'Empty, the 3-screen template', sure({ type: 'Project', param: 'New', value: 3 })),
       big('New project · 1 screen', 'Empty, one output', sure({ type: 'Project', param: 'New', value: 1 })),
       big('Open…', 'A project folder or a .himmelshow file', async () => {
         const p = await ask('OPEN · project folder or .himmelshow file', '', 'e.g. C:\\Users\\me\\Documents\\Himmel\\Projects\\Club.himmel');
-        if (p && (!sh.dirty || confirm('Unsaved changes are lost (the autosave keeps them). Open?'))) send({ type: 'Project', param: 'Open', text: p });
+        if (p && (!sh.dirty || await H.confirm('Unsaved changes are lost (the autosave keeps them). Open?'))) send({ type: 'Project', param: 'Open', text: p });
       }));
     body.append(row, el('div', 'lbl', 'RECENT PROJECTS'));
     const rec = el('div', 'wstart');
@@ -106,12 +117,18 @@
     const lib = S.library, PW = window.Panels.W;
     const drop = el('div', 'drop');
     const root = lib?.root || '';
-    drop.append(el('div', 'big', 'Drop clips into the library folder'),
-      el('div', 'mono', root ? root + '\\originals' : 'Documents\\Himmel\\Library\\originals'),
-      el('div', 'dim', 'Video, stills, GIFs, SVG and image sequences are converted to HAP, analysed (colours, motion, mood, loops) and tagged, in the background. A browser cannot hand files to Himmel: copy them into that folder (Explorer), they appear in the LIBRARY view when ready.'));
+    const imp = el('button', 'primary', '+ IMPORT A FOLDER…'); imp.title = 'Choose a folder of videos, pictures or GIFs (subfolders too). The originals stay where they are.';
+    imp.addEventListener('click', () => window.Lib.importDialog('folder'));
+    const impF = el('button', null, '+ IMPORT FILES…'); impF.title = 'Tick single files in a folder';
+    impF.addEventListener('click', () => window.Lib.importDialog('files'));
+    const btns = el('div', 'askrow'); btns.append(imp, impF);
+    drop.append(el('div', 'big', 'Import a folder of clips'), btns,
+      el('div', 'dim', 'Video, stills, GIFs, SVG and image sequences become fast HAP copies and are analysed (colours, motion, mood, loops) in the background. The first clips are playable while the rest still import: you do not have to wait.'),
+      el('div', 'dim mono', root ? 'or copy files into ' + root + '\\originals (watched)' : ''));
     drop.addEventListener('dragover', e => e.preventDefault());
-    drop.addEventListener('drop', e => { e.preventDefault(); window.H.toast('Copy the files into ' + (root ? root + '\\originals' : 'the originals folder') + ' with Explorer: the page cannot import them itself.'); });
+    drop.addEventListener('drop', e => { e.preventDefault(); window.H.toast('Drop files on the LIBRARY page to copy them in, or use IMPORT A FOLDER… (imports in place, no copy).'); });
     body.append(drop);
+    W.prog = el('div', 'wprog'); body.append(W.prog); stepProgress();
     const st = el('div');
     if (PW.has(lib)) {
       st.append(el('div', 'wstat ' + (lib.alive ? 'ok' : 'warn'), lib.alive ? (lib.working || lib.queued ? 'IMPORTING' : 'READY FOR NEW FILES') : 'IMPORT WORKER NOT RUNNING'),
@@ -121,7 +138,7 @@
     } else {
       st.append(el('div', 'wstat warn', 'IMPORT WORKER NOT RUNNING'), el('div', 'dim', 'himmel.exe starts himmel_ingest (not with --no-show-files unless --library is given). The engine still plays every HAP .mov in media/.'));
     }
-    const open = el('button', null, 'Open the LIBRARY view'); open.addEventListener('click', () => window.setView('library')); st.append(open);
+    const open = el('button', null, 'Open the LIBRARY view'); open.title = 'Search, filter, select and load clips'; open.addEventListener('click', () => window.setView('library')); st.append(open);
     const row = el('div', 'wrow');
     const list = el('div', 'wlist');
     (S.cat?.clips || []).slice(0, 40).forEach(c => {
@@ -133,6 +150,125 @@
     if (!n) list.append(el('div', 'dim', S.cat ? 'The engine has no clips yet. Generators still play (step 4 → GENERATORS).' : 'Waiting for the engine catalog…'));
     row.append(card('Import', st), card(`${n} clips ready to play`, list), card('Starter looks', `${g} generators are built in (Lines, Rings, Noise, Shapes, Solid, Ticker): they play on an empty layer, no clips needed.`));
     body.append(row);
+  }
+
+  // The import progress in step 1 (updated in place, ~every frame while the step shows).
+  function stepProgress() {
+    if (!W.prog) return;
+    const l = S.library, p = window.Lib?.progress?.();
+    const d = window.Lib?.disk?.() || {};
+    window.Lib?.loadDisk?.();
+    W.prog.textContent = '';
+    if (p) {
+      const bar = el('div', 'lbpbar'); const f = el('i'); f.style.width = (p.total ? p.done / p.total * 100 : 0) + '%'; bar.append(f);
+      W.prog.append(el('div', null, p.busy ? `Importing ${Math.min(p.total, p.done + 1)} of ${p.total}${l?.job?.name ? ' · ' + l.job.name : ''}${p.eta >= 0 ? ' · about ' + (p.eta < 60 ? Math.round(p.eta) + ' s' : Math.round(p.eta / 60) + ' min') + ' left' : ''}` : `Imported ${p.done} of ${p.total}`), bar);
+    }
+    if (d.free != null) W.prog.append(el('div', d.guard === 'low' ? 'bad' : 'dim', `Library drive: ${(d.free / 1e9).toFixed(1)} GB free · the library uses ${((d.lib || 0) / 1e9).toFixed(1)} GB`));
+  }
+
+  // Step 5: clips onto layers. Drag a clip onto a PREVIEW layer, double-click = the next free layer.
+  function step5(body) {
+    const L = S.live, F = window.Flows, n = S.cat?.clips.length ?? 0;
+    if (!L) { body.append(card('Waiting for the engine', 'Start Himmel (himmel.exe); this page waits for it.', 'off')); return; }
+    const pd = 1 - L.program_deck;
+    const onPrev = L.deck[pd].layer.filter(x => x.clip >= 0).length;
+    body.append(checklist([[onPrev > 0, 'A clip is on a PREVIEW layer'], [onPrev > 1, 'Two layers (optional): they mix on top of each other']]));
+    body.append(el('div', 'dim', 'PREVIEW (green) is off air: what you build here is not on the screens until you TAKE it. Layer A is at the bottom, D on top.'));
+    const row = el('div', 'wlayers');
+    for (let k = 0; k < 4; k++) {
+      const ls = L.deck[pd].layer[k], ci = S.cat?.clips?.[ls.clip];
+      const c = el('div', 'wlayer' + (ci ? ' full' : ''));
+      c.append(el('b', null, 'PREVIEW ' + 'ABCD'[k]), el('span', null, ci ? ci.name.replace(/\.mov$/i, '') : 'empty: drop a clip here'));
+      const pick = el('button', null, ci ? 'change…' : 'choose a clip…'); pick.title = 'Open the clip picker for this layer';
+      pick.addEventListener('click', () => F.picker({ deck: pd, layer: k }));
+      c.append(pick);
+      F.dropTarget(c, () => ({ deck: pd, layer: k }));
+      row.append(c);
+    }
+    body.append(row);
+    const list = el('div', 'wpick');
+    (S.cat?.clips || []).slice(0, 48).forEach(c => {
+      const it = el('div', 'wpc'); it.draggable = true;
+      const th = el('div', 'wpth'); th.style.background = window.H.rgb(c.thumb_rgb);
+      const r = F.rowOf(c.id), u = F.thumbUrl(r);
+      if (u) { const img = el('img'); img.src = u; img.alt = ''; img.draggable = false; img.onerror = () => img.remove(); th.append(img); }
+      th.append(F.whereTags(c.id));
+      it.append(th, el('span', null, c.name.replace(/\.mov$/i, '')));
+      it.title = 'Drag onto a PREVIEW layer above · double-click = the next free PREVIEW layer';
+      it.addEventListener('dragstart', e => F.setDrag(e, c.id));
+      it.addEventListener('dblclick', () => F.load(c.id, 'free-prev'));
+      list.append(it);
+    });
+    if (!n) list.append(el('div', 'empty', 'No clips are ready yet. Go back to step 1 and import a folder (or wait: they appear here as soon as they are ready).'));
+    body.append(el('div', 'lbl', `CLIPS (${n})`), list);
+  }
+
+  // Step 6: TAKE (PREVIEW goes on air) and one effect on a layer.
+  function step6(body) {
+    const L = S.live, send = window.H.send;
+    if (!L) { body.append(card('Waiting for the engine', 'Start Himmel; this page waits for it.', 'off')); return; }
+    const progHas = L.deck[L.program_deck].layer.some(x => x.clip >= 0);
+    const anyFx = L.deck.some(d => d.layer.some(x => x.fx.some(f => f.effect >= 0)));
+    body.append(checklist([[progHas, 'PROGRAM (on air) shows a clip: press TAKE'], [anyFx, 'An effect is on a layer']]));
+    const take = el('button', 'primary bigbtn', 'TAKE ▶'); take.title = 'PREVIEW travels to PROGRAM over the TAKE time (space in PERFORM; the wheel on the MK2)';
+    take.addEventListener('click', () => send({ type: 'Take', value: 0 }));
+    const cut = el('button', 'bigbtn', 'CUT'); cut.title = 'Swap PREVIEW and PROGRAM at once (enter in PERFORM)';
+    cut.addEventListener('click', () => send({ type: 'Cut' }));
+    const r1 = el('div', 'askrow'); r1.append(take, cut);
+    body.append(card('1 · TAKE', r1));
+    // Effects on the focused layer (PREVIEW by default): the first free slot.
+    // The layer the effect goes on: the focused one when it has a clip, else the first layer with a clip
+    // on PROGRAM (after a TAKE that is what you see), else on PREVIEW.
+    const F = window.Flows, f0 = F.focus();
+    const firstWith = d => { const k = L.deck[d].layer.findIndex(x => x.clip >= 0); return k >= 0 ? { deck: d, layer: k } : null; };
+    const t = (f0 && L.deck[f0.deck].layer[f0.layer].clip >= 0 ? f0 : null) || firstWith(L.program_deck) || firstWith(1 - L.program_deck) || f0;
+    const ls = t ? L.deck[t.deck].layer[t.layer] : null;
+    const fx = (S.cat?.effects || []).filter(e => e.kind !== 'generator').slice(0, 12);
+    const chips = el('div', 'wfx');
+    for (const e of fx) {
+      const b = el('button', 'chip2', e.name); b.title = `Put ${e.name} on ${F.groupOf(t.deck, t.layer)} (its first free effect slot)`;
+      b.addEventListener('click', () => {
+        const slot = ls.fx.findIndex(f => f.effect < 0);
+        if (slot < 0) { window.H.toast('All 4 effect slots of this layer are in use'); return; }
+        send({ type: 'FxSet', deck: t.deck, layer: t.layer, slot, value: e.id });
+      });
+      chips.append(b);
+    }
+    const where = t ? `${t.deck === L.program_deck ? 'PROGRAM (on air)' : 'PREVIEW'} ${F.groupOf(t.deck, t.layer)}: ${S.cat?.clips?.[ls.clip]?.name.replace(/\.mov$/i, '') || 'empty'}` : '–';
+    const c2 = el('div'); c2.append(el('div', 'dim', 'Adds to ' + where + '. Turn its knobs in PERFORM → LAYER FX (or knobs 1–4 on the MK2).'), chips);
+    body.append(card('2 · AN EFFECT', c2));
+    body.append(el('div', 'dim', 'Every effect reacts to the sound by default (the ~ ear next to a knob in LAYER FX). In PERFORM, double-click a layer to open its clip editor: in / out, loops, cue points, speed.'));
+  }
+
+  // Step 7: a scene (the look on a deck, saved on a pad) and the project (a folder on disk).
+  function step7(body) {
+    const sh = S.show, send = window.H.send, PW = window.Panels.W;
+    if (!PW.has(sh)) { body.append(card('Projects are not available', 'The show block is missing (the renderer runs without project files, e.g. --no-show-files).', 'off')); return; }
+    const L = S.live;
+    body.append(checklist([[sh.scene_count > 0, `A scene is saved (${sh.scene_count} so far)`], [!!sh.files?.path && !sh.dirty, sh.files?.path ? `The project is saved${sh.dirty ? ' (changes since: SAVE again)' : ''}` : 'The project is saved (it has no name yet)']]));
+    const rec = el('button', 'primary bigbtn', 'SAVE SCENE (REC)'); rec.title = 'Save the look of the PROGRAM deck on the next free scene pad (REC on the MK2)';
+    rec.addEventListener('click', () => send({ type: 'SceneSave', deck: L ? L.program_deck : 0, value: -1 }));
+    const recP = el('button', null, 'save the PREVIEW look'); recP.title = 'Save the PREVIEW deck instead';
+    recP.addEventListener('click', () => send({ type: 'SceneSave', deck: L ? 1 - L.program_deck : 1, value: -1 }));
+    const r1 = el('div', 'askrow'); r1.append(rec, recP);
+    const c1 = el('div'); c1.append(el('div', 'dim', 'A scene keeps the clips, effects, knob reactions and macros of a deck. Recall it later from PERFORM → SCENES or the MK2 pads (SCENE).'), r1);
+    body.append(card('1 · A SCENE', c1));
+    const save = el('button', 'primary bigbtn', sh.files?.path ? 'SAVE PROJECT' : 'SAVE PROJECT AS…');
+    save.title = 'A project is a folder on disk with every scene, song and setting. Autosave runs anyway; SAVE makes the version you open next time.';
+    save.addEventListener('click', async () => {
+      if (sh.files?.path) { send({ type: 'Project', param: 'Save' }); return; }
+      const n = await PW.ask('SAVE AS · project name', sh.project === 'Untitled' ? '' : sh.project, 'A name goes into the projects folder (<name>.himmel); a full path makes that folder.');
+      if (n) send({ type: 'Project', param: 'SaveAs', text: n });
+    });
+    const c2 = el('div'); c2.append(el('div', 'dim', sh.files?.path ? 'Saved in ' + sh.files.path : 'The project is "' + sh.project + '" and has no folder yet.'), save);
+    body.append(card('2 · THE PROJECT', c2));
+    body.append(el('div', 'dim', 'Done! Open PERFORM to play. Ctrl+S saves any time; the ⋯ next to the project name has open / save as / export.'));
+  }
+
+  function checklist(items) {
+    const c = el('div', 'wcheck');
+    for (const [ok, t] of items) c.append(el('div', ok ? 'ok' : 'todo', (ok ? '✓ ' : '○ ') + t));
+    return c;
   }
 
   function step2(body) {
@@ -189,7 +325,7 @@
     }
     body.append(ctl,
       el('div', 'dim', 'IDENTIFY shows a big number on every output for 5 s: check that OUT 1 is on the left. 1080p is the safe choice; 1440p / 4K for big rigs. 50 Hz in countries with 50 Hz light and cameras. The number of outputs is set when Himmel starts (himmel.exe -- --outputs N) in 0.1.'));
-    const more = el('button', null, 'More on the OUTPUTS view'); more.addEventListener('click', () => window.setView('outputs')); body.append(more);
+    const more = el('button', null, 'More on the OUTPUTS view'); more.title = 'Black per output, layer places, blend'; more.addEventListener('click', () => window.setView('outputs')); body.append(more);
   }
 
   // The canvas to scale: each output where it sits, blend zones hatched, lost outputs hatched red.
@@ -217,7 +353,7 @@
     const snd = el('div');
     W.u = PW.audioPicker(snd, true);
     body.append(card('SOUND IN · every effect reacts to it', snd));
-    body.append(el('div', 'dim', 'Perform: PREVIEW (green) left, PROGRAM (red) right, TAKE in the middle. Click a layer = focus; the CLIP tab edits its transport, LAYER FX its effects, SCENES saves and recalls looks.'));
+    body.append(el('div', 'dim', 'Perform: PREVIEW (green) left, PROGRAM (red) right, TAKE in the middle. Click a layer = focus; the CLIP tab edits its transport, LAYER FX its effects, SCENES saves and recalls looks. Next: put clips on layers.'));
   }
 
   // ================================================================ MK2 picture
@@ -323,7 +459,7 @@
     const nav = $('setNav');
     if (!nav.children.length) {
       for (const [id, name] of PAGES) {
-        const b = el('button', null, name); b.dataset.p = id;
+        const b = el('button', null, name); b.dataset.p = id; b.title = 'Settings: ' + name;
         b.addEventListener('click', () => { SET.page = id; SET.key = ''; renderSettings(); });
         nav.append(b);
       }
@@ -356,8 +492,8 @@
     } else if (P === 'engine') {
       body.append(el('h2', null, 'Engine & outputs'), el('p', 'dim', 'Resolution, refresh, blend, IDENTIFY, black per output and the layer places are on the OUTPUTS view. The rest is on the renderer command line in 0.1 (himmel.exe -- ARGS).'),
         kv([['outputs', '--outputs N (1..6)'], ['size', '--size WxH (custom)'], ['fullscreen', '--fullscreen'], ['AV offset', '--av-offset MS (−200..200)'], ['flash cap (D65, off by default)', '--flash-cap N'], ['test reaction signal', '--test-signal'], ['ticker text', '--ticker "TEXT"']]));
-      const ov = el('button', null, 'Open the OUTPUTS view'); ov.addEventListener('click', () => window.setView('outputs')); body.append(ov);
-      const bt = el('button', null, 'Black (master)'); bt.addEventListener('click', () => window.H.send({ type: 'Black', value: 2 }));
+      const ov = el('button', null, 'Open the OUTPUTS view'); ov.title = 'Displays, IDENTIFY, resolution, blend'; ov.addEventListener('click', () => window.setView('outputs')); body.append(ov);
+      const bt = el('button', null, 'Black (master)'); bt.title = 'Master black on / off (the outputs stay alive)'; bt.addEventListener('click', () => window.H.send({ type: 'Black', value: 2 }));
       const qt = el('button', 'bad', 'Quit Himmel…'); qt.title = 'Stop Himmel (asks first). The MK2: SHIFT + wheel → SYSTEM → QUIT, hold 2 s.';
       qt.addEventListener('click', () => window.H.quit());
       body.append(qt);
@@ -367,7 +503,7 @@
         ['MK2 controller block', m.present ? 'present' : 'not found'], ['MK2 USB', m.connected ? 'connected' : 'not connected'],
         ['MK2 map', m.map_verified ? 'verified map loaded' : m.present ? 'built-in default' : '–'], ['MK2 events dropped on GUI ring', m.dropped ?? '–'],
         ...(Array.isArray(S.weapons) ? S.weapons : []).map(w => [`slot ${w.slot} · ${w.name || w.weapon || '?'}`, w.state !== 'ok' ? 'other block version' : `${w.connected ? 'connected' : 'not connected'} · ${w.alive ? 'driver alive' : 'driver stopped'}${w.simulated ? ' · simulated' : ''}`])]));
-      const b2 = el('button', null, 'Open the MK2 picture'); b2.addEventListener('click', () => window.setView('mk2')); body.append(b2);
+      const b2 = el('button', null, 'Open the MK2 picture'); b2.title = 'The MK2 as the engine drives it'; b2.addEventListener('click', () => window.setView('mk2')); body.append(b2);
     } else if (P === 'gui') {
       body.append(el('h2', null, 'This GUI'), kv([['bridge', 'himmel_ui on http://127.0.0.1:8790 (only answers this PC)'], ['theme', 'dark (D28)'], ['keys', 'space = TAKE · enter = CUT · T = tap · Esc = cancel'], ['restart safety', 'killing himmel_ui or this page changes nothing on the outputs']]));
     } else {
