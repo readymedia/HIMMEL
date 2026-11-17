@@ -56,8 +56,10 @@ void build_show(Rig& r) {
     mb.f[1] = 0.9f;
     CHECK(r.send(mb) == Reject::None);
     // A song with two scenes.
-    r.show->set_text(static_cast<int>(Producer::Tool), "Opener");
-    CHECK(r.send(cmd(CommandType::SongEdit, kNone, kNone, kNone, static_cast<uint8_t>(SongAction::New), 1)) == Reject::None);
+    const uint32_t opener = r.show->set_text(static_cast<int>(Producer::Tool), "Opener");
+    CHECK(r.send(cmd(CommandType::SongEdit, kNone, kNone, kNone, static_cast<uint8_t>(SongAction::New), static_cast<int>(opener + 1))) ==
+          Reject::BadValue);  // the box holds another id: refused
+    CHECK(r.send(cmd(CommandType::SongEdit, kNone, kNone, kNone, static_cast<uint8_t>(SongAction::New), static_cast<int>(opener))) == Reject::None);
     CHECK(r.send(cmd(CommandType::SongEdit, 0, kNone, kNone, static_cast<uint8_t>(SongAction::AddScene), 0)) == Reject::None);
     r.fill_deck(1, 6);
     CHECK(r.send(cmd(CommandType::SongEdit, 1, kNone, kNone, static_cast<uint8_t>(SongAction::AddScene), 0)) == Reject::None);
@@ -293,6 +295,11 @@ void test_recall_cost() {
         if (i < 2 || i == kRuns - 1) CHECK(looks_equal(now, pad ? b : a));
         r.tick();
     }
+    // Recall onto an empty deck B: every layer and FX slot changes, still one frame (cap 384).
+    const uint32_t before_b = r.model->live().acked_seq[static_cast<int>(Producer::Show)];
+    CHECK(r.send(cmd(CommandType::SceneRecall, 1, kNone, kNone, kNone, 1)) == Reject::None);
+    CHECK(looks_equal(deck_look(r, 1), b) && r.show->last_recall_commands() <= kShowCommandsPerFrame);
+    CHECK(r.model->live().acked_seq[static_cast<int>(Producer::Show)] > before_b);
     std::printf("  %d recalls: mean %.1f us, worst %u us, up to %d commands (a frame is 16667 us)\n", kRuns,
                 static_cast<double>(total) / kRuns, worst, cmds);
     CHECK(worst < 2000);  // well under one frame, even on a slow laptop
@@ -529,12 +536,23 @@ void test_pages_kits_macros() {
     CHECK(std::fabs(r.model->live().deck[0].layer[1].fx[0].param[1] - 0.9f) < 1e-5f);
     CHECK(r.send(cmd(CommandType::MacroValue, kNone, kNone, 2, kNone, 0, -0.5f, kRelative)) == Reject::None);
     CHECK(std::fabs(r.model->live().deck[0].layer[1].fx[0].param[1] - (0.2f + 0.7f * 0.5f)) < 1e-4f);
+    // 400 knob moves in one frame: the show never trips the model's rate limit, the rest waits.
+    for (int k = 0; k < 400; ++k) r.send(cmd(CommandType::MacroValue, kNone, kNone, 0, kNone, 0, (k % 100) / 100.0f));
+    for (int k = 0; k < 120; ++k) r.tick();
+    CHECK(r.model->live().rejected[static_cast<int>(Producer::Show)] == 0);
     // Unbound INTENSITY (macro 1) drives every layer effect's mix.
     CHECK(r.send(cmd(CommandType::MacroValue, kNone, kNone, 0, kNone, 0, 0.25f)) == Reject::None);
     CHECK(std::fabs(r.model->live().deck[0].layer[0].fx[0].mix - 0.25f) < 1e-5f);
     // Songs: new, move, delete.
-    r.show->set_text(static_cast<int>(Producer::Tool), "Closer");
-    r.send(cmd(CommandType::SongEdit, kNone, kNone, kNone, static_cast<uint8_t>(SongAction::New), 1));
+    const uint32_t closer = r.show->set_text(static_cast<int>(Producer::Tool), "Closer");
+    r.send(cmd(CommandType::SongEdit, kNone, kNone, kNone, static_cast<uint8_t>(SongAction::New), static_cast<int>(closer)));
+    const uint32_t ren = r.show->set_text(static_cast<int>(Producer::Tool), "Encore");
+    CHECK(r.send(cmd(CommandType::SongEdit, kNone, kNone, 1, static_cast<uint8_t>(SongAction::Rename), static_cast<int>(ren))) == Reject::None);
+    CHECK(std::strcmp(r.show->show().songs[r.show->show().setlist[1]].name, "Encore") == 0);
+    CHECK(r.send(cmd(CommandType::SongEdit, kNone, kNone, 1, static_cast<uint8_t>(SongAction::Rename), static_cast<int>(ren))) == Reject::None);
+    const uint32_t back = r.show->set_text(static_cast<int>(Producer::Tool), "Closer");
+    CHECK(r.send(cmd(CommandType::SongEdit, kNone, kNone, 1, static_cast<uint8_t>(SongAction::Rename), static_cast<int>(ren))) == Reject::BadValue);
+    CHECK(r.send(cmd(CommandType::SongEdit, kNone, kNone, 1, static_cast<uint8_t>(SongAction::Rename), static_cast<int>(back))) == Reject::None);
     r.send(cmd(CommandType::SongEdit, kNone, kNone, 0, static_cast<uint8_t>(SongAction::Move), 1));
     CHECK(std::strcmp(r.show->show().songs[r.show->show().setlist[0]].name, "Closer") == 0);
     CHECK(r.send(cmd(CommandType::SongEdit, kNone, kNone, kNone, static_cast<uint8_t>(SongAction::Delete), 1)) == Reject::None);
@@ -556,7 +574,9 @@ void test_projects() {
     cfg.projects_root = root / "Projects";
     cfg.app_dir = root / "App";
     constexpr int kTool = static_cast<int>(Producer::Tool);
-    auto project = [](ProjectAction a, int i = 0) { return cmd(CommandType::Project, kNone, kNone, kNone, static_cast<uint8_t>(a), i); };
+    auto project = [](ProjectAction a, int i = 0, uint8_t slot = kNone) {
+        return cmd(CommandType::Project, kNone, kNone, slot, static_cast<uint8_t>(a), i);
+    };
     Look saved_a, live_after;
     {
         Rig r(make_catalog(12));
@@ -564,8 +584,9 @@ void test_projects() {
         CHECK(r.settle());
         build_show(r);
         CHECK(r.show->dirty());
-        r.show->set_text(kTool, "My Show");
-        CHECK(r.send(project(ProjectAction::SaveAs)) == Reject::None);
+        CHECK(r.send(project(ProjectAction::SaveAs)) == Reject::BadValue);  // no text id
+        const uint32_t name = r.show->set_text(kTool, "My Show");
+        CHECK(r.send(project(ProjectAction::SaveAs, static_cast<int>(name))) == Reject::None);
         CHECK(r.settle());
         const fs::path folder = cfg.projects_root / "My Show.himmel";
         CHECK(fs::exists(folder / "project.json") && fs::exists(folder / "autosave" / "journal.bin"));
@@ -615,23 +636,23 @@ void test_projects() {
         // Open recent 0 mid-show: PROGRAM (A) untouched, the project's look on PREVIEW (B).
         r.fill_deck(0, 2);
         const Look program_before = deck_look(r, 0);
-        CHECK(r.send(project(ProjectAction::Open, 0)) == Reject::None);
+        CHECK(r.send(project(ProjectAction::Open, 0, 0)) == Reject::None);
         CHECK(r.settle());
         CHECK(std::strcmp(r.show->show().name, "My Show") == 0 && scene_count(r.show->show()) == 5);
         CHECK(looks_equal(deck_look(r, 0), program_before));
         CHECK(looks_equal(deck_look(r, 1), live_after));
         // Open the exported file: unpacked into the projects folder.
-        r.show->set_text(kTool, F::utf8(cfg.projects_root / "My Show.himmelshow").c_str());
-        CHECK(r.send(project(ProjectAction::Open, -1)) == Reject::None);
+        uint32_t id = r.show->set_text(kTool, F::utf8(cfg.projects_root / "My Show.himmelshow").c_str());
+        CHECK(r.send(project(ProjectAction::Open, static_cast<int>(id))) == Reject::None);
         CHECK(r.settle());
         CHECK(fs::exists(cfg.projects_root / "My Show (2).himmel" / "project.json"));
         CHECK(scene_count(r.show->show()) == 5 && r.show->files().recent_count == 2);
         // Opening nonsense fails in the worker; the show stays.
-        r.show->set_text(kTool, F::utf8(root / "nothing-here").c_str());
-        r.send(project(ProjectAction::Open, -1));
+        id = r.show->set_text(kTool, F::utf8(root / "nothing-here").c_str());
+        r.send(project(ProjectAction::Open, static_cast<int>(id)));
         CHECK(r.settle());
         CHECK(scene_count(r.show->show()) == 5 && r.show->files().error[0] != 0);
-        CHECK(r.send(project(ProjectAction::Open, 12)) == Reject::BadId);
+        CHECK(r.send(project(ProjectAction::Open, 0, 12)) == Reject::BadId);
     }
     {
         // A missing clip is listed on open; Relink finds it by name in a folder.
@@ -644,8 +665,11 @@ void test_projects() {
         CHECK(r.settle());
         FilesStatus fsx = r.show->files();
         CHECK(fsx.missing_count == 1 && std::strcmp(fsx.missing[0], "clip01.mov") == 0);
-        r.show->set_text(kTool, F::utf8(root / "Media").c_str());
-        r.send(project(ProjectAction::Relink));
+        if (fsx.missing_count != 1)
+            std::printf("    files: missing %u restored %u path \"%s\" error \"%s\" msg \"%s\"\n", fsx.missing_count, fsx.restored,
+                        fsx.path, fsx.error, r.show->status().message);
+        const uint32_t media = r.show->set_text(kTool, F::utf8(root / "Media").c_str());
+        r.send(project(ProjectAction::Relink, static_cast<int>(media)));
         CHECK(r.settle());
         CHECK(r.show->files().relink_found == 1);
     }
@@ -685,8 +709,8 @@ void test_snapshots() {
     Rig r(make_catalog(8));
     r.start(cfg);
     CHECK(r.settle());
-    r.show->set_text(static_cast<int>(Producer::Tool), "Snap");
-    r.send(cmd(CommandType::Project, kNone, kNone, kNone, static_cast<uint8_t>(ProjectAction::SaveAs)));
+    const uint32_t snap = r.show->set_text(static_cast<int>(Producer::Tool), "Snap");
+    r.send(cmd(CommandType::Project, kNone, kNone, kNone, static_cast<uint8_t>(ProjectAction::SaveAs), static_cast<int>(snap)));
     CHECK(r.settle());
     for (int i = 0; i < 350; ++i) {  // ~3.5 s
         r.deck(cmd(CommandType::LayerOpacity, 0, 0, kNone, kNone, 0, (i % 100) / 100.0f));

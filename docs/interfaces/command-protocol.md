@@ -47,7 +47,7 @@ MK2 Perform     ──ring 0──┘        (in-process producer, same Command 
 | 1 `Gui` | the web GUI | `himmel_ui` |
 | 2 `Osc` | OSC in (M13) | `himmel_osc` or the bridge |
 | 3 `Tool` | tests, scripts | `himmel_cmd`, `show_cmd`, test programs |
-| 4 `Show` | the show runtime inside the render process (M3): recall, morph, undo, dice as ordinary commands; never a shared ring; exempt from the rate limit | `himmel_render` itself |
+| 4 `Show` | the show runtime inside the render process (M3): recall, morph, undo, dice as ordinary commands straight into the model (no shared ring); same validation and rate limit as every producer; at most `kShowCommandsPerFrame` (384) per frame, the rest waits in its outbox (show-files.md §1) | `himmel_render` itself |
 | 5–7 | spare | — |
 
 Exactly one process writes a slot. A producer writes its `pid` into
@@ -122,8 +122,10 @@ deck using the state they read; the engine never guesses what a producer meant.
 The render process hands these to the show runtime (`src/show/`), which
 validates them, acks them in `Local\HimmelShow` ([`show-block.md`](show-block.md), `ShowStatus.acked_seq`,
 not `LiveState`) and changes the decks only through ordinary commands on slot
-4. Paths and names come from the producer's **text box** in the show block
-(write it first). Enums are in `show.h`. Types 25–39 are SHOW's range (LEAD,
+4. Paths and names come from the producer's **text box** in the show block:
+write an id + the text, then send the command with `i` = that id; the
+runtime refuses it (`BadValue`) when the box holds another id
+([`show-block.md`](show-block.md) §2). Enums are in `show.h`. Types 25–39 are SHOW's range (LEAD,
 2026-11-17): 37–39 are free and already go to the show runtime.
 
 | Type | Targets | Argument | Notes |
@@ -134,12 +136,12 @@ not `LiveState`) and changes the decks only through ordinary commands on slot
 | `SceneReset` (28) | deck, layer (`kNone` = all) | `f[0]` = glide s (0 = 1 beat) | hold `ERASE` + group / `ALL` |
 | `Dice` (29) | deck; layer / slot = scope (`kNone` = deck) | `param` = `DiceVerb` (Roll, Mutate, Back, Forward, Rotate); `i` = seed (0 = auto) or rotate step ±1; `f[0]` = mutate amount (0 = 0.2) | applies to the addressed deck at once (producers pick PREVIEW per focus) |
 | `Locks` (30) | — | `param` = `LockOp` (Set, Toggle, Clear); `i` = `LockBit` mask | the 8 locks, kept in the show |
-| `Project` (31) | — | `param` = `ProjectAction` (New, Open, Save, SaveAs, Export, Revert, RestoreAutosave, Relink); `i` = New: screens 1 / 3; Open: recent 0..9 or −1 = the text box; Export: 0 = next to the project, 1 = the path in the text box | done by the save worker; the result is in `FilesStatus` and the message |
+| `Project` (31) | — | `param` = `ProjectAction` (New, Open, Save, SaveAs, Export, Revert, RestoreAutosave, Relink); `i` = New: screens 1 / 3; Open: `slot` = recent 0..9, or `slot` = `kNone` and `i` = text id; SaveAs / Relink: `i` = text id; Export: `i` = 0 next to the project, else a text id | done by the save worker; the result is in `FilesStatus` and the message |
 | `ShowSelect` (32) | — | `param` = `SelectWhat` (Bank, Song, UseSetlist); `i` = index (`kRelative` = delta) or toggle value | which page the pads show |
 | `KitSet` (33) | deck (its scene), `slot` = pad 0..15, `layer` = `PadTarget` | `param` = `PadKind`; `i` = clip / effect id, scene pad, cue, `PadAction` | the deck must hold a saved scene (`BadTarget` otherwise) |
-| `MacroSet` (34) | deck (its scene), `slot` = macro 0..3, `layer` = target layer (`kNone` = deck FX) | `param` = binding 0..7 (`kNone` = rename from the text box); `i` = FX slot × 16 + param; `f[0]` min, `f[1]` max; `flags & kClear` = remove | |
+| `MacroSet` (34) | deck (its scene), `slot` = macro 0..3, `layer` = target layer (`kNone` = deck FX) | `param` = binding 0..7 (`kNone` = rename: `i` = text id); `i` = FX slot × 16 + param; `f[0]` min, `f[1]` max; `flags & kClear` = remove | |
 | `MacroValue` (35) | `slot` = macro 0..3 | `f[0]` 0..1 (`kRelative` = delta) | knobs 5–8: always the PROGRAM deck |
-| `SongEdit` (36) | deck (AddScene: source), `slot` = position | `param` = `SongAction` (New, Delete, AddScene, RemoveScene, Bpm, Rename, Move, RenameScene); `i` = song (RenameScene: pad; New: 1 = the name is in the text box, 0 = "Song n"); `f[0]` = BPM | Rename / RenameScene read the text box |
+| `SongEdit` (36) | deck (AddScene: source), `slot` = position | `param` = `SongAction` (New, Delete, AddScene, RemoveScene, Bpm, Rename, Move, RenameScene); `i` = song; New: `i` = text id (0 = "Song n"); Rename: `slot` = song, `i` = text id; RenameScene: `slot` = pad, `i` = text id; `f[0]` = BPM | |
 
 ## 5. Validation (the engine, before anything else)
 

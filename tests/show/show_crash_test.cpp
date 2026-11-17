@@ -45,8 +45,8 @@ int child(const fs::path& root) {
             r.fill_deck(0, i % 13);
             r.send(cmd(CommandType::SceneSave, 0, kNone, kNone, kNone, i % 16));
         }
-        r.show->set_text(kTool, "Crash");
-        r.send(cmd(CommandType::Project, kNone, kNone, kNone, static_cast<uint8_t>(ProjectAction::SaveAs)));
+        const uint32_t id = r.show->set_text(kTool, "Crash");
+        r.send(cmd(CommandType::Project, kNone, kNone, kNone, static_cast<uint8_t>(ProjectAction::SaveAs), static_cast<int>(id)));
         if (!r.settle(20000)) return 11;
     }
     std::printf("READY\n");

@@ -259,10 +259,7 @@ Reject DeckModel::submit(int producer, const Command& c, uint64_t now_us) {
         rate_window_us_[producer] = now_us;
         rate_count_[producer] = 0;
     }
-    // Slot 4 (Show, M3) is exempt: the show runtime in this process sends whole scenes
-    // (recall, morph, undo) made from already validated data; every command is still validated.
-    const bool limited = producer != static_cast<int>(Producer::Show) && ++rate_count_[producer] > kMaxCommandsPerSecond;
-    Reject r = limited ? Reject::RateLimited : validate(c);
+    Reject r = ++rate_count_[producer] > kMaxCommandsPerSecond ? Reject::RateLimited : validate(c);
     if (r == Reject::None) r = apply(c, now_us);
     if (r == Reject::None) {
         live_.acked_seq[producer] = c.seq;
