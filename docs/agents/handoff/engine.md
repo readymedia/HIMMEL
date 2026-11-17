@@ -1,32 +1,55 @@
 # ENGINE handoff
-Updated: 2026-11-16 by the ENGINE M2 session · Branch: `claude/engine-m2-transport` · Last commit: see `git log` on the branch
+Updated: 2026-11-17 by the ENGINE M6 session · Branch: `claude/engine-m6-outputs` · Last commit: see `git log` on the branch
 
 ## State in one paragraph
-`himmel_render.exe` is the **slice engine** (S1, 2026-11-15) plus the **M2 clip
-transport** (2026-11-16, `design/clips-and-playback.md` §2–3, §10). The pure
-deck model (2 decks × 4 layers + a **HIT layer** on top of PROGRAM, FX slots on
-layer / deck / master, crossfader, TAKE / CUT / black / focus) now owns one
-`Playhead` per layer and an internal **beat clock** (tap / BPM / nudge / resync /
-grid). Every play mode works (loop, ping-pong, once · hold / eject / next,
-random, chop, step, scratch), with in / out, the 4-point inner loop, 16 cue
-points per clip (equal slices when unset), beat loops with catch-up, scratch
-hold (stay / snap back), REVERSE held with catch-up, FREE / BPM time base, speed
-glide, trigger styles (normal / toggle / piano / legato), start position
-(restart / continue), fade in / out, beat snap (PROGRAM waits, PREVIEW never),
-clip targets (own / free / HIT), autopilot (next / previous / random / same,
-ONCE · NEXT) and layer transitions (cut / fade / black-dip). All of it comes in
-through six new commands (`command-protocol.md` §4a) and goes out in the new
-transport section of the state block (`engine-state.md` v2). The decode worker
-keeps the 16 jump targets of every layer **warm**, and a jump holds its landing
-frame for that one frame, so a cue jump is on screen on the next present
-(measured: 160 / 160). Soak (`docs/measurements/2026-11-16-m2-transport-soak.md`):
-15 + 10 min with every transport feature cycling, 0 crashes; 10 late frames in
-the first (6 in its first 2 min, cold start), 2 in 10 min on the warm renderer =
-the S1 baseline rate. The supervisor's log file is now readable while Himmel
-runs (`_wfsopen` + `_SH_DENYWR`).
+**M6 outputs (2026-11-17, this branch)** on top of S1 + M2 (below). Output
+slots (1..8) are windows onto one canvas, made by a pure `OutputModel`:
+resolution presets 720p / 1080p / 1440p / 4K / Custom, span (with an edge
+blend overlap) or mirror, layer places (FILL ALL / OUT n / FIT / FREE),
+black per output, IDENTIFY. In full screen each slot belongs to its display
+**by identity** (`DisplayWatch` worker: QueryDisplayConfig + EDID from the
+registry): a display that goes away hides its window and leaves the wait
+set. The others are not touched. It comes back to its slot on any connector.
+The refresh (60 / 50 / 59.94 / 30 / 25) is switched by the worker
+(`CDS_FULLSCREEN`). Status out: the new block `Local\HimmelOutputs`
+(`docs/interfaces/outputs-block.md`); commands 70–73 (`command-protocol.md` §4c).
+The supervisor holds **curtains** (black windows just below each output
+window), keeps the outputs / state / commands / show blocks open (the show
+survives a renderer restart without a GUI), and restarts the renderer with
+at most 0.5 s back-off. Measured on the dev laptop (3 windows): kill the
+renderer → black at once (0 ms), show back after 1.0–1.6 s (6 / 6 runs,
+`src/engine/tools/curtain_check.py`). Simulated cable pull (`simlost`) on
+OUT 2: 10 cycles, 0 late frames, the others never stuttered. **Spout out is
+not done:** it waits for the LEAD's yes on the Spout SDK.
 
 ## Done (with commits)
-- **M2 (this branch):**
+- **M6 (this branch, `claude/engine-m6-outputs`):**
+  - `protocol/outputs.h` (new block, enums), commands 70–73 appended to
+    `commands.h` (`Count` = 74); `protocol_tests` asserts the wave-3 ranges.
+  - `output_model.h/.cpp` (pure, in `himmel_engine_model`): layout, blend,
+    places → `l_xform`, IDENTIFY fades, black, SimLost / Adopt, restore,
+    `same_display` / `match_displays`. `DeckModel::set_outputs()` routes
+    types 70–73 to it (same rate limit / validation / ack).
+  - `display_watch.h/.cpp` (in `himmel_engine_shared`): the display worker
+    (500 ms + poke on WM_DISPLAYCHANGE), seqlock snapshot, refresh switching.
+  - `render_main.cpp`: output slots with state / display / identity; full-
+    screen windows refuse foreign moves (`WM_WINDOWPOSCHANGING`); no DWM
+    transitions on output windows; per-frame wait set = shown outputs only;
+    `set_display()` (hide / move + resize only that swap chain / show);
+    canvas from the model (rebuilt only on a setup command); blit with black
+    per output, edge blend, IDENTIFY picture (t3); layer xform from the place
+    (placeholder colour too); outputs block written on change / 100 ms;
+    start-up time logged; windowed default stays 3 windows; `M` = Mode command.
+  - `slice_shaders.h`: `b_edge`, `b_ident`, `tex3`, `edge_gain()`; the
+    placeholder respects the place.
+  - Supervisor: `Curtains` thread, keeps the blocks open, writes the command
+    block header when it creates it, render back-off ≤ 0.5 s, 50 ms poll,
+    `--no-curtains`.
+  - `himmel_cmd`: `outputs`, `outblack`, `identify`, `place`, `outres`,
+    `refresh`, `blendw`, `blendgamma`, `outmode`, `adopt`, `simlost`.
+  - `tests/engine/output_tests.cpp` → `output_tests.exe` (111 checks).
+  - `src/engine/tools/curtain_check.py`: the kill → black → back measurement.
+- **M2 (merged 2026-11-16):**
   - `transport.h/.cpp`: `BeatClock` (tap tempo over up to 8 taps, 2 s timeout,
     every tap lands on a beat; set BPM keeps the phase), `grid_beats()`,
     `Playhead` (main head = shadow playhead; overrides for beat loop / scratch /
@@ -87,6 +110,11 @@ runs (`_wfsopen` + `_SH_DENYWR`).
 Nothing half-done.
 
 ## Next up (ordered)
+0. **M6 leftovers:** Spout out (waits for the LEAD: SDK or own sender);
+   check a real cable pull and a 50 Hz switch on the show PC (only simulated
+   / one display here); save display identities + places in the project
+   (SHOW); per-output test pattern / crosshair (mapping, later); GUI Outputs
+   view on the new block and commands (GUI).
 1. **Warm the next random / scratch target:** RANDOM and absolute scratch moves
    land on frames that are not warm, so they show one frame late (counted as
    `clip misses`). Pre-roll the next random target from the seeded RNG into a
@@ -107,6 +135,14 @@ Nothing half-done.
    graph in a worker.
 
 ## GUESSES
+- **M6 (D150–D154 in `decisions.md`):** windowed outputs report the first
+  display's Hz; black per output is a cut; IDENTIFY darkens by 60 %; the
+  blend is smoothstep ^ (1/γ); render restart back-off cap 0.5 s; identity
+  rule (serial on any connector, else connector); a slot whose display is
+  gone keeps its swap chain at the old size until it returns. Not checked on
+  hardware: a real cable pull, two identical projectors without serials, a
+  50 Hz mode switch, Windows reordering displays (all covered by
+  `output_tests` / `simlost`, not by a real unplug).
 - **M2 (all listed in `decisions.md` D101–D104):** GRID off by default; plain
   clip loads never wait and start at in; defaults (cut 0.5 s, fades 0, HIT
   fade-out 0.2 s + ADD, chop 8, autopilot 4 loops, BPM range 4 beats, inner
@@ -126,6 +162,11 @@ Nothing half-done.
 
 ## How to build / run / test this track
 ```
+buildin\Release\output_tests.exe          # 111 checks, no GPU
+buildin\Release\himmel.exe --no-controller --no-weapons --no-ui --no-audio -- --outputs 3 --size 640x360 --no-show-files
+buildin\Release\himmel_cmd.exe clip a 1 0 -- outputs
+python src\engine	ools\curtain_check.py --runs 6 --gap 6   # kill -> black -> back
+buildin\Release\himmel_cmd.exe identify -- blendw 120 -- place a 2 out 3 -- outblack 3 on -- simlost 2 on
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release --parallel 8
 build\bin\Release\deck_tests.exe            # 143 checks, no GPU
@@ -141,6 +182,14 @@ build\bin\Release\himmel_cmd.exe            # the state incl. transport + clock
 Output windows: `M` = span / mirror, `O` = overlay, `Esc` = quit (windowed).
 
 ## Gotchas found
+- M6: a killed renderer's windows fade out (DWM close animation) over the
+  curtain unless `DWMWA_TRANSITIONS_FORCEDISABLED` is set: it is now.
+- M6: a supervisor that creates `Local\HimmelCommands` must write its header,
+  or the renderer waits forever ("another magic / version / size").
+- M6: screen-grab probes (BitBlt of the desktop at 200 Hz) can stall DWM and
+  the renderer's Present; `curtain_check.py` samples every 20 ms.
+- M6: an output preset of 4K on a 3-wide span makes a ~900 MB texture pool:
+  fine on the 5090, watch the GTX 1070.
 - The Bash tool's heredocs choke on some content (backticks); write helper
   scripts with the Write tool instead.
 - A jump must not advance in the same tick, or it lands half a frame past the
@@ -155,6 +204,9 @@ Output windows: `M` = span / mirror, `O` = overlay, `Esc` = quit (windowed).
   Bash turns `/m` into a path (use `--parallel 8`).
 
 ## Interfaces touched
+- M6: new `outputs-block.md` (`Local\HimmelOutputs` v1); `command-protocol.md`
+  §4c (types 70–73, additive, `kCommandVersion` stays 1);
+  `interfaces/README.md` row. State block unchanged (v2).
 - `command-protocol.md` §4a (append-only): `LayerSet`, `LayerTrigger`,
   `LayerCue`, `LayerBeatLoop`, `LayerScratch`, `Clock`; `PlayAction` Release /
   Stop; `kHitDeck`, `kRelease`; enums `LayerParam`, `PlayMode`, `TimeBase`,

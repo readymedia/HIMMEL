@@ -878,7 +878,8 @@ int main(int argc, char** argv) {
             d.rect[3] - d.rect[1], d.rect[0], d.rect[1], d.hz);
     }
     himmel::engine::OutputSetup osetup;
-    osetup.count = cfg.outputs ? cfg.outputs : (cfg.fullscreen ? std::max(1, static_cast<int>(displays->count)) : 1);
+    // Default: one output per display in full screen, 3 windows otherwise (the default rig).
+    osetup.count = cfg.outputs ? cfg.outputs : (cfg.fullscreen ? std::max(1, static_cast<int>(displays->count)) : 3);
     osetup.fullscreen = cfg.fullscreen;
     osetup.preset = cfg.resolution >= 0 ? static_cast<proto::ResolutionPreset>(cfg.resolution)
                                        : (cfg.fullscreen ? proto::ResolutionPreset::P1080 : proto::ResolutionPreset::Custom);
