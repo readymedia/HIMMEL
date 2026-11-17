@@ -4,6 +4,8 @@
 // Runs in the render loop: no heap, no locks, no I/O.
 #include "himmel/perform/nuvj_perform.h"
 
+#include "himmel/engine/clip_directory.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -75,7 +77,18 @@ uint8_t NuvjPerform::layer_of(const LiveState& s, int deck) const {
 }
 
 int NuvjPerform::clip_pages(const Catalog& cat) const {
-    return std::max(1, (clip_count(cat) + kPadsPerDeck - 1) / kPadsPerDeck);
+    return std::max(1, (nclips(cat) + kPadsPerDeck - 1) / kPadsPerDeck);
+}
+
+// Wave 8: the engine's ClipDirectory when set (every clip), else the catalog window.
+int NuvjPerform::nclips(const Catalog& cat) const { return clips_ ? static_cast<int>(clips_->count()) : clip_count(cat); }
+const ClipInfo* NuvjPerform::clip_at(const Catalog& cat, int id) const {
+    if (id < 0 || id >= nclips(cat)) return nullptr;
+    return clips_ ? &clips_->info(id) : &cat.clip[id];
+}
+bool NuvjPerform::playable(const Catalog& cat, int id) const {
+    if (!clip_at(cat, id)) return false;
+    return !clips_ || (clips_->state(id) != ClipState::Removed && clips_->state(id) != ClipState::Empty);
 }
 
 // ============================================================================ crossfader
@@ -287,7 +300,7 @@ void NuvjPerform::on_event(const mk2::Event& e, const LiveState& s, const Catalo
             pad_held_[d] = n - 1;
             last_deck_ = d;
             const int clip = bank_[d] * kPadsPerDeck + (n - 1);
-            if (clip >= clip_count(cat)) return;
+            if (!playable(cat, clip)) return;
             send(make(CommandType::LayerTrigger, static_cast<uint8_t>(d), layer_of(s, d), clip, 1.0f), sink);
             return;
         }
@@ -296,7 +309,7 @@ void NuvjPerform::on_event(const mk2::Event& e, const LiveState& s, const Catalo
             const int d = e.id > kPadsPerDeck ? 1 : 0, n = e.id - d * kPadsPerDeck;
             if (pad_held_[d] == n - 1) pad_held_[d] = -1;
             const int clip = bank_[d] * kPadsPerDeck + (n - 1);
-            if (clip < clip_count(cat))  // piano / LATCH-off styles end on release (the engine's trigger style decides)
+            if (playable(cat, clip))  // piano / LATCH-off styles end on release (the engine's trigger style decides)
                 send(make(CommandType::LayerTrigger, static_cast<uint8_t>(d), layer_of(s, d), clip, 0.0f, kRelease), sink);
             return;
         }
@@ -390,7 +403,7 @@ void NuvjPerform::tick(uint64_t now_us, const LiveState& s, const Catalog& cat, 
             bool on = false;
             for (int k = 0; k < kLayersPerDeck; ++k) on = on || s.deck[d].layer[k].clip == clip;
             if (pad_held_[d] == n - 1) on = true;
-            if (clip < clip_count(cat)) leds[pad_control(d, n)] = on ? kLedOn : kLedOff;
+            if (playable(cat, clip)) leds[pad_control(d, n)] = on ? kLedOn : kLedOff;
         }
         leds[base + kLatch] = latch_[d] ? kLedOn : kLedOff;
         leds[base + kSync] = transport_ && transport_->layer[d][l].time_base == static_cast<uint8_t>(TimeBase::Bpm) ? kLedOn : kLedOff;
@@ -409,7 +422,7 @@ void NuvjPerform::tick(uint64_t now_us, const LiveState& s, const Catalog& cat, 
         copy_text(lcd.text, sizeof(lcd.text), lcd_msg_, 8);
     } else {
         const LayerState& L = s.deck[prog].layer[layer_of(s, prog)];
-        if (L.clip >= 0 && L.clip < clip_count(cat)) copy_text(lcd.text, sizeof(lcd.text), cat.clip[L.clip].name, 8);
+        if (const ClipInfo* ci = clip_at(cat, L.clip)) copy_text(lcd.text, sizeof(lcd.text), ci->name, 8);
         else copy_text(lcd.text, sizeof(lcd.text), "HIMMEL", 8);
     }
     {

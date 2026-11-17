@@ -7,6 +7,7 @@
 #include <memory>
 #include <vector>
 
+#include "himmel/engine/clip_directory.h"
 #include "himmel/perform/nuvj_perform.h"
 
 using namespace himmel;
@@ -154,6 +155,38 @@ static void test_pads_banks() {
     r.live->deck[1].layer[0].clip = 2;  // B pad 3 (bank 1)
     r.tick();
     CHECK(r.leds[31] == 127 && r.leds[29] == 0);  // B Pad 3 = control 31, B Pad 1 = 29
+}
+
+
+// Wave 8: with the engine's ClipDirectory the banks reach every clip (past id 255).
+static void test_pads_catalog_v3() {
+    std::printf("pads past id 255 (catalog v3)\n");
+    auto dir = std::make_unique<himmel::engine::ClipDirectory>();
+    for (int i = 0; i < 300; ++i) {
+        ClipInfo ci{};
+        std::snprintf(ci.name, kNameLen, "lib%03d.mov", i);
+        dir->add(ci, 1000 + i, i == 280 ? ClipState::Removed : ClipState::Ready);
+    }
+    Rig r;
+    r.m.set_clips(dir.get());
+    for (int i = 0; i < 40; ++i) r.ev(EventType::EncoderDelta, A_BANK, 1);
+    CHECK(r.m.bank(0) == 33);  // 300 clips = 34 banks of 9: clamped at 33
+    r.ev(EventType::PadHit, 2, 127);  // bank 33 pad 2 = clip 298
+    CHECK(r.sink.last(CommandType::LayerTrigger) && r.sink.last(CommandType::LayerTrigger)->i == 298);
+    r.ev(EventType::PadRelease, 2);
+    r.ev(EventType::EncoderDelta, A_BANK, -1);  // bank 31 = clips 279..287 (one bank per event)
+    r.ev(EventType::EncoderDelta, A_BANK, -1);
+    CHECK(r.m.bank(0) == 31);
+    r.sink.clear();
+    r.ev(EventType::PadHit, 2, 127);  // clip 280: removed, nothing
+    CHECK(r.sink.count(CommandType::LayerTrigger) == 0);
+    r.ev(EventType::PadRelease, 2);
+    r.ev(EventType::PadHit, 1, 127);  // clip 279
+    CHECK(r.sink.last(CommandType::LayerTrigger) && r.sink.last(CommandType::LayerTrigger)->i == 279);
+    r.ev(EventType::PadRelease, 1);
+    r.live->deck[0].layer[0].clip = 290;  // the LCD names a clip past 255
+    r.tick();
+    CHECK(std::strncmp(r.lcd.text, "LIB290", 6) == 0);
 }
 
 static void test_crossfader() {
@@ -335,6 +368,7 @@ static void test_knobs_master_lcd() {
 
 int main() {
     test_pads_banks();
+    test_pads_catalog_v3();
     test_crossfader();
     test_wheels();
     test_trim_and_sync();

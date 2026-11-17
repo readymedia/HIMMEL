@@ -1335,6 +1335,7 @@ int main(int argc, char** argv) {
     lightpad->set_context(&model->transport());
     LightpadLink lplink;
     auto nuvj = std::make_unique<himmel::perform::NuvjPerform>();  // CONTROL M10
+    nuvj->set_clips(clipdir.get());  // CONTROL wave 8: the pad banks reach every clip (catalog v3)
     nuvj->set_context(&model->transport());
     LightpadLink nvlink;
     nvlink.weapon = "nuvj";

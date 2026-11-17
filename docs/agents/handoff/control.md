@@ -1,5 +1,5 @@
 # CONTROL handoff
-Updated: 2026-11-17 by the CONTROL session (wave 6: MK2 stop_request) · Branch: claude/control-mk2-stop · Last commit: see git log
+Updated: 2026-11-17 by the CONTROL session (wave 8: BROWSE + pads on catalog v3) · Branch: claude/control-w8-browse · Last commit: see git log
 
 ## State in one paragraph
 MK2: verified map, C++ controller (`src/controller`, shared memory `Local\HimmelMk2`, LEDs, screens, reconnect, `--sim` over UDP 8766), screen pages (`pages.cpp`), Python live view + simulator + games. Generic weapon block + drivers for Lightpad / LUMI / NuVJ / APC20 (`weapons/README.md`). **New (M4, 2026-11-17): `himmel::perform::Mk2Perform` plays Perform v4** (`src/perform/`, `docs/design/perform.md`, `hardware-mapping.md` §3): focus PREP / PLAY with double-tap, wheel = TAKE, Top buttons (locks, FREEZE / STROBE / BLACK / ASSIST), knob pages PLAY / CLIP / LAYER / FX / MIX, knobs 5–8 = the PROGRAM scene's macros, pads CLIPS / SLICE / LOOKS / FX PADS (+ MOODS stub), pad targets, PRESS, HIT, `REC` / `ERASE` / `ENTER`, both screens. 219 unit checks in `perform_tests.exe`. **A whole song is played from the MK2 alone** in `himmel.exe --sim` (`python tools/mk2_e2e.py`: build 3 scenes with pads + REC, LOOKS recall, wheel TAKE, ENTER × 3, macro, BLACK, FX PAD, PLAY-focus edit + variation, ERASE undo, SOLO HIT; PASS) and **input → glass is measured: median 32 ms, p90 38 ms, max 40 ms** (`docs/measurements/2026-11-17-control-m4-input-to-glass.md`). **M9 (2026-11-17): `himmel::perform::LightpadPerform`** plays the Block next to the MK2: TOUCH (Touch FX on PROGRAM), MIX (a real crossfader with soft takeover against the wheel, top row TAKE, bottom row CUT) and SCRUB, with its 15 × 15 LEDs; `himmel_render` reads the Lightpad's weapon slot itself. 50 checks in `lightpad_tests.exe`; `mk2_e2e.py` has a Lightpad stage against the simulated Block (`weapon_blocks.exe lightpad --sim`). **M13 (2026-11-17): OSC in** — `himmel_osc.exe` (UDP 7000, started by the supervisor) turns `/himmel/go`, `/himmel/scene n`, macros, BLACK, TAKE ... into commands on producer slot 2, behind an allow list and a strict parser; garbage never reaches the engine (200 000-packet fuzz in `osc_tests.exe`); `Local\HimmelOsc` keeps the last 32 messages. Address map: `docs/interfaces/osc.md`. **MK2 BROWSE** (2026-11-17): the catalog as a list on the MK2 screens, wheel / knob 1 scroll, push / ENTER load into the focused layer, "catalog full" shown. **M10 (2026-11-17): `himmel::perform::NuvjPerform`** plays the NuVJ as a main weapon (perform.md §5.2) through its weapon slot: the crossfader decides PROGRAM (soft takeover), wheels BEND / SCRATCH / FX WHEEL, trims, SYNC loops, INSTA / auto fade, LEDs and LCD; 60 checks in `nuvj_tests.exe`, an e2e stage against the simulated NuVJ. **Not yet checked on the owner's NuVJ** (steps below).
@@ -70,16 +70,29 @@ Contract and address map: **`docs/interfaces/osc.md`**. Code: `src/osc/` (`himme
 - Try it: `build\bin\Release\himmel_osc.exe --send /himmel/go`, `--send /himmel/scene 3`, `--send /himmel/macro/1 0.5`; `himmel_osc.exe --status` = counters + the last messages with the reason.
 - Not built: OSC out, song by name, master dimmer (no engine dimmer), patterns, the Settings › Remote page (GUI), a heartbeat check in the supervisor.
 
-## MK2 BROWSE (MEDIA M7 follow-up)
+## MK2 BROWSE (MEDIA M7 follow-up; catalog v3 in wave 8)
+Wave 8 (PROPOSED D200–D201): BROWSE and the CLIPS pads read the engine's whole clip list
+(`set_clips(ClipDirectory*)`, up to 8192 clips), not the 256-clip `catalog` window. Removed clips are
+hidden; Missing / Busy ones are listed with a tag (the engine refuses to load them).
+
 | Control | In BROWSE |
 |---|---|
 | `BROWSE` | On / off (LED lit while on). The selection starts at the focused layer's clip |
-| Wheel / knob 1 | Scroll the list (1 detent / 50 raw units = one clip); **nothing is crossfaded** |
-| Wheel push / `ENTER` | Load the selected clip into the focused layer (`LayerClip`); the screen says "LOADED > B1". `GUESS:` ENTER loads instead of GO while browsing |
+| Wheel / knob 1 | Scroll the list (1 detent / 50 raw units = one row); **nothing is crossfaded** |
+| `SHIFT` + wheel / `SHIFT` + knob 1 | One page = 16 rows (one CLIPS pad bank). While browsing, `SHIFT` + wheel does **not** open the SYSTEM menu (leave BROWSE first) |
+| Knob 2 | The order: ADDED (clip ids = the pad banks, the default) → NAME (A–Z, case-insensitive) → NEWEST → ENERGY (5 first, unknown last). The selected clip stays selected |
+| Wheel push / `ENTER` | Load the selected clip into the focused layer: a library clip by its **library id** (`LayerClipLib`, refused while it is not ready), a `media/` / `--clip` clip by engine id (`LayerClip`); the screen says "LOADED > B1". `GUESS:` ENTER loads instead of GO while browsing |
 | Groups | Still pick the focus (= where it loads); `PLAY` is still TAKE |
-| Screens | Left: "LIBRARY 6/40" and the list (LIVE / PREV tags); right: "LOAD > B1 PREVIEW", name, size, fps, length, codec, and "CATALOG FULL: +n / IN THE LIBRARY ONLY" when the library feed left clips out (`set_library()`, from `LibraryFeed::catalog_full`) |
+| Screens | Left: "LIBRARY NAME 137/327" and the list (LIVE / PREV / MISSING / BUSY tags); right: "LOAD > B1 PREVIEW", name, size, fps + length (m:ss), codec + energy or state, a dithered swatch of the clip's average colour (48 × 27), and "PAGE 9/21 SHIFT" (or "FULL: +n IN LIBRARY" past 8192) |
 
-Not built: library pages beyond the 256-clip catalog (needs a protocol change, library-db.md §8), thumbnails, search / sort.
+Also wave 8: the CLIPS pad pages (`Master < >`, bank × 16) and PLAY knob 1 (SCROLL) reach every clip id; SCROLL
+loads by library id and skips removed clips. The NuVJ pads (bank × 9 per deck) reach every clip id too
+(`NuvjPerform::set_clips`, one line in `render_main.cpp`), and its LCD names clips past 255.
+
+Not built: real thumbnails (the library's thumbs are JPEG files: decoding them needs a decoder dependency such as
+stb_image plus a worker outside the render loop, an owner / LEAD call), search by letters, a filter by mood.
+ENERGY sorts on `ClipInfo.reserved[0]` (D201): until the library feed fills it, every clip is "unknown" and
+ENERGY = NAME order.
 
 ## NuVJ mapping (M10)
 `docs/design/perform.md` §5.2; PROPOSED D165. Code: `src/perform/include/himmel/perform/nuvj_perform.h`. `himmel_render` finds the weapon slot whose header says `nuvj` (the Lightpad's link, generalised), drains ring 0 into the mapper, writes `led[]` and the LCD `display` (on change, ≤ 30 Hz; the driver resends every 2 s). The mapper never asks for SysEx `7B`.
@@ -120,6 +133,7 @@ Not built (M10 follow-ups): scenes on the NuVJ (hold LATCH + pad = scene 1–9 i
 10. Note what feels wrong (wheel speed, bend amount, fade range) and send `build\bin\Release\logs\himmel-<date>.log`. Settle D165.
 
 ## Done (with commits)
+- **Wave 8 (2026-11-17, branch `claude/control-w8-browse`):** BROWSE + CLIPS pads + PLAY SCROLL on catalog v3 (`Mk2Perform::nclips / clip_at / load_clip`, sorted list `order_` rebuilt only on change, no heap), NuVJ pads past 255, `perform_tests` +325 checks (`test_browse_catalog_v3`, 300 clips), `nuvj_tests` +6, `mk2_e2e.py` stage "300+ library clips" (a temp library of 310 tiny HAP clips in `%TEMP%\himmel_e2e_lib300`, built once with `himmel_ingest --once`; `--no-lib300` skips it) and the wave 7 stack lock in `mk2_e2e.py`, D200–D201.
 - **MK2 stop_request (wave 6, 2026-11-17, branch `claude/control-mk2-stop`):** `Local\HimmelMk2` v2: `Status.stop_request` (appended; `kShmVersion` 1 -> 2). `Controller::run` stops on it like on Ctrl+C; with the MK2 still connected it lets go first: every LED off, the "stopped" page (`ui::draw_stopped`) on both screens, then "Stopped" and exit 0. `mk2_controller` clears the flag when it starts. The supervisor sets it right after "stopping" (fenced `CONTROL (mk2 stop)` block, 3 lines), so the controller lets go in parallel with the renderer instead of being terminated after 3 s. `mk2_tests` +12 checks (`test_stop_request`: a real `Controller` against a simulated MK2 on UDP 28766 and a private block: run() returns ~60 ms after the request, the last LED reports are all off, all 16 strips = the stopped page; without an MK2 < 1 s; Ctrl+C still works). Not run: `quit_check.py` (the LEAD measures it at merge).
 - **MK2 BROWSE + M10 (2026-11-17, branch `claude/control-m10-nuvj`):** BROWSE in `Mk2Perform` (+14 checks, `perform_tests --dump-browse`), `NuvjPerform` + `nuvj_tests` (60 checks), the NuVJ slot in `render_main.cpp` (ENGINE file: the Lightpad link generalised, ~45 lines; `perform->set_library(...)`), `mk2_e2e.py` BROWSE + NuVJ stages (the stack now runs `--weapons lightpad,nuvj`; `--no-nuvj`), D165.
 - **M13 (2026-11-17, branch `claude/control-m13-osc`):** `src/osc/` + `osc_tests` + `docs/interfaces/osc.md` (+ a row in `docs/interfaces/README.md`), supervisor starts `himmel_osc.exe` (ENGINE file, +16 lines), `mk2_e2e.py` OSC stage (`--no-osc` skips it), D164.
@@ -128,7 +142,7 @@ Not built (M10 follow-ups): scenes on the NuVJ (hold LATCH + pad = scene 1–9 i
 - S2 slice mapper (branch `claude/control-slice-perform`). Earlier history: `CLAUDE.md` "Next steps" and `docs/roadmap.md`.
 
 ## In progress
-- Nothing. MK2 stop_request ready to merge. The real NuVJ check is the owner's (steps above).
+- Nothing. Wave 8 ready to merge. The real NuVJ check is the owner's (steps above).
 
 ## Done 2026-11-16: MK2 input end to end (owner: "neither the sim nor the MK2 drives the engine")
 - **Measured, not guessed.** On main (35e662e) with exactly ONE simulator, the whole chain works: scripted `SimMk2`, the live view over HTTP, and clicks in the browser page all reached the engine (every group, 12 quick presses, knob 1, wheel +6 = 0.200, PLAY TAKE), and the engine's Perform screens / LEDs showed on the page.
@@ -161,6 +175,8 @@ Not built (M10 follow-ups): scenes on the NuVJ (hold LATCH + pad = scene 1–9 i
 - The input → glass number covers UDP + engine + DWM, not USB and not the panel (see the measurement doc).
 
 ## Open questions for the owner
+- PROPOSED D200 (BROWSE: knob 2 = order ADDED / NAME / NEWEST / ENERGY, SHIFT + wheel = 16-row pages, the SYSTEM menu not from BROWSE). D201 (energy for the sort in `ClipInfo.reserved[0]`, filled by the library feed: asked the LEAD).
+- Real thumbnails on the MK2 screen need a JPEG decoder (new dependency): yes / no?
 - PROPOSED D165 (NuVJ: deck A/B = engine A/B, the selected layer = the focus layer on that deck, else layer 1; SPEED fader 0..2×; BEND ±2 % per tick; AUTO FADE 0..8 s; LATCH = no dice; ENTER loads while the MK2 browses).
 - PROPOSED D164 (OSC: UDP 7000, this PC only by default, out-of-range values refused, the extra addresses `/himmel/back`, `/go/preview`, `/xfade`, `/undo`, `/redo`, `/beat` = a tap).
 - PROPOSED D163 (Lightpad: MIX absolute A ↔ B with soft takeover, TOUCH zones = the first 5 effects in master FX slot 2, Mode tap = hold / double-tap = next mode).
