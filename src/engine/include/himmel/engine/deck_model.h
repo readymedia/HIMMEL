@@ -110,8 +110,18 @@ public:
     // With `old_transport` (a version 2 block) the transport settings, cue points,
     // BPM and grid come back too. The HIT layer is never restored.
     // Returns the number of layers whose clip could not be found by name.
+    // With `old_react` (a version 3 block) each slot whose effect came back keeps its
+    // Custom / Off reactions (D131).
     int restore(const protocol::LiveState& old_live, const protocol::Catalog& old_catalog,
-                const protocol::TransportSection* old_transport = nullptr);
+                const protocol::TransportSection* old_transport = nullptr,
+                const protocol::ReactionSection* old_react = nullptr);
+
+    // ---- per-knob reactions (D131, FxReact) ----
+    // Start-up: each effect's Default row (engine::react_defaults), indexed by effect
+    // id; must outlive the model. Without it a fresh slot's rows have signal None.
+    void set_react_defaults(const protocol::SlotReactions* rows, int count);
+    // The table (settings; env / value are the renderer's). gen bumps on every change.
+    const protocol::ReactionSection& reactions() const { return react_; }
 
     const protocol::LiveState& live() const { return live_; }
     const protocol::Catalog& catalog() const { return catalog_; }
@@ -126,6 +136,8 @@ private:
     void set_crossfader(float v);
     void land_take();
     void reset_fx(protocol::FxSlotState& s, int effect);
+    protocol::SlotReactions* react_row(const protocol::FxSlotState* s);  // nullptr: not a live slot (HIT)
+    const protocol::SlotReactions& react_default_row(int effect) const;
 
     // ---- transport (M2) ----
     enum class PendingKind : uint8_t { None, Launch, Jump };
@@ -171,6 +183,10 @@ private:
     const protocol::Catalog& catalog_;
     protocol::LiveState live_{};
     protocol::TransportSection transport_{};
+    protocol::ReactionSection react_{};
+    const protocol::SlotReactions* react_defaults_ = nullptr;
+    int react_default_count_ = 0;
+    protocol::SlotReactions react_empty_{};
     bool dirty_ = true;
     Playhead ph_[kLayerSlots];
     BeatClock clock_;

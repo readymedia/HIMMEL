@@ -755,6 +755,43 @@ struct StateLink {
     uint64_t last_write_us = 0;
 };
 
+// ==== AUDIO (D131): the reaction table for the state block, with each knob's live
+// envelope and value from the FX resolver (0 for a slot not drawn this frame). ====
+bool react_live_wanted(const proto::LiveState& live) {
+    for (const auto& d : live.deck) {
+        for (const auto& l : d.layer)
+            for (const auto& f : l.fx)
+                if (f.effect >= 0) return true;
+        for (const auto& f : d.fx)
+            if (f.effect >= 0) return true;
+    }
+    for (const auto& f : live.master_fx)
+        if (f.effect >= 0) return true;
+    return false;
+}
+void fill_react_row(proto::SlotReactions& out, const proto::SlotReactions& in, const himmel::fx::FxGpu& fx, int chain,
+                    int slot) {
+    out = in;
+    const himmel::fx::SlotRuntime& rt = fx.runtime(chain, slot);
+    const bool now = rt.frame != 0 && rt.frame == fx.frame_count();
+    for (int p = 0; p < proto::kReactParams; ++p) {
+        out.p[p].env = now ? rt.react_env[p] : 0.0f;
+        out.p[p].value = now ? rt.out[p] : 0.0f;
+    }
+}
+void fill_react_out(proto::ReactionSection& out, const proto::ReactionSection& in, const himmel::fx::FxGpu& fx) {
+    for (int d = 0; d < proto::kDecks; ++d) {
+        for (int l = 0; l < proto::kLayersPerDeck; ++l)
+            for (int k = 0; k < proto::kFxSlots; ++k)
+                fill_react_row(out.layer[d][l][k], in.layer[d][l][k], fx, himmel::fx::chain_layer(d, l), k);
+        for (int k = 0; k < proto::kFxSlots; ++k)
+            fill_react_row(out.deck[d][k], in.deck[d][k], fx, himmel::fx::chain_deck(d), k);
+    }
+    for (int k = 0; k < proto::kFxSlots; ++k) fill_react_row(out.master[k], in.master[k], fx, himmel::fx::kChainMaster, k);
+    out.gen = in.gen;
+}
+// ==== END AUDIO (D131) ====
+
 // ---------------------------------------------------------------- MK2 in / out
 struct Mk2Link {
     mk2::SharedMemory shm;
@@ -1018,6 +1055,11 @@ int main(int argc, char** argv) {
         if (audio_link.open()) LOG("audio: reactions listen to %ls (AV offset %.0f ms)", himmel::audio::kBlockName, cfg.av_offset_ms);
         else LOG("audio: cannot map %ls - reactions stay still", himmel::audio::kBlockName);
     }
+    // D131: every effect's default reaction row; the deck model keeps the per-knob table (FxReact).
+    auto react_defaults = std::make_unique<proto::SlotReactions[]>(proto::kMaxEffects);
+    himmel::engine::react_defaults(himmel::fx::builtin(), react_defaults.get(), proto::kMaxEffects);
+    model->set_react_defaults(react_defaults.get(), proto::kMaxEffects);
+    auto react_out = std::make_unique<proto::ReactionSection>();  // the state block copy (+ live env / value)
     // ==== END AUDIO (M8) ====
 
     // ---- state block: restore from a block that survived the last renderer
@@ -1038,7 +1080,12 @@ int main(int argc, char** argv) {
                 if (proto::seq_read(state.blk->live_seq, state.blk->live, *old_live) &&
                     proto::seq_read(state.blk->catalog_seq, state.blk->catalog, *old_cat)) {
                     const bool have_tr = proto::seq_read(state.blk->transport_seq, state.blk->transport, *old_tr) != 0;
-                    const int lost = model->restore(*old_live, *old_cat, have_tr ? old_tr.get() : nullptr);
+                    // ==== AUDIO (D131): the reaction table comes back too ====
+                    auto old_rx = std::make_unique<proto::ReactionSection>();
+                    const bool have_rx = proto::seq_read(state.blk->react_seq, state.blk->react, *old_rx) != 0;
+                    // ==== END AUDIO (D131) ====
+                    const int lost = model->restore(*old_live, *old_cat, have_tr ? old_tr.get() : nullptr,
+                                                    have_rx ? old_rx.get() : nullptr);
                     epoch = old_live->epoch + 1;
                     LOG("state: restored the show from the previous renderer (epoch %u)%s", old_live->epoch,
                         lost ? " - some clips are gone from the media folder" : "");
@@ -1105,6 +1152,7 @@ int main(int argc, char** argv) {
         if (cfg.test_signal) LOG("fx: reactions get the test signal (not the audio block)");
     }
     g_fx = fxg.get();
+    g_fx->set_reactions(&model->reactions());  // ==== AUDIO (D131): per-knob reactions ====
     // ==== ENGINE (M6): Spout out (off without --spout; a failure never touches the outputs) ====
     himmel::engine::SpoutOut spout;
     if (!cfg.spout.empty()) {
@@ -1850,11 +1898,19 @@ int main(int argc, char** argv) {
             for (const auto& dk : live.deck)
                 for (const auto& ly : dk.layer) playing |= ly.clip >= 0 && ly.playing;
             playing |= model->layer(kHitSlot).clip >= 0;
+            bool react_due = false;  // AUDIO (D131)
             if (model->take_structure_dirty() || playing || t_done - state.last_write_us >= 250000) {
                 proto::seq_write(state.blk->live_seq, state.blk->live, live);
                 proto::seq_write(state.blk->transport_seq, state.blk->transport, model->transport());
                 state.last_write_us = t_done;
+                react_due = true;
             }
+            // ==== AUDIO (D131): the reaction table + live env / value, every frame while an FX slot is used ====
+            if (react_due || react_live_wanted(live)) {
+                fill_react_out(*react_out, model->reactions(), *g_fx);
+                proto::seq_write(state.blk->react_seq, state.blk->react, *react_out);
+            }
+            // ==== END AUDIO (D131) ====
             state.blk->status.heartbeat_us.store(t_done);
         }
         // ==== ENGINE (M6): outputs block - on change, while IDENTIFY runs, and every 100 ms (the supervisor's

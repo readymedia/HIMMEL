@@ -16,6 +16,7 @@
 //   himmel_cmd fx T S EFFECT PRESET        ... then set the preset's knobs (subtle, extreme, ...: fx/<id>/effect.json)
 //   himmel_cmd press T S V                 PRESS 0..1 on the slot (0 = release)
 //   himmel_cmd param T S P V | mix T S V | bypass T S [on|off|toggle]   P = 1..8
+//   himmel_cmd react T S K kick 0.5 add   D131: knob K (1..4) gets its own reaction (FxReact); "default" / "off"
 //   himmel_cmd focus D L | hello | raw TYPE DECK LAYER SLOT PARAM I F   (raw: protocol numbers)
 //   himmel_cmd flood N                     N opacity commands at once (rate-limit test)
 //   himmel_cmd watch [seconds]             print the state twice a second
@@ -88,6 +89,7 @@ void usage() {
         "  clip D L ID | opacity D L V | speed D L V | jump D L V | blend D L MODE\n"
         "  mute D L [on|off|toggle] | play D L pause|play|toggle|restart | focus D L\n"
         "  fx T S EFFECT [PRESET] | param T S P V | mix T S V | press T S V | bypass T S [on|off|toggle]\n"
+        "  react T S K|all SIGNAL [AMOUNT] [add|follow|trigger] [ATTACK RELEASE THRESHOLD] | react T S K|all default|off\n"
         "  raw TYPE DECK LAYER SLOT PARAM I F | hello | flood N\n"
         "  set D L PARAM VALUE | trigger D L ID [VEL] [up] | cue D L K jump|set [V]|clear\n"
         "  beatloop D L BEATS | scratch D L grab|release|move V|rel S | play D L release|stop\n"
@@ -574,6 +576,25 @@ int run_one(Engine& e, const std::vector<std::string>& a, const Catalog& cat) {
         for (int p = 0; p < m.params; ++p)
             if (const int rp = fx_cmd(CommandType::FxParam, static_cast<uint8_t>(p), 0, m.preset[pr].v[p]); rp != 0) return rp;
         return 0;
+    }
+    if (c == "react") {  // D131: react T S K|all SIGNAL [AMOUNT] [add|follow|trigger] [ATTACK RELEASE THRESHOLD] | default | off
+        uint8_t deck = 0, layer = 0;
+        if (a.size() < 5 || !fx_target(a[1], deck, layer) || n(2) < 1) return 1;
+        const uint8_t slot = static_cast<uint8_t>(n(2) - 1);
+        const uint8_t knob = a[3] == "all" ? kNone : static_cast<uint8_t>(n(3) - 1);
+        if (knob != kNone && knob >= kReactParams) return 1;
+        ReactArgs ra;
+        if (a[4] == "default" || a[4] == "off") {
+            ra.op = a[4] == "default" ? ReactOp::Default : ReactOp::Off;
+            return e.send(make_react(deck, layer, slot, knob, ra));
+        }
+        himmel::fx::Signal sg;
+        if (!himmel::fx::signal_from_name(a[4].c_str(), sg)) return 1;
+        ra.signal = static_cast<ReactSignal>(sg);
+        if (a.size() > 6) ra.mode = a[6] == "follow" ? ReactMode::Follow : a[6] == "trigger" ? ReactMode::Trigger : ReactMode::Add;
+        const float amount = a.size() > 5 ? f(5) : 0.5f;
+        const float att = a.size() > 7 ? f(7) : 10.0f, rel = a.size() > 8 ? f(8) : 200.0f, thr = a.size() > 9 ? f(9) : 0.0f;
+        return e.send(make_react(deck, layer, slot, knob, ra, amount, att, rel, thr));
     }
     if (c == "press") return a.size() < 4 ? 1 : fx_cmd(CommandType::FxPress, kNone, 0, f(3));
     if (c == "param") return a.size() < 5 || n(3) < 1 ? 1 : fx_cmd(CommandType::FxParam, static_cast<uint8_t>(n(3) - 1), 0, f(4));

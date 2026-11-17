@@ -49,6 +49,68 @@ int step_index(float p, int n) {
 }
 float step_center(int i, int n) { return n <= 1 ? 0.0f : (static_cast<float>(i) + 0.5f) / static_cast<float>(n); }
 
+static_assert(static_cast<int>(protocol::ReactSignal::Count) == kSignals);
+static_assert(static_cast<int>(protocol::ReactMode::Trigger) == static_cast<int>(ReactMode::Trigger));
+static_assert(static_cast<int>(protocol::ReactCurve::Exp) == static_cast<int>(Curve::Exp));
+static_assert(protocol::kReactParams == kParams);
+
+void reactions_from(const protocol::SlotReactions& in, Reaction out[kParams]) {
+    for (int p = 0; p < kParams; ++p) {
+        const protocol::ReactionEntry& e = in.p[p];
+        Reaction r;
+        r.param = static_cast<int8_t>(p);
+        const bool nums = std::isfinite(e.amount) && std::isfinite(e.attack_ms) && std::isfinite(e.release_ms) &&
+                          std::isfinite(e.threshold) && std::isfinite(e.range_lo) && std::isfinite(e.range_hi) &&
+                          std::isfinite(e.quantise_beats) && std::isfinite(e.hold_beats);
+        if (e.source != static_cast<uint8_t>(protocol::ReactSource::Off) && e.signal < kSignals &&
+            e.mode < static_cast<uint8_t>(protocol::ReactMode::Count) &&
+            e.curve < static_cast<uint8_t>(protocol::ReactCurve::Count) && nums) {
+            r.signal = static_cast<Signal>(e.signal);
+            r.mode = static_cast<ReactMode>(e.mode);
+            r.curve = static_cast<Curve>(e.curve);
+            r.amount = std::clamp(e.amount, -1.0f, 1.0f);
+            r.attack_ms = std::clamp(e.attack_ms, 0.0f, protocol::kReactMaxMs);
+            r.release_ms = std::clamp(e.release_ms, 0.0f, protocol::kReactMaxMs);
+            r.threshold = clamp01(e.threshold);
+            r.range_lo = clamp01(e.range_lo);
+            r.range_hi = clamp01(e.range_hi);
+            r.quantise_beats = std::clamp(e.quantise_beats, 0.0f, 16.0f);
+            r.hold_beats = std::clamp(e.hold_beats, 0.0f, 16.0f);
+        }
+        out[p] = r;
+    }
+}
+
+void default_entry(const EffectMeta& m, int p, protocol::ReactionEntry& e) {
+    e = protocol::ReactionEntry{};
+    e.source = static_cast<uint8_t>(protocol::ReactSource::Default);
+    const bool has = p >= 0 && p < std::min(m.params, kParams);
+    const Reaction& re = m.reaction;
+    if (has && re.param == p && re.signal != Signal::None) {
+        e.signal = static_cast<uint8_t>(re.signal);
+        e.mode = static_cast<uint8_t>(re.mode);
+        e.curve = static_cast<uint8_t>(re.curve);
+        e.amount = re.amount;
+        e.attack_ms = re.attack_ms;
+        e.release_ms = re.release_ms;
+        e.threshold = re.threshold;
+        e.range_lo = re.range_lo;
+        e.range_hi = re.range_hi;
+        e.quantise_beats = re.quantise_beats;
+        e.hold_beats = re.hold_beats;
+        return;
+    }
+    // No default on this knob: the template a Signal / Amount op starts from.
+    e.signal = static_cast<uint8_t>(Signal::None);
+    e.mode = static_cast<uint8_t>(ReactMode::Add);
+    e.curve = static_cast<uint8_t>(Curve::Linear);
+    e.amount = 0.0f;
+    e.attack_ms = 10.0f;
+    e.release_ms = 200.0f;
+    e.range_lo = has ? m.param[p].good_lo : 0.0f;
+    e.range_hi = has ? m.param[p].good_hi : 1.0f;
+}
+
 float strobe_flash_hz(const EffectMeta& m, float rate01, float bpm) {
     if (m.flash.mode != FlashMode::Rate || m.flash.steps == 0) return 0.0f;
     const int i = step_index(rate01, m.flash.steps);
@@ -56,7 +118,7 @@ float strobe_flash_hz(const EffectMeta& m, float rate01, float bpm) {
 }
 
 Resolved resolve(const EffectMeta& m, int effect_id, const protocol::FxSlotState& slot, SlotRuntime& rt,
-                 const Globals& globals, const FrameCtx& ctx) {
+                 const Globals& globals, const FrameCtx& ctx, const Reaction* reacts) {
     if (rt.effect != effect_id) {
         rt = SlotRuntime{};
         rt.effect = static_cast<int16_t>(effect_id);
@@ -98,33 +160,41 @@ Resolved resolve(const EffectMeta& m, int effect_id, const protocol::FxSlotState
         v[pp] = v[pp] + (pv - v[pp]) * w;
     }
 
-    // 3. Reaction (music.md §4): signal -> gate -> envelope -> curve -> ADD / FOLLOW / TRIGGER.
-    const Reaction& re = m.reaction;
-    if (re.signal != Signal::None && re.param >= 0 && re.param < n) {
+    // 3. Reactions (music.md §4): signal -> gate -> envelope -> curve -> ADD / FOLLOW / TRIGGER.
+    //    One per knob (D131), each on its own envelope, in knob order.
+    for (int rp = 0; rp < n; ++rp) {
+        const Reaction* rr = nullptr;
+        if (reacts) rr = &reacts[rp];
+        else if (m.reaction.param == rp) rr = &m.reaction;
+        if (!rr || rr->signal == Signal::None || rr->signal >= Signal::Count) {
+            rt.react_env[rp] = 0.0f;
+            continue;
+        }
+        const Reaction& re = *rr;
+        float& env = rt.react_env[rp];
         const float sig = clamp01(ctx.sig[re.signal]);
         const float x = sig <= re.threshold ? 0.0f : (sig - re.threshold) / std::max(1e-3f, 1.0f - re.threshold);
         if (re.mode == ReactMode::Trigger) {
-            const bool edge = sig > re.threshold && rt.prev_sig <= re.threshold;
+            const bool edge = sig > re.threshold && rt.prev_sig[rp] <= re.threshold;
             bool fire = edge;
             if (fire && re.quantise_beats > 0.0f) {
                 // Only on the grid: an edge waits for the next grid line (kept as a pending trigger).
-                rt.last_trigger_beat = std::ceil(ctx.beats / re.quantise_beats) * re.quantise_beats;
+                rt.last_trigger_beat[rp] = std::ceil(ctx.beats / re.quantise_beats) * re.quantise_beats;
                 fire = false;
             }
-            if (!fire && re.quantise_beats > 0.0f && rt.last_trigger_beat > -1e8 && ctx.beats >= rt.last_trigger_beat) {
+            if (!fire && re.quantise_beats > 0.0f && rt.last_trigger_beat[rp] > -1e8 && ctx.beats >= rt.last_trigger_beat[rp]) {
                 fire = true;
-                rt.last_trigger_beat = -1e9;
+                rt.last_trigger_beat[rp] = -1e9;
             }
-            if (fire) rt.trigger_until_beat = ctx.beats + re.hold_beats;
-            const bool up = fire || ctx.beats < rt.trigger_until_beat;
-            rt.react_env = follow(rt.react_env, up ? 1.0f : 0.0f, re.attack_ms, re.release_ms, dt);
-            if (fire && re.attack_ms <= 0.0f) rt.react_env = 1.0f;
+            if (fire) rt.trigger_until_beat[rp] = ctx.beats + re.hold_beats;
+            const bool up = fire || ctx.beats < rt.trigger_until_beat[rp];
+            env = follow(env, up ? 1.0f : 0.0f, re.attack_ms, re.release_ms, dt);
+            if (fire && re.attack_ms <= 0.0f) env = 1.0f;
         } else {
-            rt.react_env = follow(rt.react_env, x, re.attack_ms, re.release_ms, dt);
+            env = follow(env, x, re.attack_ms, re.release_ms, dt);
         }
-        rt.prev_sig = sig;
-        const float k = shape(re.curve, rt.react_env);
-        const int rp = re.param;
+        rt.prev_sig[rp] = sig;
+        const float k = shape(re.curve, env);
         const bool move = (rt.scope[rp] & 3) == static_cast<uint8_t>(Scope::Move) && (m.param[rp].scopes & scope_bit(Scope::Move));
         const float lo = re.range_lo, hi = re.range_hi;
         if (move || re.mode == ReactMode::Follow) {
@@ -167,7 +237,7 @@ Resolved resolve(const EffectMeta& m, int effect_id, const protocol::FxSlotState
         v[fl.param] = lv;
     }
 
-    for (int p = 0; p < kParams; ++p) out.p[p] = p < n ? v[p] : 0.0f;
+    for (int p = 0; p < kParams; ++p) out.p[p] = rt.out[p] = p < n ? v[p] : 0.0f;
     return out;
 }
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 #include "himmel/engine/deck_model.h"
+#include "himmel/engine/reactions.h"
 
 #include <algorithm>
 #include <cmath>
@@ -90,7 +91,47 @@ const LayerTransport& DeckModel::layer_transport(int slot) const {
     return slot < kHitSlot ? transport_.layer[slot / 4][slot % 4] : transport_.hit_transport;
 }
 
+SlotReactions* DeckModel::react_row(const FxSlotState* s) {
+    for (int d = 0; d < kDecks; ++d) {
+        for (int l = 0; l < kLayersPerDeck; ++l)
+            for (int f = 0; f < kFxSlots; ++f)
+                if (s == &live_.deck[d].layer[l].fx[f]) return &react_.layer[d][l][f];
+        for (int f = 0; f < kFxSlots; ++f)
+            if (s == &live_.deck[d].fx[f]) return &react_.deck[d][f];
+    }
+    for (int f = 0; f < kFxSlots; ++f)
+        if (s == &live_.master_fx[f]) return &react_.master[f];
+    return nullptr;
+}
+
+const SlotReactions& DeckModel::react_default_row(int effect) const {
+    return react_defaults_ && effect >= 0 && effect < react_default_count_ ? react_defaults_[effect] : react_empty_;
+}
+
+void DeckModel::set_react_defaults(const SlotReactions* rows, int count) {
+    react_defaults_ = rows;
+    react_default_count_ = rows ? count : 0;
+    // Slots that already hold an effect show its defaults (Custom / Off stay).
+    auto fix = [&](const FxSlotState& f) {
+        if (SlotReactions* r = react_row(&f))
+            for (int p = 0; p < kReactParams; ++p)
+                if (r->p[p].source == static_cast<uint8_t>(ReactSource::Default)) r->p[p] = react_default_row(f.effect).p[p];
+    };
+    for (auto& d : live_.deck) {
+        for (auto& l : d.layer)
+            for (auto& f : l.fx) fix(f);
+        for (auto& f : d.fx) fix(f);
+    }
+    for (auto& f : live_.master_fx) fix(f);
+    ++react_.gen;
+    dirty_ = true;
+}
+
 void DeckModel::reset_fx(FxSlotState& s, int effect) {
+    if (SlotReactions* r = react_row(&s)) {  // D131: FxSet = the new effect's own reactions
+        *r = react_default_row(effect);
+        ++react_.gen;
+    }
     std::memset(&s, 0, sizeof(s));
     s.effect = static_cast<int16_t>(effect);
     s.mix = 1.0f;
@@ -101,6 +142,7 @@ void DeckModel::reset_fx(FxSlotState& s, int effect) {
 }
 
 void DeckModel::reset() {
+    react_empty_row(react_empty_);
     const uint32_t epoch = live_.epoch;
     std::memset(&live_, 0, sizeof(live_));
     live_.epoch = epoch;
@@ -193,6 +235,14 @@ Reject DeckModel::validate(const Command& c) const {
         case CommandType::FxBypass:
             if (!fx_target(c)) return Reject::BadTarget;
             return is_toggle(c.i) ? Reject::None : Reject::BadValue;
+        case CommandType::FxReact: {  // D131 (command-protocol.md §4d)
+            if (!fx_target(c)) return Reject::BadTarget;
+            const FxSlotState* s = fx_slot(c);
+            if (s->effect < 0) return Reject::BadTarget;
+            if (c.param != kNone && (c.param >= kReactParams || c.param >= catalog_.effect[s->effect].param_count))
+                return Reject::BadTarget;
+            return react_check(c);
+        }
         case CommandType::FxMix:
         case CommandType::FxPress:
             if (!fx_target(c)) return Reject::BadTarget;
@@ -708,6 +758,14 @@ Reject DeckModel::apply(const Command& c, uint64_t now_us) {
             s->mix = clamp01(with_delta(s->mix, c));
             break;
         }
+        case CommandType::FxReact: {
+            const FxSlotState* s = fx_slot(c);
+            if (SlotReactions* r = react_row(s)) {
+                react_apply(*r, c, react_default_row(s->effect));
+                ++react_.gen;
+            }
+            break;
+        }
         case CommandType::FxPress: {  // absolute only; the renderer shapes velocity / release (himmel::fx::resolve)
             FxSlotState* s = fx_slot(c);
             s->press = static_cast<uint8_t>(std::lround(clamp01(c.f[0]) * 255.0f));
@@ -985,7 +1043,8 @@ void copy_settings(LayerTransport& d, const LayerTransport& s) {
 }
 }  // namespace
 
-int DeckModel::restore(const LiveState& old, const Catalog& old_cat, const TransportSection* old_tr) {
+int DeckModel::restore(const LiveState& old, const Catalog& old_cat, const TransportSection* old_tr,
+                       const ReactionSection* old_react) {
     reset();
     int lost = 0;
     auto clip_id = [&](int16_t id) -> int16_t {
@@ -994,6 +1053,25 @@ int DeckModel::restore(const LiveState& old, const Catalog& old_cat, const Trans
             if (names_equal(catalog_.clip[i].name, old_cat.clip[id].name, kNameLen)) return static_cast<int16_t>(i);
         ++lost;
         return -1;
+    };
+    // D131: Custom / Off reactions come back with their slot (only knobs the effect has).
+    auto react = [&](FxSlotState& dst, const SlotReactions* src) {
+        SlotReactions* row = react_row(&dst);
+        if (!src || !row || dst.effect < 0) return;
+        const int n = std::min<int>(kReactParams, catalog_.effect[dst.effect].param_count);
+        for (int p = 0; p < n; ++p) {
+            const ReactionEntry& e = src->p[p];
+            if (e.source != static_cast<uint8_t>(ReactSource::Custom) && e.source != static_cast<uint8_t>(ReactSource::Off))
+                continue;
+            const bool nums = finite(e.amount) && finite(e.attack_ms) && finite(e.release_ms) && finite(e.threshold) &&
+                              finite(e.range_lo) && finite(e.range_hi) && finite(e.quantise_beats) && finite(e.hold_beats);
+            if (!nums || e.signal >= static_cast<uint8_t>(ReactSignal::Count) ||
+                e.mode >= static_cast<uint8_t>(ReactMode::Count) || e.curve >= static_cast<uint8_t>(ReactCurve::Count))
+                continue;
+            row->p[p] = e;
+            row->p[p].env = row->p[p].value = 0.0f;
+        }
+        ++react_.gen;
     };
     auto fx = [&](FxSlotState& dst, const FxSlotState& src) {
         int16_t id = -1;
@@ -1021,7 +1099,10 @@ int DeckModel::restore(const LiveState& old, const Catalog& old_cat, const Trans
             t.position = finite(s.position) && t.clip >= 0 ? clamp01(s.position) : 0.0f;
             jump_to_[slot] = t.position;
             ++jump_gen_[slot];
-            for (int f = 0; f < kFxSlots; ++f) fx(t.fx[f], s.fx[f]);
+            for (int f = 0; f < kFxSlots; ++f) {
+                fx(t.fx[f], s.fx[f]);
+                react(t.fx[f], old_react ? &old_react->layer[d][l][f] : nullptr);
+            }
             if (old_tr) {
                 const LayerTransport& ot = old_tr->layer[d][l];
                 copy_settings(T(slot), ot);
@@ -1035,9 +1116,15 @@ int DeckModel::restore(const LiveState& old, const Catalog& old_cat, const Trans
                 if (g.frames > 0) ph_[slot].start(g, T(slot), t.position * static_cast<double>(g.frames), t.speed);
             }
         }
-        for (int f = 0; f < kFxSlots; ++f) fx(live_.deck[d].fx[f], old.deck[d].fx[f]);
+        for (int f = 0; f < kFxSlots; ++f) {
+            fx(live_.deck[d].fx[f], old.deck[d].fx[f]);
+            react(live_.deck[d].fx[f], old_react ? &old_react->deck[d][f] : nullptr);
+        }
     }
-    for (int f = 0; f < kFxSlots; ++f) fx(live_.master_fx[f], old.master_fx[f]);
+    for (int f = 0; f < kFxSlots; ++f) {
+        fx(live_.master_fx[f], old.master_fx[f]);
+        react(live_.master_fx[f], old_react ? &old_react->master[f] : nullptr);
+    }
     if (old_tr) {
         if (finite(old_tr->clock.bpm)) clock_.set_bpm(old_tr->clock.bpm, last_tick_us_);
         transport_.clock.bpm = static_cast<float>(clock_.bpm());
