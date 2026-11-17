@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "himmel/ui/json_codec.h"
+#include "himmel/ui/panels_json.h"
 #include "http_util.h"
 
 using namespace himmel::protocol;
@@ -386,6 +387,251 @@ static void test_transport_commands() {
     CHECK(cj["effects"][0]["kind"] == "effect" && cj["effects"][1]["kind"] == "generator");
 }
 
+// ---- M11 part 2: show / output commands and the panel JSON ----
+static void test_panel_commands() {
+    using namespace himmel::protocol;
+    // SceneRecall
+    auto r = P(R"({"type":"SceneRecall","deck":"B","value":3})");
+    CHECK(r.ok && r.cmd.type == CommandType::SceneRecall && r.cmd.deck == 1 && r.cmd.i == 3 && r.cmd.slot == kNone);
+    CHECK(r.cmd.f[0] == -1.0f);   // default: the scene's own transition
+    r = P(R"({"type":"SceneRecall","deck":"A","value":"next","f":0})");
+    CHECK(r.ok && r.cmd.i == kSceneNext && r.cmd.f[0] == 0.0f);
+    r = P(R"({"type":"SceneRecall","deck":"A","value":"prev","slot":2})");
+    CHECK(r.ok && r.cmd.i == kScenePrev && r.cmd.slot == 2);
+    CHECK(!P(R"({"type":"SceneRecall","deck":"A","value":16})").ok);
+    CHECK(!P(R"({"type":"SceneRecall","value":1})").ok);
+    CHECK(!P(R"({"type":"SceneRecall","deck":"hit","value":1})").ok);
+    // SceneSave
+    r = P(R"({"type":"SceneSave","deck":"A"})");
+    CHECK(r.ok && r.cmd.i == -1 && !(r.cmd.flags & kVariation));
+    r = P(R"({"type":"SceneSave","deck":1,"value":5,"variation":true})");
+    CHECK(r.ok && r.cmd.deck == 1 && r.cmd.i == 5 && (r.cmd.flags & kVariation));
+    CHECK(!P(R"({"type":"SceneSave","deck":0,"variation":"yes"})").ok);
+    // Undo
+    CHECK(P(R"({"type":"Undo"})").ok && P(R"({"type":"Undo"})").cmd.i == 0);
+    CHECK(P(R"({"type":"Undo","value":"redo"})").cmd.i == 1);
+    CHECK(!P(R"({"type":"Undo","value":2})").ok);
+    // SceneReset
+    r = P(R"({"type":"SceneReset","deck":"A","layer":2,"f":0.5})");
+    CHECK(r.ok && r.cmd.layer == 2 && r.cmd.f[0] == 0.5f);
+    CHECK(P(R"({"type":"SceneReset","deck":"A"})").cmd.layer == kNone);
+    CHECK(!P(R"({"type":"SceneReset","deck":"A","f":-1})").ok);
+    // Dice
+    r = P(R"({"type":"Dice","param":"Mutate","deck":"A","f":0.4})");
+    CHECK(r.ok && r.cmd.param == static_cast<uint8_t>(DiceVerb::Mutate) && r.cmd.f[0] == 0.4f && r.cmd.layer == kNone);
+    CHECK(!P(R"({"type":"Dice","param":"Shake","deck":"A"})").ok);
+    CHECK(!P(R"({"type":"Dice","deck":"A"})").ok);
+    // Locks
+    r = P(R"({"type":"Locks","param":"Toggle","value":["Clip","Fx"]})");
+    CHECK(r.ok && r.cmd.param == static_cast<uint8_t>(LockOp::Toggle) && r.cmd.i == (kLockClip | kLockFx));
+    CHECK(P(R"({"type":"Locks","param":"Clear","value":"all"})").cmd.i == static_cast<int32_t>(kLockAll));
+    CHECK(P(R"({"type":"Locks","param":"Set","value":4})").cmd.i == 4);
+    CHECK(!P(R"({"type":"Locks","param":"Set","value":["Banana"]})").ok);
+    CHECK(!P(R"({"type":"Locks","param":"Set","value":256})").ok);
+    // Project + the text handshake
+    r = P(R"({"type":"Project","param":"Save"})");
+    CHECK(r.ok && r.cmd.param == static_cast<uint8_t>(ProjectAction::Save) && !r.needs_text);
+    r = P(R"({"type":"Project","param":"SaveAs","text":"My show"})");
+    CHECK(r.ok && r.needs_text && r.text == "My show");
+    CHECK(!P(R"({"type":"Project","param":"SaveAs"})").ok);
+    CHECK(!P(R"({"type":"Project","param":"Save","text":"x"})").ok);
+    r = P(R"({"type":"Project","param":"Open","slot":2})");
+    CHECK(r.ok && r.cmd.slot == 2 && !r.needs_text);
+    r = P(R"({"type":"Project","param":"Open","text":"C:\\shows\\a.himmel"})");
+    CHECK(r.ok && r.cmd.slot == kNone && r.needs_text);
+    CHECK(!P(R"({"type":"Project","param":"Open"})").ok);
+    CHECK(!P(R"({"type":"Project","param":"Open","slot":1,"text":"x"})").ok);
+    CHECK(!P(R"({"type":"Project","param":"Open","slot":10})").ok);
+    CHECK(P(R"({"type":"Project","param":"New","value":1})").cmd.i == 1);
+    CHECK(!P(R"({"type":"Project","param":"New","value":2})").ok);
+    CHECK(P(R"({"type":"Project","param":"Export"})").ok);
+    CHECK(!P(R"({"type":"Project","param":"SaveAs","text":""})").ok);
+    CHECK(!P(R"({"type":"Project","param":"SaveAs","text":"a\nb"})").ok);
+    {
+        json j = {{"type", "Project"}, {"param", "SaveAs"}, {"text", std::string(kPathLen, 'x')}};
+        CHECK(!command_from_json(j, kLim).ok);
+    }
+    // ShowSelect
+    r = P(R"({"type":"ShowSelect","param":"Bank","value":1,"relative":true})");
+    CHECK(r.ok && (r.cmd.flags & kRelative) && r.cmd.i == 1);
+    CHECK(P(R"({"type":"ShowSelect","param":"Bank","value":15})").ok);
+    CHECK(!P(R"({"type":"ShowSelect","param":"Bank","value":16})").ok);
+    CHECK(P(R"({"type":"ShowSelect","param":"UseSetlist","value":"toggle"})").cmd.i == 2);
+    CHECK(!P(R"({"type":"ShowSelect","param":"UseSetlist","value":1,"relative":true})").ok);
+    // KitSet
+    r = P(R"({"type":"KitSet","deck":"A","slot":3,"param":"Clip","layer":"Layer2","value":5})");
+    CHECK(r.ok && r.cmd.slot == 3 && r.cmd.param == static_cast<uint8_t>(PadKind::Clip) &&
+          r.cmd.layer == static_cast<uint8_t>(PadTarget::Layer2) && r.cmd.i == 5);
+    r = P(R"({"type":"KitSet","deck":"A","slot":0,"param":"Action","value":"Freeze"})");
+    CHECK(r.ok && r.cmd.i == static_cast<int32_t>(PadAction::Freeze) && r.cmd.layer == 0);
+    CHECK(P(R"({"type":"KitSet","deck":"A","slot":0,"param":"Empty"})").ok);
+    CHECK(!P(R"({"type":"KitSet","deck":"A","slot":16,"param":"Clip","value":1})").ok);
+    // MacroSet / MacroValue
+    r = P(R"({"type":"MacroSet","deck":"A","slot":1,"param":0,"layer":2,"value":17,"f":[0.2,0.8]})");
+    CHECK(r.ok && r.cmd.slot == 1 && r.cmd.param == 0 && r.cmd.layer == 2 && r.cmd.i == 17 && r.cmd.f[1] == 0.8f);
+    CHECK(P(R"({"type":"MacroSet","deck":"A","slot":1,"param":0,"value":3})").cmd.f[1] == 1.0f);
+    r = P(R"({"type":"MacroSet","deck":"A","slot":2,"text":"WOBBLE"})");
+    CHECK(r.ok && r.cmd.param == kNone && r.needs_text);
+    CHECK(P(R"({"type":"MacroSet","deck":"A","slot":2,"param":1,"clear":true})").ok);
+    CHECK(!P(R"({"type":"MacroSet","deck":"A","slot":2})").ok);
+    r = P(R"({"type":"MacroValue","slot":3,"f":1.7})");
+    CHECK(r.ok && r.cmd.f[0] == 1.0f);
+    r = P(R"({"type":"MacroValue","slot":0,"f":-0.1,"relative":true})");
+    CHECK(r.ok && (r.cmd.flags & kRelative) && r.cmd.f[0] == -0.1f);
+    CHECK(!P(R"({"type":"MacroValue","slot":4,"f":0.5})").ok);
+    // SongEdit
+    r = P(R"({"type":"SongEdit","param":"RenameScene","slot":4,"text":"Drop"})");
+    CHECK(r.ok && r.cmd.slot == 4 && r.needs_text && r.text == "Drop");
+    CHECK(!P(R"({"type":"SongEdit","param":"RenameScene","slot":4})").ok);
+    r = P(R"({"type":"SongEdit","param":"Bpm","value":2,"f":128})");
+    CHECK(r.ok && r.cmd.i == 2 && r.cmd.f[0] == 128.0f);
+    CHECK(!P(R"({"type":"SongEdit","param":"Bpm","value":2,"f":500})").ok);
+    CHECK(P(R"({"type":"SongEdit","param":"New"})").ok);
+    CHECK(P(R"({"type":"SongEdit","param":"AddScene","deck":"B","value":0})").cmd.deck == 1);
+    CHECK(!P(R"({"type":"SongEdit","param":"AddScene","value":0})").ok);
+    // Outputs
+    r = P(R"({"type":"OutputBlack","slot":1,"value":"toggle"})");
+    CHECK(r.ok && r.cmd.slot == 1 && r.cmd.i == 2);
+    CHECK(P(R"({"type":"OutputBlack","value":1})").cmd.slot == kNone);
+    CHECK(!P(R"({"type":"OutputBlack","slot":8,"value":1})").ok);
+    CHECK(P(R"({"type":"Identify","value":"5s"})").cmd.i == 1);
+    CHECK(P(R"({"type":"Identify","value":"Hold"})").cmd.i == 2);
+    CHECK(!P(R"({"type":"Identify"})").ok);
+    r = P(R"({"type":"LayerPlace","deck":"A","layer":0,"value":"Out","param":1})");
+    CHECK(r.ok && r.cmd.i == static_cast<int32_t>(Place::Out) && r.cmd.param == 1);
+    r = P(R"({"type":"LayerPlace","deck":"hit","value":"Free","f":[0.1,0.2,0.5,0.5]})");
+    CHECK(r.ok && r.cmd.deck == kHitDeck && r.cmd.layer == 0 && r.cmd.f[3] == 0.5f);
+    CHECK(!P(R"({"type":"LayerPlace","deck":"A","layer":0,"value":"Free","f":[0,0,0,0.5]})").ok);
+    CHECK(!P(R"({"type":"LayerPlace","deck":"A","layer":0,"value":"Out"})").ok);
+    CHECK(!P(R"({"type":"LayerPlace","deck":"A","layer":0,"value":"Fit","param":1})").ok);
+    r = P(R"({"type":"OutputConfig","param":"Resolution","value":"P1440"})");
+    CHECK(r.ok && r.cmd.i == static_cast<int32_t>(ResolutionPreset::P1440) && r.cmd.slot == kNone);
+    CHECK(P(R"({"type":"OutputConfig","param":"Refresh","value":"Hz50"})").cmd.i == 1);
+    CHECK(P(R"({"type":"OutputConfig","param":"BlendGamma","f":9})").cmd.f[0] == 3.0f);
+    CHECK(P(R"({"type":"OutputConfig","param":"BlendWidth","value":200})").cmd.i == 200);
+    CHECK(!P(R"({"type":"OutputConfig","param":"BlendWidth","value":2000})").ok);
+    CHECK(!P(R"({"type":"OutputConfig","param":"SimLost","value":1})").ok);
+    CHECK(P(R"({"type":"OutputConfig","param":"SimLost","slot":1,"value":1})").ok);
+    CHECK(!P(R"({"type":"OutputConfig","param":"Zoom","value":1})").ok);
+    // Names
+    CHECK(std::strcmp(command_type_name(CommandType::SceneRecall), "SceneRecall") == 0);
+    CHECK(std::strcmp(command_type_name(CommandType::OutputConfig), "OutputConfig") == 0);
+    const json names = panels_names();
+    CHECK(names["dice"].size() == 5 && names["presets"][2] == "P1440" && names["locks"][0] == "Clip");
+    // Existing commands are untouched by the panel parser.
+    CHECK(P(R"({"type":"Cut"})").ok);
+    CHECK(!P(R"({"type":"Nonsense"})").ok);
+}
+
+static void test_panel_json() {
+    using namespace himmel::protocol;
+    auto st = std::make_unique<ShowStatus>();
+    auto fl = std::make_unique<FilesStatus>();
+    std::strcpy(st->project, "Club night");
+    st->dirty = 1;
+    st->pad[2].used = 1;
+    std::strcpy(st->pad[2].name, "Intro");
+    st->pad[2].on_deck = 2;
+    st->pad[2].thumb_rgb = 0x00ff8800;
+    st->deck[0].scene = 4;
+    st->deck[0].variation = 'b';
+    st->locks = kLockClip | kLockMood;
+    st->undo_depth = 3;
+    st->acked_seq[1] = 77;
+    st->rejected[1] = 2;
+    st->last_reject[1] = static_cast<uint8_t>(Reject::BadValue);
+    std::strcpy(st->message, "Saved");
+    std::strcpy(fl->path, "C:\\shows\\Club night.himmel");
+    fl->recent_count = 1;
+    std::strcpy(fl->recent[0].name, "Club night");
+    fl->missing_count = 12;   // more than kMissingShown
+    std::strcpy(fl->missing[0], "sunset");
+    json j = show_to_json(*st, *fl, 1);
+    CHECK(j["present"] == true && j["project"] == "Club night" && j["dirty"] == true);
+    CHECK(j["pads"].size() == 16 && j["pads"][2]["name"] == "Intro" && j["pads"][2]["on"][1] == true &&
+          j["pads"][2]["rgb"] == 0xff8800 && j["pads"][0]["used"] == false && !j["pads"][0].contains("name"));
+    CHECK(j["decks"][0]["scene"] == 4 && j["decks"][0]["variation"] == "b" && j["decks"][1]["variation"] == "");
+    CHECK(j["locks"].size() == 2 && j["locks"][1] == "Mood");
+    CHECK(j["acked"] == 77 && j["rejected"] == 2 && j["last_reject"] == "BadValue");
+    CHECK(j["files"]["recent"].size() == 1 && j["files"]["missing_count"] == 12 && j["files"]["missing"].size() == 8);
+    CHECK(!j.contains("time_us"));
+
+    auto os = std::make_unique<OutputsSection>();
+    os->count = 2;
+    os->mode = 1;
+    os->out[0].state = static_cast<uint8_t>(OutputState::Ok);
+    std::strcpy(os->out[0].name, "DELL U2720Q");
+    std::strcpy(os->out[0].id.maker, "DEL");
+    os->out[1].state = static_cast<uint8_t>(OutputState::Lost);
+    os->out[1].black = 1;
+    os->out[1].preset = static_cast<uint8_t>(ResolutionPreset::P2160);
+    os->identify_ms_left = 4321;
+    os->layer[8].place = static_cast<uint8_t>(Place::Free);
+    os->layer[8].rect[2] = 0.5f;
+    j = outputs_to_json(*os);
+    CHECK(j["outputs"].size() == 2 && j["mode"] == "Mirror");
+    CHECK(j["outputs"][0]["state"] == "Ok" && j["outputs"][0]["display"]["maker"] == "DEL");
+    CHECK(j["outputs"][1]["state"] == "Lost" && j["outputs"][1]["black"] == true && j["outputs"][1]["preset"] == "P2160");
+    CHECK(j["identify_left_ms"] == 4250 && j["places"].size() == 9 && j["places"][8]["place"] == "Free");
+    os->count = 99;   // a wild count never reads past the table
+    CHECK(outputs_to_json(*os)["outputs"].size() == static_cast<size_t>(kMaxOutputs));
+
+    himmel::audio::Signals sig{};
+    sig.v[static_cast<int>(himmel::audio::Sig::Bass)] = 0.5f;
+    sig.kicks = 9;
+    himmel::audio::InputStatus in{};
+    in.state = static_cast<uint8_t>(himmel::audio::InputState::Running);
+    std::strcpy(in.device, "Microphone (USB)");
+    himmel::audio::ClockSource clk[himmel::audio::kClockSources]{};
+    clk[0].kind = static_cast<uint8_t>(himmel::audio::ClockKind::Midi);
+    clk[0].run = static_cast<uint8_t>(himmel::audio::ClockRun::Running);
+    clk[0].bpm = 120.0f;
+    clk[0].beat = 4.0;
+    clk[0].time_us = 1000000;
+    himmel::audio::AudioConfig cfg{};
+    j = audio_to_json(sig, in, clk, cfg, 0, 1500000);   // 0.5 s later at 120 BPM = +1 beat
+    CHECK(j["sig"]["bass"] == 0.5 && j["hits"][0] == 9 && j["input"]["state"] == "Running");
+    CHECK(j["clock"].size() == 1 && j["clock"][0]["kind"] == "Midi" && j["clock"][0]["beat"] == 5.0);
+    CHECK(j["spectrum"].size() == 32);
+
+    std::string err;
+    CHECK(audio_config_from_json(json::parse(R"({"device":"Mic","mode":"Loopback","gain_db":99,"channel_count":2})"), cfg, err));
+    CHECK(std::strcmp(cfg.device, "Mic") == 0 && cfg.mode == 1 && cfg.gain_db == 48.0f && cfg.channel_count == 2);
+    himmel::audio::AudioConfig before = cfg;
+    CHECK(!audio_config_from_json(json::parse(R"({"mode":"Stereo"})"), cfg, err) && cfg.mode == before.mode);
+    CHECK(!audio_config_from_json(json::parse(R"({"volume":3})"), cfg, err));
+    CHECK(!audio_config_from_json(json{{"device", std::string(200, 'x')}}, cfg, err));
+
+    const json dev = parse_audio_list(
+        "Capture endpoints (mic / line in):\r\n    Mic A (Maker)  (2 ch, 48000 Hz)\r\n  * Mic B  (1 ch, 44100 Hz)\r\n"
+        "Render endpoints (for --loopback):\r\n  * Speakers (X)  (2 ch, 48000 Hz)\r\nMIDI inputs (for --midi-clock):\r\n"
+        "    ROLI Lightpad BLOCK\r\n");
+    CHECK(dev["capture"].size() == 2 && dev["capture"][0]["name"] == "Mic A (Maker)" && dev["capture"][0]["channels"] == 2);
+    CHECK(dev["capture"][1]["default"] == true && dev["capture"][1]["rate"] == 44100);
+    CHECK(dev["render"].size() == 1 && dev["midi"].size() == 1 && dev["midi"][0] == "ROLI Lightpad BLOCK");
+
+    auto oscs = std::make_unique<himmel::osc::OscStatus>();
+    oscs->port = 7000;
+    oscs->total = 3;
+    oscs->next = 3;
+    std::strcpy(oscs->last[0].text, "/himmel/scene 1");
+    std::strcpy(oscs->last[2].text, "/himmel/take");
+    oscs->last[2].from_ip = 0x7F000001;
+    oscs->last[2].verdict = static_cast<uint8_t>(himmel::osc::Verdict::Blocked);
+    j = osc_to_json(*oscs);
+    CHECK(j["last"].size() == 3 && j["last"][0]["text"] == "/himmel/take" && j["last"][0]["verdict"] == "Blocked" &&
+          j["last"][0]["from"] == "127.0.0.1:0" && j["last"][2]["text"] == "/himmel/scene 1");
+
+    LibraryCounts lc;
+    lc.queued = 4;
+    lc.catalog_full = 2;
+    himmel::library::IngestJob job{};
+    std::strcpy(job.name, "sunset.mp4");
+    job.progress = 1.7f;
+    j = library_block_to_json(lc, job);
+    CHECK(j["queued"] == 4 && j["catalog_full"] == 2 && j["job"]["name"] == "sunset.mp4" && j["job"]["progress"] == 1.0);
+}
+
 static void test_http() {
     std::printf("http helpers\n");
     HttpRequest r;
@@ -420,6 +666,8 @@ int main() {
     test_round_trip();
     test_state_json();
     test_transport_commands();
+    test_panel_commands();
+    test_panel_json();
     test_http();
     std::printf("\n%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;

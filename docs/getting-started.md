@@ -240,6 +240,43 @@ crossfader and the clip list.
   read-only second view: it sends nothing and takes no MK2 ring, so it can
   watch a show another bridge drives.
 
+### Project, scenes, outputs, library, audio, OSC (M11 part 2)
+
+Each panel shows only when its process runs (its shared block is there and
+has the right version); a missing one never stops the rest of the page.
+
+- **Project** (top bar): the name (● = unsaved), SAVE (Ctrl+S; an untitled
+  project asks for a name), `⋯` = new (1 or 3 screens), open by path, save
+  as, export `.himmelshow`, revert, restore the autosave, relink missing
+  clips, open recent. `↶ ↷` = undo / redo (Ctrl+Z / Ctrl+Shift+Z).
+- **SCENES tab** (bottom panel): the 16 scenes of the bank (or the song when
+  SETLIST is on), `◀ ▶` = bank / song. Click a pad = recall it into the
+  focused deck (Alt = a cut), Shift + click = select, double-click = rename.
+  REC saves the focused deck on the selected pad (or the next free one),
+  +VAR = a new variation, RESET = back to the scene, GO / `◀` = next /
+  previous scene. DICE: ROLL, MUTATE, back / forward, and the 8 locks the
+  dice keep. The four sliders are the PROGRAM scene's macros (knobs 5–8).
+- **OUTPUTS view:** canvas mode, resolution preset (a setup action: one
+  hitch), refresh, blend width and gamma, IDENTIFY, one card per output
+  (state ON SCREEN / LOST / WINDOW / NEW DISPLAY?, display identity, BLACK,
+  "use the new display", SIM: PULL for tests on one screen), and where each
+  layer covers the canvas (FILL ALL, FIT, OUT n, FREE).
+- **LIBRARY view:** the import worker's status (queued / working / ready /
+  failed, the current file, "catalog full"), and every clip of the library
+  with its thumbnail, size, fps, length, energy, loop style, palette, mood
+  and judder warning ("IN SHOW" = the engine has it). Drop files into the
+  library's `originals` folder (the path is shown).
+- **Audio:** the meter left of the clock (level, bass, mid, high, kick);
+  click it for Settings → Audio: the input (mic / line in or sound on this
+  PC, device, channels), auto gain, gain, gate, sensitivity, the MIDI clock
+  port, the live bands and spectrum, and each effect's default reaction
+  with the signal it follows.
+- **Settings → Remote / OSC:** the port, the allow list, counters and the
+  last 32 messages with their verdict.
+- Test runs: `himmel.exe --sim -- --show-root build/test-show-root` (launch
+  config `himmel-sim-test`) keeps projects and the library away from your own
+  (the children run in `build/bin/Release`, so a relative root lands there).
+
 ### Playing it from the MK2
 
 > Since the playable slice (2026-11-15) `himmel_render.exe` is the deck engine

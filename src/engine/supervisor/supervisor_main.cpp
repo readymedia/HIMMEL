@@ -372,9 +372,9 @@ int main(int argc, char** argv) {
     }
 
     // ==== MEDIA (M7) hook 1/3: himmel_ingest.exe imports into the renderer's library ====
-    std::wstring ingest_args;
+    std::wstring ingest_args, ui_args;
     {
-        bool render_part = false, no_files = false, named = false;
+        bool render_part = false, no_files = false, named = false, no_lib = false;
         for (int i = 1; i < argc; ++i) {
             const std::string a = argv[i];
             if (a == "--") render_part = true;
@@ -383,9 +383,11 @@ int main(int argc, char** argv) {
             else if (a == "--library" && i + 1 < argc) ingest_args = L"--library \"" + widen(argv[++i]) + L"\"", named = true;
             else if (a == "--show-root" && i + 1 < argc && !named)
                 ingest_args = L"--library \"" + (fs::path(widen(argv[++i])) / L"Library").wstring() + L"\"", named = true;
-            else if (a == "--no-library") with_ingest = false;
+            else if (a == "--no-library") with_ingest = false, no_lib = true;
         }
         if (no_files && !named) with_ingest = false;  // a test run: never the owner's library
+        // ==== GUI (M11 part 2) hook: himmel_ui lists the same library the ingest worker fills ====
+        ui_args = named ? ingest_args : (no_files || no_lib) ? std::wstring(L"--no-library") : std::wstring();
     }
     // ==== end MEDIA hook 1/3 ====
 
@@ -402,7 +404,7 @@ int main(int argc, char** argv) {
     // The web GUI bridge (S3). No heartbeat block of its own yet: the supervisor only
     // restarts it when it exits. GUESS: a hung UI is not detected (it cannot hurt the
     // show: the renderer never waits for it); add a heartbeat when himmel_ui has one.
-    Child ui{"ui", (dir / "himmel_ui.exe").wstring(), L""};
+    Child ui{"ui", (dir / "himmel_ui.exe").wstring(), ui_args};
     if (with_ui && !fs::exists(ui.exe, ec)) {
         log("ui: %s not found - running without the web GUI", fs::path(ui.exe).filename().string().c_str());
         with_ui = false;

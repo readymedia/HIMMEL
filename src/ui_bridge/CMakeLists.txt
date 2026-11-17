@@ -1,14 +1,17 @@
 # The web GUI bridge (GUI track, D43): himmel_ui.exe + fake_engine.exe + tests.
 # No new dependencies: Winsock + nlohmann/json (already fetched).
 
-add_library(himmel_ui_core STATIC src/json_codec.cpp src/http_util.cpp)
-target_include_directories(himmel_ui_core PUBLIC include PRIVATE src)
+add_library(himmel_ui_core STATIC src/json_codec.cpp src/panels_json.cpp src/http_util.cpp)
+# M11 part 2 panels: header-only block layouts of SHOW / AUDIO / OSC / library (no code linked).
+target_include_directories(himmel_ui_core PUBLIC include ${PROJECT_SOURCE_DIR}/src/audio/include
+    ${PROJECT_SOURCE_DIR}/src/osc/include ${PROJECT_SOURCE_DIR}/src/library/include PRIVATE src)
 target_link_libraries(himmel_ui_core PUBLIC himmel_protocol nlohmann_json::nlohmann_json)
 
-add_executable(himmel_ui src/ui_main.cpp)
+add_executable(himmel_ui src/ui_main.cpp src/panels_link.cpp)
 # The MK2 mirror reads Local\HimmelMk2 (header-only types from the controller, no hidapi).
 target_include_directories(himmel_ui PRIVATE src ${PROJECT_SOURCE_DIR}/src/controller/include)
-target_link_libraries(himmel_ui PRIVATE himmel_ui_core ws2_32)
+# The LIBRARY panel reads the library DB read-only (himmel_library: SQLite, already in the build).
+target_link_libraries(himmel_ui PRIVATE himmel_ui_core himmel_library ws2_32)
 
 add_executable(fake_engine tools/fake_engine_main.cpp)
 target_link_libraries(fake_engine PRIVATE himmel_ui_core winmm)

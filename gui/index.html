@@ -8,6 +8,7 @@
 <title>Himmel · Perform</title>
 <link rel="stylesheet" href="app.css">
 <link rel="stylesheet" href="m11.css">
+<link rel="stylesheet" href="panels.css">
 </head>
 <body>
 <header id="top">
@@ -15,9 +16,13 @@
   <nav class="views" id="viewTabs">
     <button data-view="start" title="The start wizard: clips, weapon, outputs, play">START</button>
     <button data-view="perform" class="on" title="Perform (the show)">PERFORM</button>
+    <button data-view="outputs" title="Outputs: displays, IDENTIFY, resolution, refresh, blend, black, layer places">OUTPUTS</button>
+    <button data-view="library" title="The clip library: import status, thumbnails, analysis">LIBRARY</button>
     <button data-view="mk2" title="The MK2 as the engine drives it: LEDs, screens, what the hands do">MK2</button>
     <button data-view="settings" title="Settings and status">⚙ SETTINGS</button>
   </nav>
+  <div class="projbar hidden" id="projBar"></div>
+  <div class="audmeter hidden" id="audMeter"></div>
   <div class="clock" id="clock" title="The internal beat clock (Clock command). The audio clock comes with M8.">
     <span class="bpm mono" id="bpmVal" title="BPM (drag up / down, or type)">–</span><span class="lbl">bpm</span>
     <span class="beats" id="beatDots"><i></i><i></i><i></i><i></i></span>
@@ -92,6 +97,7 @@
       <button data-tab="deck" id="tabDeck">DECK FX</button>
       <button data-tab="master" id="tabMaster">MASTER FX</button>
       <button data-tab="hit" id="tabHit" title="The HIT layer (one-shots on top of PROGRAM)">HIT</button>
+      <button data-tab="scenes" id="tabScenes" class="hidden" title="Scenes of the bank / song: recall, save (REC), rename, dice and locks, macros">SCENES</button>
       <div class="layerbar" id="layerBar">
         <span class="nm" id="inspClip">–</span>
         <span class="lbl">speed</span><input type="range" id="inspSpeed" min="-4" max="4" step="0.01" title="Target speed (the playhead glides to it; double-click = 1x)"><span class="mono val" id="inspSpeedVal">1.00x</span>
@@ -105,6 +111,7 @@
     <div id="clipEd" class="clipEd"></div>
     <div class="slots hidden" id="slots"></div>
     <div id="hitEd" class="hitEd hidden"></div>
+    <div id="scenesEd" class="scenesEd hidden"></div>
   </section>
 </main>
 
@@ -115,6 +122,23 @@
     <button data-step="3"><b>3</b> OUTPUTS</button><button data-step="4"><b>4</b> PLAY</button>
   </div>
   <div class="wizbody" id="wizBody"></div>
+</main>
+
+<!-- ====================================================================== OUTPUTS -->
+<main id="outputs" class="view hidden">
+  <div class="pagewrap">
+    <h2>Outputs</h2>
+    <div id="outBody"></div>
+  </div>
+</main>
+
+<!-- ====================================================================== LIBRARY -->
+<main id="library" class="view hidden">
+  <div class="pagewrap">
+    <div class="libtop"><h2>Library</h2><span class="dim" id="libCount"></span></div>
+    <div class="libhead" id="libHead"></div>
+    <div class="libgrid" id="libGrid"></div>
+  </div>
 </main>
 
 <!-- ====================================================================== MK2 -->
@@ -155,6 +179,7 @@
 <div id="toasts"></div>
 <template id="cvTpl"><canvas width="480" height="270"></canvas></template>
 <script src="app.js"></script>
+<script src="panels.js"></script>
 <script src="views.js"></script>
 </body>
 </html>

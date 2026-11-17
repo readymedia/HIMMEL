@@ -13,6 +13,8 @@ const GROUPS = { prev: ['A', 'B', 'C', 'D'], prog: ['E', 'F', 'G', 'H'] };
 const CODEC = ['HAP', 'HAP α', 'HAP Q', '?'];
 const S = {
   cat: null, live: null, bridge: null, tr: null, mk2: null,
+  // M11 part 2 (optional blocks; {present:false} = hide the panel): panels.js
+  show: null, outputs: null, audio: null, osc: null, library: null, weapons: null,
   names: null,          // GET /names
   meta: [],             // per catalog effect id: its effect.json (or null)
   sse: false, lastBridgeMs: 0,
@@ -76,7 +78,7 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const clipName = ci => ci.name.replace(/\.mov$/i, '');
 const groupOf = (d, l) => GROUPS[d === progDeck() ? 'prog' : 'prev'][l];
-window.H = { send, sendT, hold, setVal, el, toast: (...a) => toast(...a), invalidate: () => invalidate(), clipInfo, fxInfo, fxMeta, rgb };
+window.H = { send, sendT, hold, setVal, el, toast: (...a) => toast(...a), invalidate: () => invalidate(), clipInfo, fxInfo, fxMeta, rgb, setTab: t => setTab(t) };
 
 function toast(msg, kind) {
   const t = el('div', 'toast' + (kind === 'bad' ? ' bad' : ''), msg);
@@ -370,6 +372,8 @@ function setTab(tab) {
   $('clipEd').classList.toggle('hidden', tab !== 'clip');
   $('slots').classList.toggle('hidden', !['layer', 'deck', 'master'].includes(tab));
   $('hitEd').classList.toggle('hidden', tab !== 'hit');
+  $('scenesEd').classList.toggle('hidden', tab !== 'scenes');
+  if (window.Panels) window.Panels.tabShown(tab);
   if (S.live) renderInspector();
 }
 // A preset's values (by param id) -> FxParam per param; missing ones = the default (effect-metadata.md §2).
@@ -938,6 +942,7 @@ function render() {
   dirty = false;
   renderTop();
   renderClock();
+  if (window.Panels) window.Panels.render();
   if (window.Views) window.Views.render();
   if (S.view !== 'perform' || !S.live || !S.cat) return;
   renderMonitors(); renderStrips(); renderTake(); renderLibrary(); renderInspector(); renderHit();
@@ -994,18 +999,24 @@ function connect() {
     invalidate();
   });
   es.addEventListener('mk2', e => { S.mk2 = JSON.parse(e.data); if (S.view === 'mk2' || S.view === 'start') invalidate(); });
+  // M11 part 2: the optional panels. AUDIO arrives ~30 Hz; only the views that show it redraw.
+  for (const name of ['show', 'outputs', 'osc', 'library', 'weapons'])
+    es.addEventListener(name, e => { S[name] = JSON.parse(e.data); invalidate(); });
+  es.addEventListener('audio', e => { S.audio = JSON.parse(e.data); invalidate(); });
   // A bridge that hangs without closing the socket: no "bridge" event for 3 s = offline.
   setInterval(() => { if (S.sse && performance.now() - S.lastBridgeMs > 3000) { S.sse = false; invalidate(); es.close(); setTimeout(connect, 500); } }, 1000);
 }
 
 // ------------------------------------------------------------------ views
+const VIEWS = ['perform', 'start', 'outputs', 'library', 'mk2', 'settings'];
 function setView(v) {
   S.view = v;
-  for (const id of ['perform', 'start', 'mk2', 'settings']) $(id).classList.toggle('hidden', id !== v);
+  for (const id of VIEWS) $(id).classList.toggle('hidden', id !== v);
   for (const b of document.querySelectorAll('#viewTabs button')) b.classList.toggle('on', b.dataset.view === v);
   document.title = 'Himmel · ' + v[0].toUpperCase() + v.slice(1);
   if (location.hash !== '#' + v) history.replaceState(null, '', '#' + v);
   if (window.Views) window.Views.shown(v);
+  if (window.Panels) window.Panels.shown(v);
   invalidate();
 }
 window.setView = setView;
@@ -1077,9 +1088,9 @@ function wire() {
   });
 }
 
-window.addEventListener('hashchange', () => { const v = location.hash.slice(1); if (['start', 'perform', 'mk2', 'settings'].includes(v) && v !== S.view) setView(v); });
+window.addEventListener('hashchange', () => { const v = location.hash.slice(1); if (VIEWS.includes(v) && v !== S.view) setView(v); });
 buildStrips(); buildSlots(); wire(); connect(); loadStatic();
-setView(['start', 'perform', 'mk2', 'settings'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'perform');
+setView(VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'perform');
 setTab('clip');
 streams.forEach(pull);
 requestAnimationFrame(tickBeat);
