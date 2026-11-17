@@ -73,6 +73,9 @@ default and stay PROPOSED (D94–D100 are run that way).
 | 5 | AUDIO · audio-m8 session | D131 FxReact (command 40) + per-slot reaction table — **merged 2026-11-17** |
 | 5 | MEDIA · media-m7 session | ingest commands 60–69, `himmel_ingest --selftest` — **merged 2026-11-17** |
 | 5 | GUI · gui-m11 session | reaction editor, library actions, rest of M11, QUIT — **merged 2026-11-17** (plus ENGINE `SystemQuit` 74) |
+| 6 | CONTROL · control-m4 session | `mk2_controller` stop_request (quit < 2 s) |
+| 6 | SHOW · show-m3 session | scenes save and recall per-knob reactions |
+| 6 | MEDIA · media-m7 session | `himmel_ingest --help` = usage; `himmel_cmd` names FxReact |
 
 ## 1. What we have to build on
 

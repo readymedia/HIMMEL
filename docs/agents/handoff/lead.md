@@ -210,6 +210,15 @@ Follow-ups (not started):
 - SHOW: scenes do not save reactions yet; a recall's FxSet resets a slot to Default.
 - Library buttons are not checked live against a real library (test stacks run with `--no-show-files`).
 
+### Wave 6 — started 2026-11-17 (owner: "Ja, runde 6")
+The wave 5 follow-ups. **The owner's show runs from the main checkout**: nobody builds in the main checkout, nobody starts or stops a Himmel process they did not start, and **no agent runs a stack** (himmel.exe, mk2_e2e, qa_rig, quit_check). The LEAD builds merges in its own worktree and runs e2e only when the owner's show is stopped.
+
+| Track · session | Task | Owns | Done when |
+|---|---|---|---|
+| CONTROL (control-m4) | `stop_request` in the MK2 status block; `mk2_controller` lets go cleanly (LEDs off, screens to a "stopped" page, log "Stopped") so quit no longer waits 3 s; the supervisor sets it in its stop path | `src/controller/`, the supervisor's stop path (fenced), `docs/mk2-controller-spec.md`, `docs/agents/handoff/control.md` | `mk2_tests` cover it; quit time measured by the LEAD with `quit_check.py` < 2 s |
+| SHOW (show-m3) | scenes / looks / variations save and recall the per-knob reactions (state v3 `ReactionSection`, FxReact); a recall applies FxSet, then the saved reactions; old show files load with Default | `src/show/`, `docs/interfaces/show-block.md`, show file format, `docs/agents/handoff/show.md` | `show_tests` round-trip a scene with Custom + Off rows; an old file loads |
+| MEDIA (media-m7) | `himmel_ingest`: unknown args or `--help` print usage and exit 2 (never start a worker); `himmel_cmd` prints `react` for FxReact (one line in `himmel_cmd_main.cpp`); a `--library <temp>` recipe in the handoff so the LEAD can check the GUI library buttons live | `src/library/`, `himmel_ingest`, that one line, `docs/agents/handoff/media.md` | tests / selftest green; `--help` starts nothing |
+
 **Old wave 4 candidates (now done or folded in):**
 - GUI: the SHOW and AUDIO panels, the reaction editor and the wizard (rest of M11);
 - M9 / M13 if CONTROL did not reach them;
