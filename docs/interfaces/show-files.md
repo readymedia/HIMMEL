@@ -225,6 +225,9 @@ names and ranges as `FxReact` (`command-protocol.md` §4d).
   each look carries. A record is written within ~5 ms of a change on the model
   (at most every 100 ms); `FlushFileBuffers` once a second. A killed process
   loses nothing written (the OS holds it); a power cut loses ≤ 1 s.
+  A save never holds the journal up: the worker writes waiting live records
+  between the files of a save (wave 8; before that a 200-scene save could
+  keep a live change out of the journal for longer than a save).
 - `autosave/show.json` = the whole show as one document, after every show
   change (coalesced, ≤ 4 per second).
 - **Snapshot** every 5 minutes: `snap-*.json` (show + live), the last 10;

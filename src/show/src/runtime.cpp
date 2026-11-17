@@ -336,7 +336,8 @@ struct ShowRuntime::Worker {
     bool save_to(const fs::path& path, const Request& r) {
         std::string err;
         const uint64_t now = F::unix_ms_now();
-        if (!F::save_project(path, *wshow, wlive, *cat, *clips, now, &err)) {
+        // The files are made from wlive first; journal records may then go in between the writes.
+        if (!F::save_project(path, *wshow, wlive, *cat, *clips, now, &err, [this] { drain_live(); })) {
             fstat->save_ok = 0;
             error(err);
             event(Ev::Failed, 0, 0, "Save failed");
@@ -502,6 +503,29 @@ struct ShowRuntime::Worker {
         }
     }
 
+    // Live records -> the journal (and wlive). Also called between the files of a save, so a
+    // live change never waits for a whole save (200 scenes) before it is in the journal.
+    bool drain_live() {
+        LiveRec rec;
+        uint32_t n = 0;
+        uint32_t popped = 0;
+        uint64_t last_ms = 0;
+        while (live->pop(rec)) {
+            ++popped;
+            if (rec.epoch != handed) continue;  // the live state of a show that was replaced
+            wlive = rec.snap;
+            if (journal.is_open()) journal.append(rec.snap, rec.unix_ms);
+            last_ms = rec.unix_ms;
+            ++n;
+        }
+        recs.fetch_add(popped);
+        if (!n) return false;
+        fstat->autosave_unix = last_ms / 1000;
+        fstat->journal_records = journal.records();
+        if (block) seq_write(block->files_seq, block->files, *fstat);
+        return true;
+    }
+
     void run() {
         uint64_t last_flush = 0;
         while (!quit.load()) {
@@ -513,23 +537,7 @@ struct ShowRuntime::Worker {
                 done.fetch_add(1);
                 did = true;
             }
-            LiveRec rec;
-            uint32_t n = 0;
-            uint32_t popped = 0;
-            while (live->pop(rec)) {
-                ++popped;
-                if (rec.epoch != handed) continue;  // the live state of a show that was replaced
-                wlive = rec.snap;
-                if (journal.is_open()) journal.append(rec.snap, rec.unix_ms);
-                ++n;
-            }
-            recs.fetch_add(popped);
-            if (n) {
-                fstat->autosave_unix = rec.unix_ms / 1000;
-                fstat->journal_records = journal.records();
-                if (block) seq_write(block->files_seq, block->files, *fstat);
-                did = true;
-            }
+            if (drain_live()) did = true;
             const uint64_t now_ms = F::unix_ms_now();
             if (have_wshow && now_ms - last_snapshot_ms >= static_cast<uint64_t>(cfg.snapshot_every_s) * 1000) snapshot(now_ms);
             if (now_ms - last_flush >= 1000) journal.flush(), last_flush = now_ms;

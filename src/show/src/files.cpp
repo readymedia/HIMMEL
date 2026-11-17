@@ -881,12 +881,14 @@ LoadInfo load_project(const fs::path& folder, ShowData& show, LiveSnapshot& live
 }
 
 bool save_project(const fs::path& folder, const ShowData& show, const LiveSnapshot& live, const Catalog& cat,
-                  const ClipIndex& clips, uint64_t saved_ms, std::string* err) {
+                  const ClipIndex& clips, uint64_t saved_ms, std::string* err, const std::function<void()>& between) {
     std::error_code ec;
     fs::create_directories(folder, ec);
-    const FileSet set = project_files(show, live, cat, clips, saved_ms);
-    for (const auto& [rel, text] : set.files)
+    const FileSet set = project_files(show, live, cat, clips, saved_ms);  // `live` may change after this (between)
+    for (const auto& [rel, text] : set.files) {
         if (!write_atomic(folder / from_utf8(rel), text, err)) return false;
+        if (between) between();
+    }
     // Files of a bank / song that no longer exists: remove (the manifest no longer lists them).
     for (const char* sub : {"banks", "songs"}) {
         const fs::path dir = folder / sub;

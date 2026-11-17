@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -56,9 +57,11 @@ LoadInfo load_document(const std::string& json_text, ShowData& show, LiveSnapsho
 // REPLACE_EXISTING | WRITE_THROUGH). A crash leaves either the old or the new file.
 bool write_atomic(const fs::path& file, const std::string& bytes, std::string* err);
 bool read_file(const fs::path& file, std::string& out);
-// Every file of the set, project.json last (it carries the CRC manifest).
+// Every file of the set, project.json last (it carries the CRC manifest). The texts are made
+// first; `between` (optional) runs after each file is written (the worker keeps its journal going).
 bool save_project(const fs::path& folder, const ShowData& show, const LiveSnapshot& live, const proto::Catalog& cat,
-                  const ClipIndex& clips, uint64_t saved_ms, std::string* err);
+                  const ClipIndex& clips, uint64_t saved_ms, std::string* err,
+                  const std::function<void()>& between = {});
 
 // ---- autosave journal (autosave/journal.bin) ---------------------------------
 // Header (names of the effects at write time) + records {unix ms, LiveSnapshot},
