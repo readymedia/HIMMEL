@@ -68,6 +68,9 @@
 #include <vector>
 
 #include "himmel/engine/clip_catalog.h"
+#include "himmel/engine/clip_directory.h"
+#include "himmel/engine/clip_watch.h"
+#include "himmel/protocol/clip_pages.h"
 #include "himmel/engine/clip_player.h"
 #include "himmel/engine/deck_model.h"
 #include "himmel/engine/display_watch.h"
@@ -120,6 +123,7 @@ constexpr int kDrainPerProducer = 256;  // command-protocol.md §5.7
 himmel::engine::LogRing* g_log = nullptr;
 himmel::fx::FxGpu* g_fx = nullptr;  // effects + generators (made at start-up)
 himmel::engine::OutputModel* g_om = nullptr;  // canvas layout + layer places (M6)
+const himmel::engine::ClipDirectory* g_clipdir = nullptr;  // catalog v3 (wave 7): every clip id
 #define LOG(...) g_log->logf(__VA_ARGS__)
 
 // ==== ENGINE (M6): Spout worker log (LogRing has one writer, the render thread) ====
@@ -875,6 +879,23 @@ struct LayerRuntime {
     uint32_t fail_seen = 0;
     bool missing = false;
     uint64_t misses = 0;
+    // Wave 7: the clip's two textures (frame blend) - which frame each holds, and which one is on screen.
+    int64_t up[2] = {-1, -1};
+    int main_tex = -1;
+    int64_t blend_next = -1;   // the frame in the other texture that is mixed in (-1 = none)
+    float blend_w = 0.0f;
+    // Wave 7 cadence measurement: refreshes each clip frame stayed on screen.
+    int64_t cad_frame = -1;
+    uint32_t cad_hold = 0;
+    double cad_sum = 0.0;      // sum of holds since the run started
+    uint32_t cad_frames = 0;   // frames in the run
+    double cad_ideal = 0.0;    // refreshes per frame the run is measured against
+    double cad_err_sum = 0.0;  // stats period: sum of |cumulative error| at each frame change
+    uint32_t cad_err_n = 0;
+    uint32_t cad_irregular = 0;
+    uint32_t cad_changes = 0;
+    float judder = 0.0f;       // last stats period
+    uint32_t irregular = 0;
 };
 
 
@@ -907,13 +928,16 @@ void rgb_of(uint32_t rgb, float out[4]) {
     out[3] = 1.0f;
 }
 
-void layer_cb(Gpu&, int slot, const LayerRuntime& rt, const proto::LayerState& ls, const proto::Catalog& cat,
+void layer_cb(Gpu& g, int slot, const LayerRuntime& rt, const proto::LayerState& ls, const proto::Catalog& cat,
               float opacity, LayerCB& cb, ID3D11ShaderResourceView*& src) {
     cb = LayerCB{};
     cb.info[3] = opacity;
     cb.blend[0] = ls.blend;
     src = nullptr;
-    const bool ready = rt.current_is_requested && rt.shown && rt.uploaded >= 0;
+    // Wave 7 pre-roll: while a new clip loads, the old clip's last frame stays (no placeholder flash).
+    (void)cat;
+    const bool ready = rt.shown && rt.uploaded >= 0 && rt.main_tex >= 0 &&
+                       (rt.current_is_requested || (ls.clip >= 0 && !rt.missing));
     if (ready) {
         const auto* clip = rt.shown;
         const float cw = static_cast<float>(clip->track.width), ch = static_cast<float>(clip->track.height);
@@ -923,12 +947,20 @@ void layer_cb(Gpu&, int slot, const LayerRuntime& rt, const proto::LayerState& l
         using HT = himmel::media::HapTexture;
         cb.info[2] = clip->texture == HT::DXT5 ? 1.0f : clip->texture == HT::YCoCgDXT5 ? 2.0f
                                              : clip->texture == HT::RGTC1 ? 3.0f : 0.0f;
-        src = clip->srv;
+        src = clip->view(rt.main_tex);
+        if (rt.current_is_requested && rt.blend_w > 0.0f && rt.blend_next >= 0) {
+            const int other = 1 - rt.main_tex;
+            if (rt.up[other] == rt.blend_next) {
+                cb.blend[1] = rt.blend_w;
+                ID3D11ShaderResourceView* next = clip->view(other);
+                g.ctx->PSSetShaderResources(4, 1, &next);
+            }
+        }
     } else if (ls.clip >= 0) {  // loading or missing: the clip's placeholder colour (build-v1 §4.4), in its place
         cb.info[2] = 4.0f;
-        g_om->layer_xform(slot, static_cast<float>(cat.clip[ls.clip].width), static_cast<float>(cat.clip[ls.clip].height),
-                          cb.xform);
-        rgb_of(cat.clip[ls.clip].thumb_rgb, cb.color);
+        const proto::ClipInfo& ci = g_clipdir->info(ls.clip);  // catalog v3: any id
+        g_om->layer_xform(slot, static_cast<float>(ci.width), static_cast<float>(ci.height), cb.xform);
+        rgb_of(ci.thumb_rgb, cb.color);
     } else {  // no clip, a generator in an FX slot: it paints on transparent (effect-metadata.md §6)
         cb.info[2] = 6.0f;
     }
@@ -961,15 +993,21 @@ int main(int argc, char** argv) {
     // ==== MEDIA (M7) hook 1/3: one append-only clip table (playlist + catalog entries) for every
     // player; the library feed adds READY library clips to it, now and while the show runs ====
     auto clip_table = std::make_unique<himmel::library::ClipTable>();
-    for (uint32_t i = 0; i < catalog->clip_count; ++i) clip_table->append(playlist[i], catalog->clip[i]);
+    for (size_t i = 0; i < playlist.size() && i < static_cast<size_t>(himmel::library::ClipTable::kCapacity); ++i) {
+        if (i < catalog->clip_count) {
+            clip_table->append(playlist[i], catalog->clip[i]);
+        } else {  // wave 7: media/ folders beyond the 256-clip window
+            proto::ClipInfo ci;
+            himmel::engine::clip_info_for(playlist[i], ci);
+            clip_table->append(playlist[i], ci);
+        }
+    }
     himmel::library::LibraryFeed library_feed;
     if (cfg.use_library) {
         const auto root = !cfg.library.empty() ? himmel::show::files::from_utf8(cfg.library)
                         : !cfg.show_root.empty() ? himmel::show::files::from_utf8(cfg.show_root) / "Library"
                                                  : himmel::library::default_library_root();
         const int lib = library_feed.load_initial(root, *clip_table);
-        for (uint32_t i = catalog->clip_count; i < clip_table->size(); ++i) catalog->clip[i] = clip_table->info[i];
-        catalog->clip_count = clip_table->size();
         library_feed.start();
         const auto root_u8 = root.u8string();
         LOG("library: %s, %d ready clip(s) added; new ones join while running", reinterpret_cast<const char*>(root_u8.c_str()), lib);
@@ -977,15 +1015,27 @@ int main(int argc, char** argv) {
         LOG("library: off");
     }
     // ==== end MEDIA hook 1/3 ====
+    // ==== ENGINE wave 7: catalog v3 - the clip directory (every id, library id, state) + the file watch.
+    //      Clip id = clip table index; the directory follows the table, the catalog section is its window.
+    auto clipdir = std::make_unique<himmel::engine::ClipDirectory>();
+    g_clipdir = clipdir.get();
+    for (uint32_t i = 0; i < clip_table->size(); ++i) clipdir->add(clip_table->info[i], clip_table->library_id[i]);
+    auto clip_watch = std::make_unique<himmel::engine::ClipWatch>(clip_table.get());
+    clip_watch->start();
+    uint32_t clip_watch_seen = 0;
+    clipdir->mirror_window(*catalog);
+    // ==== end ENGINE wave 7 ====
     himmel::engine::fx::fill_catalog(*catalog);
-    LOG("catalog: %u clips%s, %u effects", catalog->clip_count,
+    LOG("catalog: %u clips (%u in the catalog window)%s, %u effects", clipdir->count(), catalog->clip_count,
         playlist.empty() ? " (put .mov files under media/ or pass --clip)" : "", catalog->effect_count);
-    for (uint32_t i = 0; i < catalog->clip_count; ++i) {
-        const auto& c = catalog->clip[i];
+    for (uint32_t i = 0; i < clipdir->count() && i < 32; ++i) {
+        const auto& c = clipdir->info(static_cast<int>(i));
         LOG("  clip %2u  %-32s %4ux%-4u %5.2f fps %6.1f s  codec %u  placeholder #%06X", i, c.name, c.width, c.height,
             c.fps, c.seconds, c.codec, c.thumb_rgb);
     }
+    if (clipdir->count() > 32) LOG("  ... and %u more", clipdir->count() - 32);
     auto model = std::make_unique<DeckModel>(*catalog);
+    model->set_clips(clipdir.get());
 
     // ==== ENGINE (M6) outputs: displays by identity, the output model, Local\HimmelOutputs ====
     himmel::engine::DisplayWatch watch;
@@ -1084,8 +1134,17 @@ int main(int argc, char** argv) {
                     auto old_rx = std::make_unique<proto::ReactionSection>();
                     const bool have_rx = proto::seq_read(state.blk->react_seq, state.blk->react, *old_rx) != 0;
                     // ==== END AUDIO (D131) ====
+                    // ==== ENGINE wave 7: the previous renderer's clip pages (ids >= 256 come back too) ====
+                    auto old_pages = std::make_unique<proto::ClipPagesCopy>();
+                    auto old_dir = std::make_unique<himmel::engine::ClipDirectory>();
+                    const bool have_pages = proto::read_clip_pages(state.blk->clips, state.blk->clip_page, *old_pages) >= 0;
+                    if (have_pages) {
+                        auto flat = std::make_unique<proto::ClipEntry[]>(proto::kMaxCatalogClips);
+                        for (uint32_t i = 0; i < old_pages->count; ++i) flat[i] = old_pages->entry(i);
+                        old_dir->load_from(flat.get(), old_pages->count);
+                    }
                     const int lost = model->restore(*old_live, *old_cat, have_tr ? old_tr.get() : nullptr,
-                                                    have_rx ? old_rx.get() : nullptr);
+                                                    have_rx ? old_rx.get() : nullptr, have_pages ? old_dir.get() : nullptr);
                     epoch = old_live->epoch + 1;
                     LOG("state: restored the show from the previous renderer (epoch %u)%s", old_live->epoch,
                         lost ? " - some clips are gone from the media folder" : "");
@@ -1099,6 +1158,7 @@ int main(int argc, char** argv) {
             }
             model->set_epoch(epoch);
             proto::seq_write(state.blk->catalog_seq, state.blk->catalog, *catalog);
+            clipdir->publish(state.blk->clips, state.blk->clip_page);  // wave 7: catalog v3 pages
             state.blk->status.pid.store(GetCurrentProcessId());
             LOG("state: epoch %u", epoch);
         }
@@ -1389,6 +1449,8 @@ int main(int argc, char** argv) {
     if (!cfg.fullscreen && displays->count && displays->d[displays->order[0]].hz > 1.0f)
         frame_period = 1.0 / displays->d[displays->order[0]].hz;
 
+    model->set_refresh_hz(1.0 / frame_period);  // wave 7: the playheads' refresh grid (Even / Blend)
+    LOG("playback: refresh grid %.2f Hz, frame smoothing %s by default", 1.0 / frame_period, "Auto");
     uint64_t quit_at_us = 0;  // ENGINE (quit): when quit_request was raised
     while (!g_win.quit) {
         // ==== ENGINE (M6): wait only for the shown outputs ====
@@ -1604,21 +1666,30 @@ int main(int argc, char** argv) {
                 rt.uploaded = -1;
                 rt.missing = false;
                 rt.jump_wait = false;
+                rt.cad_frame = -1;
                 if (ls.clip >= 0) {
                     rt.fail_seen = rt.player->load_failed.load();
-                    rt.player->load(ls.clip);
+                    // Wave 7 pre-roll: the worker decodes the start frame before it hands the clip over.
+                    rt.player->load(ls.clip, std::max<int64_t>(0, model->frame(s)), model->direction(s));
+                    clip_watch->poke(ls.clip);
                 }
             }
             himmel::engine::LoadedClip* clip = rt.player->current();
             if (clip != rt.shown) {
+                const bool is_req =
+                    clip && rt.requested >= 0 && clip->path == clip_table->path[static_cast<size_t>(rt.requested)];
+                // A new clip takes over only with its first frame: if the pre-rolled frame is not
+                // ready (it always is), the old picture stays one more frame.
                 rt.shown = clip;
                 rt.uploaded = -1;
-                rt.current_is_requested =
-                    clip && rt.requested >= 0 && clip->path == clip_table->path[static_cast<size_t>(rt.requested)];
+                rt.main_tex = -1;
+                rt.up[0] = rt.up[1] = -1;
+                rt.current_is_requested = is_req;
             }
             if (rt.requested >= 0 && !rt.current_is_requested && rt.player->load_failed.load() != rt.fail_seen)
                 rt.missing = true;
             model->set_missing_slot(s, rt.requested >= 0 && rt.missing);
+            model->set_loading(s, rt.requested >= 0 && !rt.current_is_requested && !rt.missing);
             if (rt.requested < 0 || !rt.current_is_requested || !clip) {
                 rt.jump_seen = model->jump_gen_slot(s);
                 continue;
@@ -1644,14 +1715,73 @@ int main(int argc, char** argv) {
                 rt.jump_target = f;
                 rt.jump_frame_no = frames;
             }
+            // Wave 7: two textures per clip. The frame on screen and (frame blend) the next one;
+            // each clip frame is uploaded once - the next frame is already there when it is due.
             if (f != rt.uploaded) {
-                if (const uint8_t* data = rt.player->acquire(f)) {
-                    g.ctx->UpdateSubresource(clip->tex, 0, nullptr, data, static_cast<UINT>(clip->row_pitch), 0);
+                const int have = rt.up[0] == f ? 0 : rt.up[1] == f ? 1 : -1;
+                if (have >= 0) {
+                    rt.main_tex = have;
+                    rt.uploaded = f;
+                } else if (const uint8_t* data = rt.player->acquire(f)) {
+                    const int k = rt.main_tex < 0 ? 0 : 1 - rt.main_tex;  // never the one on screen
+                    g.ctx->UpdateSubresource(clip->gpu_tex(k), 0, nullptr, data, static_cast<UINT>(clip->row_pitch), 0);
                     rt.player->release();
+                    rt.up[k] = f;
+                    rt.main_tex = k;
                     rt.uploaded = f;
                 } else if (rt.uploaded >= 0) {
                     ++rt.misses;  // the last frame stays on screen
                 }
+            }
+            rt.blend_next = -1;
+            rt.blend_w = 0.0f;
+            if (rt.main_tex >= 0 && rt.uploaded == f) {
+                int64_t nf = -1;
+                float w = 0.0f;
+                model->blend_frames(s, nf, w);
+                if (nf >= 0 && w > 0.0f) {
+                    const int other = 1 - rt.main_tex;
+                    if (rt.up[other] != nf) {
+                        if (const uint8_t* data = rt.player->acquire(nf)) {
+                            g.ctx->UpdateSubresource(clip->gpu_tex(other), 0, nullptr, data,
+                                                     static_cast<UINT>(clip->row_pitch), 0);
+                            rt.player->release();
+                            rt.up[other] = nf;
+                        }
+                    }
+                    if (rt.up[other] == nf) rt.blend_next = nf, rt.blend_w = w;
+                }
+            }
+            // Wave 7 cadence: how many refreshes each clip frame stays (a missed refresh counts double).
+            if (rt.uploaded >= 0) {
+                const uint32_t refreshes = static_cast<uint32_t>(std::max(1.0, std::floor(dt / frame_period + 0.5)));
+                const double ideal = model->refreshes_per_frame(s);
+                const bool playing_on = ls.playing && ideal > 0.0 && model->jump_gen_slot(s) == rt.jump_seen;
+                if (!playing_on || std::abs(ideal - rt.cad_ideal) > 1e-3 || rt.cad_frame < 0) {
+                    rt.cad_ideal = ideal;  // a new run: speed / clip / pause / jump
+                    rt.cad_sum = 0.0, rt.cad_frames = 0, rt.cad_hold = 0;
+                    rt.cad_frame = rt.uploaded;
+                } else if (rt.uploaded != rt.cad_frame) {
+                    const int64_t step = std::llabs(rt.uploaded - rt.cad_frame);
+                    if (step == 1 && rt.cad_hold > 0) {
+                        rt.cad_sum += rt.cad_hold;
+                        ++rt.cad_frames;
+                        const double lo = std::floor(ideal + 1e-6), hi = std::ceil(ideal - 1e-6);
+                        if (rt.cad_hold < lo || rt.cad_hold > hi) ++rt.cad_irregular;
+                        if (rt.cad_frames > 1) {  // the first hold of a run starts mid-frame
+                            rt.cad_err_sum += std::abs(rt.cad_sum - rt.cad_frames * ideal);
+                            ++rt.cad_err_n;
+                        } else {
+                            rt.cad_sum = rt.cad_frames * ideal;  // align the run to the first full frame
+                        }
+                        ++rt.cad_changes;
+                    } else {
+                        rt.cad_sum = 0.0, rt.cad_frames = 0;  // a loop or a skip: start again
+                    }
+                    rt.cad_frame = rt.uploaded;
+                    rt.cad_hold = 0;
+                }
+                rt.cad_hold += refreshes;
             }
             if (rt.jump_wait && (rt.uploaded == f || frames - rt.jump_frame_no > 120)) {
                 // 0 = the jump's frame was uploaded in the frame the command was applied, so it is in
@@ -1916,6 +2046,22 @@ int main(int argc, char** argv) {
             if (model->take_structure_dirty() || playing || t_done - state.last_write_us >= 250000) {
                 proto::seq_write(state.blk->live_seq, state.blk->live, live);
                 proto::seq_write(state.blk->transport_seq, state.blk->transport, model->transport());
+                // Wave 7: frame smoothing + cadence per layer (a ~150 B section, no allocation).
+                proto::PlaybackSection pb{};
+                pb.smooth = static_cast<uint8_t>(model->frame_smooth());
+                pb.out_hz = static_cast<float>(model->refresh_hz());
+                for (int s = 0; s < kLayerSlots; ++s) {
+                    auto& lp = pb.layer[s];
+                    lp.smooth = model->smooth_setting(s);
+                    lp.in_use = static_cast<uint8_t>(model->smooth_in_use(s));
+                    lp.loading = model->loading(s) ? 1 : 0;
+                    const int c = model->layer(s).clip;
+                    lp.clip_fps = clipdir->valid(c) ? clipdir->info(c).fps : 0.0f;
+                    lp.refreshes_per_frame = static_cast<float>(model->refreshes_per_frame(s));
+                    lp.judder = layers[s].judder;
+                    lp.irregular = layers[s].irregular;
+                }
+                proto::seq_write(state.blk->playback_seq, state.blk->playback, pb);
                 state.last_write_us = t_done;
                 react_due = true;
             }
@@ -1935,6 +2081,7 @@ int main(int argc, char** argv) {
                 out_sec->time_us = t_done;
                 out_sec->epoch = live.epoch;
                 out_sec->hz_measured = fps;
+                out_sec->frame_smooth = static_cast<uint8_t>(model->frame_smooth());  // wave 7
                 out_sec->displays = displays->count;
                 for (int i = 0; i < kMaxOutputs; ++i) {
                     auto& oi = out_sec->out[i];
@@ -1964,16 +2111,31 @@ int main(int argc, char** argv) {
 
         // ==== MEDIA (M7) hook 3/3: library clips that turned ready join the catalog. Ids are
         // append-only, so nothing on air moves; no I/O, no allocation (fixed table) ====
-        if (const uint32_t lib_n = std::min<uint32_t>(clip_table->size(), proto::kMaxClips); lib_n > catalog->clip_count) {
-            const uint32_t before = catalog->clip_count;
-            for (uint32_t i = before; i < lib_n; ++i) catalog->clip[i] = clip_table->info[i];
-            catalog->clip_count = lib_n;
-            if (state.blk) proto::seq_write(state.blk->catalog_seq, state.blk->catalog, *catalog);
-            LOG("library: %u new clip(s) in the catalog, %u in all", lib_n - before, lib_n);
+        // ENGINE wave 7 (catalog v3): the directory follows the table (any number of clips up to
+        // kMaxCatalogClips), the file watch sets each clip's state, changed pages are published.
+        if (const uint32_t tn = clip_table->size(); tn > clipdir->count()) {
+            const uint32_t before = clipdir->count();
+            for (uint32_t i = before; i < tn; ++i)
+                clipdir->add(clip_table->info[i], clip_table->library_id[i], clip_watch->state(static_cast<int>(i)));
+            LOG("library: %u new clip(s) in the catalog, %u in all", clipdir->count() - before, clipdir->count());
+        }
+        if (const uint32_t wg = clip_watch->changed(); wg != clip_watch_seen) {
+            clip_watch_seen = wg;
+            for (uint32_t i = 0; i < clipdir->count(); ++i) {
+                const auto st = clip_watch->state(static_cast<int>(i));
+                if (clipdir->state(static_cast<int>(i)) != st && clipdir->set_state(static_cast<int>(i), st))
+                    LOG("clip %u \"%s\": %s", i, clipdir->info(static_cast<int>(i)).name,
+                        st == proto::ClipState::Ready ? "ready" : st == proto::ClipState::Busy ? "busy (being written)" : "missing");
+            }
+        }
+        if (clipdir->dirty()) {
+            if (clipdir->mirror_window(*catalog) && state.blk)
+                proto::seq_write(state.blk->catalog_seq, state.blk->catalog, *catalog);
+            if (state.blk) clipdir->publish(state.blk->clips, state.blk->clip_page);
         }
         if (static bool full_logged = false; !full_logged && library_feed.catalog_full.load(std::memory_order_relaxed)) {
-            full_logged = true;  // once: the clips stay in the library (a paged catalog is a later protocol change)
-            LOG("library: the catalog is full (%d clips) - new library clips stay in the library", proto::kMaxClips);
+            full_logged = true;  // once: the clips stay in the library
+            LOG("library: the catalog is full (%d clips) - new library clips stay in the library", proto::kMaxCatalogClips);
         }
         // ==== end MEDIA hook 3/3 ====
 
@@ -2014,6 +2176,20 @@ int main(int argc, char** argv) {
                 lat_n ? lat_sum / lat_n / 1000.0 : 0.0, logring.dropped(), late_worst_ms,
                 static_cast<unsigned long long>(jumps), static_cast<unsigned long long>(jumps_next_frame),
                 static_cast<unsigned long long>(jump_worst), static_cast<unsigned long long>(warm), model->bpm());
+            // Wave 7: the cadence of every layer that plays a clip (judder = mean |cumulative error| in refreshes).
+            for (int s = 0; s < kLayerSlots; ++s) {
+                auto& ly = layers[s];
+                ly.judder = ly.cad_err_n ? static_cast<float>(ly.cad_err_sum / ly.cad_err_n) : 0.0f;
+                ly.irregular = ly.cad_irregular;
+                if (ly.cad_changes && model->layer(s).clip >= 0) {
+                    static const char* const kSm[] = {"auto", "off", "blend", "even"};
+                    const int c = model->layer(s).clip;
+                    LOG("CADENCE layer %d  clip %d %.3f fps  %.3f refreshes/frame  smooth %s  frames %u  judder %.3f  irregular %u",
+                        s, c, clipdir->valid(c) ? clipdir->info(c).fps : 0.0f, model->refreshes_per_frame(s),
+                        kSm[static_cast<int>(model->smooth_in_use(s)) & 3], ly.cad_changes, ly.judder, ly.cad_irregular);
+                }
+                ly.cad_err_sum = 0.0, ly.cad_err_n = 0, ly.cad_irregular = 0, ly.cad_changes = 0;
+            }
             if (es) {
                 es->fps_x100.store(static_cast<uint32_t>(fps * 100));
                 es->frame_ms_avg_x100.store(static_cast<uint32_t>(avg_ms * 100));

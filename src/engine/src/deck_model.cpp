@@ -78,7 +78,19 @@ void default_transport(LayerTransport& t, int slot) {
     for (auto& q : t.cue) q = -1.0f;
 }
 
-DeckModel::DeckModel(const Catalog& catalog) : catalog_(catalog) { reset(); }
+DeckModel::DeckModel(const Catalog& catalog)
+    : catalog_(catalog), cues_(new CueRow[kMaxCatalogClips]), resume_(new float[kMaxCatalogClips]) {
+    reset();
+}
+
+int DeckModel::clip_total() const {
+    return clips_ ? static_cast<int>(clips_->count()) : static_cast<int>(std::min<uint32_t>(catalog_.clip_count, kMaxClips));
+}
+
+const ClipInfo* DeckModel::clip_info(int id) const {
+    if (id < 0 || id >= clip_total()) return nullptr;
+    return clips_ ? &clips_->info(id) : &catalog_.clip[id];
+}
 
 LayerState& DeckModel::L(int slot) { return slot < kHitSlot ? live_.deck[slot / 4].layer[slot % 4] : transport_.hit; }
 LayerTransport& DeckModel::T(int slot) {
@@ -180,9 +192,11 @@ void DeckModel::reset() {
     last_beat_ = clock_.beat(last_tick_us_);
     transport_.clock.bpm = static_cast<float>(clock_.bpm());
     transport_.clock.grid = static_cast<uint8_t>(GridDiv::Off);  // GUESS: no global snap until the owner turns GRID on
-    for (auto& c : cues_)
-        for (auto& q : c) q = -1.0f;
-    std::memset(resume_, 0, sizeof(resume_));
+    for (int c = 0; c < kMaxCatalogClips; ++c)
+        for (auto& q : cues_[c]) q = -1.0f;
+    std::memset(resume_.get(), 0, sizeof(float) * kMaxCatalogClips);
+    for (auto& v : smooth_) v = kSmoothFollow;
+    for (auto& v : loading_) v = false;
     std::memset(jump_gen_, 0, sizeof(jump_gen_));
     std::memset(jump_to_, 0, sizeof(jump_to_));
     dirty_ = true;
@@ -204,8 +218,16 @@ Reject DeckModel::validate(const Command& c) const {
     switch (c.type) {
         case CommandType::LayerClip:
             if (slot < 0) return Reject::BadTarget;
-            if (c.i < -1 || c.i >= static_cast<int32_t>(catalog_.clip_count)) return Reject::BadId;
+            if (c.i < -1 || c.i >= clip_total()) return Reject::BadId;
             return Reject::None;
+        case CommandType::LayerClipLib: {  // wave 7: by library id (catalog v3)
+            if (slot < 0) return Reject::BadTarget;
+            if (c.i <= 0) return Reject::BadValue;
+            if (!clips_) return Reject::NotReady;
+            ClipState st = ClipState::Empty;
+            if (clips_->find_library(c.i, &st) < 0) return Reject::NotReady;
+            return st == ClipState::Ready ? Reject::None : Reject::Missing;
+        }
         case CommandType::LayerOpacity:
         case CommandType::LayerSpeed:
         case CommandType::LayerJump:
@@ -272,6 +294,7 @@ Reject DeckModel::validate(const Command& c) const {
                 case LayerParam::Autopilot: return enum_ok<AutopilotMode>(c.i) ? Reject::None : Reject::BadValue;
                 case LayerParam::Transition: return enum_ok<TransitionType>(c.i) ? Reject::None : Reject::BadValue;
                 case LayerParam::Snap: return c.i == -1 || enum_ok<GridDiv>(c.i) ? Reject::None : Reject::BadValue;
+                case LayerParam::Smooth: return c.i == -1 || enum_ok<FrameSmooth>(c.i) ? Reject::None : Reject::BadValue;
                 case LayerParam::Direction:
                 case LayerParam::ReverseHold: return c.i == 0 || c.i == 1 ? Reject::None : Reject::BadValue;
                 case LayerParam::InnerLoop:
@@ -282,7 +305,7 @@ Reject DeckModel::validate(const Command& c) const {
         }
         case CommandType::LayerTrigger:
             if (slot < 0) return Reject::BadTarget;
-            if (c.i < -1 || c.i >= static_cast<int32_t>(catalog_.clip_count)) return Reject::BadId;
+            if (c.i < -1 || c.i >= clip_total()) return Reject::BadId;
             if (c.i == -1 && layer(slot).clip < 0) return Reject::BadValue;  // "the layer's clip" on an empty layer
             return finite(c.f[0]) ? Reject::None : Reject::BadValue;
         case CommandType::LayerCue:
@@ -302,6 +325,8 @@ Reject DeckModel::validate(const Command& c) const {
         case CommandType::Identify:
         case CommandType::LayerPlace:
         case CommandType::OutputConfig:
+            if (c.type == CommandType::OutputConfig && c.param == static_cast<uint8_t>(OutputParam::FrameSmooth))
+                return enum_ok<FrameSmooth>(c.i) ? Reject::None : Reject::BadValue;  // wave 7: kept in this model
             return outputs_ ? outputs_->validate(c, c.type == CommandType::LayerPlace ? slot : -1) : Reject::UnknownType;
         // ---- ENGINE: quit (command-protocol.md §4e) ----
         case CommandType::SystemQuit:
@@ -363,8 +388,9 @@ void DeckModel::land_take() {
 // ---------------------------------------------------------------- transport helpers
 ClipGeom DeckModel::geom(int clip) const {
     ClipGeom g;
-    if (clip < 0 || clip >= static_cast<int>(catalog_.clip_count)) return g;
-    const ClipInfo& ci = catalog_.clip[clip];
+    const ClipInfo* cp = clip_info(clip);
+    if (!cp) return g;
+    const ClipInfo& ci = *cp;
     if (ci.fps > 0 && ci.seconds > 0) {
         g.fps = ci.fps;
         g.frames = std::max<int64_t>(1, std::llround(static_cast<double>(ci.seconds) * ci.fps));
@@ -411,7 +437,7 @@ void DeckModel::warm_frames(int slot, int64_t out[kCuePoints]) const {
         }
         // Exactly the arithmetic of a jump (jump_now -> Playhead::jump -> frame()).
         const double pos = cue_frac(slot, k) * static_cast<double>(g.frames);
-        out[k] = std::clamp<int64_t>(static_cast<int64_t>(std::floor(std::clamp(pos, 0.0, static_cast<double>(g.frames) - 1e-6))),
+        out[k] = std::clamp<int64_t>(static_cast<int64_t>(std::floor(std::clamp(pos, 0.0, static_cast<double>(g.frames) - 1e-6) + frame_bias(slot))),
                                      0, g.frames - 1);
     }
 }
@@ -419,7 +445,7 @@ void DeckModel::warm_frames(int slot, int64_t out[kCuePoints]) const {
 void DeckModel::load_clip(int slot, int clip, double frac, float velocity) {
     LayerState& l = L(slot);
     LayerTransport& t = T(slot);
-    if (l.clip >= 0 && l.clip < kMaxClips) resume_[l.clip] = l.position;
+    if (l.clip >= 0 && l.clip < kMaxCatalogClips) resume_[l.clip] = l.position;
     l.clip = static_cast<int16_t>(clip);
     l.missing = 0;
     l.playing = 1;
@@ -555,7 +581,7 @@ void DeckModel::stop_layer(int slot, float fade_s) {
 }
 
 int DeckModel::pick_clip(int slot, AutopilotMode how) {
-    const int n = static_cast<int>(catalog_.clip_count);
+    const int n = clip_total();
     const int cur = L(slot).clip;
     if (n <= 0) return -1;
     switch (how) {
@@ -647,6 +673,7 @@ Reject DeckModel::apply_layer_set(int slot, const Command& c) {
             t.seed = static_cast<uint32_t>(c.i);
             ph_[slot].seed(t.seed);
             break;
+        case LayerParam::Smooth: smooth_[slot] = c.i < 0 ? kSmoothFollow : static_cast<uint8_t>(c.i); break;
         default: return Reject::BadTarget;
     }
     return Reject::None;
@@ -707,6 +734,12 @@ Reject DeckModel::apply(const Command& c, uint64_t now_us) {
             piano_clip_[slot] = -1;
             // GUESS: a plain load starts at the range start, whatever StartPos says (CONTINUE is for pad launches).
             change_clip(slot, c.i, kFromStart, 1.0f);
+            break;
+        case CommandType::LayerClipLib:  // wave 7: = LayerClip with the library clip's engine id
+            pending_[slot].kind = PendingKind::None;
+            T(slot).pending = 0;
+            piano_clip_[slot] = -1;
+            change_clip(slot, clips_->find_library(c.i), kFromStart, 1.0f);
             break;
         case CommandType::LayerOpacity: {
             LayerState& l = L(slot);
@@ -882,6 +915,10 @@ Reject DeckModel::apply(const Command& c, uint64_t now_us) {
         case CommandType::Identify:
         case CommandType::LayerPlace:
         case CommandType::OutputConfig:
+            if (c.type == CommandType::OutputConfig && c.param == static_cast<uint8_t>(OutputParam::FrameSmooth)) {
+                smooth_global_ = static_cast<FrameSmooth>(c.i);
+                break;
+            }
             if (!outputs_) return Reject::UnknownType;
             outputs_->apply(c, slot, now_us, submitting_);
             break;
@@ -918,6 +955,20 @@ void DeckModel::tick_transport(uint64_t now_us) {
     in.beat0 = dt > 0.0 ? std::min(last_beat_, in.beat1) : in.beat1;  // no beat events on the first tick
     in.bpm = clock_.bpm();
     last_beat_ = in.beat1;
+    // Wave 7 frame smoothing: Even / Blend layers step on the display's refresh grid (whole
+    // refresh periods), so the wake-up jitter of the frame loop never moves a frame boundary.
+    TickIn grid = in;
+    if (refresh_hz_ > 0.0 && dt > 0.0) {
+        const double period = 1.0 / refresh_hz_;
+        grid_acc_ += dt;
+        const double n = std::floor(grid_acc_ / period + 0.5);
+        grid.dt = n * period;
+        grid_acc_ -= grid.dt;
+        grid_acc_ = std::clamp(grid_acc_, -period, period);
+    }
+    TickIn hold = in;  // pre-roll: the playhead waits for the clip's first frame
+    hold.dt = 0.0;
+    hold.beat0 = in.beat1;
 
     for (int s = 0; s < kLayerSlots; ++s) {
         LayerState& l = L(s);
@@ -967,7 +1018,9 @@ void DeckModel::tick_transport(uint64_t now_us) {
         const ClipGeom g = geom(l.clip);
         if (g.frames <= 0) continue;  // length unknown: nothing to play (the renderer shows the placeholder)
         if (!ph_[s].active()) ph_[s].start(g, t, l.position * static_cast<double>(g.frames), l.speed);
-        const uint32_t ev = ph_[s].advance(g, t, l.playing != 0, l.speed, in);
+        const FrameSmooth sm = smooth_in_use(s);
+        const TickIn& tin = loading_[s] ? hold : sm == FrameSmooth::Off ? in : grid;
+        const uint32_t ev = ph_[s].advance(g, t, l.playing != 0, l.speed, tin);
         if (ev & kEvLooped) {
             ++t.loops;
             const auto ap = static_cast<AutopilotMode>(t.autopilot);
@@ -976,7 +1029,7 @@ void DeckModel::tick_transport(uint64_t now_us) {
         if (ev & kEvEnded) on_ended(s);
         if (l.clip < 0) continue;  // ejected by a cut fade
         l.position = static_cast<float>(ph_[s].pos() / static_cast<double>(g.frames));
-        t.frame = static_cast<int32_t>(ph_[s].frame());
+        t.frame = static_cast<int32_t>(frame(s));
         t.speed_now = static_cast<float>(ph_[s].speed_now());
         const bool holding = ph_[s].ended() && t.mode == static_cast<uint8_t>(PlayMode::OnceHold);
         t.phase = static_cast<uint8_t>(holding ? PlayheadPhase::Holding : ph_[s].phase(l.playing != 0));
@@ -990,6 +1043,57 @@ void DeckModel::tick_transport(uint64_t now_us) {
     cs.time_us = now_us;
     cs.taps = clock_.taps();
     cs.source = clock_external_ ? 2 : clock_.tapped() ? 1 : 0;
+}
+
+double DeckModel::frame_bias(int slot) const {
+    return refresh_hz_ > 0.0 && smooth_in_use(slot) != FrameSmooth::Off ? 1e-6 : 0.0;
+}
+
+int64_t DeckModel::frame(int slot) const {
+    const int64_t f = ph_[slot].frame();
+    const double bias = frame_bias(slot);
+    if (f < 0 || bias == 0.0) return f;
+    const int64_t n = geom(layer(slot).clip).frames;
+    const int64_t b = static_cast<int64_t>(std::floor(ph_[slot].pos() + bias));
+    return n > 0 ? std::clamp<int64_t>(b, 0, n - 1) : f;
+}
+
+FrameSmooth DeckModel::smooth_in_use(int slot) const {
+    const FrameSmooth set = smooth_[slot] == kSmoothFollow ? smooth_global_ : static_cast<FrameSmooth>(smooth_[slot]);
+    if (set != FrameSmooth::Auto) return set;
+    // Auto: Even when the refresh is a whole multiple of the frame rate (30 @ 60, 25 @ 50,
+    // 60 @ 60), else Blend (24 / 25 / 30 on 50 / 60 Hz the other way). GUESS: 1 % tolerance.
+    const double r = refreshes_per_frame(slot);
+    if (r <= 0.0) return FrameSmooth::Even;
+    return std::abs(r - std::round(r)) < 0.01 * r && r >= 0.99 ? FrameSmooth::Even : FrameSmooth::Blend;
+}
+
+double DeckModel::refreshes_per_frame(int slot) const {
+    const LayerState& l = slot == kHitSlot ? transport_.hit : live_.deck[slot / kLayersPerDeck].layer[slot % kLayersPerDeck];
+    if (refresh_hz_ <= 0.0 || l.clip < 0) return 0.0;
+    const ClipGeom g = geom(l.clip);
+    const LayerTransport& t = layer_transport(slot);
+    const double rate = Playhead::base_rate(g, t, clock_.bpm()) * std::abs(ph_[slot].speed_now());
+    return rate > 1e-6 ? refresh_hz_ / rate : 0.0;
+}
+
+void DeckModel::blend_frames(int slot, int64_t& next, float& weight) const {
+    next = -1;
+    weight = 0.0f;
+    if (smooth_in_use(slot) != FrameSmooth::Blend || loading_[slot]) return;
+    const int64_t f = frame(slot);
+    const LayerState& l = slot == kHitSlot ? transport_.hit : live_.deck[slot / kLayersPerDeck].layer[slot % kLayersPerDeck];
+    if (f < 0 || l.clip < 0 || !l.playing) return;
+    const ClipGeom g = geom(l.clip);
+    const double p = ph_[slot].pos();
+    const double fr = p + 1e-6 - std::floor(p + 1e-6);
+    if (g.frames <= 1 || fr < 1e-3) return;
+    // Between frame f and f + 1 (whatever the direction); at the clip's end the blend waits.
+    double a = 0.0, b = 0.0;
+    Playhead::range(g, layer_transport(slot), a, b);
+    if (f + 1 >= g.frames || static_cast<double>(f + 1) >= b || static_cast<int64_t>(std::floor(p + 1e-6)) != f) return;
+    next = f + 1;
+    weight = static_cast<float>(fr);
 }
 
 void DeckModel::follow_clock(bool active, double bpm, double beat, bool phase, uint64_t now_us, double dt_s) {
@@ -1055,13 +1159,33 @@ void copy_settings(LayerTransport& d, const LayerTransport& s) {
 }  // namespace
 
 int DeckModel::restore(const LiveState& old, const Catalog& old_cat, const TransportSection* old_tr,
-                       const ReactionSection* old_react) {
+                       const ReactionSection* old_react, const ClipDirectory* old_clips) {
     reset();
     int lost = 0;
     auto clip_id = [&](int16_t id) -> int16_t {
-        if (id < 0 || id >= static_cast<int>(old_cat.clip_count) || id >= kMaxClips) return -1;
-        for (uint32_t i = 0; i < catalog_.clip_count; ++i)
-            if (names_equal(catalog_.clip[i].name, old_cat.clip[id].name, kNameLen)) return static_cast<int16_t>(i);
+        if (id < 0) return -1;
+        // Wave 7: a version 4 block names every id (library id first: names can repeat).
+        if (old_clips && old_clips->valid(id)) {
+            const ClipEntry& oe = old_clips->entry(id);
+            if (clips_) {
+                int found = clips_->find_library(oe.library_id);
+                if (found < 0) found = clips_->find_name(oe.info.name);
+                if (found >= 0) return static_cast<int16_t>(found);
+            } else {
+                for (uint32_t i = 0; i < catalog_.clip_count; ++i)
+                    if (names_equal(catalog_.clip[i].name, oe.info.name, kNameLen)) return static_cast<int16_t>(i);
+            }
+            ++lost;
+            return -1;
+        }
+        if (id >= static_cast<int>(old_cat.clip_count) || id >= kMaxClips) return -1;
+        if (clips_) {
+            const int found = clips_->find_name(old_cat.clip[id].name);
+            if (found >= 0) return static_cast<int16_t>(found);
+        } else {
+            for (uint32_t i = 0; i < catalog_.clip_count; ++i)
+                if (names_equal(catalog_.clip[i].name, old_cat.clip[id].name, kNameLen)) return static_cast<int16_t>(i);
+        }
         ++lost;
         return -1;
     };
@@ -1159,6 +1283,8 @@ const char* reject_name(Reject r) {
         case Reject::BadId: return "bad id";
         case Reject::BadValue: return "bad value";
         case Reject::RateLimited: return "rate limited";
+        case Reject::NotReady: return "not ready";
+        case Reject::Missing: return "missing";
         default: return "?";
     }
 }
@@ -1179,6 +1305,7 @@ const char* command_name(CommandType t) {
         case CommandType::LayerPlace: return "place";
         case CommandType::OutputConfig: return "outconfig";
         case CommandType::SystemQuit: return "quit";
+        case CommandType::LayerClipLib: return "cliplib";  // wave 7
         default: break;
     }
     const auto i = static_cast<size_t>(t);

@@ -64,6 +64,12 @@ struct LoadedClip {
     void* file = nullptr;      // HANDLE
     ID3D11Texture2D* tex = nullptr;
     ID3D11ShaderResourceView* srv = nullptr;
+    // Wave 7 frame blend: a second texture, so the two nearest frames are both on the GPU
+    // (the renderer uploads each clip frame once and alternates between the two).
+    ID3D11Texture2D* tex_b = nullptr;
+    ID3D11ShaderResourceView* srv_b = nullptr;
+    ID3D11Texture2D* gpu_tex(int k) const { return k ? tex_b : tex; }
+    ID3D11ShaderResourceView* view(int k) const { return k ? srv_b : srv; }
     ClipSlot slots[kClipSlots];
     ClipSlot warm[kWarmSlots];                   // data sized by the worker on first use
     std::atomic<int64_t> warm_want[kWarmSlots];  // -1 = none; written by the render thread
@@ -92,8 +98,10 @@ public:
 
     const std::vector<std::string>& playlist() const { return playlist_; }
     // Any thread: ask the worker to load playlist[index]; the old clip plays on
-    // until the new one is ready.
-    void load(int index);
+    // until the new one is ready. Wave 7 pre-roll: the worker decodes `start_frame` (and
+    // the frames after it in `dir`) before it hands the clip over, so the first frame is
+    // on screen in the frame the clip swaps in (no black, no placeholder flash).
+    void load(int index, int64_t start_frame = 0, int dir = 1);
 
     // Render thread.
     LoadedClip* current();                  // swaps in a newly loaded clip; may be null
@@ -125,6 +133,8 @@ private:
     void* wake_ = nullptr;  // HANDLE, auto-reset event
 
     std::atomic<int> request_index_{-1};
+    std::atomic<int64_t> request_frame_{0};
+    std::atomic<int32_t> request_dir_{1};
     std::atomic<uint32_t> request_seq_{0};
     std::atomic<LoadedClip*> pending_{nullptr};       // worker -> render
     std::atomic<LoadedClip*> retired_[4] = {};        // render -> worker (delete)

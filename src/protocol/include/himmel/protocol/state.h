@@ -19,9 +19,13 @@ namespace himmel::protocol {
 
 inline constexpr const wchar_t* kStateShmName = L"Local\\HimmelState";
 inline constexpr uint32_t kStateMagic = 0x54534D48;  // "HMST"
-inline constexpr uint32_t kStateVersion = 3;  // 2: + transport section (M2); 3: + reaction table (AUDIO, D131)
+inline constexpr uint32_t kStateVersion = 4;  // 2: + transport section (M2); 3: + reaction table (AUDIO, D131);
+                                              // 4: + clip pages (catalog v3, ENGINE wave 7) + playback section
 
-inline constexpr int kMaxClips = 256;
+inline constexpr int kMaxClips = 256;      // the `catalog` section's window: clip ids 0..255 (catalog v3: see ClipPages)
+inline constexpr int kMaxCatalogClips = 8192;  // catalog v3: every engine clip id 0..8191 (clip pages)
+inline constexpr int kClipPageSize = 64;
+inline constexpr int kClipPageCount = kMaxCatalogClips / kClipPageSize;  // 128
 inline constexpr int kMaxEffects = 64;
 inline constexpr int kNameLen = 48;        // UTF-8, NUL-terminated
 inline constexpr int kParamNameLen = 16;
@@ -221,6 +225,80 @@ struct ReactionSection {
     uint32_t reserved;
 };
 
+// ---- catalog v3: clip pages (version 4, ENGINE wave 7; engine-state.md §1, §2) ------------
+// Every clip the engine can play, up to kMaxCatalogClips, in pages of kClipPageSize with one
+// seqlock each. Clip id = index (append-only: an id never moves; a clip that is removed or
+// whose file is gone keeps its id and says so in `state`). Ids 0..255 are also in the
+// `catalog` section (unchanged since version 1). A reader keeps a copy, watches
+// `ClipPagesHeader::gen`, and re-reads only the pages whose page_gen changed.
+enum class ClipState : uint8_t {
+    Empty = 0,     // no clip at this id (above count)
+    Ready = 1,     // playable
+    Missing = 2,   // the file is gone or cannot be opened (a layer shows the placeholder)
+    Removed = 3,   // the clip left the library (MEDIA Remove); the id stays, loading it is refused
+    Busy = 4,      // the file is locked or still being written; loading it is refused for now
+    Count
+};
+
+struct ClipEntry {
+    ClipInfo info;             // as in the catalog section
+    int64_t library_id;        // the library DB id (library-db.md), 0 = not from the library (media/ or --clip)
+    uint8_t state;             // ClipState
+    uint8_t reserved[3];
+    uint32_t gen;              // bumped when this entry changes
+    uint32_t reserved2[2];
+};
+static_assert(sizeof(ClipEntry) == 96);
+
+struct ClipPageData {
+    uint32_t gen;              // = ClipPagesHeader::page_gen[page] at the write
+    uint32_t used;             // entries in use on this page (0..kClipPageSize)
+    ClipEntry e[kClipPageSize];
+};
+
+struct ClipPagesHeader {
+    std::atomic<uint32_t> count;     // clip ids in use: 0..count-1 (only grows while the renderer runs)
+    std::atomic<uint32_t> gen;       // bumped after any page changed (readers poll this one value)
+    uint32_t capacity;               // kMaxCatalogClips
+    uint32_t page_size;              // kClipPageSize
+    std::atomic<uint32_t> full;      // clips the engine could not take (catalog full; they stay in the library)
+    uint32_t reserved[3];
+    std::atomic<uint32_t> page_gen[kClipPageCount];  // per page: bumped when that page changed
+};
+
+struct ClipPage {
+    alignas(64) std::atomic<uint32_t> seq;
+    ClipPageData data;
+};
+
+// ---- playback (version 4): frame smoothing for clips whose fps does not divide the output Hz --
+enum class FrameSmooth : uint8_t {
+    Auto = 0,      // Even when the output Hz is a whole multiple of the clip's fps (30 @ 60), else Blend
+    Off = 1,       // the nearest frame by wall-clock time (versions <= 3)
+    Blend = 2,     // mix the two nearest frames by the playhead's fraction (one extra texture per layer)
+    Even = 3,      // the nearest frame on the display's refresh grid (no dt jitter: 2-2-2, 3-2-3-2)
+    Count
+};
+inline constexpr uint8_t kSmoothFollow = 0xFF;  // a layer's setting: follow the global one
+
+struct LayerPlayback {
+    uint8_t smooth;            // the layer's setting: FrameSmooth or kSmoothFollow
+    uint8_t in_use;            // the FrameSmooth the engine uses now (never Auto)
+    uint8_t loading;           // 1 = a new clip is pre-rolling (the old picture stays until its first frame)
+    uint8_t reserved;
+    float clip_fps;            // fps of the clip on the layer (0 = none)
+    float refreshes_per_frame; // output Hz / (clip fps x |speed|): 2 = 30 fps at 60 Hz
+    float judder;              // cadence error over the last stats period: mean |hold - ideal| in refreshes (0 = even)
+    uint32_t irregular;        // holds that were neither floor nor ceil of the ideal, last stats period
+};
+
+struct PlaybackSection {
+    uint8_t smooth;            // the global setting: FrameSmooth (OutputConfig FrameSmooth)
+    uint8_t reserved[3];
+    float out_hz;              // the refresh the smoothing assumes (measured)
+    LayerPlayback layer[kDecks * kLayersPerDeck + 1];  // deck * 4 + layer, then HIT
+};
+
 struct EngineStatusMirror {
     std::atomic<uint64_t> heartbeat_us;   // engine clock at the last live write
     std::atomic<uint32_t> pid;
@@ -242,6 +320,10 @@ struct StateBlock {
     TransportSection transport;
     alignas(64) std::atomic<uint32_t> react_seq;       // version 3
     ReactionSection react;
+    alignas(64) std::atomic<uint32_t> playback_seq;    // version 4
+    PlaybackSection playback;
+    alignas(64) ClipPagesHeader clips;                 // version 4: catalog v3
+    ClipPage clip_page[kClipPageCount];
 };
 #ifdef _MSC_VER
 #pragma warning(pop)

@@ -99,6 +99,9 @@ enum class CommandType : uint16_t {
     // ---- system (ENGINE) ----
     SystemQuit = 74,    // f[0] = 1 (confirmed) or refused as BadValue; the renderer sets quit_request, the supervisor
                         // stops every process cleanly (command-protocol.md §4d). Never sent without a confirm.
+    // ---- clips by library id (ENGINE wave 7, catalog v3; command-protocol.md §4f) ----   deck (or kHitDeck), layer
+    LayerClipLib = 75,  // i = library id (> 0, library-db.md). Same as LayerClip with the engine clip id of that
+                        // library clip; refused NotReady (not in the catalog yet) or Missing (file gone / busy / removed)
     Count
 };
 
@@ -143,6 +146,7 @@ enum class LayerParam : uint8_t {
     ScratchSnap = 26,   // i = Toggle value: on scratch release, snap back (1) or stay (0)
     ReverseHold = 27,   // i = 1 held / 0 let go: momentary reverse with catch-up
     Seed = 28,          // i: random / chop / autopilot seed (same seed = same pattern)
+    Smooth = 29,        // i = FrameSmooth (state.h), or -1 = follow the global setting (OutputConfig FrameSmooth). Wave 7
     Count
 };
 enum class PlayMode : uint8_t { Loop = 0, PingPong = 1, OnceHold = 2, OnceEject = 3, OnceNext = 4, Random = 5, Chop = 6, Step = 7, Scratch = 8, Count };
@@ -278,6 +282,8 @@ enum class Reject : uint8_t {
     BadId,          // clip or effect id not in the catalog
     BadValue,       // NaN, inf, or an enum out of range (values in range are clamped, not refused)
     RateLimited,    // more than kMaxCommandsPerSecond from one producer
+    NotReady,       // wave 7: LayerClipLib - that library id is not a clip in the catalog (yet)
+    Missing,        // wave 7: LayerClipLib - the clip's file is gone, still being written / locked, or removed
     Count
 };
 inline constexpr uint32_t kMaxCommandsPerSecond = 4000;

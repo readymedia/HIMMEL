@@ -52,6 +52,8 @@ DXGI_FORMAT dxgi_format(media::HapTexture t) {
 LoadedClip::~LoadedClip() {
     if (srv) srv->Release();
     if (tex) tex->Release();
+    if (srv_b) srv_b->Release();
+    if (tex_b) tex_b->Release();
     if (file) CloseHandle(static_cast<HANDLE>(file));
 }
 
@@ -85,8 +87,10 @@ ClipPlayer::~ClipPlayer() {
     CloseHandle(static_cast<HANDLE>(wake_));
 }
 
-void ClipPlayer::load(int index) {
+void ClipPlayer::load(int index, int64_t start_frame, int dir) {
     if (index < 0 || index >= playlist_size()) return;
+    request_frame_.store(start_frame < 0 ? 0 : start_frame);
+    request_dir_.store(dir < 0 ? -1 : 1);
     request_index_.store(index);
     request_seq_.fetch_add(1);
     SetEvent(static_cast<HANDLE>(wake_));
@@ -197,7 +201,9 @@ LoadedClip* ClipPlayer::open_clip(const std::string& path) {
     td.Usage = D3D11_USAGE_DEFAULT;
     td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
     if (FAILED(device_->CreateTexture2D(&td, nullptr, &c->tex)) ||
-        FAILED(device_->CreateShaderResourceView(c->tex, nullptr, &c->srv)))
+        FAILED(device_->CreateShaderResourceView(c->tex, nullptr, &c->srv)) ||
+        FAILED(device_->CreateTexture2D(&td, nullptr, &c->tex_b)) ||
+        FAILED(device_->CreateShaderResourceView(c->tex_b, nullptr, &c->srv_b)))
         return fail("could not create the GPU texture");
     return c.release();
 }
@@ -300,6 +306,13 @@ void ClipPlayer::run() {
             seen_seq = seq;
             const int index = request_index_.load();
             if (LoadedClip* c = open_clip(playlist_path(index))) {
+                // Pre-roll (wave 7): decode the start frame and the frames after it before the
+                // renderer can take the clip, so it shows its first frame at once.
+                const int64_t n = static_cast<int64_t>(c->track.frames());
+                c->wanted.store(wrap(request_frame_.load(), n));
+                c->direction.store(request_dir_.load());
+                for (int k = 0; k <= kClipAhead && fill_one(*c); ++k) {
+                }
                 delete pending_.exchange(c);  // an older one the renderer never took
                 newest_ = c;
                 loaded_index.store(index);

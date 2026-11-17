@@ -73,10 +73,11 @@ const char* const kBlendNames[] = {"Normal", "Add", "Screen", "Multiply", "Diffe
 static_assert(std::size(kBlendNames) == static_cast<size_t>(BlendMode::Count));
 const char* const kPlayNames[] = {"Pause", "Play", "Toggle", "Restart", "Release", "Stop"};
 static_assert(std::size(kPlayNames) == static_cast<size_t>(PlayAction::Count));
-const char* const kRejectNames[] = {"None", "UnknownType", "BadTarget", "BadId", "BadValue", "RateLimited"};
+const char* const kRejectNames[] = {"None", "UnknownType", "BadTarget", "BadId", "BadValue", "RateLimited", "NotReady", "Missing"};
 static_assert(std::size(kRejectNames) == static_cast<size_t>(Reject::Count));
 
 // ---- clip transport names (M2). The page uses the same words. ----
+const char* const kSmoothNames[] = {"Auto", "Off", "Blend", "Even"};  // FrameSmooth (ENGINE wave 7)
 const char* const kModeNames[] = {"Loop", "PingPong", "OnceHold", "OnceEject", "OnceNext", "Random", "Chop", "Step", "Scratch"};
 const char* const kTimeBaseNames[] = {"Free", "Bpm"};
 const char* const kTriggerNames[] = {"Normal", "Toggle", "Piano", "Legato"};
@@ -141,6 +142,7 @@ const ParamSpec kParamSpecs[] = {
     {LayerParam::ScratchSnap, "ScratchSnap", PKind::Toggle, 0, 2, nullptr, 0, false},
     {LayerParam::ReverseHold, "ReverseHold", PKind::Bool, 0, 1, nullptr, 0, false},
     {LayerParam::Seed, "Seed", PKind::Int, 0, 2147483647.0, nullptr, 0, false},
+    ENUM_P(Smooth, "Smooth", kSmoothNames, true),  // ENGINE wave 7: -1 = follow the global setting
 };
 #undef ENUM_P
 static_assert(std::size(kParamSpecs) == static_cast<size_t>(LayerParam::Count));
