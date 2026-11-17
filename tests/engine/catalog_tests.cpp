@@ -115,6 +115,12 @@ static void test_paging() {
     auto c2 = std::make_unique<ClipPagesCopy>();
     CHECK(read_clip_pages(*pg2.h, pg2.p.get(), *c2) == kClipPageCount && c2->count == static_cast<uint32_t>(kMaxCatalogClips));
     CHECK(c2->full == 1);
+    // 8192 ids: a change at the last id writes (and is read as) exactly one page.
+    CHECK(big->set_state(kMaxCatalogClips - 1, ClipState::Missing));
+    CHECK(big->publish(*pg2.h, pg2.p.get()) == 1);
+    CHECK(read_clip_pages(*pg2.h, pg2.p.get(), *c2) == 1);
+    CHECK(c2->entry(kMaxCatalogClips - 1).state == static_cast<uint8_t>(ClipState::Missing));
+    CHECK(big->find_library(0) == -1 && big->find_name("clip8191") == kMaxCatalogClips - 1);
     // A second renderer (new directory) on the same block continues the page generations.
     auto again = std::make_unique<ClipDirectory>();
     for (int i = 0; i < 10; ++i) again->add(info(i));

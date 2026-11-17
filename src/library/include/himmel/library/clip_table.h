@@ -19,7 +19,9 @@
 namespace himmel::library {
 
 struct ClipTable {
-    static constexpr int kCapacity = protocol::kMaxCatalogClips;  // catalog v3 (ENGINE wave 7): was kMaxClips (256)
+    // ==== ENGINE (catalog v3) ====
+    static constexpr int kCapacity = protocol::kMaxCatalogClips;  // was kMaxClips (256)
+    // ==== end ENGINE (catalog v3) ====
     std::string path[kCapacity];             // UTF-8 path of the playable HAP file
     protocol::ClipInfo info[kCapacity];      // the catalog entry
     int64_t library_id[kCapacity] = {};      // 0 = not from the library (media/ or --clip)
@@ -36,6 +38,7 @@ struct ClipTable {
         count.store(n + 1, std::memory_order_release);
         return static_cast<int>(n);
     }
+    // ==== ENGINE (catalog v3) ====
     // Wave 7: the index of an entry with this library id and path, or -1 (a library clip that
     // turns ready again - re-import, re-analyse - keeps its engine id instead of a duplicate).
     int find(int64_t lib_id, const std::string& p) const {
@@ -44,6 +47,7 @@ struct ClipTable {
             if (library_id[i] == lib_id && path[i] == p) return static_cast<int>(i);
         return -1;
     }
+    // ==== end ENGINE (catalog v3) ====
 };
 
 }  // namespace himmel::library
