@@ -65,7 +65,8 @@ public:
     void set_missing(int deck, int layer, bool missing);
     void set_missing_slot(int slot, bool missing);
     void set_frame(uint64_t frame, uint64_t time_us, float fps);
-    void set_producer_alive(int producer, bool alive);
+    // `now_us` (M6): a producer that goes quiet lets go of a held IDENTIFY.
+    void set_producer_alive(int producer, bool alive, uint64_t now_us = 0);
     void set_epoch(uint32_t epoch) { live_.epoch = epoch; }
 
     // Bumped on every jump of a layer's playhead (LayerJump, cue jump, Restart,
@@ -118,6 +119,7 @@ public:
 
 private:
     OutputModel* outputs_ = nullptr;
+    int submitting_ = -1;  // the producer of the command being applied (M6: who holds IDENTIFY)
     protocol::Reject apply(const protocol::Command& c, uint64_t now_us);
     protocol::FxSlotState* fx_slot(const protocol::Command& c);
     const protocol::FxSlotState* fx_slot(const protocol::Command& c) const;

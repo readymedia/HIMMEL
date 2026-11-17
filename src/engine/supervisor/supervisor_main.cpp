@@ -103,7 +103,7 @@ void log(const char* fmt, ...) {
     }
 }
 
-// ---------------------------------------------------------------- curtains (M6)
+// ==== ENGINE (M6): curtains ====
 // Black windows held by the supervisor, one per output, just below the renderer's
 // output window (operations.md, build-v1 M6): when the renderer dies or restarts,
 // its windows vanish and the curtain shows black - never the desktop. The curtain
@@ -242,6 +242,7 @@ private:
     std::atomic<bool> stop_{false};
     std::atomic<uint32_t> shown_{0};
 };
+// ==== end ENGINE (M6) ====
 
 struct Child {
     std::string name;
@@ -519,6 +520,7 @@ int main(int argc, char** argv) {
     // ==== end CONTROL (M13) ====
     children.push_back(&ren);
     if (with_ui) children.push_back(&ui);
+    // ==== ENGINE (M6): keep the blocks open, curtains ====
     // Kept open for the whole night: the outputs block (and the curtains' rects in it) survives
     // a renderer restart, so the new renderer finds its display identities and settings.
     himmel::engine::ShmBlock outputs_keep;
@@ -542,6 +544,7 @@ int main(int argc, char** argv) {
     show_keep.open_or_create(himmel::protocol::kShowShmName, sizeof(himmel::protocol::ShowBlock));
     Curtains curtains;
     if (with_curtains && !legacy) curtains.start();
+    // ==== end ENGINE (M6) ====
     constexpr uint64_t kHungUs = 2000000, kGraceUs = 8000000;  // grace: start-up (GPU, shaders, USB)
     uint64_t next_report = now_us() + 60000000;
 
@@ -597,7 +600,7 @@ int main(int argc, char** argv) {
         if (shm->get()) shm->get()->status.stop_request.store(1);
     for (auto& w : weapon_children) stop_child(*w, 3000);
     stop_child(ctl, 3000);  // otherwise terminated
-    curtains.stop();  // after every child: black until the very end
+    curtains.stop();  // ENGINE (M6): after every child - black until the very end
     log("bye");
     if (g_logfile) std::fclose(g_logfile);
     CloseHandle(job);

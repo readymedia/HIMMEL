@@ -4,7 +4,7 @@
 //
 //   himmel_render [--outputs N] [--fullscreen] [--size 640x360] [--mode span|mirror]
 //                 [--resolution 720p|1080p|1440p|4k|custom] [--refresh 60|50|59.94|30|25]
-//                 [--blend PX] [--blend-gamma G]   (outputs: M6, docs/interfaces/outputs-block.md)
+//                 [--blend PX] [--blend-gamma G] [--spout NAME]   (outputs: M6, docs/interfaces/outputs-block.md)
 //                 [--clip file.mov ...] [--no-overlay] [--preview-fps N] [--stats-csv]
 //                 [--flash-cap HZ] [--test-signal] [--ticker "TEXT"]   (effects: src/engine/fx/, M5)
 //                 [--project FOLDER|FILE.himmelshow] [--no-show-files] [--show-root DIR]   (show: src/show/, M3)
@@ -72,6 +72,7 @@
 #include "himmel/engine/deck_model.h"
 #include "himmel/engine/display_watch.h"
 #include "himmel/engine/output_model.h"
+#include "himmel/engine/spout_out.h"
 #include "himmel/engine/reactions.h"
 #include "himmel/engine/engine_shared.h"
 #include "himmel/engine/fx_catalog.h"
@@ -120,6 +121,15 @@ himmel::fx::FxGpu* g_fx = nullptr;  // effects + generators (made at start-up)
 himmel::engine::OutputModel* g_om = nullptr;  // canvas layout + layer places (M6)
 #define LOG(...) g_log->logf(__VA_ARGS__)
 
+// ==== ENGINE (M6): Spout worker log (LogRing has one writer, the render thread) ====
+void spout_log(const char* line) {
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    std::printf("%02d:%02d:%02d  render  %s\n", st.wHour, st.wMinute, st.wSecond, line);
+    std::fflush(stdout);
+}
+// ==== end ENGINE (M6) ====
+
 // ---------------------------------------------------------------- config
 struct Config {
     int outputs = 0;  // 0 = one per monitor (windowed: 3)
@@ -131,6 +141,7 @@ struct Config {
     proto::RefreshRate refresh = proto::RefreshRate::Hz60;
     int blend_px = 0;               // M6: edge-blend overlap, canvas pixels
     float blend_gamma = 2.2f;
+    std::string spout;              // M6: Spout sender name for MAIN ("" = Spout off)
     int preview_fps = 20;
     std::vector<std::string> clips;
     float flash_cap = 0;       // D65: optional per-show flash cap (flashes/s), 0 = off (default)
@@ -175,6 +186,7 @@ Config parse_args(int argc, char** argv) {
             c.refresh = hz > 59.5 && hz < 59.99 ? proto::RefreshRate::Hz59_94 : hz == 50 ? proto::RefreshRate::Hz50
                       : hz == 30 ? proto::RefreshRate::Hz30 : hz == 25 ? proto::RefreshRate::Hz25 : proto::RefreshRate::Hz60;
         } else if (a == "--blend") c.blend_px = std::clamp(std::atoi(next().c_str()), 0, 1024);
+        else if (a == "--spout") c.spout = next();
         else if (a == "--blend-gamma") c.blend_gamma = std::clamp(static_cast<float>(std::atof(next().c_str())), 1.0f, 3.0f);
         else if (a == "--library") c.library = next();
         else if (a == "--no-library") c.use_library = false;
@@ -936,7 +948,7 @@ int main(int argc, char** argv) {
     }
     auto model = std::make_unique<DeckModel>(*catalog);
 
-    // ==== OUTPUTS (M6): displays by identity, the output model, Local\HimmelOutputs ====
+    // ==== ENGINE (M6) outputs: displays by identity, the output model, Local\HimmelOutputs ====
     himmel::engine::DisplayWatch watch;
     watch.start();  // the first scan runs here; then a worker keeps the list current
     auto displays = std::make_unique<himmel::engine::DisplayList>();
@@ -992,7 +1004,7 @@ int main(int argc, char** argv) {
             outputs_blk->status.pid.store(GetCurrentProcessId());
         }
     }
-    // ==== end OUTPUTS ====
+    // ==== end ENGINE (M6) ====
 
     // ==== AUDIO (M8): Local\HimmelAudio, mapped once; himmel_audio.exe may come and go ====
     himmel::engine::AudioLink audio_link;
@@ -1091,6 +1103,13 @@ int main(int argc, char** argv) {
         if (cfg.test_signal) LOG("fx: reactions get the test signal (not the audio block)");
     }
     g_fx = fxg.get();
+    // ==== ENGINE (M6): Spout out (off without --spout; a failure never touches the outputs) ====
+    himmel::engine::SpoutOut spout;
+    if (!cfg.spout.empty()) {
+        spout.start(g.dev.Get(), cfg.spout.c_str(), spout_log);
+        LOG("spout: MAIN goes out as \"%s\" (SpoutDX on its own thread and device)", cfg.spout.c_str());
+    }
+    // ==== end ENGINE (M6) ====
 
     WNDCLASSW wc{};
     wc.lpfnWndProc = wndproc;
@@ -1164,6 +1183,7 @@ int main(int argc, char** argv) {
     // Output1..3 have their output's aspect.
     auto configure_previews = [&]() {
         make_canvas(g, static_cast<int>(om->canvas_w()), static_cast<int>(om->canvas_h()));
+        spout.resize(g.canvas_w, g.canvas_h);  // ENGINE (M6): Spout's shared textures follow the canvas
         for (int i = 0; i < n; ++i) {
             const auto& rg = om->region(i);
             std::memcpy(outs[static_cast<size_t>(i)].src, rg.uv, sizeof(rg.uv));
@@ -1218,7 +1238,7 @@ int main(int argc, char** argv) {
     set_msg("running");
     LOG("start-up took %.0f ms (process start -> first frame)", (now_us() - t_launch) / 1000.0);
 
-    // ==== OUTPUTS (M6): a slot's display comes and goes; the other outputs never notice ====
+    // ==== ENGINE (M6) outputs: a slot's display comes and goes; the other outputs never notice ====
     auto shown = [](const Output& o) {
         return o.state == proto::OutputState::Ok || o.state == proto::OutputState::Window;
     };
@@ -1305,7 +1325,7 @@ int main(int argc, char** argv) {
             outputs_dirty = true;
         }
     };
-    // ==== end OUTPUTS ====
+    // ==== end ENGINE (M6) ====
 
     // The frame period for "late": the asked refresh in full screen, the desktop's in a window.
     double frame_period = 1.0 / proto::refresh_hz(om->setup().refresh);
@@ -1313,6 +1333,7 @@ int main(int argc, char** argv) {
         frame_period = 1.0 / displays->d[displays->order[0]].hz;
 
     while (!g_win.quit) {
+        // ==== ENGINE (M6): wait only for the shown outputs ====
         // 1. Wait until the shown swap chains can take a frame (max latency 1). A hidden
         //    output (its display is gone) leaves the wait set, so it never holds up the others.
         HANDLE waits[kMaxOutputs];
@@ -1321,6 +1342,7 @@ int main(int argc, char** argv) {
             if (shown(o)) waits[nwaits++] = o.waitable;
         if (nwaits) WaitForMultipleObjects(nwaits, waits, TRUE, 100);
         else Sleep(static_cast<DWORD>(1000.0f / proto::refresh_hz(om->setup().refresh)));
+        // ==== end ENGINE (M6) ====
         const uint64_t t = now_us();
         const double dt = (t - last_frame) / 1e6;
         last_frame = t;
@@ -1332,6 +1354,7 @@ int main(int argc, char** argv) {
             DispatchMessageW(&msg);
         }
         if (es && es->stop_request.load()) g_win.quit = true;
+        // ==== ENGINE (M6): display change, M key, window resize ====
         if (g_win.display_change) {  // a display came, went or changed mode: rescan now
             g_win.display_change = false;
             watch.poke();
@@ -1350,6 +1373,7 @@ int main(int argc, char** argv) {
             outputs_dirty = true;
             overlay_next = 0;
         }
+        // ==== end ENGINE (M6) ====
 
         // 3. Input: MK2 events -> Perform -> slot 0; then every producer, at most 256 each.
         cmd.poll(t);
@@ -1434,19 +1458,19 @@ int main(int argc, char** argv) {
         // ==== end SHOW hook 3/4 ====
         if (t >= alive_next) {
             alive_next = t + 250000;
-            model->set_producer_alive(0, mk2_alive);
+            model->set_producer_alive(0, mk2_alive, t);
             for (int slot = 1; slot < proto::kProducers; ++slot) {
                 bool alive = false;
                 if (cmd.blk) {
                     const uint64_t hb = cmd.blk->producers[slot].heartbeat_us.load();
                     alive = cmd.blk->producers[slot].pid.load() != 0 && hb && t - std::min(t, hb) < 2000000;
                 }
-                model->set_producer_alive(slot, alive);
+                model->set_producer_alive(slot, alive, t);
             }
         }
         const proto::LiveState& live = model->live();
 
-        // 3b. Outputs (M6): displays that came / went, adopt, refresh; a setup command
+        // ==== ENGINE (M6) 3b. Outputs: displays that came / went, adopt, refresh; a setup command
         //     (preset, mode, blend) rebuilds the canvas here - a setup action, one hitch.
         update_outputs(t);
         if (om->layout_dirty()) {
@@ -1457,6 +1481,7 @@ int main(int argc, char** argv) {
             outputs_dirty = true;
             overlay_next = 0;
         }
+        // ==== end ENGINE (M6) 3b ====
 
         // 4. Clip players: the model's playheads (DeckModel::tick, above) say which frame each
         //    layer shows; follow clip changes, keep cue frames warm, upload ready frames.
@@ -1663,8 +1688,11 @@ int main(int argc, char** argv) {
              g.deck[1][deck_out[1]].srv.Get());
         const int main_k = run_fx(g, g.main, 0, live.master_fx, himmel::fx::kChainMaster);
         ID3D11ShaderResourceView* main_srv = g.main[main_k].srv.Get();
+        // ==== ENGINE (M6): Spout out - one copy of MAIN (black when master black), the worker sends it ====
+        spout.frame(g.ctx.Get(), g.main[main_k].tex.Get(), live.black != 0);
+        // ==== end ENGINE (M6) ====
 
-        // 7. Outputs.
+        // ==== ENGINE (M6) 7. Outputs: shown outputs only, black per output, edge blend, IDENTIFY ====
         const bool overlay_due = g_win.overlay && t >= overlay_next;
         if (overlay_due) {
             overlay_next = t + 500000;
@@ -1721,6 +1749,7 @@ int main(int argc, char** argv) {
             ID3D11ShaderResourceView* none1 = nullptr;
             g.ctx->PSSetShaderResources(3, 1, &none1);
         }
+        // ==== end ENGINE (M6) 7 ====
         // 8. Previews (after the outputs are drawn, before Present).
         g.ctx->End(g.q_preview[qi].Get());
         ID3D11ShaderResourceView* psrc[proto::kPreviewStreams] = {
@@ -1780,7 +1809,7 @@ int main(int argc, char** argv) {
             }
             state.blk->status.heartbeat_us.store(t_done);
         }
-        // Outputs block (M6): on change, while IDENTIFY runs, and every 100 ms (the supervisor's
+        // ==== ENGINE (M6): outputs block - on change, while IDENTIFY runs, and every 100 ms (the supervisor's
         // curtains follow the window rects from here). ~3 KB memcpy, no allocation.
         if (outputs_blk) {
             if (outputs_dirty || t_done >= outputs_next_us || ident_a > 0.0f) {
@@ -1813,6 +1842,7 @@ int main(int argc, char** argv) {
             }
             outputs_blk->status.heartbeat_us.store(t_done);
         }
+        // ==== end ENGINE (M6) ====
 
         // ==== MEDIA (M7) hook 3/3: library clips that turned ready join the catalog. Ids are
         // append-only, so nothing on air moves; no I/O, no allocation (fixed table) ====
@@ -1892,6 +1922,7 @@ int main(int argc, char** argv) {
         for (auto& st : preview.blk->stream) st.active.store(0);
     show->stop();  // ==== SHOW (M3) hook 4/4: flushes the autosave journal ====
     watch.stop();
+    spout.stop();  // ENGINE (M6)
     if (outputs_blk) outputs_blk->status.pid.store(0);  // the curtains stay where the windows were
     set_msg("stopped");
     timeEndPeriod(1);
