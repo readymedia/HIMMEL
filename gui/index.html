@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="app.css">
 <link rel="stylesheet" href="m11.css">
 <link rel="stylesheet" href="panels.css">
+<link rel="stylesheet" href="build.css">
 </head>
 <body>
 <header id="top">
@@ -16,6 +17,7 @@
   <nav class="views" id="viewTabs">
     <button data-view="start" title="The start wizard: clips, weapon, outputs, play">START</button>
     <button data-view="perform" class="on" title="Perform (the show)">PERFORM</button>
+    <button data-view="build" class="hidden" title="Build: the setlist, scenes, their kits (16 pads) and macros">BUILD</button>
     <button data-view="outputs" title="Outputs: displays, IDENTIFY, resolution, refresh, blend, black, layer places">OUTPUTS</button>
     <button data-view="library" title="The clip library: import status, thumbnails, analysis">LIBRARY</button>
     <button data-view="mk2" title="The MK2 as the engine drives it: LEDs, screens, what the hands do">MK2</button>
@@ -118,10 +120,16 @@
 <!-- ====================================================================== START (wizard) -->
 <main id="start" class="view hidden">
   <div class="wizbar" id="wizBar">
+    <button data-step="0" class="hidden" title="The start screen: new / open / recent project, autosave, health"><b>0</b> PROJECT</button>
     <button data-step="1"><b>1</b> CLIPS</button><button data-step="2"><b>2</b> WEAPON</button>
     <button data-step="3"><b>3</b> OUTPUTS</button><button data-step="4"><b>4</b> PLAY</button>
   </div>
   <div class="wizbody" id="wizBody"></div>
+</main>
+
+<!-- ====================================================================== BUILD (song, scene, kit editor) -->
+<main id="build" class="view hidden">
+  <div class="buildwrap" id="buildBody"></div>
 </main>
 
 <!-- ====================================================================== OUTPUTS -->
@@ -181,5 +189,7 @@
 <script src="app.js"></script>
 <script src="panels.js"></script>
 <script src="views.js"></script>
+<script src="build.js"></script>
+<script src="react.js"></script>
 </body>
 </html>

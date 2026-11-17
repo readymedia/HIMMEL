@@ -18,7 +18,7 @@ namespace {
 enum class DeckRule : uint8_t { None, Deck, DeckOrMaster, DeckOrHit };
 enum class LayerRule : uint8_t { None, Required, Optional };  // Optional: absent = deck level (FX)
 enum class Arg : uint8_t { None, Float, Toggle, Blend, Play, ClipId, EffectId, TakeMs,
-                           LayerSet, Trigger, Cue, BeatLoop, Scratch, ClockArg };
+                           LayerSet, Trigger, Cue, BeatLoop, Scratch, ClockArg, React, Quit };
 
 struct Spec {
     CommandType type;
@@ -57,6 +57,10 @@ constexpr Spec kSpecs[] = {
     {CommandType::LayerBeatLoop, "LayerBeatLoop", DeckRule::DeckOrHit, LayerRule::Required, false, false, Arg::BeatLoop, 0, 16, false},
     {CommandType::LayerScratch, "LayerScratch", DeckRule::DeckOrHit, LayerRule::Required, false, false, Arg::Scratch, 0, 1, true},
     {CommandType::Clock, "Clock", DeckRule::None, LayerRule::None, false, false, Arg::ClockArg, 0, 0, true},
+    // ---- audio reactions (AUDIO, D131, command-protocol.md §4d); "param" = knob 0..3 is read by Arg::React ----
+    {CommandType::FxReact, "FxReact", DeckRule::DeckOrMaster, LayerRule::Optional, true, false, Arg::React, 0, 0, true},
+    // ---- quit (ENGINE, command-protocol.md §4e): {"type": "SystemQuit", "value": 1} = confirmed; else refused ----
+    {CommandType::SystemQuit, "SystemQuit", DeckRule::None, LayerRule::None, false, false, Arg::Quit, 0, 0, false},
 };
 
 const Spec* find_spec(CommandType t) {
@@ -159,6 +163,27 @@ int name_index(const json& v, const char* const* names, size_t n) {
     for (size_t k = 0; k < n; ++k)
         if (iequals(t, names[k])) return static_cast<int>(k);
     return -1;
+}
+
+// ---- audio reactions (D131). The page uses the same words. ----
+const char* const kReactOpNames[] = {"Set", "Amount", "Signal", "Range", "Default", "Off"};
+const char* const kReactSignalNames[] = {"None", "Level", "Bass", "Mid", "High", "Kick", "Snare",
+                                         "Hat", "Onset", "Beat", "Bar", "Energy", "Build", "Drop"};
+const char* const kReactModeNames[] = {"Add", "Follow", "Trigger"};
+const char* const kReactCurveNames[] = {"Linear", "Soft", "Hard", "Steps", "Exp"};
+const char* const kReactQuantNames[] = {"Off", "Sixteenth", "Eighth", "Quarter", "Half", "Bar"};
+const char* const kReactSourceNames[] = {"Default", "Custom", "Off"};
+static_assert(std::size(kReactOpNames) == static_cast<size_t>(ReactOp::Count));
+static_assert(std::size(kReactSignalNames) == static_cast<size_t>(ReactSignal::Count));
+static_assert(std::size(kReactModeNames) == static_cast<size_t>(ReactMode::Count));
+static_assert(std::size(kReactCurveNames) == static_cast<size_t>(ReactCurve::Count));
+static_assert(std::size(kReactQuantNames) == static_cast<size_t>(ReactQuantise::Count));
+static_assert(std::size(kReactSourceNames) == static_cast<size_t>(ReactSource::Count));
+
+std::string names_list(const char* const* names, size_t n) {
+    std::string s;
+    for (size_t k = 0; k < n; ++k) s += (k ? ", " : "") + std::string(names[k]);
+    return s;
 }
 
 // Reads an integer field. Accepts JSON integers, and floats that are whole numbers.
@@ -545,6 +570,88 @@ ParseResult command_from_json(const json& j, const CatalogLimits& limits) {
             }
             break;
         }
+        case Arg::Quit: {
+            // Only an explicit confirmation passes: the page asks "Quit Himmel?" first.
+            double d = 0;
+            if (!get_float(val, "value", d)) return r;
+            if (d != 1.0) return fail("SystemQuit needs \"value\": 1 (confirmed)");
+            c.f[0] = 1.0f;
+            break;
+        }
+        case Arg::React: {
+            // {"op": "Set" | "Amount" | "Signal" | "Range" | "Default" | "Off", "param": knob 0..3 (absent = all 4,
+            //  Default / Off only), "signal", "mode", "curve", "quantise" (names), "hold" (quarter beats 0..16),
+            //  "f": [amount, attack ms, release ms, threshold] (Set) | amount (Amount) | [lo, hi] (Range)}
+            ReactArgs a;
+            const json* op = field("op");
+            const int64_t oi = op ? name_index(*op, kReactOpNames, std::size(kReactOpNames)) : -1;
+            if (oi < 0) return fail("FxReact needs \"op\" (" + names_list(kReactOpNames, std::size(kReactOpNames)) + ")");
+            a.op = static_cast<ReactOp>(oi);
+            const json* p = field("param");
+            int64_t pv = -1;
+            if (p && (!get_int(*p, pv) || pv < 0 || pv >= kReactParams)) return fail("FxReact \"param\" (knob) must be 0..3");
+            if (!p && a.op != ReactOp::Default && a.op != ReactOp::Off)
+                return fail("FxReact needs \"param\" (knob 0..3); only Default / Off may leave it out (= all 4)");
+            c.param = p ? static_cast<uint8_t>(pv) : kNone;
+            auto pick = [&](const char* key, const char* const* names, size_t n, int64_t& out) -> bool {
+                const json* v = field(key);
+                if (!v) return true;
+                out = name_index(*v, names, n);
+                if (out < 0) {
+                    fail(std::string("\"") + key + "\" must be one of " + names_list(names, n));
+                    return false;
+                }
+                return true;
+            };
+            int64_t sig = 0, mode = 0, curve = 0, quant = 0;
+            if (!pick("signal", kReactSignalNames, std::size(kReactSignalNames), sig) ||
+                !pick("mode", kReactModeNames, std::size(kReactModeNames), mode) ||
+                !pick("curve", kReactCurveNames, std::size(kReactCurveNames), curve) ||
+                !pick("quantise", kReactQuantNames, std::size(kReactQuantNames), quant))
+                return r;
+            if (a.op == ReactOp::Signal && !field("signal")) return fail("FxReact Signal needs \"signal\"");
+            a.signal = static_cast<ReactSignal>(sig);
+            a.mode = static_cast<ReactMode>(mode);
+            a.curve = static_cast<ReactCurve>(curve);
+            a.quantise = static_cast<ReactQuantise>(quant);
+            if (const json* h = field("hold")) {
+                int64_t hv = 0;
+                if (!get_int(*h, hv) || hv < 0 || hv > kReactHoldMax) return fail("\"hold\" must be 0..16 quarter beats");
+                a.hold_q = static_cast<uint8_t>(hv);
+            }
+            if (relative && a.op != ReactOp::Amount) return fail("only FxReact Amount can be relative");
+            // f: a number or up to 4 numbers, all finite.
+            std::vector<double> fv;
+            if (const json* f = field("f")) {
+                if (f->is_number()) fv.push_back(f->get<double>());
+                else if (f->is_array() && f->size() <= 4)
+                    for (const auto& e : *f) {
+                        if (!e.is_number()) return fail("\"f\" must be numbers");
+                        fv.push_back(e.get<double>());
+                    }
+                else return fail("\"f\" must be a number or up to 4 numbers");
+                for (double d : fv)
+                    if (!std::isfinite(d)) return fail("\"f\" must be finite");
+            }
+            const size_t need = a.op == ReactOp::Set ? 4 : a.op == ReactOp::Amount ? 1 : a.op == ReactOp::Range ? 2 : 0;
+            if (fv.size() < need)
+                return fail("FxReact " + std::string(kReactOpNames[oi]) + " needs " + std::to_string(need) + " numbers in \"f\"");
+            for (size_t k = 0; k < fv.size(); ++k) c.f[k] = static_cast<float>(fv[k]);
+            if (a.op == ReactOp::Set) {
+                c.f[0] = std::clamp(c.f[0], -1.0f, 1.0f);
+                c.f[1] = std::clamp(c.f[1], 0.0f, kReactMaxMs);
+                c.f[2] = std::clamp(c.f[2], 0.0f, kReactMaxMs);
+                c.f[3] = std::clamp(c.f[3], 0.0f, 1.0f);
+            } else if (a.op == ReactOp::Amount) {
+                c.f[0] = std::clamp(c.f[0], relative ? -2.0f : -1.0f, relative ? 2.0f : 1.0f);
+            } else if (a.op == ReactOp::Range) {
+                if (c.f[0] >= 0) c.f[0] = std::clamp(c.f[0], 0.0f, 1.0f);
+                c.f[1] = std::clamp(c.f[1], 0.0f, 1.0f);
+            }
+            c.i = pack_react(a);
+            if (!react_args_ok(c.i)) return fail("FxReact arguments out of range");
+            break;
+        }
         case Arg::ClockArg: {
             // {"param": "Tap" | "Bpm" | "Nudge" | "Resync" | "Grid", "value": ...}
             const json* p = field("param");
@@ -609,6 +716,17 @@ json command_to_json(const Command& c) {
         if (c.param == static_cast<uint8_t>(ClockParam::Grid)) j["value"] = label_or(kGridNames, std::size(kGridNames), c.i, "?");
         else if (c.param == static_cast<uint8_t>(ClockParam::Bpm) || c.param == static_cast<uint8_t>(ClockParam::Nudge))
             j["value"] = c.f[0];
+    } else if (a == Arg::React) {
+        const ReactArgs ra = unpack_react(c.i);
+        if (c.slot != kNone) j["slot"] = c.slot;
+        if (c.param != kNone) j["param"] = c.param;
+        j["op"] = label_or(kReactOpNames, std::size(kReactOpNames), static_cast<int>(ra.op), "?");
+        j["signal"] = label_or(kReactSignalNames, std::size(kReactSignalNames), static_cast<int>(ra.signal), "?");
+        j["mode"] = label_or(kReactModeNames, std::size(kReactModeNames), static_cast<int>(ra.mode), "?");
+        j["curve"] = label_or(kReactCurveNames, std::size(kReactCurveNames), static_cast<int>(ra.curve), "?");
+        j["quantise"] = label_or(kReactQuantNames, std::size(kReactQuantNames), static_cast<int>(ra.quantise), "?");
+        j["hold"] = ra.hold_q;
+        j["f"] = {c.f[0], c.f[1], c.f[2], c.f[3]};
     } else if (a == Arg::Trigger) {
         j["value"] = c.i;
         j["velocity"] = c.f[0];
@@ -797,7 +915,59 @@ json transport_names() {
             {"cue", list(kCueNames, std::size(kCueNames))},
             {"clock", list(kClockNames, std::size(kClockNames))},
             {"phase", list(kPhaseNames, std::size(kPhaseNames))},
-            {"blend", list(kBlendNames, std::size(kBlendNames))}};
+            {"blend", list(kBlendNames, std::size(kBlendNames))},
+            {"react", {{"ops", list(kReactOpNames, std::size(kReactOpNames))},
+                       {"signals", list(kReactSignalNames, std::size(kReactSignalNames))},
+                       {"modes", list(kReactModeNames, std::size(kReactModeNames))},
+                       {"curves", list(kReactCurveNames, std::size(kReactCurveNames))},
+                       {"quantise", list(kReactQuantNames, std::size(kReactQuantNames))},
+                       {"sources", list(kReactSourceNames, std::size(kReactSourceNames))},
+                       {"hold_max", kReactHoldMax},
+                       {"max_ms", kReactMaxMs}}}};
+}
+
+namespace {
+json react_entry_json(const ReactionEntry& e, bool live_only) {
+    auto r3 = [](float v) { return std::isfinite(v) ? std::round(v * 1000.0) / 1000.0 : 0.0; };
+    if (live_only) return json::array({r3(e.env), r3(e.value)});
+    return {{"source", label_or(kReactSourceNames, std::size(kReactSourceNames), e.source, "?")},
+            {"signal", label_or(kReactSignalNames, std::size(kReactSignalNames), e.signal, "?")},
+            {"mode", label_or(kReactModeNames, std::size(kReactModeNames), e.mode, "?")},
+            {"curve", label_or(kReactCurveNames, std::size(kReactCurveNames), e.curve, "?")},
+            {"range_set", (e.flags & kReactRangeSet) != 0},
+            {"amount", r3(e.amount)},
+            {"attack_ms", std::round(e.attack_ms)},
+            {"release_ms", std::round(e.release_ms)},
+            {"threshold", r3(e.threshold)},
+            {"range", {r3(e.range_lo), r3(e.range_hi)}},
+            {"quantise_beats", r3(e.quantise_beats)},
+            {"hold_beats", r3(e.hold_beats)}};
+}
+json slots_json(const SlotReactions (&s)[kFxSlots], bool live_only) {
+    json a = json::array();
+    for (const auto& slot : s) {
+        json k = json::array();
+        for (const auto& e : slot.p) k.push_back(react_entry_json(e, live_only));
+        a.push_back(std::move(k));
+    }
+    return a;
+}
+}  // namespace
+
+json react_to_json(const ReactionSection& r, bool live_only) {
+    json j;
+    j["gen"] = r.gen;
+    json layers = json::array(), decks = json::array();
+    for (int d = 0; d < kDecks; ++d) {
+        json dl = json::array();
+        for (int l = 0; l < kLayersPerDeck; ++l) dl.push_back(slots_json(r.layer[d][l], live_only));
+        layers.push_back(std::move(dl));
+        decks.push_back(slots_json(r.deck[d], live_only));
+    }
+    j["layer"] = std::move(layers);   // [deck][layer][slot][knob]
+    j["deck"] = std::move(decks);     // [deck][slot][knob]
+    j["master"] = slots_json(r.master, live_only);   // [slot][knob]
+    return j;
 }
 
 }  // namespace himmel::ui

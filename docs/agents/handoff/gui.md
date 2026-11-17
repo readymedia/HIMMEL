@@ -1,5 +1,5 @@
 # GUI handoff
-Updated: 2026-11-17 by the GUI agent (wave 4, M11 part 2) · Branch: claude/gui-m11-panels · Last commit: see `git log claude/gui-m11-panels`
+Updated: 2026-11-17 by the GUI agent (wave 5, M11 part 3) · Branch: claude/gui-m11-part3 · Last commit: see `git log claude/gui-m11-part3`
 
 ## State in one paragraph
 M11 part 1 (on main) made every wave-1 engine feature reachable from the browser: transport, the CLIP editor, the
@@ -15,6 +15,45 @@ panel hides itself; nothing fails.
 
 The start wizard's steps 1–4 use these blocks. The page is plain HTML / JS / CSS with no build step and is dark only:
 `index.html`, `app.css` + `m11.css` + `panels.css`, `app.js` + `panels.js` + `views.js`.
+
+**Part 3 (wave 5, branch `claude/gui-m11-part3`)** adds the BUILD view (song / scene / kit editor), the reaction
+editor (AUDIO D131), the library actions (MEDIA §10), the clip drawer's filmstrip and the wizard's start screen. The
+branch **merges the two contract commits** `aa36c95` (AUDIO FxReact, state v3) and `0e6375e` (MEDIA ingest commands,
+library block v2); the bridge needs them, so merge AUDIO and MEDIA first (or together). AUDIO and ENGINE (quit) are
+already on main and merged into this branch; MEDIA's contract commit is in, its worker code is not.
+
+## Done in part 3 (wave 5)
+- **Bridge:**
+  - `GET /show/document`: the project's `autosave/show.json` (or project.json + banks/ + songs/ when that is older),
+    trimmed by `show_doc_for_page` (no live part). Read-only.
+  - `/library/clips` rows gain `curve` (motion curve, 96 buckets, `downsample_curve`) and `cuts` (0..1).
+  - `FxReact` (40) in the JSON codec: `{"op", "param" (knob 0..3, absent = all for Default / Off), "signal", "mode",
+    "curve", "quantise", "hold", "f"}` → `pack_react`; clamps like the contract; `command_to_json` writes it back.
+  - State v3: the react section → SSE `react` (settings, when `gen` or the epoch changes) and `reactlive`
+    (`[env, value]` per knob, ~15 Hz). `/names` gains `react`.
+  - `POST /library/cmd` → `IngestCommand` in the GUI channel (slot 1) of the library block v2 (`make_ingest` /
+    `push_ingest`); refused when the worker's heartbeat is older than 2 s. The replies are drained by the poller and
+    sent in the `library` event as `cmd {sent, done, rejected, applying, replies[8]}`. Watch mode never writes.
+  - `fake_engine` plays the reaction table (FxReact ops, FxSet resets, a fake envelope per signal).
+  - `ui_bridge_tests`: 432 checks (74 new): every command the BUILD view, the reaction editor and the library
+    buttons send, react JSON, ingest parse / reply.
+- **QUIT** (ENGINE, SystemQuit 74): `{"type": "SystemQuit", "value": 1}` only (anything else refused in the codec);
+  the button is in the project ⋯ menu and Settings → Engine, asks "Quit Himmel?", then shows "HIMMEL HAS QUIT" when the
+  bridge goes away.
+- **Library rows:** `removed` (tombstones) are hidden; `source_missing` shows a line on the card when the row has it
+  (`GUESS:` the bridge does not send it yet: `ClipRecord` has no such field until MEDIA adds it).
+- **Page:** `gui/build.js` (BUILD view), `gui/react.js` (ears, knob ghosts, editor), `gui/build.css`; `app.js` (clip
+  drawer filmstrip + FX / PRESS row, react events, `H.beatNow`), `panels.js` (library actions), `views.js` (wizard
+  step 0, step 3 canvas to scale + blend).
+- **Checked live 2026-11-17:**
+  - BUILD in my own `himmel-sim-test` stack (the owner's stack was stopped then): REHEARSE, FILL KIT (16 pads read
+    back from the autosave), pad 6 → clip on L2, macro binds add / add / remove (packed), setlist new song, BPM 124,
+    + scene from PREVIEW, new song 2, ↑, rename. 0 refused. Wizard step 0 + step 3 canvas, clip drawer filmstrip
+    (library clip) and FX row. Kill `himmel_ui`: renderer PID the same, state equal apart from playhead positions.
+  - Reaction editor against `fake_engine` + `himmel_ui --port 8792`: ear states (default / custom / off), Set with
+    Kick / Trigger / 1/4, Range 0.2..1, DEFAULT, OFF, FOLLOW + SOFT graph, knob ghost. 0 refused.
+  - **Not checked live:** the library buttons (needs MEDIA's himmel_ingest with block v2) and the reaction editor on
+    the real engine (needs AUDIO's renderer). e2e pending (the owner's stack was running).
 
 ## Done (with commits)
 - **Bridge** (`src/ui_bridge/`):
@@ -62,18 +101,25 @@ The start wizard's steps 1–4 use these blocks. The page is plain HTML / JS / C
   - Done-check: build clean, ctest 21/21, 7 Python selftests, `himmel_audio --selftest`, `mk2_e2e.py` PASS.
 
 ## In progress
-- Nothing. Ready to merge.
+- Nothing open in code. Live checks pending on MEDIA / AUDIO engine code (above).
 
 ## Next up (ordered)
-1. `FxReact` editor per FX slot once D131 (command 40 + the reaction table) is in the protocol; the AUDIO page
-   already lists every effect's default reaction with its live signal.
+1. Check the library buttons and the reaction editor live once MEDIA's and AUDIO's code is merged; show
+   `source_missing` on library cards when MEDIA puts it in the rows.
 2. AV offset in the GUI. It is only a renderer argument today (`--av-offset`), with no block field and no command.
-3. Kit editor (KitSet, the 16 pad targets per scene) and macro binding (MacroSet) in the SCENES tab; the setlist editor
-   (SongEdit New / AddScene / Move / Bpm). The codec and tests already cover these commands.
+3. Trigger style / PRESS per kit pad and "Fill song from mood" (no contract yet); scene thumbnails (show-block §3).
 4. 4 × 4 pad grid (CLIPS / SLICE / FX PADS) of the v4 mockup; knob tiles 1–4 / 5–8.
 5. Effect browser with live thumbnails (needs per-effect previews from the engine), scope badges (FxScope, D106).
 
 ## GUESSES
+- `GUESS:` the BUILD view edits only the scene on the PREVIEW deck (KitSet / MacroSet act on "the deck's scene");
+  REHEARSE is a cut recall into PREVIEW.
+- `GUESS:` the deck's variation letter `a` = the main scene, `b` = `variations[0]` in the show document.
+- `GUESS:` "Fill kit" = perform.md §4.2's table: clips in catalog order (alpha clips first for the overlays), effects by
+  name (strobe, RGB / split, zoom / pulse, freeze / trails), else the next effects.
+- `GUESS:` "wizard steps 5+" in the brief = the parts of gui.md §3 still missing: the start screen (as step 0) and the
+  canvas drawn to scale with the blend slider. The design has 4 steps.
+- `GUESS:` the reaction graph is a sketch of the response (curve, threshold, range, mode), not the engine's maths.
 - `GUESS:` the bridge counts a block's writer as alive when its heartbeat moved in the last 1.5 s. For SHOW the
   heartbeat is `ShowStatus.time_us` (written at least every 250 ms).
 - `GUESS:` a weapon driver is "alive" when its heartbeat moved since the last check, 1 s earlier.
@@ -127,6 +173,13 @@ The start wizard's steps 1–4 use these blocks. The page is plain HTML / JS / C
   - Spec + examples: `src/ui_bridge/include/himmel/ui/panels_json.h`; tests: `tests/ui_bridge/ui_bridge_tests.cpp`.
 
 ## Gotchas found
+- **2026-11-17 incident:** a test script of mine sent LayerClip + FxSet through a browser tab on `127.0.0.1:8790`
+  that had become another stack's bridge (MEDIA's test stack, per the LEAD; not the owner's). Rule now: agents run no
+  himmel.exe / mk2_e2e / qa_rig in wave 5; test bridges on **port 8792** against `fake_engine`, scripts check
+  `location.port` first, close the tab when done.
+- **`himmel_ingest.exe` with an unknown flag (`--help`, and `--selftest` before MEDIA's wave 5) starts a real import
+  worker on `Documents\Himmel\Library`.** It happened twice (10:15 and 16:47 on 2026-11-17, stopped at once; only
+  `ingest.log` written, nothing imported). Never run it without `--library <temp>`.
 - **One stack per machine**: check `tasklist` in the same command before starting one, and stop it when you are done.
 - **`himmel_ingest` has no `--selftest`.** Run with that flag it starts as a normal import worker on the *default*
   library (Documents\Himmel\Library). It did so once on 2026-11-17 at 10:15 and created an empty library there (no

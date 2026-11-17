@@ -90,7 +90,11 @@ const char* const kClockKindNames[] = {"None", "Midi", "ProDjLink", "Link"};
 const char* const kClockRunNames[] = {"Absent", "Stopped", "Running"};
 const char* const kVerdictNames[] = {"Applied", "Refused", "Blocked", "Garbage", "RateLimited"};
 static_assert(std::size(kVerdictNames) == static_cast<size_t>(osc::Verdict::Count));
-const char* const kIngestModeNames[] = {"Idle", "Full", "Background", "High"};
+const char* const kIngestModeNames[] = {"Idle", "Full", "Background", "High", "Hold"};
+const char* const kIngestCmdNames[] = {"Import", "Rescan", "Remove", "Relink", "Reanalyse", "Retry", "Mode", "Unwatch"};
+const char* const kIngestReqNames[] = {"Auto", "Full", "Background", "Hold"};
+const char* const kIngestStatusNames[] = {"Ok", "Accepted", "UnknownType", "BadId", "BadPath", "Mismatch",
+                                          "Duplicate", "Failed", "Interrupted", "BadValue"};
 
 json locks_json(uint32_t mask) {
     json a = json::array();
@@ -955,6 +959,114 @@ json panels_names() {
     j["scene_pads"] = kScenePads;
     j["max_outputs"] = kMaxOutputs;
     return j;
+}
+
+std::vector<float> downsample_curve(const std::vector<float>& curve, int n) {
+    std::vector<float> out;
+    if (curve.empty() || n <= 0) return out;
+    const size_t m = curve.size();
+    const size_t k = std::min<size_t>(static_cast<size_t>(n), m);
+    out.assign(k, 0.0f);
+    for (size_t b = 0; b < k; ++b) {
+        const size_t lo = b * m / k, hi = std::max(lo + 1, (b + 1) * m / k);
+        float v = 0.0f;
+        for (size_t x = lo; x < hi && x < m; ++x)
+            if (std::isfinite(curve[x])) v = std::max(v, curve[x]);
+        out[b] = v;
+    }
+    const float top = *std::max_element(out.begin(), out.end());
+    for (auto& v : out) v = top > 0.0f ? std::round(v / top * 1000.0f) / 1000.0f : 0.0f;
+    return out;
+}
+
+json show_doc_for_page(const json& doc) {
+    if (!doc.is_object() || doc.value("format", std::string()) != "himmel-show/1")
+        return {{"ok", false}, {"error", "not a himmel-show/1 document"}};
+    json j = json::object();
+    for (const char* k : {"name", "use_setlist", "bank", "song", "locks", "default_take_ms", "saved_ms"})
+        if (auto it = doc.find(k); it != doc.end()) j[k] = *it;
+    json banks = json::array(), setlist = json::array();
+    if (auto b = doc.find("banks"); b != doc.end() && b->is_array())
+        for (const auto& x : *b)
+            if (x.is_object()) banks.push_back({{"index", x.value("index", 0)}, {"pads", x.value("pads", json::array())}});
+    if (auto s = doc.find("setlist"); s != doc.end() && s->is_array())
+        for (const auto& x : *s)
+            if (x.is_object()) {
+                json so = {{"name", x.value("name", std::string())}, {"scenes", x.value("scenes", json::array())}};
+                if (x.contains("bpm")) so["bpm"] = x["bpm"];
+                setlist.push_back(std::move(so));
+            }
+    j["banks"] = std::move(banks);
+    j["setlist"] = std::move(setlist);
+    j["ok"] = true;
+    return j;
+}
+
+// ---- MEDIA ingest commands (library-db.md §10, CommandType 60..69 in the library block) ----
+bool ingest_command_from_json(const json& j, library::IngestCommand& c, std::string& error) {
+    using library::IngestCommandType;
+    if (!j.is_object()) { error = "an ingest command must be a JSON object"; return false; }
+    const auto t = j.find("type");
+    int idx = -1;
+    if (t != j.end() && t->is_string())
+        for (size_t k = 0; k < std::size(kIngestCmdNames); ++k)
+            if (ieq(t->get<std::string>(), kIngestCmdNames[k])) idx = static_cast<int>(k);
+    if (idx < 0) { error = "\"type\" must be one of " + list_of(kIngestCmdNames); return false; }
+    const auto type = static_cast<IngestCommandType>(library::kIngestFirst + idx);
+    int64_t clip = 0;
+    if (auto it = j.find("clip"); it != j.end() && !it->is_null()) {
+        if (!it->is_number_integer() || it->get<int64_t>() < 0) { error = "\"clip\" must be a library id (>= 0, 0 = all)"; return false; }
+        clip = it->get<int64_t>();
+    }
+    std::string path;
+    if (auto it = j.find("path"); it != j.end() && !it->is_null()) {
+        if (!it->is_string()) { error = "\"path\" must be a string"; return false; }
+        path = it->get<std::string>();
+    }
+    auto flag = [&](const char* k) { auto it = j.find(k); return it != j.end() && it->is_boolean() && it->get<bool>(); };
+    uint16_t flags = 0;
+    if (flag("watch")) flags |= library::kIngestWatch;
+    if (flag("force")) flags |= library::kIngestForce;
+    if (flag("thumbs")) flags |= library::kIngestThumbs;
+    int32_t iv = 0;
+    const bool needs_path = type == IngestCommandType::Import || type == IngestCommandType::Unwatch ||
+                            type == IngestCommandType::Relink;
+    const bool needs_clip = type == IngestCommandType::Remove;
+    if (needs_path && path.empty()) { error = std::string(kIngestCmdNames[idx]) + " needs \"path\""; return false; }
+    if (needs_clip && clip <= 0) { error = "Remove needs \"clip\" (a library id)"; return false; }
+    // Absolute Windows paths only (C:\... or \\server\...): the worker refuses others as BadPath anyway.
+    if (!path.empty() && !((path.size() > 2 && path[1] == ':' && (path[2] == '\\' || path[2] == '/')) ||
+                           path.rfind("\\\\", 0) == 0)) {
+        error = "\"path\" must be absolute (C:\\... or \\\\server\\...)";
+        return false;
+    }
+    if (type == IngestCommandType::Mode) {
+        auto it = j.find("mode");
+        int m = -1;
+        if (it != j.end() && it->is_string())
+            for (size_t k = 0; k < std::size(kIngestReqNames); ++k)
+                if (ieq(it->get<std::string>(), kIngestReqNames[k])) m = static_cast<int>(k);
+        if (m < 0) { error = "Mode needs \"mode\": one of " + list_of(kIngestReqNames); return false; }
+        iv = m;
+    }
+    if (!library::make_ingest(c, type, clip, path.empty() ? nullptr : path.c_str(), flags, iv)) {
+        error = "the path is too long";
+        return false;
+    }
+    return true;
+}
+
+json ingest_reply_to_json(const library::IngestReply& r) {
+    size_t n = 0;
+    while (n < sizeof(r.message) && r.message[n]) ++n;
+    const int t = static_cast<int>(r.type) - library::kIngestFirst;
+    return {{"seq", r.seq},
+            {"type", t >= 0 && t < static_cast<int>(std::size(kIngestCmdNames)) ? kIngestCmdNames[t] : "?"},
+            {"status", name_or(kIngestStatusNames, r.status)},
+            {"ok", r.status <= 1},
+            {"count", r.count},
+            {"clip", r.clip},
+            {"message", std::string(r.message, n)}};
 }
 
 }  // namespace himmel::ui

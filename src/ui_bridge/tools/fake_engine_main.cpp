@@ -187,6 +187,7 @@ void init_transport(TransportSection& t) {
 struct Model {
     LiveState s;
     TransportSection t;
+    ReactionSection r;   // state v3 (AUDIO, D131): a stand-in reaction table for the GUI's reaction editor
     float cues[256][kCuePoints];  // per clip (cue points belong to the clip)
     // TAKE
     uint64_t take_start_us = 0;
@@ -203,6 +204,114 @@ FxSlotState* fx_target(LiveState& s, const Command& c) {
     if (c.layer == kNone) return &s.deck[c.deck].fx[c.slot];
     if (c.layer >= kLayersPerDeck) return nullptr;
     return &s.deck[c.deck].layer[c.layer].fx[c.slot];
+}
+
+// The fake default reaction (no effect metadata here): knob 1 follows the bass, ADD 0.3; the others none.
+void react_defaults(SlotReactions& s) {
+    for (int k = 0; k < kReactParams; ++k) {
+        ReactionEntry& e = s.p[k];
+        e = ReactionEntry{};
+        e.source = static_cast<uint8_t>(ReactSource::Default);
+        e.signal = static_cast<uint8_t>(k == 0 ? ReactSignal::Bass : ReactSignal::None);
+        e.mode = static_cast<uint8_t>(ReactMode::Add);
+        e.curve = static_cast<uint8_t>(ReactCurve::Linear);
+        e.amount = k == 0 ? 0.3f : 0.f;
+        e.attack_ms = 10.f;
+        e.release_ms = 200.f;
+        e.range_lo = 0.f;
+        e.range_hi = 1.f;
+    }
+}
+SlotReactions* react_target(ReactionSection& r, const Command& c) {
+    if (c.slot >= kFxSlots) return nullptr;
+    if (c.deck == kMasterDeck) return c.layer == kNone ? &r.master[c.slot] : nullptr;
+    if (c.deck >= kDecks) return nullptr;
+    if (c.layer == kNone) return &r.deck[c.deck][c.slot];
+    if (c.layer >= kLayersPerDeck) return nullptr;
+    return &r.layer[c.deck][c.layer][c.slot];
+}
+// FxReact as command-protocol.md §4d says (the real one lives in the engine, AUDIO).
+Reject apply_react(Model& m, const Command& c) {
+    FxSlotState* fx = fx_target(m.s, c);
+    SlotReactions* sr = react_target(m.r, c);
+    if (!fx || !sr || fx->effect < 0) return Reject::BadTarget;
+    if (!react_args_ok(c.i)) return Reject::BadValue;
+    for (float v : c.f)
+        if (!std::isfinite(v)) return Reject::BadValue;
+    const ReactArgs a = unpack_react(c.i);
+    const bool all = c.param == kNone;
+    if (all && a.op != ReactOp::Default && a.op != ReactOp::Off) return Reject::BadTarget;
+    if (!all && c.param >= kReactParams) return Reject::BadTarget;
+    for (int k = 0; k < kReactParams; ++k) {
+        if (!all && k != c.param) continue;
+        ReactionEntry& e = sr->p[k];
+        switch (a.op) {
+            case ReactOp::Default: {
+                SlotReactions d;
+                react_defaults(d);
+                e = d.p[k];
+                break;
+            }
+            case ReactOp::Off: e.source = static_cast<uint8_t>(ReactSource::Off); e.signal = 0; break;
+            case ReactOp::Set:
+                e.source = static_cast<uint8_t>(ReactSource::Custom);
+                e.signal = static_cast<uint8_t>(a.signal);
+                e.mode = static_cast<uint8_t>(a.mode);
+                e.curve = static_cast<uint8_t>(a.curve);
+                e.amount = std::clamp(c.f[0], -1.f, 1.f);
+                e.attack_ms = std::clamp(c.f[1], 0.f, kReactMaxMs);
+                e.release_ms = std::clamp(c.f[2], 0.f, kReactMaxMs);
+                e.threshold = std::clamp(c.f[3], 0.f, 1.f);
+                e.quantise_beats = kReactQuantiseBeats[static_cast<int>(a.quantise)];
+                e.hold_beats = a.hold_q * 0.25f;
+                break;
+            case ReactOp::Amount:
+                e.source = static_cast<uint8_t>(ReactSource::Custom);
+                e.amount = std::clamp((c.flags & kRelative) ? e.amount + c.f[0] : c.f[0], -1.f, 1.f);
+                break;
+            case ReactOp::Signal:
+                if (e.signal == 0 && e.source != static_cast<uint8_t>(ReactSource::Custom)) {
+                    e.amount = 0.5f; e.attack_ms = 10.f; e.release_ms = 200.f; e.range_lo = 0.f; e.range_hi = 1.f;
+                }
+                e.source = static_cast<uint8_t>(ReactSource::Custom);
+                e.signal = static_cast<uint8_t>(a.signal);
+                break;
+            case ReactOp::Range:
+                e.source = static_cast<uint8_t>(ReactSource::Custom);
+                if (c.f[0] < 0) { e.flags &= static_cast<uint8_t>(~kReactRangeSet); e.range_lo = 0.f; e.range_hi = 1.f; }
+                else { e.flags |= kReactRangeSet; e.range_lo = std::clamp(c.f[0], 0.f, 1.f); e.range_hi = std::clamp(c.f[1], 0.f, 1.f); }
+                break;
+            default: return Reject::BadValue;
+        }
+    }
+    ++m.r.gen;
+    return Reject::None;
+}
+// Live env / value: a fake signal per ReactSignal (no audio here), so the "knob ghosts" move.
+void react_tick(Model& m, double t) {
+    auto one = [&](const FxSlotState& fx, SlotReactions& sr) {
+        for (int k = 0; k < kReactParams; ++k) {
+            ReactionEntry& e = sr.p[k];
+            const float base = fx.effect >= 0 ? fx.param[k] : 0.f;
+            if (fx.effect < 0 || e.signal == 0 || e.source == static_cast<uint8_t>(ReactSource::Off)) {
+                e.env = 0.f;
+                e.value = base;
+                continue;
+            }
+            const double ph = t * (0.5 + 0.37 * e.signal);
+            e.env = static_cast<float>(std::pow(0.5 + 0.5 * std::sin(ph * 6.2832), 3.0));
+            const float lo = e.range_lo, hi = e.range_hi;
+            const float v = e.mode == static_cast<uint8_t>(ReactMode::Follow) ? lo + (hi - lo) * e.env
+                                                                              : base + e.amount * e.env * (hi - lo);
+            e.value = std::clamp(v, 0.f, 1.f);
+        }
+    };
+    for (int d = 0; d < kDecks; ++d) {
+        for (int l = 0; l < kLayersPerDeck; ++l)
+            for (int s = 0; s < kFxSlots; ++s) one(m.s.deck[d].layer[l].fx[s], m.r.layer[d][l][s]);
+        for (int s = 0; s < kFxSlots; ++s) one(m.s.deck[d].fx[s], m.r.deck[d][s]);
+    }
+    for (int s = 0; s < kFxSlots; ++s) one(m.s.master_fx[s], m.r.master[s]);
 }
 
 uint8_t toggle(uint8_t cur, int32_t v) { return v == 2 ? static_cast<uint8_t>(!cur) : static_cast<uint8_t>(v != 0); }
@@ -224,6 +333,7 @@ Reject apply(Model& m, const Command& c, uint64_t now) {
     auto fl = [&](float cur, float lo, float hi) { return std::clamp(rel ? cur + f : f, lo, hi); };
     switch (c.type) {
         case CommandType::Hello: return Reject::None;
+        case CommandType::FxReact: return apply_react(m, c);
         case CommandType::LayerSet: {
             LayerTransport* t = ltr();
             if (!t || c.param >= static_cast<uint8_t>(LayerParam::Count)) return Reject::BadTarget;
@@ -402,6 +512,10 @@ Reject apply(Model& m, const Command& c, uint64_t now) {
             if (!fx) return Reject::BadTarget;
             if (c.i < -1 || c.i >= FxCount) return Reject::BadId;
             clear_fx(*fx);
+            if (SlotReactions* sr = react_target(m.r, c)) {   // FxSet resets the slot's reactions (D131)
+                react_defaults(*sr);
+                ++m.r.gen;
+            }
             fx->effect = static_cast<int16_t>(c.i);
             if (c.i >= 0)
                 for (int p = 0; p < kFx[c.i].n; ++p) fx->param[p] = kFx[c.i].d[p];
@@ -795,6 +909,8 @@ int main(int argc, char** argv) {
         }
         seq_write(sb->live_seq, sb->live, m->s);
         seq_write(sb->transport_seq, sb->transport, m->t);
+        react_tick(*m, static_cast<double>(now_us()) * 1e-6);
+        seq_write(sb->react_seq, sb->react, m->r);
         sb->status.heartbeat_us.store(us, std::memory_order_release);
 
         if (now - last_pic >= std::chrono::milliseconds(33)) {  // ~30 fps pictures

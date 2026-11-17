@@ -282,6 +282,36 @@ has the right version); a missing one never stops the rest of the page.
   config `himmel-sim-test`) keeps projects and the library away from your own
   (the children run in `build/bin/Release`, so a relative root lands there).
 
+### Build, reactions, library actions (M11 part 3)
+
+- **BUILD view** (the song, scene and kit editor): BANKS / SETLIST on the
+  left (songs: + NEW SONG, rename, BPM, ↑ ↓, delete; + SCENE FROM PREVIEW),
+  the page's scenes below. Click a scene to see it; **REHEARSE** loads it to
+  PREVIEW (double-click does the same). Only the scene on PREVIEW can be
+  edited: its 4 macros (✎ name, + BIND a parameter of an effect in the scene
+  with a min / max range, ✕ remove) and its kit (click a pad: holds clip /
+  cue / effect / scene / action, target SEL / L1–L4 / ALL / FREE / HIT, SET
+  PAD; **FILL KIT** proposes the default layout). Save the project to keep it.
+- **Reactions:** every FX knob 1–4 (LAYER / DECK / MASTER FX tabs) has an
+  ear `~`: dim = no reaction, white = the effect's default, green = your own,
+  struck = off. A thin green mark on the slider is where the shader is now.
+  Click the ear for the editor: signal (with live meters), mode ADD / FOLLOW /
+  TRIGGER, amount, curve, attack / release, threshold, range, quantise and
+  hold for TRIGGER. DEFAULT / OFF reset it.
+- **Clip drawer** (CLIP tab): under the timeline, the clip's filmstrip from
+  the library with its motion curve and analysed cuts (click = jump), and the
+  layer's effects with their live PRESS.
+- **LIBRARY view:** + IMPORT… (a file or a folder by path; end it with `+` to
+  keep watching the folder), RESCAN ALL, RETRY FAILED, REANALYSE ALL, FIND
+  MISSING…, and the import speed (AUTO / BACKGROUND / FULL / HOLD). Each clip
+  card has ↻ rescan, ANALYSE, RETRY, RELINK… and ✕ remove (the original file
+  is never touched). The buttons are grey while the import worker does not
+  answer.
+- **START → 0 PROJECT:** new (3 / 1 screens), open by path, the recent
+  projects, the autosave offer and a one-line health check.
+- Without an engine: `fake_engine.exe` + `himmel_ui.exe --port 8792
+  --no-library` (the fake engine also plays the reaction table).
+
 ### Playing it from the MK2
 
 > Since the playable slice (2026-11-15) `himmel_render.exe` is the deck engine

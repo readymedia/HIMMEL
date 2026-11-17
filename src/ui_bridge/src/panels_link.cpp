@@ -77,7 +77,9 @@ struct Panels {
     Link audio{audio::kBlockName, sizeof(audio::AudioBlock), audio::kMagic, audio::kVersion, true, {}};
     Link osc{osc::kOscShmName, sizeof(osc::OscBlock), osc::kOscMagic, osc::kOscVersion, false, {}};
     Link library{library::kLibraryShmName, sizeof(library::LibraryBlock), library::kLibraryMagic,
-                 library::kLibraryVersion, false, {}};
+                 library::kLibraryVersion, true, {}};   // v2: the bridge writes its ingest command channel (Gui = 1)
+    uint32_t ingest_seq = 0;        // the bridge's running ingest seq (under write_m)
+    json ingest_replies = json::array();   // the last replies, newest first (under write_m)
     std::mutex write_m;        // the bridge's own writes (text box, audio config): one writer
     uint64_t weapon_beat[weapon::kMaxSlots + 1] = {};   // last heartbeat per weapon slot (alive = it moved in 1 s)
 
@@ -100,7 +102,7 @@ void panels_init(bool watch, const fs::path& library_root, const fs::path& exe_d
     g->watch = watch;
     g->library_root = library_root;
     g->exe_dir = exe_dir;
-    if (watch) g->show.writable = g->audio.writable = false;
+    if (watch) g->show.writable = g->audio.writable = g->library.writable = false;
 }
 
 void panels_close() {
@@ -198,6 +200,21 @@ PanelJson panels_poll(uint64_t now_us, bool retry) {
         if (!seq_read(b->job_seq, b->job, job)) job = library::IngestJob{};
         json j = library_block_to_json(c, job);
         j["alive"] = g->library.alive(b->heartbeat_us.load(std::memory_order_acquire), now);
+        // v2: the ingest replies to this bridge (the GUI slot); drained here, kept for the page.
+        {
+            std::lock_guard wl(g->write_m);
+            if (g->library.writable) {
+                auto& ch = const_cast<library::LibraryBlock*>(b)->channels[static_cast<int>(Producer::Gui)];
+                library::IngestReply rep{};
+                while (ch.replies.pop(rep)) {
+                    g->ingest_replies.insert(g->ingest_replies.begin(), ingest_reply_to_json(rep));
+                    if (g->ingest_replies.size() > 8) g->ingest_replies.erase(g->ingest_replies.end() - 1);
+                }
+                j["cmd"] = {{"sent", g->ingest_seq}, {"done", ch.done_seq.load()}, {"rejected", ch.rejected.load()},
+                            {"applying", ch.applying_seq.load()}, {"replies", g->ingest_replies}};
+            }
+            j["writable"] = g->library.writable;
+        }
         j["root"] = utf8(g->library_root);
         out.library = dump(j);
     } else {
@@ -376,6 +393,14 @@ json panels_library_clips() {
         c["stars"] = r.stars;
         c["favourite"] = r.favourite;
         c["tags"] = r.user_tags;
+        if (!a.motion_curve.empty()) c["curve"] = downsample_curve(a.motion_curve, 96);
+        if (!a.cuts.empty() && r.seconds > 0 && r.fps > 0) {
+            const double frames = r.seconds * r.fps;
+            json cuts = json::array();
+            for (const auto f : a.cuts)
+                if (f >= 0 && f < frames) cuts.push_back(std::round(f / frames * 10000.0) / 10000.0);
+            c["cuts"] = std::move(cuts);
+        }
         if (a.version > 0) {
             char rgb[8];
             std::snprintf(rgb, sizeof rgb, "#%06x", a.avg_rgb & 0xFFFFFFu);
@@ -406,6 +431,87 @@ json panels_library_clips() {
     }
     out["ok"] = true;
     return out;
+}
+
+namespace {
+bool read_text_file(const fs::path& p, std::string& out) {
+    std::ifstream f(p, std::ios::binary);
+    if (!f) return false;
+    std::ostringstream ss;
+    ss << f.rdbuf();
+    out = ss.str();
+    return true;
+}
+fs::file_time_type mtime(const fs::path& p) {
+    std::error_code ec;
+    const auto t = fs::last_write_time(p, ec);
+    return ec ? fs::file_time_type::min() : t;
+}
+}  // namespace
+
+json panels_ingest_command(const json& body) {
+    if (!g) return {{"ok", false}, {"error", "not started"}};
+    library::IngestCommand c;
+    std::string err;
+    if (!ingest_command_from_json(body, c, err)) return {{"ok", false}, {"error", err}};
+    std::shared_lock vl(g->views);
+    if (!g->library.writable) return {{"ok", false}, {"error", "read-only bridge (--watch)"}};
+    if (g->library.st != ShmStatus::Ok) return {{"ok", false}, {"error", "the import worker is not running (no library block v2)"}};
+    auto* b = g->library.view.as<library::LibraryBlock>();
+    // library-db.md §10.1: no live worker (heartbeat older than 2 s) = do not send.
+    const uint64_t beat = b->heartbeat_us.load(std::memory_order_acquire);
+    if (!g->library.seen || steady_us() - g->library.beat_seen_us > 2000000 || beat == 0)
+        return {{"ok", false}, {"error", "the import worker does not answer (no heartbeat for 2 s)"}};
+    std::lock_guard wl(g->write_m);
+    const uint32_t seq = ++g->ingest_seq;
+    if (!library::push_ingest(b->channels[static_cast<int>(Producer::Gui)], c, seq, GetCurrentProcessId(), steady_us()))
+        return {{"ok", false}, {"error", "the import worker's queue is full, try again"}};
+    return {{"ok", true}, {"seq", seq}};
+}
+
+json panels_show_document() {
+    if (!g) return {{"ok", false}, {"error", "not started"}};
+    std::string path;
+    {
+        std::shared_lock vl(g->views);
+        if (g->show.st != ShmStatus::Ok) return {{"ok", false}, {"error", "no show block (the renderer is not running)"}};
+        const auto* b = g->show.view.as<const ShowBlock>();
+        auto fl = std::make_unique<FilesStatus>();
+        if (!seq_read(b->files_seq, b->files, *fl)) return {{"ok", false}, {"error", "the show block is busy, try again"}};
+        path.assign(fl->path, strnlen(fl->path, sizeof(fl->path)));
+    }
+    if (path.empty()) return {{"ok", false}, {"error", "no project path yet"}};
+    const fs::path folder = fs::path(std::u8string(path.begin(), path.end()));
+    const fs::path auto_doc = folder / "autosave" / "show.json", head_file = folder / "project.json";
+    std::string text;
+    json doc;
+    // The autosave is written after every show change (<= 4/s); a plain save rewrites project.json.
+    if (mtime(auto_doc) >= mtime(head_file) && read_text_file(auto_doc, text)) doc = json::parse(text, nullptr, false);
+    if (!doc.is_object() && read_text_file(head_file, text)) {
+        doc = json::parse(text, nullptr, false);
+        if (doc.is_object()) {
+            json banks = json::array(), songs = json::array();
+            auto load = [&](const json& list, json& into) {
+                if (!list.is_array()) return;
+                for (const auto& rel : list) {
+                    std::string t, r = rel.is_string() ? rel.get<std::string>() : std::string();
+                    if (r.empty() || r.find("..") != std::string::npos) continue;
+                    if (read_text_file(folder / fs::path(std::u8string(r.begin(), r.end())), t)) {
+                        json x = json::parse(t, nullptr, false);
+                        if (x.is_object()) into.push_back(std::move(x));
+                    }
+                }
+            };
+            load(doc.value("banks", json::array()), banks);
+            load(doc.value("setlist", json::array()), songs);
+            doc["banks"] = std::move(banks);
+            doc["setlist"] = std::move(songs);
+        }
+    }
+    if (!doc.is_object()) return {{"ok", false}, {"error", "no show document in " + path}};
+    json j = show_doc_for_page(doc);
+    j["path"] = path;
+    return j;
 }
 
 std::string panels_library_thumb(const std::string& file) {

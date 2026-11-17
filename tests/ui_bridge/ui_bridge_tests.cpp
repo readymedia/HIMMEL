@@ -658,6 +658,171 @@ static void test_http() {
           !origin_is_local("null"));
 }
 
+static void test_part3() {
+    using nlohmann::json;
+    auto c = downsample_curve({0.1f, 0.2f, 0.4f, 0.1f, 0.0f, 0.2f}, 3);
+    CHECK(c.size() == 3 && c[0] == 0.5f && c[1] == 1.0f && c[2] == 0.5f);
+    CHECK(downsample_curve({}, 8).empty() && downsample_curve({1.0f}, 0).empty());
+    CHECK(downsample_curve({0.3f, 0.6f}, 8).size() == 2);
+    auto z = downsample_curve({0.0f, 0.0f}, 2);
+    CHECK(z.size() == 2 && z[0] == 0.0f);
+    auto nan = downsample_curve({std::numeric_limits<float>::quiet_NaN(), 2.0f}, 1);
+    CHECK(nan.size() == 1 && nan[0] == 1.0f);
+
+    CHECK(!show_doc_for_page(json::object())["ok"].get<bool>());
+    CHECK(!show_doc_for_page(json{{"format", "other"}})["ok"].get<bool>());
+    json doc = {{"format", "himmel-show/1"}, {"kind", "document"}, {"name", "My Show"}, {"bank", 2},
+                {"use_setlist", true}, {"live", {{"decks", json::array()}}},
+                {"banks", json::array({json{{"index", 2}, {"pads", json::array({nullptr, json{{"name", "S2"}}})}}, 7})},
+                {"setlist", json::array({json{{"name", "Intro"}, {"bpm", 120}, {"scenes", json::array()}}})}};
+    json j = show_doc_for_page(doc);
+    CHECK(j["ok"].get<bool>() && j["name"] == "My Show" && j["bank"] == 2 && j["use_setlist"] == true);
+    CHECK(!j.contains("live") && j["banks"].size() == 1 && j["banks"][0]["index"] == 2);
+    CHECK(j["banks"][0]["pads"][1]["name"] == "S2" && j["setlist"][0]["bpm"] == 120);
+
+    // The exact commands gui/build.js sends (the BUILD view), deck as a number.
+    using namespace himmel::protocol;
+    auto r = P(R"({"type":"KitSet","deck":1,"slot":12,"param":"Clip","layer":"Layer1","value":4})");
+    CHECK(r.ok && r.cmd.type == CommandType::KitSet && r.cmd.deck == 1 && r.cmd.slot == 12 &&
+          r.cmd.param == static_cast<uint8_t>(PadKind::Clip) && r.cmd.layer == static_cast<uint8_t>(PadTarget::Layer1) && r.cmd.i == 4);
+    r = P(R"({"type":"KitSet","deck":0,"slot":2,"param":"Action","value":"Black"})");
+    CHECK(r.ok && r.cmd.i == static_cast<int32_t>(PadAction::Black) && r.cmd.layer == 0);
+    r = P(R"({"type":"KitSet","deck":0,"slot":3,"param":"Action","value":"NextScene"})");
+    CHECK(r.ok && r.cmd.i == static_cast<int32_t>(PadAction::NextScene));
+    r = P(R"({"type":"KitSet","deck":0,"slot":5,"param":"Empty"})");
+    CHECK(r.ok && r.cmd.param == static_cast<uint8_t>(PadKind::Empty));
+    r = P(R"({"type":"KitSet","deck":0,"slot":0,"param":"Clip","layer":"Hit","value":2})");
+    CHECK(r.ok && r.cmd.layer == static_cast<uint8_t>(PadTarget::Hit));
+    r = P(R"({"type":"MacroSet","deck":1,"slot":2,"param":0,"value":17,"f":[0.2,0.9]})");   // deck FX (no layer)
+    CHECK(r.ok && r.cmd.layer == kNone && r.cmd.param == 0 && r.cmd.i == 17 && r.cmd.f[0] == 0.2f && r.cmd.f[1] == 0.9f);
+    r = P(R"({"type":"MacroSet","deck":1,"slot":2,"param":1,"layer":3,"value":0,"f":[1,0]})");
+    CHECK(r.ok && r.cmd.layer == 3 && r.cmd.f[0] == 1.0f && r.cmd.f[1] == 0.0f);
+    r = P(R"({"type":"MacroSet","deck":1,"slot":2,"param":1,"clear":true})");
+    CHECK(r.ok && (r.cmd.flags & kClear));
+    r = P(R"({"type":"MacroSet","deck":1,"slot":0,"text":"INTENSITY"})");
+    CHECK(r.ok && r.needs_text && r.text == "INTENSITY" && r.cmd.param == kNone);
+    r = P(R"({"type":"SongEdit","param":"New"})");
+    CHECK(r.ok && r.cmd.i == 0 && !r.needs_text);
+    r = P(R"({"type":"SongEdit","param":"New","text":"Warmup"})");
+    CHECK(r.ok && r.needs_text);
+    r = P(R"({"type":"SongEdit","param":"Move","value":2,"slot":1})");
+    CHECK(r.ok && r.cmd.i == 2 && r.cmd.slot == 1);
+    r = P(R"({"type":"SongEdit","param":"Bpm","value":0,"f":128})");
+    CHECK(r.ok && r.cmd.f[0] == 128.0f);
+    r = P(R"({"type":"SongEdit","param":"Rename","slot":0,"text":"Glass"})");
+    CHECK(r.ok && r.needs_text && r.cmd.slot == 0);
+    r = P(R"({"type":"SongEdit","param":"AddScene","value":0,"deck":1})");
+    CHECK(r.ok && r.cmd.deck == 1 && r.cmd.i == 0);
+    r = P(R"({"type":"SongEdit","param":"RemoveScene","value":0,"slot":4})");
+    CHECK(r.ok && r.cmd.slot == 4);
+    r = P(R"({"type":"SongEdit","param":"Delete","value":1})");
+    CHECK(r.ok && r.cmd.i == 1);
+    r = P(R"({"type":"SceneRecall","deck":1,"value":4,"f":0})");
+    CHECK(r.ok && r.cmd.deck == 1 && r.cmd.f[0] == 0.0f);
+    r = P(R"({"type":"ShowSelect","param":"Song","value":2})");
+    CHECK(r.ok && r.cmd.i == 2 && !(r.cmd.flags & kRelative));
+    r = P(R"({"type":"ShowSelect","param":"UseSetlist","value":0})");
+    CHECK(r.ok && r.cmd.i == 0);
+    r = P(R"({"type":"OutputConfig","param":"BlendWidth","value":128})");
+    CHECK(r.ok && r.cmd.i == 128);
+    r = P(R"({"type":"Project","param":"New","value":3})");
+    CHECK(r.ok && r.cmd.i == 3);
+
+    // FxReact (AUDIO D131, command 40): the reaction editor's commands.
+    r = P(R"({"type":"FxReact","deck":1,"layer":2,"slot":0,"param":1,"op":"Set","signal":"Kick","mode":"Trigger","curve":"Soft","quantise":"Quarter","hold":4,"f":[0.6,5,300,0.2]})");
+    CHECK(r.ok && r.cmd.type == CommandType::FxReact && r.cmd.deck == 1 && r.cmd.layer == 2 && r.cmd.slot == 0 && r.cmd.param == 1);
+    {
+        const ReactArgs a = unpack_react(r.cmd.i);
+        CHECK(a.op == ReactOp::Set && a.signal == ReactSignal::Kick && a.mode == ReactMode::Trigger && a.curve == ReactCurve::Soft &&
+              a.quantise == ReactQuantise::Quarter && a.hold_q == 4 && react_args_ok(r.cmd.i));
+        CHECK(r.cmd.f[0] == 0.6f && r.cmd.f[1] == 5.0f && r.cmd.f[2] == 300.0f && r.cmd.f[3] == 0.2f);
+    }
+    r = P(R"({"type":"FxReact","deck":"master","slot":2,"param":0,"op":"Set","signal":"Bass","f":[2,9999,-5,3]})");   // clamped
+    CHECK(r.ok && r.cmd.deck == kMasterDeck && r.cmd.layer == kNone && r.cmd.f[0] == 1.0f && r.cmd.f[1] == kReactMaxMs &&
+          r.cmd.f[2] == 0.0f && r.cmd.f[3] == 1.0f);
+    r = P(R"({"type":"FxReact","deck":0,"slot":1,"param":3,"op":"Amount","f":-0.1,"relative":true})");
+    CHECK(r.ok && (r.cmd.flags & kRelative) && unpack_react(r.cmd.i).op == ReactOp::Amount && r.cmd.f[0] == -0.1f);
+    r = P(R"({"type":"FxReact","deck":0,"layer":0,"slot":0,"param":0,"op":"Range","f":[0.8,0.2]})");
+    CHECK(r.ok && r.cmd.f[0] == 0.8f && r.cmd.f[1] == 0.2f);
+    r = P(R"({"type":"FxReact","deck":0,"layer":0,"slot":0,"param":0,"op":"Range","f":[-1,0]})");
+    CHECK(r.ok && r.cmd.f[0] < 0);
+    r = P(R"({"type":"FxReact","deck":0,"layer":0,"slot":0,"op":"Default"})");
+    CHECK(r.ok && r.cmd.param == kNone && unpack_react(r.cmd.i).op == ReactOp::Default);
+    r = P(R"({"type":"FxReact","deck":0,"layer":0,"slot":0,"param":2,"op":"Off"})");
+    CHECK(r.ok && r.cmd.param == 2);
+    r = P(R"({"type":"FxReact","deck":0,"layer":0,"slot":0,"param":2,"op":"Signal","signal":"Drop"})");
+    CHECK(r.ok && unpack_react(r.cmd.i).signal == ReactSignal::Drop);
+    CHECK(!P(R"({"type":"FxReact","deck":0,"slot":0,"op":"Set","signal":"Kick","f":[1,1,1,1]})").ok);   // Set needs a knob
+    CHECK(!P(R"({"type":"FxReact","deck":0,"slot":0,"param":4,"op":"Off"})").ok);
+    CHECK(!P(R"({"type":"FxReact","deck":0,"slot":0,"param":0,"op":"Set","signal":"Kick","f":[1,1]})").ok);   // 4 numbers
+    CHECK(!P(R"({"type":"FxReact","deck":0,"slot":0,"param":0,"op":"Signal"})").ok);
+    CHECK(!P(R"({"type":"FxReact","deck":0,"slot":0,"param":0,"op":"Set","signal":"Wobble","f":[1,1,1,1]})").ok);
+    CHECK(!P(R"({"type":"FxReact","deck":0,"slot":0,"param":0,"op":"Set","hold":17,"f":[1,1,1,1]})").ok);
+    CHECK(!P(R"({"type":"FxReact","deck":0,"slot":0,"param":0,"op":"Range","f":[0.1,0.2],"relative":true})").ok);
+    CHECK(!P(R"({"type":"FxReact","deck":0,"slot":0,"param":0,"op":"Nope"})").ok);
+    {
+        json cj = command_to_json(P(R"({"type":"FxReact","deck":1,"layer":2,"slot":0,"param":1,"op":"Set","signal":"Kick","f":[0.6,5,300,0.2]})").cmd);
+        CHECK(cj["op"] == "Set" && cj["signal"] == "Kick" && cj["param"] == 1 && cj["slot"] == 0);
+    }
+    {
+        auto rs = std::make_unique<ReactionSection>();
+        std::memset(rs.get(), 0, sizeof(ReactionSection));
+        rs->gen = 7;
+        ReactionEntry& e = rs->layer[1][2][0].p[1];
+        e.source = static_cast<uint8_t>(ReactSource::Custom);
+        e.signal = static_cast<uint8_t>(ReactSignal::Kick);
+        e.amount = 0.6f;
+        e.range_hi = 1.0f;
+        e.env = 0.25f;
+        e.value = 0.5f;
+        json rj = react_to_json(*rs, false);
+        CHECK(rj["gen"] == 7 && rj["layer"].size() == 2 && rj["layer"][1].size() == 4 && rj["layer"][1][2].size() == 4);
+        CHECK(rj["layer"][1][2][0][1]["signal"] == "Kick" && rj["layer"][1][2][0][1]["source"] == "Custom" &&
+              rj["layer"][1][2][0][1]["amount"] == 0.6);
+        CHECK(rj["deck"][0].size() == 4 && rj["master"].size() == 4 && rj["master"][0][0]["signal"] == "None");
+        json lj = react_to_json(*rs, true);
+        CHECK(lj["layer"][1][2][0][1][0] == 0.25 && lj["layer"][1][2][0][1][1] == 0.5);
+    }
+
+    // SystemQuit (74): only "value": 1 passes.
+    r = P(R"({"type":"SystemQuit","value":1})");
+    CHECK(r.ok && r.cmd.type == CommandType::SystemQuit && r.cmd.f[0] == 1.0f);
+    CHECK(!P(R"({"type":"SystemQuit"})").ok && !P(R"({"type":"SystemQuit","value":0.5})").ok && !P(R"({"type":"SystemQuit","value":0})").ok);
+
+    // MEDIA ingest commands (library-db.md §10): the LIBRARY view's buttons.
+    {
+        namespace lib = himmel::library;
+        lib::IngestCommand ic;
+        std::string err;
+        CHECK(ingest_command_from_json(json{{"type", "Import"}, {"path", "D:\\Clips\\Set 1"}, {"watch", true}}, ic, err));
+        CHECK(ic.type == static_cast<uint16_t>(lib::IngestCommandType::Import) && (ic.flags & lib::kIngestWatch) &&
+              std::string(ic.path) == "D:\\Clips\\Set 1" && ic.clip == 0);
+        CHECK(ingest_command_from_json(json{{"type", "rescan"}}, ic, err) && ic.type == 61 && ic.clip == 0);
+        CHECK(ingest_command_from_json(json{{"type", "Remove"}, {"clip", 42}}, ic, err) && ic.type == 62 && ic.clip == 42);
+        CHECK(ingest_command_from_json(json{{"type", "Relink"}, {"clip", 7}, {"path", "\\\\nas\\v\\a.mov"}, {"force", true}}, ic, err) &&
+              ic.type == 63 && (ic.flags & lib::kIngestForce));
+        CHECK(ingest_command_from_json(json{{"type", "Reanalyse"}, {"clip", 0}, {"thumbs", true}}, ic, err) && (ic.flags & lib::kIngestThumbs));
+        CHECK(ingest_command_from_json(json{{"type", "Retry"}}, ic, err) && ic.type == 65);
+        CHECK(ingest_command_from_json(json{{"type", "Mode"}, {"mode", "Hold"}}, ic, err) && ic.type == 66 && ic.i == 3);
+        CHECK(ingest_command_from_json(json{{"type", "Unwatch"}, {"path", "C:/x"}}, ic, err) && ic.type == 67);
+        CHECK(!ingest_command_from_json(json{{"type", "Import"}}, ic, err));                         // no path
+        CHECK(!ingest_command_from_json(json{{"type", "Import"}, {"path", "relative\\x"}}, ic, err)); // not absolute
+        CHECK(!ingest_command_from_json(json{{"type", "Remove"}}, ic, err));                         // no clip
+        CHECK(!ingest_command_from_json(json{{"type", "Remove"}, {"clip", -3}}, ic, err));
+        CHECK(!ingest_command_from_json(json{{"type", "Mode"}, {"mode", "Turbo"}}, ic, err));
+        CHECK(!ingest_command_from_json(json{{"type", "Delete"}}, ic, err));
+        CHECK(!ingest_command_from_json(json{{"type", "Import"}, {"path", "C:\\" + std::string(1200, 'a')}}, ic, err));
+        lib::IngestReply rep{};
+        rep.seq = 5;
+        rep.type = 62;
+        rep.status = static_cast<uint8_t>(lib::IngestStatus::BadId);
+        rep.clip = 9;
+        std::snprintf(rep.message, sizeof rep.message, "no clip 9");
+        json rj = ingest_reply_to_json(rep);
+        CHECK(rj["seq"] == 5 && rj["type"] == "Remove" && rj["status"] == "BadId" && rj["ok"] == false && rj["message"] == "no clip 9");
+    }
+}
+
 int main() {
     test_layer_commands();
     test_fx_commands();
@@ -669,6 +834,7 @@ int main() {
     test_panel_commands();
     test_panel_json();
     test_http();
+    test_part3();
     std::printf("\n%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

@@ -78,7 +78,15 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const clipName = ci => ci.name.replace(/\.mov$/i, '');
 const groupOf = (d, l) => GROUPS[d === progDeck() ? 'prog' : 'prev'][l];
-window.H = { send, sendT, hold, setVal, el, toast: (...a) => toast(...a), invalidate: () => invalidate(), clipInfo, fxInfo, fxMeta, rgb, setTab: t => setTab(t) };
+window.H = { send, sendT, hold, setVal, el, toast: (...a) => toast(...a), invalidate: () => invalidate(), clipInfo, fxInfo, fxMeta, rgb, setTab: t => setTab(t),
+  beatNow: () => (CLK.bpm > 0 ? CLK.beat + (performance.now() - CLK.at) / 60000 * CLK.bpm : 0),
+  // QUIT (ENGINE, SystemQuit 74): asked first; then the supervisor stops everything, this bridge too.
+  quit: async () => {
+    if (!confirm('Quit Himmel?\n\nThe outputs go dark and every Himmel program stops (the autosave keeps your work).' + (S.show?.dirty ? '\nThe project has unsaved changes.' : ''))) return;
+    S.quitting = true;
+    await send({ type: 'SystemQuit', value: 1 });
+    toast('Quitting Himmel…');
+  } };
 
 function toast(msg, kind) {
   const t = el('div', 'toast' + (kind === 'bad' ? ' bad' : ''), msg);
@@ -402,13 +410,15 @@ function renderFxSlots() {
         if (m && m.main && m.main.includes(pm?.id)) name.classList.add('main');
         if (m && m.press && m.press.param === pm?.id) name.classList.add('ptarget');
         row.append(name, inp, pv);
+        // The reaction ear "~" + knob ghost on knobs 1-4 (gui/react.js, AUDIO D131).
+        const rx = p < 4 && window.Reacts ? window.Reacts.attach(row, inp, k, p, fxTarget) : null;
         hold(inp);
         inp.addEventListener('input', () => { pv.textContent = fmtParam(pm, +inp.value); sendT('fx' + k + '/' + p, { type: 'FxParam', ...fxTarget(), slot: k, param: p, value: +inp.value }); });
         inp.addEventListener('dblclick', () => send({ type: 'FxParam', ...fxTarget(), slot: k, param: p, value: info.defaults[p] ?? 0 }));
         inp.title = pn + (pm ? ` (${pm.min}..${pm.max} ${pm.unit || ''})` : '') + ' · double-click = default' +
           (m?.press?.param === pm?.id ? ' · PRESS target' : '') + (m?.main?.includes(pm?.id) ? ' · main param (knobs 1–2)' : '');
         u.params.append(row);
-        u.rows.push({ inp, pv, pm });
+        u.rows.push({ inp, pv, pm, rx });
       });
       if (m && m.presets) {
         for (const pr of m.presets) {
@@ -439,6 +449,7 @@ function renderFxSlots() {
       u.rows.forEach((r, p) => {
         setVal(r.inp, f.param[p]);
         if (performance.now() >= (r.inp._hold || 0)) r.pv.textContent = fmtParam(r.pm, f.param[p]);
+        if (r.rx) r.rx.update();
       });
       u.pressBar.style.width = Math.round((f.press || 0) * 100) + '%';
       const pt = m?.press ? m.params.find(x => x.id === m.press.param) : null;
@@ -656,10 +667,79 @@ function buildClipEditor() {
   CE.seed = numBox('seed', 'Seed', 0, 2147483647, 1, '', 'RANDOM / CHOP / autopilot pattern (same seed = same pattern)');
   row5.append(CE.innerT.b, CE.catch.b, CE.auto.g, CE.trans.g, CE.seed.w);
 
+  // Row 1b (M11 part 3): the filmstrip + motion curve + analysed cuts from the library (gui.md §16), and
+  // the layer's effects with their level tag and live PRESS (row 3 of the drawer). Click a tile = LAYER FX.
+  CE.film = el('div', 'cefilm'); CE.film.title = 'The clip from the library: 8 frames, the motion curve (white) and analysed cuts (yellow). Click = jump.';
+  CE.film.addEventListener('pointerdown', e => { const r = CE.film.getBoundingClientRect(); send({ type: 'LayerJump', ...focusTarget(), value: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) }); });
+  CE.fxrow = el('div', 'cefx');
   CE.none = el('div', 'cenone dim', '');
   CE.body = el('div', 'cebody');
-  CE.body.append(tl, row2, row3, row4, row5);
+  CE.body.append(tl, CE.film, row2, row3, row4, row5, CE.fxrow);
   box.append(head, CE.none, CE.body);
+}
+// The library row of a catalog clip (by file name), for the drawer's filmstrip. Refreshed every 15 s
+// while the CLIP tab shows; a run without a library (tests) simply has no filmstrip.
+const LIBC = { byName: null, at: -1e9, busy: false };
+async function libRows() {
+  if (LIBC.busy || performance.now() - LIBC.at < 15000) return;
+  LIBC.busy = true; LIBC.at = performance.now();
+  try {
+    const r = await fetch('/library/clips');
+    if (r.ok) {
+      const j = await r.json(); const m = new Map();
+      for (const c of j.clips || []) if (c.state === 'ready') m.set(c.name.toLowerCase(), c);
+      LIBC.byName = m; CE.filmKey = ''; invalidate();
+    }
+  } catch (e) { /* no bridge */ }
+  LIBC.busy = false;
+}
+function libRowOf(ci) {
+  if (!ci || !LIBC.byName) return null;
+  const n = ci.name.replace(/ \(lib\)$/, '').toLowerCase();
+  return LIBC.byName.get(n) || LIBC.byName.get(n.replace(/\.mov$/, '')) || null;
+}
+function renderFilm(ci, pos) {
+  libRows();
+  const row = libRowOf(ci);
+  const key = (ci ? ci.name : '') + '|' + (row ? row.hash : '') + '|' + !!LIBC.byName;
+  if (CE.filmKey !== key) {
+    CE.filmKey = key; CE.film.textContent = '';
+    CE.film.style.backgroundImage = row && row.thumb ? `url(/library/thumb/${row.hash}-strip.jpg)` : 'none';
+    if (row && row.curve && row.curve.length > 1) {
+      const n = row.curve.length, pts = row.curve.map((v, i) => `${(i / (n - 1) * 100).toFixed(2)},${(34 - v * 30).toFixed(1)}`).join(' ');
+      CE.film.insertAdjacentHTML('beforeend', `<svg viewBox="0 0 100 34" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="#fff" stroke-width="1.2" vector-effect="non-scaling-stroke" opacity=".85"/></svg>`);
+    }
+    for (const c of (row && row.cuts) || []) { const m = el('div', 'cut'); m.style.left = (c * 100) + '%'; CE.film.append(m); }
+    if (!row) CE.film.append(el('div', 'fnote', !ci ? '' : !LIBC.byName ? 'no library in this run' : 'not in the library (no analysis)'));
+    CE.fph = el('div', 'fph'); CE.film.append(CE.fph);
+  }
+  CE.film.classList.toggle('hidden', !ci);
+  if (CE.fph) CE.fph.style.left = (pos * 100).toFixed(2) + '%';
+}
+function renderDrawerFx(ls) {
+  const fx = ls.fx || [];
+  const key = JSON.stringify(fx.map(f => [f.effect, f.bypass]));
+  if (CE.fxKey !== key) {
+    CE.fxKey = key; CE.fxrow.textContent = ''; CE.press = [];
+    CE.fxrow.append(el('span', 'lbl', 'effects'));
+    fx.forEach((f, k) => {
+      const fi = fxInfo(f.effect);
+      if (!fi) return;   // only the slots in use; LAYER FX shows all four
+      const t = el('button', 'cefxt' + (f.effect < 0 || f.bypass ? ' off' : ''));
+      t.append(el('span', 'lvl', 'LAYER'), el('span', null, `${k + 1} ${fi ? fi.name : 'empty'}`));
+      t.title = `The layer's effect slot ${k + 1} (click = LAYER FX tab)`;
+      t.addEventListener('click', () => setTab('layer'));
+      CE.fxrow.append(t);
+      if (fi) {
+        const pm = fxMeta(f.effect)?.press;
+        const p = el('span', 'cepress'); const bar = el('span', 'pb'); const fill = el('i'); bar.append(fill);
+        p.append(el('span', 'dim', 'PRESS ' + (pm ? pm.param : '')), bar); p.title = 'Live PRESS on this slot (pads, Block Z, LUMI, the PRESS button)';
+        CE.fxrow.append(p); CE.press[k] = fill;
+      }
+    });
+    if (!fx.some(f => f.effect >= 0)) CE.fxrow.append(el('span', 'dim', 'none · LAYER FX adds one'));
+  }
+  fx.forEach((f, k) => { if (CE.press[k]) CE.press[k].style.width = Math.round((f.press || 0) * 100) + '%'; });
 }
 function curTransport() {
   if (!S.tr || !S.live) return null;
@@ -693,6 +773,8 @@ function renderClipEditor() {
   if (CE.dragging !== 'LoopIn') CE.h.LoopIn.style.left = pct(tr.loop_in);
   if (CE.dragging !== 'LoopOut') CE.h.LoopOut.style.left = pct(tr.loop_out);
   CE.ph.style.left = pct(ls.position);
+  renderFilm(ci, ls.position);
+  renderDrawerFx(ls);
   CE.bl.classList.toggle('hidden', !tr.beat_loop);
   // cue points (they belong to the clip)
   const anyCue = tr.cue.some(q => q >= 0);
@@ -921,7 +1003,8 @@ function renderTop() {
   }
   // overlay
   let title = '', text = '', warn = false;
-  if (!S.sse) { title = 'BRIDGE NOT REACHABLE'; text = 'himmel_ui is not running. The show is not affected. Reconnecting…'; }
+  if (!S.sse && S.quitting) { title = 'HIMMEL HAS QUIT'; text = 'Start himmel.exe again to play. This page reconnects by itself.'; }
+  else if (!S.sse) { title = 'BRIDGE NOT REACHABLE'; text = 'himmel_ui is not running. The show is not affected. Reconnecting…'; }
   else if (!b) { title = 'CONNECTING…'; }
   else if (b.engine === 'absent') { title = 'ENGINE NOT RUNNING'; text = 'Waiting for himmel_render (or fake_engine). Start Himmel; this page reconnects by itself.'; }
   else if (b.engine === 'stale') { title = 'ENGINE NOT RESPONDING'; text = 'No heartbeat for over 1.5 s; showing the last state. The supervisor restarts the renderer.'; }
@@ -944,6 +1027,8 @@ function render() {
   renderClock();
   if (window.Panels) window.Panels.render();
   if (window.Views) window.Views.render();
+  if (window.Build) window.Build.render();
+  if (window.Reacts) window.Reacts.update();
   if (S.view !== 'perform' || !S.live || !S.cat) return;
   renderMonitors(); renderStrips(); renderTake(); renderLibrary(); renderInspector(); renderHit();
 }
@@ -1003,12 +1088,15 @@ function connect() {
   for (const name of ['show', 'outputs', 'osc', 'library', 'weapons'])
     es.addEventListener(name, e => { S[name] = JSON.parse(e.data); invalidate(); });
   es.addEventListener('audio', e => { S.audio = JSON.parse(e.data); invalidate(); });
+  // M11 part 3: the reaction table (state v3, AUDIO D131): settings on change, [env, value] per knob ~15 Hz.
+  es.addEventListener('react', e => { S.react = JSON.parse(e.data); invalidate(); });
+  es.addEventListener('reactlive', e => { S.reactlive = JSON.parse(e.data); if (S.view === 'perform') invalidate(); });
   // A bridge that hangs without closing the socket: no "bridge" event for 3 s = offline.
   setInterval(() => { if (S.sse && performance.now() - S.lastBridgeMs > 3000) { S.sse = false; invalidate(); es.close(); setTimeout(connect, 500); } }, 1000);
 }
 
 // ------------------------------------------------------------------ views
-const VIEWS = ['perform', 'start', 'outputs', 'library', 'mk2', 'settings'];
+const VIEWS = ['perform', 'start', 'build', 'outputs', 'library', 'mk2', 'settings'];
 function setView(v) {
   S.view = v;
   for (const id of VIEWS) $(id).classList.toggle('hidden', id !== v);
@@ -1017,6 +1105,7 @@ function setView(v) {
   if (location.hash !== '#' + v) history.replaceState(null, '', '#' + v);
   if (window.Views) window.Views.shown(v);
   if (window.Panels) window.Panels.shown(v);
+  if (window.Build) window.Build.shown(v);
   invalidate();
 }
 window.setView = setView;

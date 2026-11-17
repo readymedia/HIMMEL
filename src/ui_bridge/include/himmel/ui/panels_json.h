@@ -12,6 +12,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -71,5 +72,22 @@ bool panel_command_from_json(const nlohmann::json& j, ParseResult& r);
 
 // Every enum name the panels use (GET /names, key "panels").
 nlohmann::json panels_names();
+
+// ---- M11 part 3 ----
+// The clip drawer's motion curve: `n` buckets (max of each), scaled so the highest is 1.
+// Empty in -> empty out.
+std::vector<float> downsample_curve(const std::vector<float>& curve, int n);
+
+// GET /show/document: the show document (show-files.md §3) without the live part, for the BUILD
+// view (kits, macros, songs). `doc` is autosave/show.json or one assembled from the project files.
+// Returns {"ok": false, "error"} for anything that is not a himmel-show/1 document.
+nlohmann::json show_doc_for_page(const nlohmann::json& doc);
+
+// POST /library/cmd (MEDIA, library-db.md §10): {"type": "Import" | "Rescan" | "Remove" | "Relink" |
+// "Reanalyse" | "Retry" | "Mode" | "Unwatch", "clip": library id (0 = all), "path": absolute,
+// "watch" / "force" / "thumbs": true, "mode": "Auto" | "Full" | "Background" | "Hold"} -> an IngestCommand
+// (seq is stamped when it is pushed). False with `error` for anything the worker would refuse anyway.
+bool ingest_command_from_json(const nlohmann::json& j, library::IngestCommand& c, std::string& error);
+nlohmann::json ingest_reply_to_json(const library::IngestReply& r);
 
 }  // namespace himmel::ui

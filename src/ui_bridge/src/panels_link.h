@@ -44,4 +44,13 @@ nlohmann::json panels_library_clips();
 std::string panels_library_thumb(const std::string& file);
 std::string panels_library_root();
 
+// GET /show/document (M11 part 3): the open project's show document for the BUILD view, read
+// from <project>/autosave/show.json, or assembled from project.json + banks/ + songs/ when that
+// is older or missing. Read-only; {"ok": false, "error"} when there is no show block or project.
+nlohmann::json panels_show_document();
+
+// POST /library/cmd (MEDIA, library-db.md §10): one ingest command into the GUI's channel of the
+// library block. {"ok": true, "seq"} when queued; the reply comes back in the "library" event ("cmd").
+nlohmann::json panels_ingest_command(const nlohmann::json& body);
+
 }  // namespace himmel::ui
