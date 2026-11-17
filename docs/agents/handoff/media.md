@@ -1,5 +1,5 @@
 # MEDIA handoff
-Updated: 2026-11-17 by the MEDIA wave-5 agent (ingest commands) · Branch: `claude/media-ingest-commands` (from main e8e0e88) · Green: build, 19 test programs, himmel_audio --selftest, himmel_ingest --selftest, 12 Python selftests, mk2_e2e.py PASS
+Updated: 2026-11-17 by the MEDIA wave-5 agent (ingest commands) · Branch: `claude/media-ingest-commands` (from main e8e0e88) · Green: build, 19 test programs, himmel_audio --selftest, himmel_ingest --selftest, 12 Python selftests, mk2_e2e.py PASS on merged main (LEAD; the agent's own runs overlapped another stack)
 
 ## State in one paragraph
 M7 ingest works end to end. `himmel_ingest.exe` watches folders, probes with
