@@ -784,6 +784,11 @@ static void test_part3() {
         CHECK(lj["layer"][1][2][0][1][0] == 0.25 && lj["layer"][1][2][0][1][1] == 0.5);
     }
 
+    // SystemQuit (74): only "value": 1 passes.
+    r = P(R"({"type":"SystemQuit","value":1})");
+    CHECK(r.ok && r.cmd.type == CommandType::SystemQuit && r.cmd.f[0] == 1.0f);
+    CHECK(!P(R"({"type":"SystemQuit"})").ok && !P(R"({"type":"SystemQuit","value":0.5})").ok && !P(R"({"type":"SystemQuit","value":0})").ok);
+
     // MEDIA ingest commands (library-db.md §10): the LIBRARY view's buttons.
     {
         namespace lib = himmel::library;

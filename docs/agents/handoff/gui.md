@@ -19,7 +19,8 @@ The start wizard's steps 1–4 use these blocks. The page is plain HTML / JS / C
 **Part 3 (wave 5, branch `claude/gui-m11-part3`)** adds the BUILD view (song / scene / kit editor), the reaction
 editor (AUDIO D131), the library actions (MEDIA §10), the clip drawer's filmstrip and the wizard's start screen. The
 branch **merges the two contract commits** `aa36c95` (AUDIO FxReact, state v3) and `0e6375e` (MEDIA ingest commands,
-library block v2); the bridge needs them, so merge AUDIO and MEDIA first (or together).
+library block v2); the bridge needs them, so merge AUDIO and MEDIA first (or together). AUDIO and ENGINE (quit) are
+already on main and merged into this branch; MEDIA's contract commit is in, its worker code is not.
 
 ## Done in part 3 (wave 5)
 - **Bridge:**
@@ -34,8 +35,13 @@ library block v2); the bridge needs them, so merge AUDIO and MEDIA first (or tog
     `push_ingest`); refused when the worker's heartbeat is older than 2 s. The replies are drained by the poller and
     sent in the `library` event as `cmd {sent, done, rejected, applying, replies[8]}`. Watch mode never writes.
   - `fake_engine` plays the reaction table (FxReact ops, FxSet resets, a fake envelope per signal).
-  - `ui_bridge_tests`: 430 checks (72 new): every command the BUILD view, the reaction editor and the library
+  - `ui_bridge_tests`: 432 checks (74 new): every command the BUILD view, the reaction editor and the library
     buttons send, react JSON, ingest parse / reply.
+- **QUIT** (ENGINE, SystemQuit 74): `{"type": "SystemQuit", "value": 1}` only (anything else refused in the codec);
+  the button is in the project ⋯ menu and Settings → Engine, asks "Quit Himmel?", then shows "HIMMEL HAS QUIT" when the
+  bridge goes away.
+- **Library rows:** `removed` (tombstones) are hidden; `source_missing` shows a line on the card when the row has it
+  (`GUESS:` the bridge does not send it yet: `ClipRecord` has no such field until MEDIA adds it).
 - **Page:** `gui/build.js` (BUILD view), `gui/react.js` (ears, knob ghosts, editor), `gui/build.css`; `app.js` (clip
   drawer filmstrip + FX / PRESS row, react events, `H.beatNow`), `panels.js` (library actions), `views.js` (wizard
   step 0, step 3 canvas to scale + blend).
@@ -167,9 +173,13 @@ library block v2); the bridge needs them, so merge AUDIO and MEDIA first (or tog
   - Spec + examples: `src/ui_bridge/include/himmel/ui/panels_json.h`; tests: `tests/ui_bridge/ui_bridge_tests.cpp`.
 
 ## Gotchas found
-- **2026-11-17 incident:** a test script of mine sent LayerClip + FxSet to the owner's running engine: the browser tab
-  on `127.0.0.1:8790` had become the owner's bridge after the owner restarted himmel.exe. Reported to the LEAD. Rule
-  now: test bridges on **port 8792**, scripts check `location.port` first, close the tab when done.
+- **2026-11-17 incident:** a test script of mine sent LayerClip + FxSet through a browser tab on `127.0.0.1:8790`
+  that had become another stack's bridge (MEDIA's test stack, per the LEAD; not the owner's). Rule now: agents run no
+  himmel.exe / mk2_e2e / qa_rig in wave 5; test bridges on **port 8792** against `fake_engine`, scripts check
+  `location.port` first, close the tab when done.
+- **`himmel_ingest.exe` with an unknown flag (`--help`, and `--selftest` before MEDIA's wave 5) starts a real import
+  worker on `Documents\Himmel\Library`.** It happened twice (10:15 and 16:47 on 2026-11-17, stopped at once; only
+  `ingest.log` written, nothing imported). Never run it without `--library <temp>`.
 - **One stack per machine**: check `tasklist` in the same command before starting one, and stop it when you are done.
 - **`himmel_ingest` has no `--selftest`.** Run with that flag it starts as a normal import worker on the *default*
   library (Documents\Himmel\Library). It did so once on 2026-11-17 at 10:15 and created an empty library there (no

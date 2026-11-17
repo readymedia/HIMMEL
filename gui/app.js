@@ -79,7 +79,14 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const clipName = ci => ci.name.replace(/\.mov$/i, '');
 const groupOf = (d, l) => GROUPS[d === progDeck() ? 'prog' : 'prev'][l];
 window.H = { send, sendT, hold, setVal, el, toast: (...a) => toast(...a), invalidate: () => invalidate(), clipInfo, fxInfo, fxMeta, rgb, setTab: t => setTab(t),
-  beatNow: () => (CLK.bpm > 0 ? CLK.beat + (performance.now() - CLK.at) / 60000 * CLK.bpm : 0) };
+  beatNow: () => (CLK.bpm > 0 ? CLK.beat + (performance.now() - CLK.at) / 60000 * CLK.bpm : 0),
+  // QUIT (ENGINE, SystemQuit 74): asked first; then the supervisor stops everything, this bridge too.
+  quit: async () => {
+    if (!confirm('Quit Himmel?\n\nThe outputs go dark and every Himmel program stops (the autosave keeps your work).' + (S.show?.dirty ? '\nThe project has unsaved changes.' : ''))) return;
+    S.quitting = true;
+    await send({ type: 'SystemQuit', value: 1 });
+    toast('Quitting Himmel…');
+  } };
 
 function toast(msg, kind) {
   const t = el('div', 'toast' + (kind === 'bad' ? ' bad' : ''), msg);
@@ -996,7 +1003,8 @@ function renderTop() {
   }
   // overlay
   let title = '', text = '', warn = false;
-  if (!S.sse) { title = 'BRIDGE NOT REACHABLE'; text = 'himmel_ui is not running. The show is not affected. Reconnecting…'; }
+  if (!S.sse && S.quitting) { title = 'HIMMEL HAS QUIT'; text = 'Start himmel.exe again to play. This page reconnects by itself.'; }
+  else if (!S.sse) { title = 'BRIDGE NOT REACHABLE'; text = 'himmel_ui is not running. The show is not affected. Reconnecting…'; }
   else if (!b) { title = 'CONNECTING…'; }
   else if (b.engine === 'absent') { title = 'ENGINE NOT RUNNING'; text = 'Waiting for himmel_render (or fake_engine). Start Himmel; this page reconnects by itself.'; }
   else if (b.engine === 'stale') { title = 'ENGINE NOT RESPONDING'; text = 'No heartbeat for over 1.5 s; showing the last state. The supervisor restarts the renderer.'; }

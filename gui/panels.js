@@ -130,7 +130,8 @@
       }),
       btn('Export .himmelshow', 'One file with the project (next to the project folder)', () => send({ type: 'Project', param: 'Export' })),
       btn('Revert', 'Back to the last save', sure('Throw away the changes since the last save?', { type: 'Project', param: 'Revert' })),
-      btn('Restore autosave', 'Load the newest autosave of this project', () => send({ type: 'Project', param: 'RestoreAutosave' })));
+      btn('Restore autosave', 'Load the newest autosave of this project', () => send({ type: 'Project', param: 'RestoreAutosave' })),
+      btn('Quit Himmel…', 'Stop Himmel: the outputs, the engine and this GUI (the autosave keeps your work)', () => window.H.quit(), 'bad'));
     if (!f.path) for (const b of acts.children) if (/Revert|Export/.test(b.textContent)) b.disabled = true;
     box.append(acts);
     if (f.missing_count) {

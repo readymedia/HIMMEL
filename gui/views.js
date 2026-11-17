@@ -358,6 +358,9 @@
         kv([['outputs', '--outputs N (1..6)'], ['size', '--size WxH (custom)'], ['fullscreen', '--fullscreen'], ['AV offset', '--av-offset MS (−200..200)'], ['flash cap (D65, off by default)', '--flash-cap N'], ['test reaction signal', '--test-signal'], ['ticker text', '--ticker "TEXT"']]));
       const ov = el('button', null, 'Open the OUTPUTS view'); ov.addEventListener('click', () => window.setView('outputs')); body.append(ov);
       const bt = el('button', null, 'Black (master)'); bt.addEventListener('click', () => window.H.send({ type: 'Black', value: 2 }));
+      const qt = el('button', 'bad', 'Quit Himmel…'); qt.title = 'Stop Himmel (asks first). The MK2: SHIFT + wheel → SYSTEM → QUIT, hold 2 s.';
+      qt.addEventListener('click', () => window.H.quit());
+      body.append(qt);
       body.append(bt);
     } else if (P === 'controllers') {
       body.append(el('h2', null, 'Controllers'), kv([

@@ -18,7 +18,7 @@ namespace {
 enum class DeckRule : uint8_t { None, Deck, DeckOrMaster, DeckOrHit };
 enum class LayerRule : uint8_t { None, Required, Optional };  // Optional: absent = deck level (FX)
 enum class Arg : uint8_t { None, Float, Toggle, Blend, Play, ClipId, EffectId, TakeMs,
-                           LayerSet, Trigger, Cue, BeatLoop, Scratch, ClockArg, React };
+                           LayerSet, Trigger, Cue, BeatLoop, Scratch, ClockArg, React, Quit };
 
 struct Spec {
     CommandType type;
@@ -59,6 +59,8 @@ constexpr Spec kSpecs[] = {
     {CommandType::Clock, "Clock", DeckRule::None, LayerRule::None, false, false, Arg::ClockArg, 0, 0, true},
     // ---- audio reactions (AUDIO, D131, command-protocol.md §4d); "param" = knob 0..3 is read by Arg::React ----
     {CommandType::FxReact, "FxReact", DeckRule::DeckOrMaster, LayerRule::Optional, true, false, Arg::React, 0, 0, true},
+    // ---- quit (ENGINE, command-protocol.md §4e): {"type": "SystemQuit", "value": 1} = confirmed; else refused ----
+    {CommandType::SystemQuit, "SystemQuit", DeckRule::None, LayerRule::None, false, false, Arg::Quit, 0, 0, false},
 };
 
 const Spec* find_spec(CommandType t) {
@@ -566,6 +568,14 @@ ParseResult command_from_json(const json& j, const CatalogLimits& limits) {
             } else if (relative) {
                 return fail("a relative LayerScratch needs \"pos\" (seconds)");
             }
+            break;
+        }
+        case Arg::Quit: {
+            // Only an explicit confirmation passes: the page asks "Quit Himmel?" first.
+            double d = 0;
+            if (!get_float(val, "value", d)) return r;
+            if (d != 1.0) return fail("SystemQuit needs \"value\": 1 (confirmed)");
+            c.f[0] = 1.0f;
             break;
         }
         case Arg::React: {
