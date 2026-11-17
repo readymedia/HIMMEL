@@ -115,4 +115,14 @@ std::string parent_dir_of(const std::string& path);
 // 24 h); 0 when nothing is left, -1 when the rate is unknown.
 int eta_seconds(int left, double per_item_s);
 
+// POST /library/upload?name=<file> (GUI wave 7, drag-drop from the desktop; import by path is preferred).
+// The file name: no folder parts, no control characters, not "." / "..", at most 200 bytes, and a media
+// extension (import_kind_of). Empty string = OK, else the reason.
+std::string upload_name_error(const std::string& name);
+// The size and disk check, from the library block v3 guard (library-db.md §11.1): refused when the size is
+// 0 or above `cap`, when the worker holds the queue (`disk_low`), or when `free - size` would eat into
+// `reserve`. `have_guard` = the v3 numbers are there (else refused: no guard, no upload). "" = OK.
+std::string upload_space_error(uint64_t size, uint64_t cap, bool have_guard, uint64_t free, uint64_t reserve, bool disk_low);
+inline constexpr uint64_t kUploadCapBytes = 8ull << 30;   // 8 GB per file
+
 }  // namespace himmel::ui

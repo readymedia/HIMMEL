@@ -9,6 +9,7 @@
 (() => {
   const $ = id => document.getElementById(id);
   const { el } = window.H;
+  const H = window.H;
   const S = window.S;
 
   // ================================================================ start wizard
@@ -93,7 +94,7 @@
       body.append(card('AUTOSAVE', c));
     }
     const row = el('div', 'wstart');
-    const sure = cmd => () => { if (!sh.dirty || confirm('Unsaved changes are lost (the autosave keeps them). Go on?')) send(cmd); };
+    const sure = cmd => async () => { if (!sh.dirty || await H.confirm('Unsaved changes are lost (the autosave keeps them). Go on?')) send(cmd); };
     const big = (title, sub, fn, cls) => { const x = el('button', 'wproj' + (cls ? ' ' + cls : '')); x.title = title + ': ' + sub; x.append(el('b', null, title), el('span', 'dim', sub)); x.addEventListener('click', fn); return x; };
     row.append(
       big('Keep playing', `${sh.project}${sh.dirty ? ' (unsaved changes)' : ''}`, () => go(1), 'sel'),
@@ -101,7 +102,7 @@
       big('New project · 1 screen', 'Empty, one output', sure({ type: 'Project', param: 'New', value: 1 })),
       big('Open…', 'A project folder or a .himmelshow file', async () => {
         const p = await ask('OPEN · project folder or .himmelshow file', '', 'e.g. C:\\Users\\me\\Documents\\Himmel\\Projects\\Club.himmel');
-        if (p && (!sh.dirty || confirm('Unsaved changes are lost (the autosave keeps them). Open?'))) send({ type: 'Project', param: 'Open', text: p });
+        if (p && (!sh.dirty || await H.confirm('Unsaved changes are lost (the autosave keeps them). Open?'))) send({ type: 'Project', param: 'Open', text: p });
       }));
     body.append(row, el('div', 'lbl', 'RECENT PROJECTS'));
     const rec = el('div', 'wstart');
@@ -125,7 +126,7 @@
       el('div', 'dim', 'Video, stills, GIFs, SVG and image sequences become fast HAP copies and are analysed (colours, motion, mood, loops) in the background. The first clips are playable while the rest still import: you do not have to wait.'),
       el('div', 'dim mono', root ? 'or copy files into ' + root + '\\originals (watched)' : ''));
     drop.addEventListener('dragover', e => e.preventDefault());
-    drop.addEventListener('drop', e => { e.preventDefault(); window.H.toast('A web page is not told where a dropped file lives: use IMPORT A FOLDER… and choose the folder the files are in.'); });
+    drop.addEventListener('drop', e => { e.preventDefault(); window.H.toast('Drop files on the LIBRARY page to copy them in, or use IMPORT A FOLDER… (imports in place, no copy).'); });
     body.append(drop);
     W.prog = el('div', 'wprog'); body.append(W.prog); stepProgress();
     const st = el('div');
@@ -162,7 +163,7 @@
       const bar = el('div', 'lbpbar'); const f = el('i'); f.style.width = (p.total ? p.done / p.total * 100 : 0) + '%'; bar.append(f);
       W.prog.append(el('div', null, p.busy ? `Importing ${Math.min(p.total, p.done + 1)} of ${p.total}${l?.job?.name ? ' · ' + l.job.name : ''}${p.eta >= 0 ? ' · about ' + (p.eta < 60 ? Math.round(p.eta) + ' s' : Math.round(p.eta / 60) + ' min') + ' left' : ''}` : `Imported ${p.done} of ${p.total}`), bar);
     }
-    if (d.free != null) W.prog.append(el('div', d.free < 10e9 ? 'bad' : 'dim', `Library drive: ${(d.free / 1e9).toFixed(1)} GB free · the library uses ${((d.lib || 0) / 1e9).toFixed(1)} GB`));
+    if (d.free != null) W.prog.append(el('div', d.guard === 'low' ? 'bad' : 'dim', `Library drive: ${(d.free / 1e9).toFixed(1)} GB free · the library uses ${((d.lib || 0) / 1e9).toFixed(1)} GB`));
   }
 
   // Step 5: clips onto layers. Drag a clip onto a PREVIEW layer, double-click = the next free layer.

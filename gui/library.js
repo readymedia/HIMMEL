@@ -14,13 +14,13 @@
   const $ = id => document.getElementById(id);
   const S = window.S;
   const { el, toast } = window.H;
+  const H = window.H;
   const F = () => window.Flows;
   const has = b => !!(b && b.present);
   const btn = (txt, title, fn, cls) => { const b = el('button', cls || null, txt); if (title) b.title = title; if (fn) b.addEventListener('click', fn); return b; };
   const ask = (...a) => window.Panels.W.ask(...a);
   const gb = n => (n >= 1e9 ? (n / 1e9).toFixed(n >= 1e10 ? 0 : 1) + ' GB' : n >= 1e6 ? Math.round(n / 1e6) + ' MB' : Math.round((n || 0) / 1e3) + ' kB');
   const dur = s => (s < 0 ? '–' : s < 60 ? Math.round(s) + ' s' : s < 3600 ? Math.round(s / 60) + ' min' : (s / 3600).toFixed(1) + ' h');
-  const LOW_DISK = 10e9;   // GUESS: warn below 10 GB free (MEDIA's guard decides what the worker does)
 
   const LB = {
     built: false, key: '', sel: new Set(), last: -1, shown: [], limit: 300,
@@ -89,8 +89,8 @@
     LB.modeBox.title = 'How hard the import works. AUTO = full speed with no show, in the background while a show runs. BACKGROUND = always gentle. FULL = full speed even during a show (not show-safe). HOLD = start nothing new and pause the running file.';
     LB.modeBox.append(el('span', 'lbl', 'import'));
     LB.modeBtns = ['Auto', 'Background', 'Full', 'Hold'].map(m => {
-      const b = btn(m.toUpperCase(), { Auto: 'AUTO: full speed with no show, gentle while a show runs (default)', Background: 'BACKGROUND: always gentle', Full: 'FULL: full speed even while a show runs (may cost frames)', Hold: 'HOLD: start nothing new; the running file pauses' }[m], () => {
-        if (m === 'Full' && !confirm('FULL speed even while a show runs: the import may cost frames on the outputs. Go on?')) return;
+      const b = btn(m.toUpperCase(), { Auto: 'AUTO: full speed with no show, gentle while a show runs (default)', Background: 'BACKGROUND: always gentle', Full: 'FULL: full speed even while a show runs (may cost frames)', Hold: 'HOLD: start nothing new; the running file pauses' }[m], async () => {
+        if (m === 'Full' && !await H.confirm('FULL speed even while a show runs: the import may cost frames on the outputs. Go on?')) return;
         ingest({ type: 'Mode', mode: m });
       }, 'chip2');
       b.dataset.m = m; LB.modeBox.append(b); return b;
@@ -114,7 +114,7 @@
     LB.progTxt = el('div', 'lbptxt');
     LB.clear = btn('CLEAR QUEUE', 'Drop every file that waits in the import queue (the running file finishes; nothing already imported is touched)', async () => {
       const l = S.library;
-      if (!confirm(`Clear the import queue?\n${l?.queued || 0} waiting files are dropped. Clips that are already in the library stay.`)) return;
+      if (!await H.confirm(`Clear the import queue?\n${l?.queued || 0} waiting files are dropped. Clips that are already in the library stay.`)) return;
       ingest({ type: 'ClearQueue' });
     }, 'bad');
     LB.hold = btn('PAUSE', 'Pause the import (HOLD); press again to resume (AUTO)', () => ingest({ type: 'Mode', mode: S.library?.mode === 'Hold' ? 'Auto' : 'Hold' }));
@@ -167,22 +167,48 @@
     page.addEventListener('drop', e => {
       if (!e.dataTransfer.types.includes('Files')) return;
       e.preventDefault(); page.classList.remove('filedrag');
-      const names = [...e.dataTransfer.files].map(f => f.name);
-      fileDropHelp(names);
+      uploadFiles([...e.dataTransfer.files]);
     });
-    const ov = el('div', 'lbdropov', 'Drop files here: Himmel will show you how to import them');
+    const ov = el('div', 'lbdropov', 'Drop videos and pictures here: they are copied into the library\'s drop folder and imported');
     page.append(ov);
     LB.built = true;
   }
 
-  function fileDropHelp(names) {
+  // Files dropped from the desktop (D173, LEAD 2026-11-17): each one is checked (GET /library/upload), then
+  // streamed to the bridge (POST /library/upload), which writes it into <library>\\originals; the watch folder
+  // imports it from there. Folders cannot be uploaded: IMPORT FOLDER… takes them by path (no copy).
+  async function uploadFiles(files) {
+    if (!files.length) return;
+    const bad = [], done = [];
+    LB.upl = { n: 0, of: files.length, name: '', pct: 0 };
+    for (const f of files) {
+      LB.upl.n++; LB.upl.name = f.name; LB.upl.pct = 0; window.H.invalidate();
+      if (!f.size && !f.type) { bad.push(`${f.name}: a folder (use IMPORT FOLDER…)`); continue; }
+      let chk;
+      try { chk = await (await fetch(`/library/upload?name=${encodeURIComponent(f.name)}&size=${f.size}`)).json(); } catch (x) { chk = { ok: false, error: 'himmel_ui is not reachable' }; }
+      if (!chk.ok) { bad.push(`${f.name}: ${chk.error}`); continue; }
+      const r = await new Promise(res => {
+        const x = new XMLHttpRequest();
+        x.open('POST', `/library/upload?name=${encodeURIComponent(f.name)}`);
+        x.upload.onprogress = ev => { if (ev.lengthComputable) { LB.upl.pct = ev.loaded / ev.total; window.H.invalidate(); } };
+        x.onload = () => { try { res(JSON.parse(x.responseText)); } catch (y) { res({ ok: false, error: 'bad answer' }); } };
+        x.onerror = () => res({ ok: false, error: 'the upload was cut off' });
+        x.send(f);
+      });
+      if (r.ok) done.push(r.name); else bad.push(`${f.name}: ${r.error}`);
+    }
+    LB.upl = null; window.H.invalidate();
+    if (done.length) toast(`${done.length} file${done.length === 1 ? '' : 's'} copied into the drop folder: they import by themselves now`);
+    if (bad.length) fileDropHelp(bad);
+  }
+  function fileDropHelp(lines) {
+    const names = lines;
     const md = el('div', 'modal'), box = el('div', 'mbox askbox');
     const close = () => md.remove();
-    box.append(el('div', 'lbl', 'IMPORT DROPPED FILES'),
-      el('div', null, `${names.length} file${names.length === 1 ? '' : 's'}: ${names.slice(0, 4).join(', ')}${names.length > 4 ? ' …' : ''}`),
-      el('div', 'dim', 'A web page is never told where a dropped file lives on your PC, so Himmel cannot pick it up from here. Two ways that work:'),
-      el('div', null, '1. IMPORT FOLDER… / IMPORT FILES… and choose the folder the files are in.'),
-      el('div', null, '2. OPEN DROP FOLDER, and drop the files into that Explorer window. Himmel imports them by itself.'));
+    box.append(el('div', 'lbl', 'SOME DROPPED FILES WERE NOT COPIED'));
+    for (const t of names.slice(0, 8)) box.append(el('div', 'bad', t));
+    if (names.length > 8) box.append(el('div', 'dim', `… and ${names.length - 8} more`));
+    box.append(el('div', 'dim', 'IMPORT FOLDER… / IMPORT FILES… import by path (nothing is copied, and the disk check estimates first). OPEN DROP FOLDER opens the watched folder in Explorer.'));
     const row = el('div', 'askrow');
     row.append(el('div', 'spacer'), btn('Close', null, close), btn('OPEN DROP FOLDER', 'Open the library\'s originals folder in Explorer', () => { close(); openOriginals(); }), btn('IMPORT FOLDER…', null, () => { close(); importDialog('folder'); }, 'primary'));
     box.append(row); md.append(box); document.body.append(md);
@@ -229,7 +255,7 @@
         const k = el('label', 'fswatch'); const kc = el('input'); kc.type = 'checkbox'; kc.checked = o.skip_known; kc.addEventListener('change', () => { o.skip_known = kc.checked; });
         k.append(kc, el('span', null, ' skip clips I removed')); k.title = 'Content already in the library is skipped, removed clips too';
         const cf = el('select'); cf.title = 'Conform 24 / 25 fps clips to the refresh (smooth, about 2.5× the disk). Off = as shot.';
-        for (const [v, t] of [[0, 'fps as shot'], [50, 'conform to 50'], [60, 'conform to 60']]) { const x = el('option', null, t); x.value = v; cf.append(x); }
+        for (const [v, t] of [[0, 'fps as shot'], [50, 'conform to 50 (≈2.5× disk)'], [60, 'conform to 60 (≈2.5× disk)']]) { const x = el('option', null, t); x.value = v; cf.append(x); }
         cf.value = o.conform_hz; cf.addEventListener('change', () => { o.conform_hz = +cf.value; });
         const est = btn('ESTIMATE DISK', 'How much space this import needs (nothing is imported)', async () => {
           if (!cur.path) return;
@@ -338,7 +364,7 @@
     const r = await pathDialog('folder', 'MOVE THE LIBRARY · choose an empty folder (or a new one on another disk)');
     if (!r) return;
     const d = diskInfo();
-    if (!confirm(`Move the library (${gb(d.lib || 0)}) to\n${r.path}?\n\nThe import pauses while it copies. The old copy is deleted after the next restart of Himmel. Clips keep playing.`)) return;
+    if (!await H.confirm(`Move the library (${gb(d.lib || 0)}) to\n${r.path}?\n\nThe import pauses while it copies. The old copy is deleted after the next restart of Himmel. Clips keep playing.`)) return;
     ingest({ type: 'Library', path: r.path, move: true });
   }
 
@@ -415,11 +441,11 @@
     loadDisk();
     const d = diskInfo(), de = LB.diskEl; de.textContent = '';
     if (d.free != null) {
-      const low = d.guard ? d.guard !== 'ok' : d.free < LOW_DISK;
+      const low = d.guard === 'low';   // the worker's guard decides (D180); the page has no threshold of its own
       const bar = el('span', 'lbdbar'); const used = el('i'); used.style.width = (d.total ? Math.min(100, (1 - d.free / d.total) * 100) : 0) + '%'; bar.append(used);
       de.append(el('span', 'lbl', 'disk'), bar, el('span', low ? 'bad' : 'dim', `${gb(d.free)} free${d.total ? ' of ' + gb(d.total) : ''}`),
         el('span', 'dim', `· library ${gb(d.lib || 0)}`));
-      if (low) de.append(el('span', 'chip ' + (d.guard === 'full' ? 'bad' : 'warn'), d.guard === 'full' ? 'DISK FULL · import stopped' : 'DISK LOW'));
+      if (low) de.append(el('span', 'chip bad', 'DISK LOW · the import waits'));
       de.title = `${d.root}\nThe library keeps a HAP copy of every clip (often several times the original's size). The originals are never copied or touched.` + (d.reserve != null ? `\nThe import stops when less than ${gb(d.reserve)} would be left.` : '');
       de.classList.toggle('low', low);
     } else de.append(el('span', 'dim', 'disk: –'));
@@ -428,6 +454,7 @@
     LB.acts.title = ingestOk() ? '' : 'The import worker is not running or does not answer.';
     // progress
     const p = progress(l);
+    if (LB.upl) LB.reply.textContent = `Copying ${LB.upl.n} of ${LB.upl.of}: ${LB.upl.name} · ${Math.round(LB.upl.pct * 100)}%`;
     LB.prog.classList.toggle('hidden', !p);
     if (p) {
       const job = l.job || {};
@@ -449,7 +476,7 @@
     const cmd = l?.cmd;
     if (cmd) {
       const top = cmd.replies[0];
-      LB.reply.textContent = top ? `${top.type}: ${top.message || top.status}` : '';
+      if (!LB.upl) LB.reply.textContent = top ? `${top.type}: ${top.message || top.status}` : '';
       LB.reply.className = 'lbreply ' + (top && !top.ok ? 'bad' : 'dim');
       for (const r of [...cmd.replies].reverse()) {
         if (r.seq <= LB.seenReply) continue;
@@ -458,7 +485,7 @@
         const op = LB.imports[r.seq];
         if (op && r.type === 'Import') afterImport(op, r);
         const rl = LB.relink[r.seq];
-        if (rl && r.status === 'Mismatch' && confirm(`${rl.path} has other content than the clip.\nImport the clip again from this file (same name, new analysis)?`)) ingest({ ...rl, force: true });
+        if (rl && r.status === 'Mismatch') H.confirm(`${rl.path} has other content than the clip.\nImport the clip again from this file (same name, new analysis)?`, 'IMPORT AGAIN').then(ok => ok && ingest({ ...rl, force: true }));
         F().loadRows(true);
       }
     }
@@ -495,7 +522,7 @@
   }
 
   function selectedRows() { const list = F().rows(); return list?.ok ? list.clips.filter(c => LB.sel.has(c.id)) : []; }
-  function selectedIds() { return selectedRows().map(c => F().catOf(c)).filter(i => i >= 0); }
+  function selectedIds() { return selectedRows().map(c => F().refOf(c)).filter(i => (typeof i === 'object' ? i.lib > 0 : i >= 0)); }
 
   function renderBulk() {
     const b = LB.bulk; const n = LB.sel.size;
@@ -513,10 +540,10 @@
       btn('LOAD TO…', 'Put the selected clips on layers (consecutive layers from the one you pick)', e => F().menu(e, ids), 'primary'),
       btn('REANALYSE', 'Run the analysis again on the selected clips (they stay playable)', () => { selectedRows().filter(c => c.state === 'ready').forEach(c => ingest({ type: 'Reanalyse', clip: c.id, thumbs: true })); }),
       btn('RETRY', 'Import the selected failed clips again', () => { selectedRows().filter(c => c.state === 'failed').forEach(c => ingest({ type: 'Retry', clip: c.id })); }),
-      btn('REMOVE…', 'Remove the selected clips from the library (the original files are never touched)', () => {
+      btn('REMOVE…', 'Remove the selected clips from the library (the original files are never touched)', async () => {
         const rows = selectedRows();
         const live = rows.filter(c => F().where(F().catOf(c)).length);
-        if (!confirm(`Remove ${rows.length} clip${rows.length === 1 ? '' : 's'} from the library?\nThe HAP copies, stills and thumbnails are deleted; the original files stay where they are.` + (live.length ? `\n${live.length} of them are on a layer now and keep playing until the layer lets go.` : ''))) return;
+        if (!await H.confirm(`Remove ${rows.length} clip${rows.length === 1 ? '' : 's'} from the library?\nThe HAP copies, stills and thumbnails are deleted; the original files stay where they are.` + (live.length ? `\n${live.length} of them are on a layer now and keep playing until the layer lets go.` : ''))) return;
         rows.forEach(c => ingest({ type: 'Remove', clip: c.id }));
         LB.sel.clear(); LB.key = '';
       }, 'bad'),
@@ -561,7 +588,7 @@
   }
 
   function card(c) {
-    const a = c.analysis, cat = F().catOf(c), w = F().where(cat);
+    const a = c.analysis, cat = F().catOf(c), w = F().where(cat), ref = F().refOf(c), can = typeof ref === 'object' || ref >= 0;
     const k = el('div', 'lbcard st-' + c.state + (LB.sel.has(c.id) ? ' sel' : '') + (w.length ? ' live' : ''));
     k.tabIndex = 0;
     const th = el('div', 'lbthumb');
@@ -602,8 +629,8 @@
     if (c.source_missing) k.append(el('div', 'bad lberr', 'ORIGINAL MISSING · the clip still plays. RELINK… or FIND MISSING…'));
     // actions
     const ca = el('div', 'lbcardacts');
-    const load = btn('LOAD ▾', cat >= 0 ? 'Load to… a layer (PREVIEW A–D, PROGRAM E–H, HIT)' : 'Not playable yet (still importing)', e => { e.stopPropagation(); F().menu(e, LB.sel.has(c.id) && LB.sel.size > 1 ? selectedIds() : [cat]); }, 'primary');
-    load.disabled = cat < 0;
+    const load = btn('LOAD ▾', can ? 'Load to… a layer (PREVIEW A–D, PROGRAM E–H, HIT)' : 'Not playable yet (still importing)', e => { e.stopPropagation(); F().menu(e, LB.sel.has(c.id) && LB.sel.size > 1 ? selectedIds() : [ref]); }, 'primary');
+    load.disabled = !can;
     ca.append(load);
     const more = btn('⋯', 'More: rescan, analyse again, relink, remove', e => { e.stopPropagation(); cardMenu(e, c, cat); });
     ca.append(more);
@@ -618,10 +645,10 @@
       else { const only = LB.sel.size === 1 && LB.sel.has(c.id); LB.sel.clear(); if (!only) LB.sel.add(c.id); }
       LB.last = i; LB.key = ''; window.H.invalidate();
     });
-    k.addEventListener('dblclick', e => { if (e.target.closest('button')) return; if (cat < 0) { toast('Not playable yet: still importing.', 'bad'); return; } F().load(cat, 'focus'); });
-    k.addEventListener('contextmenu', e => F().menu(e, LB.sel.has(c.id) && LB.sel.size > 1 ? selectedIds() : [cat]));
-    k.draggable = cat >= 0;
-    k.addEventListener('dragstart', e => F().setDrag(e, LB.sel.has(c.id) && LB.sel.size > 1 ? selectedIds() : [cat]));
+    k.addEventListener('dblclick', e => { if (e.target.closest('button')) return; if (!can) { toast('Not playable yet: still importing.', 'bad'); return; } F().load(ref, 'focus'); });
+    k.addEventListener('contextmenu', e => F().menu(e, LB.sel.has(c.id) && LB.sel.size > 1 ? selectedIds() : [ref]));
+    k.draggable = can;
+    k.addEventListener('dragstart', e => F().setDrag(e, LB.sel.has(c.id) && LB.sel.size > 1 ? selectedIds() : [ref]));
     return k;
   }
 
@@ -639,8 +666,8 @@
       const p = await ask(`RELINK · ${c.name}`, c.source || '', 'The file\'s new absolute path. Other content is refused unless you confirm it.');
       if (p) ingest({ type: 'Relink', clip: c.id, path: p });
     });
-    item('REMOVE FROM LIBRARY…', 'The original file is never touched', () => {
-      if (confirm(`Remove "${c.name}" from the library?\nThe HAP copy, still and thumbnails are deleted; the original file stays.${cat >= 0 ? '\nA layer playing it keeps it until it lets go.' : ''}`)) ingest({ type: 'Remove', clip: c.id });
+    item('REMOVE FROM LIBRARY…', 'The original file is never touched', async () => {
+      if (await H.confirm(`Remove "${c.name}" from the library?\nThe HAP copy, still and thumbnails are deleted; the original file stays.${cat >= 0 ? '\nA layer playing it keeps it until it lets go.' : ''}`)) ingest({ type: 'Remove', clip: c.id });
     }, 'bad');
     document.body.append(m);
     const r = m.getBoundingClientRect();

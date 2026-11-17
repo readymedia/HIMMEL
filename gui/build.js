@@ -15,6 +15,7 @@
 (() => {
   const $ = id => document.getElementById(id);
   const { el, send, toast } = window.H;
+  const H = window.H;
   const S = window.S;
 
   const B = { adds: [0, 0, 0, 0], doc: null, at: 0, key: '', fetching: false, again: 0, sel: -1, pad: 12, built: false, rkey: '' };
@@ -106,7 +107,7 @@
             btn('BPM', 'The song\'s tempo (0 = none)', () => songBpm(i, so.bpm || 0)),
             btn('↑', 'Move up in the setlist', () => i > 0 && send({ type: 'SongEdit', param: 'Move', value: i, slot: i - 1 })),
             btn('↓', 'Move down', () => i + 1 < songs.length && send({ type: 'SongEdit', param: 'Move', value: i, slot: i + 1 })),
-            btn('✕', 'Delete the song and its scenes', () => confirm(`Delete "${so.name}" and its scenes?`) && send({ type: 'SongEdit', param: 'Delete', value: i }), 'bad'));
+            btn('✕', 'Delete the song and its scenes', async () => await H.confirm(`Delete "${so.name}" and its scenes?`) && send({ type: 'SongEdit', param: 'Delete', value: i }), 'bad'));
           r.append(tools);
         }
         list.append(r);
@@ -180,7 +181,7 @@
     head.append(ed ? el('span', 'chip prevchip', 'PREVIEW · rehearsing') :
       btn('REHEARSE = load to PREVIEW', 'Recall this scene into the PREVIEW deck (a cut) so you can edit its kit and macros', () => rehearse(k), 'primary'));
     head.append(btn('RENAME', 'Rename the scene', async () => { const n = await ask(`RENAME SCENE ${k + 1}`, p.name); if (n) send({ type: 'SongEdit', param: 'RenameScene', slot: k, text: n }); }));
-    if (sh.use_setlist && sh.song >= 0) head.append(btn('✕', 'Remove this scene from the song', () => confirm(`Remove "${p.name}" from the song?`) && send({ type: 'SongEdit', param: 'RemoveScene', value: sh.song, slot: k }), 'bad'));
+    if (sh.use_setlist && sh.song >= 0) head.append(btn('✕', 'Remove this scene from the song', async () => await H.confirm(`Remove "${p.name}" from the song?`) && send({ type: 'SongEdit', param: 'RemoveScene', value: sh.song, slot: k }), 'bad'));
     M.append(head);
     if (!sc) { M.append(el('div', 'dim', B.doc?.ok === false ? 'The show document is not readable: ' + (B.doc.error || '') : 'Reading the show document…')); return; }
     // Layers.
@@ -336,7 +337,7 @@
           e.preventDefault();
           const tgt = p && (p.kind === 'clip' || p.kind === 'cue') ? (TAG_FILE[p.target] || 'Selected') : 'Selected';
           // Several clips fill this pad and the next ones (pad numbers up, max 16).
-          ids.slice(0, 16 - i).forEach((id, k) => send({ type: 'KitSet', deck: previewDeck(), slot: i + k, param: 'Clip', layer: tgt, value: id }));
+          ids.filter(x => typeof x === 'number').slice(0, 16 - i).forEach((id, k) => send({ type: 'KitSet', deck: previewDeck(), slot: i + k, param: 'Clip', layer: tgt, value: id }));
           B.pad = i; B.rkey = '';
           toast(ids.length > 1 ? `${Math.min(ids.length, 16 - i)} clips → pads ${i + 1}…` : `Pad ${i + 1} → ${window.Flows.nameOf(ids[0])}`);
         });
@@ -437,8 +438,8 @@
   }
   // "Fill kit" (perform.md §4.2, GUESS: the default layout): 13–16 backgrounds → L1, 9–12 overlays
   // (alpha first) → L3, 5–8 effect hits, 1–2 HIT clips, 3 BLACK, 4 NEXT SCENE.
-  function fillKit(sc) {
-    if ((sc?.kit || []).some(Boolean) && !confirm('Replace the kit of this scene with the default layout?')) return;
+  async function fillKit(sc) {
+    if ((sc?.kit || []).some(Boolean) && !await H.confirm('Replace the kit of this scene with the default layout?')) return;
     const d = previewDeck(), clips = S.cat?.clips || [], fx = (S.cat?.effects || []).filter(e => e.kind !== 'generator');
     if (!clips.length) return toast('The engine has no clips yet', 'bad');
     const alpha = clips.filter(c => c.codec === 1), plain = clips.filter(c => c.codec !== 1);

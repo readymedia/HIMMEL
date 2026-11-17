@@ -162,3 +162,13 @@ button.fsrow, .fsrow.nocb { grid-template-columns: 22px 1fr auto; }
 .fsopts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 4px 10px; font-size: 12px; }
 .fsopts:empty { display: none; }
 .lbjud { font-size: 10px; padding: 0 7px; }
+
+/* ---- Himmel's own confirm box (H.confirm) and the QUIT button ---- */
+.confirmm { z-index: 80; }
+.confirmm .mbox { gap: 10px; }
+.cfhead { font-size: 16px; font-weight: 900; }
+.cfbody { white-space: pre-line; color: var(--text-dim); }
+.askbox.danger { border-color: var(--live); }
+button.primary.bad { background: var(--live); border-color: var(--live); color: #fff; }
+.quitBtn { min-height: 32px; font-weight: 800; border-color: #5a1714; color: #ff8a80; }
+.quitBtn:hover { background: #5a1714; color: #fff; }

@@ -1154,6 +1154,28 @@ std::string parent_dir_of(const std::string& path) {
     return p.substr(0, k - 1);
 }
 
+std::string upload_name_error(const std::string& name) {
+    if (name.empty()) return "no file name";
+    if (name.size() > 200) return "the file name is too long";
+    if (name == "." || name == "..") return "not a file name";
+    for (const unsigned char ch : name)
+        if (ch < 32 || ch == '/' || ch == '\\' || ch == ':' || ch == '*' || ch == '?' || ch == '"' || ch == '<' || ch == '>' || ch == '|')
+            return "the file name has characters Windows does not allow";
+    if (name.back() == '.' || name.back() == ' ') return "the file name ends with a dot or a space";
+    if (import_kind_of(name).empty()) return "not a video, picture or GIF Himmel can import";
+    return {};
+}
+
+std::string upload_space_error(uint64_t size, uint64_t cap, bool have_guard, uint64_t free, uint64_t reserve, bool disk_low) {
+    if (size == 0) return "the file is empty";
+    if (size > cap) return "the file is bigger than " + std::to_string(cap >> 30) + " GB: import it by folder instead";
+    if (!have_guard) return "the import worker is not running (no disk guard), so nothing is copied";
+    if (disk_low) return "the library disk is low: the import is on hold";
+    if (free < size || free - size < reserve)
+        return "not enough disk space: " + std::to_string((size + (1ull << 20) - 1) >> 20) + " MB would eat into the space Himmel keeps free";
+    return {};
+}
+
 int eta_seconds(int left, double per_item_s) {
     if (left <= 0) return 0;
     if (!(per_item_s > 0) || per_item_s > 86400) return -1;

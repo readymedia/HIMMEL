@@ -702,6 +702,23 @@ json panels_open_originals() {
     return {{"ok", true}, {"path", utf8(d)}};
 }
 
+bool panels_upload_guard(uint64_t& free, uint64_t& reserve, bool& disk_low) {
+    if (!g || g->watch) return false;
+    std::shared_lock vl(g->views);
+    if (g->library.st != ShmStatus::Ok) return false;
+    const auto* b = g->library.view.as<const library::LibraryBlock>();
+    free = b->disk_free.load();
+    reserve = b->disk_reserve.load();
+    disk_low = b->disk_low.load() != 0;
+    return b->disk_total.load() != 0;   // a v3 worker that measured the disk
+}
+
+std::filesystem::path panels_upload_dir() {
+    if (!g || g->watch) return {};
+    const fs::path r = lib_root();
+    return r.empty() ? fs::path() : r / "originals";
+}
+
 json panels_library_disk() {
     json out = {{"ok", false}};
     if (!g || lib_root().empty()) return out;

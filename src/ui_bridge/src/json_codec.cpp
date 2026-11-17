@@ -18,7 +18,7 @@ namespace {
 enum class DeckRule : uint8_t { None, Deck, DeckOrMaster, DeckOrHit };
 enum class LayerRule : uint8_t { None, Required, Optional };  // Optional: absent = deck level (FX)
 enum class Arg : uint8_t { None, Float, Toggle, Blend, Play, ClipId, EffectId, TakeMs,
-                           LayerSet, Trigger, Cue, BeatLoop, Scratch, ClockArg, React, Quit };
+                           LayerSet, Trigger, Cue, BeatLoop, Scratch, ClockArg, React, Quit, LibId };
 
 struct Spec {
     CommandType type;
@@ -34,6 +34,8 @@ struct Spec {
 
 constexpr Spec kSpecs[] = {
     {CommandType::LayerClip, "LayerClip", DeckRule::DeckOrHit, LayerRule::Required, false, false, Arg::ClipId, 0, 0, false},
+    // ENGINE wave 7 (command-protocol.md §4f): load by library id; the engine refuses NotReady / Missing.
+    {CommandType::LayerClipLib, "LayerClipLib", DeckRule::DeckOrHit, LayerRule::Required, false, false, Arg::LibId, 0, 0, false},
     {CommandType::LayerOpacity, "LayerOpacity", DeckRule::DeckOrHit, LayerRule::Required, false, false, Arg::Float, 0, 1, true},
     {CommandType::LayerBlend, "LayerBlend", DeckRule::DeckOrHit, LayerRule::Required, false, false, Arg::Blend, 0, 0, false},
     {CommandType::LayerMute, "LayerMute", DeckRule::DeckOrHit, LayerRule::Required, false, false, Arg::Toggle, 0, 0, false},
@@ -437,9 +439,16 @@ ParseResult command_from_json(const json& j, const CatalogLimits& limits) {
             int64_t v = 0;
             if (!need_val() || !get_int(*val, v)) return fail(std::string(spec.name) + " needs an id \"value\" (-1 = empty)");
             const int count = clip ? limits.clips : limits.effects;
-            const int hard = clip ? kMaxClips : kMaxEffects;
+            const int hard = clip ? kMaxCatalogClips : kMaxEffects;   // catalog v3 (state v4): up to 8192 clip ids
             if (v < -1 || v >= hard || (count >= 0 && v >= count))
                 return fail(std::string(clip ? "clip" : "effect") + " id " + std::to_string(v) + " is not in the catalog");
+            c.i = static_cast<int32_t>(v);
+            break;
+        }
+        case Arg::LibId: {
+            int64_t v = 0;
+            if (!need_val() || !get_int(*val, v) || v <= 0 || v > 2147483647LL)
+                return fail("LayerClipLib needs a library id \"value\" (> 0)");
             c.i = static_cast<int32_t>(v);
             break;
         }
@@ -780,12 +789,10 @@ json live_to_json(const LiveState& s) {
     return j;
 }
 
-json catalog_to_json(const Catalog& c) {
+json catalog_to_json(const Catalog& c, const ClipPagesCopy* pages) {
     json j;
     json clips = json::array();
-    const uint32_t nc = std::min<uint32_t>(c.clip_count, kMaxClips);
-    for (uint32_t k = 0; k < nc; ++k) {
-        const ClipInfo& ci = c.clip[k];
+    auto add = [&](uint32_t k, const ClipInfo& ci) {
         clips.push_back({{"id", k},
                          {"name", fixed_str(ci.name, kNameLen)},
                          {"width", ci.width},
@@ -794,6 +801,20 @@ json catalog_to_json(const Catalog& c) {
                          {"seconds", round4(ci.seconds)},
                          {"codec", ci.codec},
                          {"thumb_rgb", ci.thumb_rgb}});
+    };
+    if (pages && pages->valid) {
+        // Catalog v3 (state v4): every clip id, with its library id ("lib", 0 = not from the library) and state.
+        static const char* const kClipStateNames[] = {"Empty", "Ready", "Missing", "Removed", "Busy"};
+        for (uint32_t k = 0; k < pages->count; ++k) {
+            const ClipEntry& e = pages->entry(k);
+            add(k, e.info);
+            clips.back()["lib"] = e.library_id;
+            clips.back()["state"] = e.state < std::size(kClipStateNames) ? kClipStateNames[e.state] : "?";
+        }
+        j["clips_full"] = pages->full;
+    } else {
+        const uint32_t nc = std::min<uint32_t>(c.clip_count, kMaxClips);
+        for (uint32_t k = 0; k < nc; ++k) add(k, c.clip[k]);
     }
     json fx = json::array();
     const uint32_t ne = std::min<uint32_t>(c.effect_count, kMaxEffects);

@@ -38,7 +38,8 @@ static void test_layer_commands() {
     CHECK(r.ok && r.cmd.i == -1);
     CHECK(!P(R"({"type":"LayerClip","deck":0,"layer":0,"value":14})").ok);   // not in the catalog
     CHECK(P(R"({"type":"LayerClip","deck":0,"layer":0,"value":200})", CatalogLimits{}).ok);  // unknown catalog: engine checks
-    CHECK(!P(R"({"type":"LayerClip","deck":0,"layer":0,"value":256})", CatalogLimits{}).ok);  // over kMaxClips
+    CHECK(P(R"({"type":"LayerClip","deck":0,"layer":0,"value":256})", CatalogLimits{}).ok);   // catalog v3: ids above 255
+    CHECK(!P(R"({"type":"LayerClip","deck":0,"layer":0,"value":8192})", CatalogLimits{}).ok);  // over kMaxCatalogClips
     CHECK(!P(R"({"type":"LayerClip","deck":0,"layer":0,"value":-2})").ok);
     CHECK(!P(R"({"type":"LayerClip","deck":0,"layer":0})").ok);
     CHECK(!P(R"({"type":"LayerClip","deck":0,"layer":0,"value":1.5})").ok);
@@ -890,6 +891,32 @@ static void test_wave7() {
     CHECK(lj["root_info"]["path"] == R"(E:\Lib)" && lj["root_info"]["move_state"] == "Copying");
     library_v3_to_json(lj, v, *prog, *plan, *rt, 3);
     CHECK(lj["plan"]["mine"] == false);
+    // POST /library/upload refusals (LEAD conditions): names, size cap, the disk guard.
+    CHECK(upload_name_error("clip.mp4").empty() && upload_name_error("Beach Day (2).MOV").empty() && upload_name_error("logo.svg").empty());
+    CHECK(!upload_name_error("").empty() && !upload_name_error("..").empty() && !upload_name_error("notes.txt").empty());
+    CHECK(!upload_name_error(R"(..\evil.mp4)").empty() && !upload_name_error("a/b.mp4").empty() && !upload_name_error("C:x.mp4").empty());
+    CHECK(!upload_name_error("x.mp4 ").empty() && !upload_name_error("x.exe").empty() && !upload_name_error(std::string("a\x01.mp4")).empty());
+    CHECK(!upload_name_error(std::string(250, 'a') + ".mp4").empty());
+    const uint64_t GB = 1ull << 30;
+    CHECK(upload_space_error(GB, kUploadCapBytes, true, 50 * GB, 10 * GB, false).empty());
+    CHECK(!upload_space_error(0, kUploadCapBytes, true, 50 * GB, 10 * GB, false).empty());              // empty
+    CHECK(!upload_space_error(9 * GB, kUploadCapBytes, true, 500 * GB, 10 * GB, false).empty());        // above the cap
+    CHECK(!upload_space_error(GB, kUploadCapBytes, false, 50 * GB, 10 * GB, false).empty());            // no guard
+    CHECK(!upload_space_error(GB, kUploadCapBytes, true, 50 * GB, 10 * GB, true).empty());              // disk_low
+    CHECK(!upload_space_error(2 * GB, kUploadCapBytes, true, 11 * GB, 10 * GB, false).empty());         // into the reserve
+    CHECK(!upload_space_error(2 * GB, kUploadCapBytes, true, GB, 0, false).empty());                    // bigger than free
+    CHECK(upload_space_error(GB, kUploadCapBytes, true, 11 * GB, 10 * GB, false).empty());              // exactly fits
+    // LayerClipLib (75, ENGINE wave 7) and clip ids above 255 (catalog v3).
+    {
+        himmel::ui::CatalogLimits lim{1000, 10};
+        auto r1 = command_from_json(json{{"type", "LayerClipLib"}, {"deck", 0}, {"layer", 1}, {"value", 42}}, lim);
+        CHECK(r1.ok && r1.cmd.type == himmel::protocol::CommandType::LayerClipLib && r1.cmd.i == 42 && r1.cmd.layer == 1);
+        CHECK(!command_from_json(json{{"type", "LayerClipLib"}, {"deck", 0}, {"layer", 1}, {"value", 0}}, lim).ok);
+        CHECK(!command_from_json(json{{"type", "LayerClipLib"}, {"deck", 0}, {"layer", 1}}, lim).ok);
+        CHECK(command_from_json(json{{"type", "LayerClip"}, {"deck", 0}, {"layer", 0}, {"value", 700}}, lim).ok);
+        CHECK(!command_from_json(json{{"type", "LayerClip"}, {"deck", 0}, {"layer", 0}, {"value", 1000}}, lim).ok);
+        CHECK(command_to_json(r1.cmd)["type"] == "LayerClipLib");
+    }
     json nm = panels_names();
     CHECK(nm["ingest"].size() == 10 && nm["ingest"][8] == "ClearQueue" && nm["ingest"][9] == "Library");
 }

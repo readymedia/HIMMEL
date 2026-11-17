@@ -312,6 +312,7 @@ void poller() {
     std::string last_state_word, last_cmd_word, last_prev_word;
     auto live = std::make_unique<LiveState>();
     auto cat = std::make_unique<Catalog>();
+    auto pages = std::make_unique<himmel::protocol::ClipPagesCopy>();   // catalog v3 (state v4, ENGINE wave 7)
     auto trans = std::make_unique<TransportSection>();
     auto react = std::make_unique<ReactionSection>();
     uint32_t last_react_gen = ~0u;
@@ -411,12 +412,15 @@ void poller() {
                         g_hub.set(g_hub.extra[7], g_hub.extra_ver[7], dump(himmel::ui::react_to_json(*react, true)));
                     }
                     const uint32_t cs = sb->catalog_seq.load(std::memory_order_acquire);
-                    if (cs != last_catalog_seq || live->epoch != last_epoch) {
+                    if (live->epoch != last_epoch) pages = std::make_unique<himmel::protocol::ClipPagesCopy>();   // a new renderer: read every page
+                    const int pr = himmel::protocol::read_clip_pages(sb->clips, sb->clip_page, *pages);
+                    if (cs != last_catalog_seq || live->epoch != last_epoch || pr > 0) {
                         if (seq_read(sb->catalog_seq, sb->catalog, *cat)) {
                             last_catalog_seq = cs;
-                            g_eng.clips.store(static_cast<int>(std::min<uint32_t>(cat->clip_count, kMaxClips)));
+                            const uint32_t nclips = pages->valid ? pages->count : std::min<uint32_t>(cat->clip_count, kMaxClips);
+                            g_eng.clips.store(static_cast<int>(nclips));
                             g_eng.effects.store(static_cast<int>(std::min<uint32_t>(cat->effect_count, kMaxEffects)));
-                            g_hub.set(g_hub.catalog, g_hub.catalog_ver, dump(himmel::ui::catalog_to_json(*cat)));
+                            g_hub.set(g_hub.catalog, g_hub.catalog_ver, dump(himmel::ui::catalog_to_json(*cat, pages->valid ? pages.get() : nullptr)));
                             if (live->epoch != last_epoch) logf("engine epoch %u", live->epoch);
                             last_epoch = live->epoch;
                         }
@@ -689,6 +693,87 @@ bool serve_static(SOCKET s, const std::string& path, bool keep) {
     return respond(s, 200, "OK", himmel::ui::content_type_for(rel), ss.str(), keep);
 }
 
+// POST /library/upload?name=<file> (GUI wave 7, drag-drop from the desktop; LEAD conditions 2026-11-17):
+// local pages only (checked by the caller), a media extension, at most kUploadCapBytes, refused when the
+// library block v3 disk guard says no; streamed to a ".part" temp name in <library>\originals (the ingest
+// scan ignores it) and renamed when complete, so the watch folder only ever sees whole files.
+// GET /library/upload?name=&size= = the same checks without a body (the page asks first).
+json upload_check(const std::string& name, uint64_t size) {
+    if (g_watch) return {{"ok", false}, {"error", "read-only bridge (--watch)"}};
+    std::string err = himmel::ui::upload_name_error(name);
+    if (err.empty()) {
+        uint64_t free = 0, reserve = 0;
+        bool low = false;
+        const bool guard = himmel::ui::panels_upload_guard(free, reserve, low);
+        err = himmel::ui::upload_space_error(size, himmel::ui::kUploadCapBytes, guard, free, reserve, low);
+    }
+    if (err.empty() && himmel::ui::panels_upload_dir().empty()) err = "no library in this run";
+    return err.empty() ? json{{"ok", true}} : json{{"ok", false}, {"error", err}};
+}
+
+void handle_upload(SOCKET s, const himmel::ui::HttpRequest& req, std::string already) {
+    const std::string name = himmel::ui::url_decode(himmel::ui::query_param(req.query, "name"));
+    const uint64_t size = req.content_length;
+    json chk = upload_check(name, size);
+    if (!chk["ok"].get<bool>()) {   // the body is not read: answer and close
+        respond(s, 200, "OK", "application/json", dump(chk), false);
+        return;
+    }
+    const fs::path dir = himmel::ui::panels_upload_dir();
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+    static std::atomic<uint32_t> n{0};
+    const fs::path part = dir / (".himmel-upload-" + std::to_string(GetCurrentProcessId()) + "-" + std::to_string(++n) + ".part");
+    std::string fail;
+    {
+        std::ofstream o(part, std::ios::binary);
+        if (!o) fail = "cannot write into " + dir.string();
+        uint64_t got = 0, since_check = 0;
+        auto put = [&](const char* p, size_t k) {
+            if (!fail.empty()) return;
+            o.write(p, static_cast<std::streamsize>(k));
+            if (!o) fail = "the disk refused the write";
+            got += k;
+            since_check += k;
+            if (since_check >= (64u << 20)) {   // re-check the guard every 64 MB: something else may fill the disk
+                since_check = 0;
+                uint64_t fr = 0, rs = 0;
+                bool low = false;
+                if (!himmel::ui::panels_upload_guard(fr, rs, low) || low || fr < rs) fail = "the library disk is low: the upload stopped";
+            }
+        };
+        const size_t first = static_cast<size_t>(std::min<uint64_t>(already.size(), size));
+        put(already.data(), first);
+        char buf[65536];
+        while (fail.empty() && got < size && !g_quit.load()) {
+            const int want = static_cast<int>(std::min<uint64_t>(sizeof buf, size - got));
+            const int k = recv(s, buf, want, 0);
+            if (k <= 0) { fail = "the upload was cut off"; break; }
+            put(buf, static_cast<size_t>(k));
+        }
+        if (fail.empty() && got != size) fail = "the upload was cut off";
+    }
+    if (!fail.empty()) {
+        fs::remove(part, ec);
+        respond(s, 200, "OK", "application/json", dump(json{{"ok", false}, {"error", fail}}), false);
+        return;
+    }
+    // A free final name: "clip.mp4", "clip (2).mp4", ...
+    const fs::path want = fs::path(std::u8string(name.begin(), name.end()));
+    fs::path dst = dir / want;
+    for (int k = 2; fs::exists(dst, ec) && k < 1000; ++k)
+        dst = dir / (want.stem().wstring() + L" (" + std::to_wstring(k) + L")" + want.extension().wstring());
+    fs::rename(part, dst, ec);
+    if (ec) {
+        fs::remove(part, ec);
+        respond(s, 200, "OK", "application/json", dump(json{{"ok", false}, {"error", "cannot rename the upload"}}), false);
+        return;
+    }
+    const auto u = dst.filename().u8string();
+    logf("upload: %s (%llu bytes)", std::string(u.begin(), u.end()).c_str(), static_cast<unsigned long long>(size));
+    respond(s, 200, "OK", "application/json", dump(json{{"ok", true}, {"name", std::string(u.begin(), u.end())}, {"bytes", size}}), false);
+}
+
 void connection(SOCKET s) {
     struct Guard {
         SOCKET s;
@@ -716,6 +801,15 @@ void connection(SOCKET s) {
         himmel::ui::HttpRequest req;
         if (!himmel::ui::parse_http_head(std::string_view(in).substr(0, end + 2), req)) {
             respond(s, 400, "Bad Request", "text/plain", "bad request", false);
+            return;
+        }
+        // The upload streams its body (bigger than the 256 KB limit below); same local-only checks first.
+        if (req.method == "POST" && req.path == "/library/upload") {
+            if (!himmel::ui::host_is_local(req.host) || !himmel::ui::origin_is_local(req.origin)) {
+                respond(s, 403, "Forbidden", "text/plain", "himmel_ui only answers pages on this PC", false);
+                return;
+            }
+            handle_upload(s, req, in.substr(end + 4));
             return;
         }
         if (req.content_length > 256 * 1024) {
@@ -798,6 +892,10 @@ void connection(SOCKET s) {
                              : respond(s, 200, "OK", "image/jpeg", img, keep);
         } else if (req.method == "POST" && req.path == "/library/open-originals") {
             ok = respond(s, 200, "OK", "application/json", dump(himmel::ui::panels_open_originals()), keep);
+        } else if (req.method == "GET" && req.path == "/library/upload") {
+            const uint64_t sz = std::strtoull(himmel::ui::query_param(req.query, "size").c_str(), nullptr, 10);
+            ok = respond(s, 200, "OK", "application/json",
+                         dump(upload_check(himmel::ui::url_decode(himmel::ui::query_param(req.query, "name")), sz)), keep);
         } else if (req.method == "GET" && req.path == "/library/disk") {
             ok = respond(s, 200, "OK", "application/json", dump(himmel::ui::panels_library_disk()), keep);
         } else if (req.method == "GET" && req.path == "/fs/list") {

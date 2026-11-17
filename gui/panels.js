@@ -13,6 +13,7 @@
 (() => {
   const $ = id => document.getElementById(id);
   const { el, send, sendT, toast } = window.H;
+  const H = window.H;
   const S = window.S;
   const has = b => !!(b && b.present);
   const hex = n => '#' + (n >>> 0 & 0xffffff).toString(16).padStart(6, '0');
@@ -115,7 +116,7 @@
         (f.restored !== 'None' ? ` · came back from ${f.restored === 'Autosave' ? 'the autosave' : 'an interrupted save'}` : '')));
     box.append(info);
     const acts = el('div', 'projacts');
-    const sure = (q, cmd) => () => { if (!sh.dirty || confirm(q)) { send(cmd); } };
+    const sure = (q, cmd) => async () => { if (!sh.dirty || await H.confirm(q)) { send(cmd); } };
     acts.append(
       btn('New · 3 screens', 'A new project with the 3-screen template', sure('Unsaved changes are lost (the autosave keeps them). New project?', { type: 'Project', param: 'New', value: 3 })),
       btn('New · 1 screen', 'A new project with the 1-screen template', sure('Unsaved changes are lost (the autosave keeps them). New project?', { type: 'Project', param: 'New', value: 1 })),
@@ -219,10 +220,10 @@
     // Click = recall into the focused deck. Alt = cut (no morph).
     send({ type: 'SceneRecall', deck: focusDeck(), value: k, f: e.altKey ? 0 : -1 });
   }
-  function sceneSave(variation) {
+  async function sceneSave(variation) {
     const d = focusDeck(), sh = S.show;
     const target = SC.sel >= 0 && !variation ? SC.sel : -1;
-    if (target >= 0 && sh.pads[target].used && !confirm(`Pad ${target + 1} holds "${sh.pads[target].name}". Overwrite its look?`)) return;
+    if (target >= 0 && sh.pads[target].used && !await H.confirm(`Pad ${target + 1} holds "${sh.pads[target].name}". Overwrite its look?`)) return;
     send({ type: 'SceneSave', deck: d, value: target, variation });
   }
   async function renameScene(k) {
@@ -271,8 +272,8 @@
     for (const r of ['Hz60', 'Hz50', 'Hz59_94', 'Hz30', 'Hz25']) { const o = el('option', null, REFRESH_WORDS[r]); o.value = r; s.append(o); }
     s.value = cur; s.addEventListener('change', () => fn(s.value)); return s;
   };
-  function setResolution(v, slot) {
-    if (!confirm(`Change the resolution to ${PRESET_WORDS[v]}? The canvas is rebuilt (one hitch on the outputs). Do it before the show.`)) { O.key = ''; return; }
+  async function setResolution(v, slot) {
+    if (!await H.confirm(`Change the resolution to ${PRESET_WORDS[v]}? The canvas is rebuilt (one hitch on the outputs). Do it before the show.`)) { O.key = ''; return; }
     send(slot == null ? { type: 'OutputConfig', param: 'Resolution', value: v } : { type: 'OutputConfig', param: 'Resolution', slot, value: v });
   }
   function identifyBtn(small) {

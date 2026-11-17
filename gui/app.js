@@ -11,6 +11,12 @@ const $ = id => document.getElementById(id);
 const BLEND = ['Normal', 'Add', 'Screen', 'Multiply', 'Difference', 'Lighten'];
 const GROUPS = { prev: ['A', 'B', 'C', 'D'], prog: ['E', 'F', 'G', 'H'] };
 const CODEC = ['HAP', 'HAP α', 'HAP Q', '?'];
+// The engine's refusals in plain words (command-protocol.md §5; NotReady / Missing: ENGINE wave 7).
+const REJECT_WORDS = {
+  NotReady: 'That clip is not ready yet: it is still importing. Try again when its card says PLAYABLE.',
+  Missing: 'That clip cannot play: its file is missing, still being written, or it was removed (LIBRARY → RELINK… / FIND MISSING…).',
+  RateLimited: 'Too many commands at once: the engine skipped one.',
+};
 const S = {
   cat: null, live: null, bridge: null, tr: null, mk2: null,
   // M11 part 2 (optional blocks; {present:false} = hide the panel): panels.js
@@ -78,15 +84,37 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const clipName = ci => ci.name.replace(/\.mov$/i, '');
 const groupOf = (d, l) => GROUPS[d === progDeck() ? 'prog' : 'prev'][l];
-window.H = { send, sendT, hold, setVal, el, toast: (...a) => toast(...a), invalidate: () => invalidate(), clipInfo, fxInfo, fxMeta, rgb, setTab: t => setTab(t),
+window.H = { send, sendT, hold, setVal, el, toast: (...a) => toast(...a), confirm: (t, o) => confirmBox(t, o), invalidate: () => invalidate(), clipInfo, fxInfo, fxMeta, rgb, setTab: t => setTab(t),
   beatNow: () => (CLK.bpm > 0 ? CLK.beat + (performance.now() - CLK.at) / 60000 * CLK.bpm : 0),
   // QUIT (ENGINE, SystemQuit 74): asked first; then the supervisor stops everything, this bridge too.
   quit: async () => {
-    if (!confirm('Quit Himmel?\n\nThe outputs go dark and every Himmel program stops (the autosave keeps your work).' + (S.show?.dirty ? '\nThe project has unsaved changes.' : ''))) return;
+    if (!(await confirmBox('Quit Himmel?\nThe outputs go dark and every Himmel program stops. The autosave keeps your work.' + (S.show?.dirty ? '\nThe project has unsaved changes: SAVE first if you want this version as the project.' : ''), { ok: 'QUIT HIMMEL', danger: true }))) return;
     S.quitting = true;
     await send({ type: 'SystemQuit', value: 1 });
     toast('Quitting Himmel…');
   } };
+
+// Himmel's own yes / no box (never window.confirm: the in-app browser auto-cancels it, and the owner could
+// not quit his show with it). Resolves true / false. Enter = OK, Esc = cancel. `danger` paints OK red.
+function confirmBox(text, opts) {
+  const o = typeof opts === 'string' ? { ok: opts } : (opts || {});
+  return new Promise(res => {
+    const m = el('div', 'modal confirmm'), box = el('div', 'mbox askbox' + (o.danger ? ' danger' : ''));
+    const lines = String(text).split('\n');
+    box.append(el('div', 'cfhead', lines[0]));
+    if (lines.length > 1) box.append(el('div', 'cfbody', lines.slice(1).join('\n').trim()));
+    const ok = el('button', o.danger ? 'primary bad' : 'primary', o.ok || 'OK'); ok.title = 'Yes (Enter)';
+    const no = el('button', null, o.cancel || 'Cancel'); no.title = 'No (Esc)';
+    const done = v => { m.remove(); document.removeEventListener('keydown', key, true); res(v); };
+    const key = e => { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); done(false); } else if (e.key === 'Enter') { e.stopPropagation(); e.preventDefault(); done(true); } };
+    ok.addEventListener('click', () => done(true)); no.addEventListener('click', () => done(false));
+    m.addEventListener('click', e => { if (e.target === m) done(false); });
+    const row = el('div', 'askrow'); row.append(el('div', 'spacer'), no, ok); box.append(row);
+    m.append(box); document.body.append(m);
+    document.addEventListener('keydown', key, true);
+    setTimeout(() => ok.focus(), 0);
+  });
+}
 
 function toast(msg, kind) {
   const t = el('div', 'toast' + (kind === 'bad' ? ' bad' : ''), msg);
@@ -523,8 +551,8 @@ function buildBrowser() {
     card.append(head, tags, help, prm);
     if (react) card.append(react);
     card.title = allowed ? 'Put “' + e.name + '” in slot ' + (FB.slot + 1) : 'This effect is not meant for the ' + FB.level + ' level (effect.json "levels")';
-    card.addEventListener('click', () => {
-      if (!allowed && !confirm(e.name + ' is not meant for the ' + FB.level + ' level. Use it anyway?')) return;
+    card.addEventListener('click', async () => {
+      if (!allowed && !await H.confirm(e.name + ' is not meant for the ' + FB.level + ' level. Use it anyway?')) return;
       send({ type: 'FxSet', ...fxTarget(), slot: FB.slot, value: e.id });
       closeBrowser();
     });
@@ -1091,7 +1119,7 @@ function renderTop() {
     const me = L.producer[1];
     $('seqChip').textContent = `sent ${S.sent} · on air #${me.acked}` + (b && b.dropped ? ` · dropped ${b.dropped}` : '');
     $('seqChip').classList.toggle('warn', !!(b && b.dropped));
-    if (S.seenRejected !== null && me.rejected > S.seenRejected) toast(`The engine refused a command: ${me.last_reject}`, 'bad');
+    if (S.seenRejected !== null && me.rejected > S.seenRejected) toast(REJECT_WORDS[me.last_reject] || `The engine refused a command: ${me.last_reject}`, 'bad');
     S.seenRejected = me.rejected;
     $('rejChip').classList.toggle('hidden', me.rejected === 0);
     $('rejChip').textContent = `refused ${me.rejected} · ${me.last_reject}`;
@@ -1214,6 +1242,7 @@ function wire() {
   $('takeBtn').addEventListener('click', take);
   $('cutBtn').addEventListener('click', cut);
   $('blackBtn').addEventListener('click', () => send({ type: 'Black', value: 2 }));
+  $('quitBtn').addEventListener('click', () => window.H.quit());
   const xf = $('xf'); hold(xf);
   xf.addEventListener('input', () => sendT('xf', { type: 'Crossfader', value: +xf.value }));
   for (const b of document.querySelectorAll('.tabs > button')) b.addEventListener('click', () => setTab(b.dataset.tab));

@@ -143,12 +143,20 @@
     if (t && t.deck !== undefined && t.layer === undefined && t.deck !== 'hit') return { deck: t.deck, layer: freeLayer(t.deck) };
     return t;
   }
-  // ids: one catalog id, or several (several go onto consecutive layers from the target, max 4).
+  // A clip reference: a catalog id (number), or {lib: library id} for a library clip the catalog may not have
+  // yet. {lib} loads with LayerClipLib (75, ENGINE wave 7); the engine refuses NotReady / Missing.
+  const okRef = x => (x && typeof x === 'object' ? x.lib > 0 : x >= 0);
+  const clipCmd = (x, deck, layer) => (typeof x === 'object' ? { type: 'LayerClipLib', deck, layer, value: x.lib } : { type: 'LayerClip', deck, layer, value: x });
+  const hasPages = () => !!S.cat?.clips?.length && S.cat.clips[0].lib !== undefined;
+  // The best reference for a library row: its catalog id when mapped, else {lib} when the engine loads by library id.
+  const refOf = row => { const c = catOf(row); return c >= 0 ? c : row && row.state === 'ready' && hasPages() ? { lib: row.id } : -1; };
+  // ids: one reference, or several (several go onto consecutive layers from the target, max 4).
   function load(ids, target) {
-    ids = [].concat(ids).filter(i => i >= 0);
+    ids = [].concat(ids).filter(okRef);
     if (!ids.length) { toast('That clip is not playable yet (it is still importing).', 'bad'); return; }
     if (!S.live) { toast('The engine is not running: nothing to load into.', 'bad'); return; }
     if (target === 'hit' || target?.deck === 'hit') {
+      if (typeof ids[0] === 'object') { send(clipCmd(ids[0], 'hit', 0)); toast('HIT: ' + nameOf(ids[0])); return; }
       send({ type: 'LayerTrigger', deck: 'hit', value: ids[0], velocity: 1 });
       toast('HIT: ' + nameOf(ids[0]));
       return;
@@ -156,14 +164,17 @@
     const t = resolve(target);
     if (!t) return;
     const cmds = [];
-    ids.slice(0, 4 - t.layer).forEach((id, k) => cmds.push({ type: 'LayerClip', deck: t.deck, layer: t.layer + k, value: id }));
+    ids.slice(0, 4 - t.layer).forEach((id, k) => cmds.push(clipCmd(id, t.deck, t.layer + k)));
     cmds.push({ type: 'Focus', deck: t.deck, layer: t.layer });
     send(cmds);
     const onAir = t.deck === S.live.program_deck;
     toast(`${ids.length > 1 ? cmds.length - 1 + ' clips' : '“' + nameOf(ids[0]) + '”'} → ${onAir ? 'PROGRAM (on air)' : 'PREVIEW'} ${groupOf(t.deck, t.layer)}` +
       (ids.length > cmds.length - 1 ? ` (only ${cmds.length - 1} fit)` : ''));
   }
-  const nameOf = id => { const c = S.cat?.clips?.[id]; return c ? clipName(c) : 'clip ' + id; };
+  const nameOf = id => {
+    if (id && typeof id === 'object') { const r = (LR.list?.clips || []).find(x => x.id === id.lib); return r ? r.name : 'library clip ' + id.lib; }
+    const c = S.cat?.clips?.[id]; return c ? clipName(c) : 'clip ' + id;
+  };
 
   // ------------------------------------------------------------------ the "Load to…" menu
   let menuEl = null;
@@ -171,7 +182,7 @@
   function menu(ev, ids) {
     ev.preventDefault?.(); ev.stopPropagation?.();
     closeMenu();
-    ids = [].concat(ids).filter(i => i >= 0);
+    ids = [].concat(ids).filter(okRef);
     const L = S.live;
     const m = el('div', 'loadmenu');
     m.addEventListener('pointerdown', e => e.stopPropagation());
@@ -264,14 +275,14 @@
   // ------------------------------------------------------------------ drag and drop
   // A drag carries catalog ids ("text/x-himmel-clip" = one id, "text/x-himmel-clips" = a JSON list).
   function setDrag(e, ids) {
-    ids = [].concat(ids).filter(i => i >= 0);
+    ids = [].concat(ids).filter(okRef);
     if (!ids.length) { e.preventDefault(); toast('Not playable yet: still importing.', 'bad'); return; }
-    e.dataTransfer.setData('text/x-himmel-clip', String(ids[0]));
-    if (ids.length > 1) e.dataTransfer.setData('text/x-himmel-clips', JSON.stringify(ids));
+    e.dataTransfer.setData('text/x-himmel-clip', typeof ids[0] === 'object' ? JSON.stringify(ids[0]) : String(ids[0]));
+    if (ids.length > 1 || typeof ids[0] === 'object') e.dataTransfer.setData('text/x-himmel-clips', JSON.stringify(ids));
     e.dataTransfer.effectAllowed = 'copy';
   }
   function dragIds(e) {
-    try { const l = JSON.parse(e.dataTransfer.getData('text/x-himmel-clips') || 'null'); if (Array.isArray(l)) return l; } catch (x) { /* one id */ }
+    try { const l = JSON.parse(e.dataTransfer.getData('text/x-himmel-clips') || 'null'); if (Array.isArray(l)) return l.filter(okRef); } catch (x) { /* one id */ }
     const id = parseInt(e.dataTransfer.getData('text/x-himmel-clip'), 10);
     return id >= 0 ? [id] : [];
   }
@@ -288,5 +299,5 @@
     });
   }
 
-  window.Flows = { rows: () => LR.list, loadRows, tick, catOf, rowOf, where, whereTags, load, menu, picker, closeMenu, setDrag, dragIds, dropTarget, focus, freeLayer, nameOf, thumbUrl, groupOf, sideOf };
+  window.Flows = { rows: () => LR.list, loadRows, tick, catOf, rowOf, refOf, hasPages, where, whereTags, load, menu, picker, closeMenu, setDrag, dragIds, dropTarget, focus, freeLayer, nameOf, thumbUrl, groupOf, sideOf };
 })();

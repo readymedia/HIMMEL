@@ -61,5 +61,9 @@ nlohmann::json panels_fs_list(const std::string& path_utf8, bool all_files);
 nlohmann::json panels_library_disk();
 // POST /library/open-originals: opens Explorer at <library>\originals (the watched drop folder).
 nlohmann::json panels_open_originals();
+// POST /library/upload (GUI wave 7): the library block v3 disk guard numbers (false = no v3 worker, or a
+// read-only bridge) and the folder uploads go to (<library>\originals, the watched drop folder; "" = none).
+bool panels_upload_guard(uint64_t& free, uint64_t& reserve, bool& disk_low);
+std::filesystem::path panels_upload_dir();
 
 }  // namespace himmel::ui
