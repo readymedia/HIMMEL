@@ -107,7 +107,7 @@ std::vector<std::string> still_png_args(const std::string& input, const std::str
 
 std::vector<std::string> thumb_args(const std::string& hap, const std::string& out, double at) {
     auto a = head();
-    a.insert(a.end(), {"-ss", num(std::max(0.0, at)), "-i", hap, "-frames:v", "1", "-vf", "scale=320:-2", "-q:v", "4",
+    a.insert(a.end(), {"-ss", num(std::max(0.0, at)), "-i", hap, "-frames:v", "1", "-vf", "scale=320:-2,format=yuvj420p", "-q:v", "4",
                        "-f", "image2", out});
     return a;
 }
@@ -115,7 +115,7 @@ std::vector<std::string> thumb_args(const std::string& hap, const std::string& o
 std::vector<std::string> strip_args(const std::string& hap, const std::string& out, int64_t frames) {
     const int64_t k = std::max<int64_t>(1, frames / 8);
     auto a = head();
-    a.insert(a.end(), {"-i", hap, "-vf", "select='not(mod(n\\," + std::to_string(k) + "))',scale=160:-2,tile=8x1",
+    a.insert(a.end(), {"-i", hap, "-vf", "select='not(mod(n\\," + std::to_string(k) + "))',scale=160:-2,tile=8x1,format=yuvj420p",
                        "-fps_mode", "passthrough", "-frames:v", "1", "-q:v", "5", "-f", "image2", out});
     return a;
 }

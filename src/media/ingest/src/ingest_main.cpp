@@ -625,6 +625,8 @@ private:
 int main(int argc, char** argv) {
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCtrlHandler(on_console, TRUE);
+    // The supervisor starts its children at high priority; the import never competes with the show.
+    SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS);
     const Config cfg = parse_args(argc, argv);
     std::error_code ec;
     fs::create_directories(cfg.root, ec);

@@ -16,7 +16,7 @@ LEAD; then both sides are built. See `docs/agents/README.md`.
 | `himmel_ui` HTTP (127.0.0.1:8790) | bridge ↔ web app | Internal to the GUI track |
 | `weapon-block.md` (`Local\HimmelWeapon<N>`, touch events, roles) | CONTROL → ENGINE | **Phase 1–2** (plan in `weapons/README.md`) |
 | [`effect-metadata.md`](effect-metadata.md) (`fx/<id>/effect.json`, PRESS, scopes, reactions, flash cap, shader contract) | FX → ENGINE / SHOW / GUI | **Version 1, 2026-11-16** (M5) |
-| `library-db.md` + sidecar JSON | MEDIA → SHOW / GUI | **Phase 3** |
+| [`library-db.md`](library-db.md) (`himmel-library.db` SQLite index, `meta/<hash>.json` sidecars `himmel-clip/1`, `Local\HimmelLibrary` import status, the engine's library feed) | MEDIA → ENGINE / SHOW / GUI | **Version 1, 2026-11-17** (M7) |
 | [`show-files.md`](show-files.md) (`himmel-show/1` project folder + `.himmelshow`, autosave journal, `Local\HimmelShow`: show status, files, text boxes) | SHOW ↔ GUI / weapons | **Version 1, 2026-11-17** (M3; moods and cues later); the block: [`show-block.md`](show-block.md) |
 | [`audio-block.md`](audio-block.md) (`Local\HimmelAudio`: signals, input, MIDI clock, config) | AUDIO → ENGINE / GUI | **Version 1, 2026-11-17** (M8) |
 | `table-format.md` (`himmel-table/1`) | GUI (table) ↔ ENGINE | **Phase 10** (draft in `docs/vj-table-design.md`) |

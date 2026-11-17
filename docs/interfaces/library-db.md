@@ -77,14 +77,17 @@ CREATE TABLE clips (
   mood_chill REAL, mood_groove REAL, mood_techno REAL, mood_crazy REAL,
   loop_quality REAL, loop_in INTEGER, loop_out INTEGER, loop_score REAL,
   loop_style TEXT, natural_beats INTEGER, flicker TEXT, black_frames INTEGER,
-  palette TEXT NOT NULL DEFAULT '[]',        -- JSON [[rgb, weight] x5]
+  palette TEXT NOT NULL DEFAULT '[]',        -- JSON [[rgb as an integer 0xRRGGBB, weight], ...] up to 5
   slices  TEXT NOT NULL DEFAULT '[]',        -- JSON [frame, ...] up to 16
   analysis_version INTEGER NOT NULL DEFAULT 0,
   added_unix INTEGER NOT NULL, ready_unix INTEGER NOT NULL DEFAULT 0,
   stars INTEGER NOT NULL DEFAULT 0, favourite INTEGER NOT NULL DEFAULT 0,
-  user_tags TEXT NOT NULL DEFAULT '[]'
+  user_tags TEXT NOT NULL DEFAULT '[]',
+  sidecar TEXT NOT NULL DEFAULT '',          -- the full sidecar JSON (motion curve, cuts, probe)
+  ready_order INTEGER NOT NULL DEFAULT 0     -- 1, 2, 3 ... in the order rows turned ready; 0 = not ready
 );
 CREATE INDEX clips_state ON clips(state, id);
+CREATE INDEX clips_ready ON clips(ready_order);
 CREATE TABLE sources (       -- path -> hash cache, so a rescan does not re-hash
   path TEXT PRIMARY KEY, size INTEGER, mtime INTEGER, hash TEXT
 );
@@ -182,9 +185,12 @@ With no show running the import uses every core (normal priority).
 
 - The render process starts a **library feed** worker (`himmel_library`,
   `LibraryFeed`), never the frame loop. It opens the DB **read-only** and
-  every second (or when `ready_seq` changes) reads `ready` rows with
-  `id > last_id`, probes the HAP header and first frame, and appends them
-  to a fixed table (capacity `kMaxClips`, preallocated).
+  every second (or when `ready_seq` changes) reads `ready` rows with a
+  `ready_order` above the last one it saw (ids are given at queue time, so a
+  clip queued early can turn ready late), and appends them to a fixed table
+  (capacity `kMaxClips`, preallocated). The catalog entry comes from the row
+  (size, fps, length, codec; the placeholder colour is the clip's average
+  colour); the feed never opens the HAP file.
 - The frame loop sees the published count rise (an atomic), copies the new
   `ClipInfo`s into its catalog and writes the catalog section once. **Ids are
   append-only**: existing clip ids never move, so commands and `LiveState`
@@ -192,7 +198,14 @@ With no show running the import uses every core (normal priority).
   `media/` clip gets ` (lib)` appended.
 - The same table is the clip players' playlist, so loading a new id works at
   once. The frame loop never reads the DB or a file.
-- `--no-library` turns the feed off; `--library DIR` picks the folder.
+- `--no-library` turns the feed off; `--library DIR` picks the folder; with
+  `--no-show-files` (test runs) it is off unless `--library` is given, and
+  `--show-root DIR` means `DIR\Library` (D144).
+- At start-up the renderer reads the ready library clips **before** it
+  restores the show from a surviving state block, so a restarted renderer
+  finds its library clips by name.
+- Readers of `Local\HimmelState` must re-read the catalog whenever
+  `catalog_seq` changes; it now grows while the show runs.
 
 ## 9. Not in version 1 (append later)
 
