@@ -19,6 +19,7 @@ target_link_libraries(himmel_library PUBLIC himmel_protocol PRIVATE himmel_sqlit
 add_executable(library_tests ${PROJECT_SOURCE_DIR}/tests/library/library_tests.cpp)
 target_link_libraries(library_tests PRIVATE himmel_library himmel_ingest_core himmel_sqlite3)
 add_test(NAME library_tests COMMAND library_tests)
+add_dependencies(library_tests himmel_ingest)  # test_ingest_cli runs the exe next to it
 
 foreach(t himmel_library library_tests)
     if(MSVC)

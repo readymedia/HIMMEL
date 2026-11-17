@@ -16,6 +16,7 @@
 //   --retry    put failed clips back in the queue
 //   --status   print the library counts and exit
 //   --send ... one command to the running worker (see send_command)
+//   --help     usage; an unknown or incomplete argument prints it too and exits 2 (nothing started)
 //   --selftest run every ingest command against a temporary library (no ffmpeg) and exit
 //
 // Commands 60..67 (import, rescan, remove, relink, reanalyse, retry, mode, unwatch) arrive
@@ -113,16 +114,43 @@ struct Config {
     double seq_fps = 25.0;
     int canvas_w = 1920, canvas_h = 1080;
     std::string quality = "hap";
+    bool help = false;
+    std::string error;  // a bad command line: print usage, exit 2, start nothing
 };
+
+void print_usage() {
+    std::printf(
+        "usage: himmel_ingest [--library DIR] [--watch DIR]... [--ffmpeg DIR] [--once]\n"
+        "                     [--mode auto|full|background] [--seq-fps N] [--canvas WxH]\n"
+        "                     [--quality hap|hap_q] [--rebuild] [--retry] [--status]\n"
+        "       himmel_ingest --selftest      every ingest command against a temp library, then exit\n"
+        "       himmel_ingest --send VERB ... one command to the running worker (--send alone: the verbs)\n"
+        "       himmel_ingest --help\n"
+        "  --library DIR  the library (default Documents\\Himmel\\Library; tests: always a temp folder)\n"
+        "  --watch DIR    another watch folder (default: <library>\\originals)\n"
+        "  --once         scan, import everything, then exit\n"
+        "  --rebuild      recreate the DB from meta\\*.json, then exit\n"
+        "  --retry        put failed clips back in the queue\n"
+        "  --status       print the library counts and exit\n"
+        "An unknown argument prints this and exits with code 2 (nothing is started or written).\n");
+}
 
 fs::path from_utf8(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
 
 Config parse_args(int argc, char** argv) {
     Config c;
-    for (int i = 1; i < argc; ++i) {
+    for (int i = 1; i < argc && c.error.empty(); ++i) {
         const std::string a = argv[i];
-        auto next = [&]() -> std::string { return i + 1 < argc ? argv[++i] : ""; };
-        if (a == "--library") c.root = from_utf8(next());
+        // An option that needs a value never takes a missing one (that would fall back to Documents).
+        auto next = [&]() -> std::string {
+            if (i + 1 >= argc || std::string(argv[i + 1]).empty() || std::string(argv[i + 1]).rfind("--", 0) == 0) {
+                c.error = a + " needs a value";
+                return "";
+            }
+            return argv[++i];
+        };
+        if (a == "--help" || a == "-h" || a == "/?") c.help = true;
+        else if (a == "--library") c.root = from_utf8(next());
         else if (a == "--watch") c.watch.push_back(from_utf8(next()));
         else if (a == "--ffmpeg") c.ffmpeg_dir = from_utf8(next());
         else if (a == "--once") c.once = true;
@@ -130,16 +158,27 @@ Config parse_args(int argc, char** argv) {
         else if (a == "--retry") c.retry = true;
         else if (a == "--status") c.status = true;
         else if (a == "--selftest") c.selftest = true;
-        else if (a == "--seq-fps") c.seq_fps = std::clamp(std::atof(next().c_str()), 1.0, 120.0);
-        else if (a == "--canvas") sscanf_s(next().c_str(), "%dx%d", &c.canvas_w, &c.canvas_h);
-        else if (a == "--quality") c.quality = next() == "hap_q" ? "hap_q" : "hap";
-        else if (a == "--mode") {
+        else if (a == "--seq-fps") {
+            const std::string v = next();
+            const double f = std::atof(v.c_str());
+            if (c.error.empty() && f <= 0) c.error = "--seq-fps needs a number";
+            c.seq_fps = std::clamp(f, 1.0, 120.0);
+        } else if (a == "--canvas") {
+            const std::string v = next();
+            if (c.error.empty() && sscanf_s(v.c_str(), "%dx%d", &c.canvas_w, &c.canvas_h) != 2) c.error = "--canvas needs WxH";
+        } else if (a == "--quality") {
+            const std::string q = next();
+            if (c.error.empty() && q != "hap" && q != "hap_q") c.error = "--quality is hap or hap_q";
+            c.quality = q == "hap_q" ? "hap_q" : "hap";
+        } else if (a == "--mode") {
             const std::string m = next();
+            if (c.error.empty() && m != "auto" && m != "full" && m != "background") c.error = "--mode is auto, full or background";
             c.force_mode = m == "full" ? 1 : m == "background" ? 2 : 0;
         } else {
-            std::printf("unknown argument %s\n", a.c_str());
+            c.error = "unknown argument " + a;
         }
     }
+    if (!c.error.empty() || c.help) return c;  // never resolve the default library for a bad command line
     if (c.root.empty()) c.root = library::default_library_root();
     if (c.watch.empty()) c.watch.push_back(c.root / "originals");
     c.canvas_w = std::clamp(c.canvas_w, 64, 8192);
@@ -758,6 +797,11 @@ int main(int argc, char** argv) {
     // The supervisor starts its children at high priority; the import never competes with the show.
     SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS);
     const Config cfg = parse_args(argc, argv);
+    if (cfg.help || !cfg.error.empty()) {  // before anything is opened, created or started
+        if (!cfg.error.empty()) std::printf("himmel_ingest: %s\n", cfg.error.c_str());
+        print_usage();
+        return 2;
+    }
     if (cfg.selftest) {
         // Never under Documents: a temp folder, deleted afterwards; an in-memory block.
         wchar_t tmp[MAX_PATH];
