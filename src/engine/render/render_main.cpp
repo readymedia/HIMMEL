@@ -1190,6 +1190,15 @@ int main(int argc, char** argv) {
             sc.projects_root = himmel::show::files::from_utf8(cfg.show_root) / "Projects";
             sc.app_dir = himmel::show::files::from_utf8(cfg.show_root) / "App";
         }
+        // SHOW wave 8 (D210): every clip id (catalog v3) and each library clip's hash (the stem of
+        // its play path, hap/<hash>.mov; clip id = clip table index), so looks keep library ids.
+        sc.clip_dir = clipdir.get();
+        sc.clip_hash = [](void* ctx, int id, char out[himmel::show::kHashLen]) -> bool {
+            const auto* t = static_cast<const himmel::library::ClipTable*>(ctx);
+            if (id < 0 || static_cast<uint32_t>(id) >= t->size()) return false;
+            return himmel::show::hash_from_path(t->path[id].c_str(), out);
+        };
+        sc.clip_hash_ctx = clip_table.get();
         show->start(sc, *catalog, show_blk);
         LOG("show: %s", cfg.show_files ? (cfg.project.empty() ? "opening the most recent project" : cfg.project.c_str())
                                        : "no files (--no-show-files)");

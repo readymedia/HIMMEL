@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 #include <vector>
 
+#include "himmel/engine/clip_directory.h"
 #include "himmel/show/dice.h"
 #include "himmel/show/files.h"
 #include "himmel/show/look_ops.h"
@@ -22,7 +23,7 @@ namespace {
 
 Look deck_look(Rig& r, int d) {
     Look l;
-    look_from_live(r.model->live(), r.model->transport(), *r.cat, d, l, &r.model->reactions());
+    look_from_live(r.model->live(), r.model->transport(), r.show->clips(), d, l, &r.model->reactions());
     return l;
 }
 
@@ -170,17 +171,17 @@ void test_files_roundtrip() {
     const ShowData& show = r.show->show();
     CHECK(scene_count(show) == 5);  // 2 bank scenes + 1 variation + 2 song scenes
     LiveSnapshot live;
-    snapshot_from_live(r.model->live(), r.model->transport(), *r.cat, live);
+    snapshot_from_live(r.model->live(), r.model->transport(), r.show->clips(), live);
 
     const fs::path root = temp_root("files");
     const fs::path folder = root / "Round trip.himmel";
     std::string err;
-    CHECK(F::save_project(folder, show, live, *r.cat, 1234567890123ull, &err));
+    CHECK(F::save_project(folder, show, live, *r.cat, r.show->clips(), 1234567890123ull, &err));
     CHECK(fs::exists(folder / "project.json") && fs::exists(folder / "banks" / "bank-01.json") &&
           fs::exists(folder / "songs" / "song-01.json") && fs::exists(folder / "live.json"));
     auto a = std::make_unique<ShowData>();
     LiveSnapshot la{};
-    F::LoadInfo info = F::load_project(folder, *a, la, *r.cat);
+    F::LoadInfo info = F::load_project(folder, *a, la, *r.cat, r.show->clips());
     CHECK(info.ok && !info.interrupted && info.have_live && info.missing == 0 && info.saved_ms == 1234567890123ull);
     auto expect = std::make_unique<ShowData>(show);
     round_show(*expect);
@@ -190,17 +191,17 @@ void test_files_roundtrip() {
     CHECK(looks_equal(lr.deck[0], la.deck[0]) && looks_equal(lr.deck[1], la.deck[1]));
 
     // Saving what was loaded gives the same bytes (stable, diff-friendly files).
-    const F::FileSet s1 = F::project_files(*a, la, *r.cat, 1);
+    const F::FileSet s1 = F::project_files(*a, la, *r.cat, r.show->clips(), 1);
     auto b = std::make_unique<ShowData>();
     LiveSnapshot lb{};
-    F::load_project(folder, *b, lb, *r.cat);
-    const F::FileSet s2 = F::project_files(*b, lb, *r.cat, 1);
+    F::load_project(folder, *b, lb, *r.cat, r.show->clips());
+    const F::FileSet s2 = F::project_files(*b, lb, *r.cat, r.show->clips(), 1);
     CHECK(s1.files == s2.files);
 
     // One-document form (autosave/show.json).
     auto c = std::make_unique<ShowData>();
     LiveSnapshot lc{};
-    info = F::load_document(F::show_document(show, live, *r.cat, 5), *c, lc, *r.cat);
+    info = F::load_document(F::show_document(show, live, *r.cat, r.show->clips(), 5), *c, lc, *r.cat, r.show->clips());
     CHECK(info.ok && info.have_live && shows_equal(*expect, *c));
 
     // .himmelshow: zip and back.
@@ -209,32 +210,33 @@ void test_files_roundtrip() {
     CHECK(F::unzip_to(zip, root / "Unpacked.himmel", &err));
     auto d = std::make_unique<ShowData>();
     LiveSnapshot ld{};
-    info = F::load_project(root / "Unpacked.himmel", *d, ld, *r.cat);
+    info = F::load_project(root / "Unpacked.himmel", *d, ld, *r.cat, r.show->clips());
     CHECK(info.ok && !info.interrupted && shows_equal(*expect, *d));
 
     // A clip missing on this PC: empty layer, name kept, written back unchanged.
     auto cat2 = make_catalog(12, /*skip*/ 1);
+    auto ix2 = make_index(*cat2);
     auto e = std::make_unique<ShowData>();
     LiveSnapshot le{};
-    info = F::load_project(folder, *e, le, *cat2);
+    info = F::load_project(folder, *e, le, *cat2, *ix2);
     CHECK(info.ok && info.missing == 1 && info.missing_names.size() == 1 && info.missing_names[0] == "clip01.mov");
     const int s0 = e->bank_pad[0][0];
     CHECK(s0 >= 0 && e->scene[s0].look.layer[1].clip < 0 && std::strcmp(e->scene[s0].look.clip_name[1], "clip01.mov") == 0);
-    CHECK(F::save_project(root / "Missing.himmel", *e, le, *cat2, 1, &err));
+    CHECK(F::save_project(root / "Missing.himmel", *e, le, *cat2, *ix2, 1, &err));
     auto f = std::make_unique<ShowData>();
     LiveSnapshot lf{};
-    info = F::load_project(root / "Missing.himmel", *f, lf, *r.cat);  // back on the PC that has it
+    info = F::load_project(root / "Missing.himmel", *f, lf, *r.cat, r.show->clips());  // back on the PC that has it
     CHECK(info.ok && info.missing == 0 && f->scene[f->bank_pad[0][0]].look.layer[1].clip >= 0);
 
     // A file changed after the save (a cut-off save) is noticed.
     std::string text;
     F::read_file(folder / "banks" / "bank-01.json", text);
     F::write_atomic(folder / "banks" / "bank-01.json", text + " ", &err);
-    info = F::load_project(folder, *a, la, *r.cat);
+    info = F::load_project(folder, *a, la, *r.cat, r.show->clips());
     CHECK(info.ok && info.interrupted);
     // A torn project.json is refused.
     F::write_atomic(folder / "project.json", "{\"format\": \"himmel-sh", &err);
-    info = F::load_project(folder, *a, la, *r.cat);
+    info = F::load_project(folder, *a, la, *r.cat, r.show->clips());
     CHECK(!info.ok && info.interrupted);
 }
 
@@ -349,14 +351,14 @@ void test_reactions() {
 
     // Files: the document form keeps Custom and Off rows, the master row and a deck FX row.
     LiveSnapshot live;
-    snapshot_from_live(r.model->live(), r.model->transport(), *r.cat, live, &rs);
+    snapshot_from_live(r.model->live(), r.model->transport(), r.show->clips(), live, &rs);
     CHECK(live.master_react[1].k[2].source == kCustom);
-    const std::string doc = F::show_document(r.show->show(), live, *r.cat, 5);
+    const std::string doc = F::show_document(r.show->show(), live, *r.cat, r.show->clips(), 5);
     CHECK(doc.find("\"react\"") != std::string::npos && doc.find("\"follow\"") != std::string::npos &&
           doc.find("\"source\":\"off\"") != std::string::npos);
     auto a = std::make_unique<ShowData>();
     LiveSnapshot la{};
-    F::LoadInfo info = F::load_document(doc, *a, la, *r.cat);
+    F::LoadInfo info = F::load_document(doc, *a, la, *r.cat, r.show->clips());
     CHECK(info.ok);
     {
         const int id = a->bank_pad[0][0];
@@ -368,7 +370,7 @@ void test_reactions() {
         CHECK(la.master_react[1].k[2].source == kCustom && la.deck[1].layer_react[0][0].k[0].source == kCustom && la.deck[1].layer_react[0][0].k[1].source == kOff);
     }
     // The same bytes when saved again (stable files).
-    CHECK(F::show_document(*a, la, *r.cat, 5) == doc);
+    CHECK(F::show_document(*a, la, *r.cat, r.show->clips(), 5) == doc);
 
     // An old file (before D131) has no "react": every knob loads as Default.
     nlohmann::json j = nlohmann::json::parse(doc);
@@ -385,7 +387,7 @@ void test_reactions() {
     CHECK(stripped >= 4);
     auto old = std::make_unique<ShowData>();
     LiveSnapshot lo{};
-    info = F::load_document(j.dump(2), *old, lo, *r.cat);
+    info = F::load_document(j.dump(2), *old, lo, *r.cat, r.show->clips());
     CHECK(info.ok);
     {
         const int id = old->bank_pad[0][0];
@@ -412,7 +414,7 @@ void test_reactions() {
         }
     };
     spoil(bad);
-    info = F::load_document(bad.dump(), *old, lo, *r.cat);
+    info = F::load_document(bad.dump(), *old, lo, *r.cat, r.show->clips());
     CHECK(patched && info.ok);
 
     // Dice: a slot that gets a new effect gets that effect's Default reactions.
@@ -427,9 +429,172 @@ void test_reactions() {
         CHECK(rolled.layer_react[0][0].k[0].source == kCustom);
 }
 
+// Wave 8 (D210): clips past id 256, by library id, relinked by hash, old files, missing clips.
+std::vector<std::string> g_hashes;  // engine clip id -> content hash (the render process reads hap/<hash>.mov)
+
+void test_library_clips() {
+    std::printf("library clips: past 256, LayerClipLib, hash relink, old file, missing\n");
+    auto dir = std::make_unique<himmel::engine::ClipDirectory>();
+    g_hashes.clear();
+    auto add = [&](const std::string& name, int64_t lib, const std::string& hash) {
+        ClipInfo ci{};
+        std::snprintf(ci.name, kNameLen, "%s", name.c_str());
+        ci.width = 1920, ci.height = 1080, ci.fps = 30.0f, ci.seconds = 8.0f;
+        ci.thumb_rgb = 0x203040u;
+        g_hashes.push_back(hash);
+        return dir->add(ci, lib);
+    };
+    auto hex = [](uint64_t v) {
+        char b[kHashLen];
+        std::snprintf(b, sizeof(b), "%016llx", static_cast<unsigned long long>(v));
+        return std::string(b);
+    };
+    for (int i = 0; i < 400; ++i) {
+        char nm[32];
+        std::snprintf(nm, sizeof(nm), "lib%03d.mov", i);
+        add(nm, 1000 + i, hex(0x1234000000000000ull + static_cast<uint64_t>(i)));
+    }
+    const int media = add("media-only.mov", 0, "");  // id 400: not a library clip
+    Rig r(make_catalog(0));
+    dir->mirror_window(*r.cat);  // the catalog section = the directory's ids < 256
+    r.model->set_clips(dir.get());
+    RuntimeConfig cfg;
+    cfg.disk = false;
+    cfg.clip_dir = dir.get();
+    cfg.clip_hash = [](void*, int id, char out[kHashLen]) -> bool {
+        if (id < 0 || id >= static_cast<int>(g_hashes.size()) || g_hashes[id].empty()) return false;
+        std::snprintf(out, kHashLen, "%s", g_hashes[id].c_str());
+        return true;
+    };
+    r.start(cfg);
+    const ClipIndex& ix = r.show->clips();
+    CHECK(ix.count() == 401 && ix.at(300).library_id == 1300 && std::strcmp(ix.at(300).hash, g_hashes[300].c_str()) == 0);
+
+    // A scene with clips past 256, a media clip and a kit pad past 256.
+    CHECK(r.deck(cmd(CommandType::LayerClip, 0, 0, kNone, kNone, 300)) == Reject::None);
+    CHECK(r.deck(cmd(CommandType::LayerClip, 0, 1, kNone, kNone, 350)) == Reject::None);
+    CHECK(r.deck(cmd(CommandType::LayerClip, 0, 2, kNone, kNone, media)) == Reject::None);
+    CHECK(r.deck(cmd(CommandType::LayerClip, 0, 3, kNone, kNone, 7)) == Reject::None);
+    r.tick();
+    CHECK(r.send(cmd(CommandType::SceneSave, 0, kNone, kNone, kNone, 0)) == Reject::None);
+    CHECK(r.send(cmd(CommandType::KitSet, 0, static_cast<uint8_t>(PadTarget::Layer2), 3, static_cast<uint8_t>(PadKind::Clip), 390)) ==
+          Reject::None);
+    const int sid = r.show->show().bank_pad[0][0];
+    CHECK(sid >= 0);
+    if (sid < 0) return;
+    {
+        const Scene& sc = r.show->show().scene[sid];
+        CHECK(sc.look.clip_lib[0] == 1300 && std::strcmp(sc.look.clip_hash[0], g_hashes[300].c_str()) == 0 &&
+              std::strcmp(sc.look.clip_name[0], "lib300.mov") == 0);
+        CHECK(sc.look.clip_lib[2] == 0 && sc.look.clip_hash[2][0] == 0 && std::strcmp(sc.look.clip_name[2], "media-only.mov") == 0);
+        CHECK(sc.kit[3].id == 390 && sc.kit[3].lib == 1390 && std::strcmp(sc.kit[3].hash, g_hashes[390].c_str()) == 0);
+        // Recall loads library clips by library id (LayerClipLib), the media clip by id.
+        CommandList list;
+        diff_look(deck_look(r, 1), sc.look, 1, *r.cat, list, kDiffAll, 0xF, true, &ix);
+        int lib_cmds = 0, plain = 0;
+        for (int i = 0; i < list.n; ++i) {
+            if (list.c[i].type == CommandType::LayerClipLib) lib_cmds += (list.c[i].i == 1300 || list.c[i].i == 1350 || list.c[i].i == 1007);
+            if (list.c[i].type == CommandType::LayerClip) plain += list.c[i].i == media;
+        }
+        CHECK(lib_cmds == 3 && plain == 1);
+    }
+    CHECK(r.send(cmd(CommandType::SceneRecall, 1, kNone, kNone, kNone, 0)) == Reject::None);
+    r.tick();
+    CHECK(r.model->live().deck[1].layer[0].clip == 300 && r.model->live().deck[1].layer[1].clip == 350 &&
+          r.model->live().deck[1].layer[2].clip == media && r.model->live().deck[1].layer[3].clip == 7);
+    CHECK(r.model->live().rejected[static_cast<int>(Producer::Show)] == 0);
+    CHECK(r.show->last_recall_us() < 16667);
+    std::printf("  recall with 4 library clips: %u us, %d commands\n", r.show->last_recall_us(), r.show->last_recall_commands());
+
+    // Files: library_id + hash in looks, kits and live.json; the same bytes when saved again.
+    LiveSnapshot live;
+    snapshot_from_live(r.model->live(), r.model->transport(), ix, live, &r.model->reactions());
+    CHECK(live.deck[1].clip_lib[0] == 1300);
+    const std::string doc = F::show_document(r.show->show(), live, *r.cat, ix, 5);
+    CHECK(doc.find("\"library_id\":1300") != std::string::npos && doc.find("\"library_id\":1390") != std::string::npos &&
+          doc.find(g_hashes[350]) != std::string::npos && doc.find("\"version\":2") != std::string::npos);
+    {
+        auto a = std::make_unique<ShowData>();
+        LiveSnapshot la{};
+        const F::LoadInfo info = F::load_document(doc, *a, la, *r.cat, ix);
+        CHECK(info.ok && info.missing == 0);
+        const int id = a->bank_pad[0][0];
+        CHECK(id >= 0 && a->scene[id].look.layer[0].clip == 300 && a->scene[id].look.layer[1].clip == 350 &&
+              a->scene[id].look.layer[2].clip == media && a->scene[id].kit[3].id == 390 && la.deck[1].layer[0].clip == 300);
+        CHECK(F::show_document(*a, la, *r.cat, ix, 5) == doc);
+    }
+
+    // An old file (version 1: names only) loads, and the next save carries library ids and hashes.
+    {
+        nlohmann::json j = nlohmann::json::parse(doc);
+        std::function<void(nlohmann::json&)> strip = [&](nlohmann::json& o) {
+            if (o.is_object()) {
+                o.erase("library_id");
+                o.erase("hash");
+                for (auto& [key, v] : o.items()) strip(v);
+            } else if (o.is_array()) {
+                for (auto& v : o) strip(v);
+            }
+        };
+        strip(j);
+        j["version"] = 1;
+        const std::string old = j.dump();
+        CHECK(old.find("library_id") == std::string::npos);
+        auto a = std::make_unique<ShowData>();
+        LiveSnapshot la{};
+        const F::LoadInfo info = F::load_document(old, *a, la, *r.cat, ix);
+        CHECK(info.ok && info.missing == 0);
+        const int id = a->bank_pad[0][0];
+        CHECK(id >= 0 && a->scene[id].look.layer[0].clip == 300 && a->scene[id].look.clip_lib[0] == 1300 &&
+              a->scene[id].kit[3].lib == 1390);
+        CHECK(F::show_document(*a, la, *r.cat, ix, 5) == doc);  // upgraded: exactly what a new save writes
+    }
+
+    // A clip nothing matches: reported, the layer stays empty, the reference survives a save.
+    {
+        nlohmann::json j = nlohmann::json::parse(doc);
+        auto& layer0 = j["banks"][0]["pads"][0]["look"]["layers"][0];
+        layer0["clip"] = {{"name", "gone.mov"}, {"library_id", 9999}, {"hash", "00000000000000ff"}};
+        auto a = std::make_unique<ShowData>();
+        LiveSnapshot la{};
+        const F::LoadInfo info = F::load_document(j.dump(), *a, la, *r.cat, ix);
+        CHECK(info.ok && info.missing == 1 && info.missing_names.size() == 1 && info.missing_names[0] == "gone.mov");
+        const int id = a->bank_pad[0][0];
+        CHECK(id >= 0 && a->scene[id].look.layer[0].clip == -1 && a->scene[id].look.clip_lib[0] == 9999);
+        const std::string again = F::show_document(*a, la, *r.cat, ix, 5);
+        CHECK(again.find("\"library_id\":9999") != std::string::npos && again.find("00000000000000ff") != std::string::npos &&
+              again.find("gone.mov") != std::string::npos);
+    }
+
+    // Removed and imported again: a new library id, the same hash. Recall finds it by hash and the
+    // scene keeps the new library id.
+    dir->set_state(300, ClipState::Removed);
+    const int again = add("lib300.mov", 2300, g_hashes[300]);
+    r.tick();
+    CHECK(ix.count() == 402 && ix.at(again).library_id == 2300);
+    r.deck(cmd(CommandType::LayerClip, 1, 0, kNone, kNone, -1));
+    r.tick();
+    CHECK(r.send(cmd(CommandType::SceneRecall, 1, kNone, kNone, kNone, 0)) == Reject::None);
+    r.tick();
+    CHECK(r.model->live().deck[1].layer[0].clip == again);
+    CHECK(r.show->show().scene[sid].look.clip_lib[0] == 2300 && r.show->dirty());
+    CHECK(r.model->live().rejected[static_cast<int>(Producer::Show)] == 0);
+
+    // A clip whose file is gone (no other copy): the recall says so (never silently).
+    dir->set_state(350, ClipState::Missing);
+    r.tick();
+    const uint32_t seq0 = r.show->status().message_seq;
+    CHECK(r.send(cmd(CommandType::SceneRecall, 1, kNone, kNone, kNone, 0)) == Reject::None);
+    r.tick();
+    CHECK(r.show->status().message_seq != seq0 && std::strstr(r.show->status().message, "lib350.mov") &&
+          std::strstr(r.show->status().message, "missing"));
+    std::printf("  message: %s\n", r.show->status().message);
+}
+
 void test_journal() {
     std::printf("journal: records, torn tail, effects remapped by name\n");
     auto cat = make_catalog(8);
+    auto ix = make_index(*cat);
     const fs::path root = temp_root("journal");
     LiveSnapshot s{};
     for (auto& d : s.deck) clear_look(d);
@@ -457,14 +622,15 @@ void test_journal() {
     LiveSnapshot out{};
     uint64_t ms = 0;
     uint32_t n = 0;
-    CHECK(F::Journal::read_last(root / "journal.bin", *cat, out, ms, &n));
+    CHECK(F::Journal::read_last(root / "journal.bin", *cat, *ix, out, ms, &n));
     CHECK(n == 20 && ms == 1019 && std::fabs(out.deck[0].layer[0].opacity - 19 / 20.0f) < 1e-6f);
     CHECK(out.deck[0].layer[0].clip == 3 && out.deck[0].layer[0].fx[0].effect == 5);
     // Another catalog order: ids follow the names.
     auto cat2 = make_catalog(8);
     std::swap(cat2->effect[5], cat2->effect[6]);
     std::swap(cat2->clip[3], cat2->clip[0]);
-    CHECK(F::Journal::read_last(root / "journal.bin", *cat2, out, ms, &n));
+    auto ix2 = make_index(*cat2);
+    CHECK(F::Journal::read_last(root / "journal.bin", *cat2, *ix2, out, ms, &n));
     CHECK(out.deck[0].layer[0].fx[0].effect == 6 && out.deck[0].layer[0].clip == 0);
 }
 
@@ -928,6 +1094,7 @@ int main() {
     test_diff_roundtrip();
     test_files_roundtrip();
     test_reactions();
+    test_library_clips();
     test_journal();
     test_recall_cost();
     test_morph_and_reset();

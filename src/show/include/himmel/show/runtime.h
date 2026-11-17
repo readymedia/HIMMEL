@@ -38,6 +38,12 @@ struct RuntimeConfig {
     uint32_t keep_snapshots = 10;
     uint32_t journal_min_ms = 100;         // at most 10 journal records per second
     uint32_t undo_coalesce_ms = 400;       // GUESS: edits closer than this are one undo step (a knob turn)
+    // Wave 8 (D210): clips past id 256 and by library id. The engine's clip directory at start
+    // (nullptr = the catalog's ids < 256) and the hash of an engine clip id (the library play
+    // path's file stem); both owned by the render process.
+    const engine::ClipDirectory* clip_dir = nullptr;
+    ClipHashFn clip_hash = nullptr;
+    void* clip_hash_ctx = nullptr;
 };
 
 class ShowRuntime {
@@ -70,6 +76,7 @@ public:
     uint32_t last_recall_us() const { return last_recall_us_; }
     int last_recall_commands() const { return last_recall_cmds_; }
     const protocol::ShowStatus& status() const { return status_; }
+    const ClipIndex& clips() const { return *clips_; }   // the show's view of the engine's clips (clips.h)
     protocol::FilesStatus files() const;     // the worker's file status (from the block; zero without one)
     bool dirty() const;
     // Write a producer's text box (as that producer would; tests and tools). Returns the id to
@@ -137,6 +144,10 @@ private:
     void drop_outbox() { outbox_->clear(), outbox_head_ = 0; }
     void changed() { ++show_gen_, status_dirty_ = true; }
     Scene* deck_scene_ptr(int deck);
+    void sync_clips(const engine::DeckModel& m);
+    // Binds a look's clips (fast when still bound); returns the missing count, sets `changed`
+    // when a reference was upgraded / relinked.
+    int bind_look(const engine::DeckModel& m, Look& look, bool* changed);
 
     RuntimeConfig cfg_;
     protocol::ShowBlock* block_ = nullptr;
@@ -189,6 +200,7 @@ private:
     protocol::TextBox local_text_[protocol::kProducers] = {};  // used when there is no shared block
     uint32_t text_ids_ = 0;
     std::unique_ptr<CommandList> outbox_;
+    std::unique_ptr<ClipIndex> clips_;
     int outbox_head_ = 0;
     int frame_sent_ = 0;
     uint64_t budget_window_us_ = 0;

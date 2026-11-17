@@ -19,7 +19,7 @@ namespace himmel::show::files {
 namespace fs = std::filesystem;
 
 inline constexpr const char* kFormat = "himmel-show/1";
-inline constexpr int kFormatVersion = 1;
+inline constexpr int kFormatVersion = 2;  // 2: clips carry library_id + hash (wave 8, D210); 1 still loads
 inline constexpr const char* kProjectExt = ".himmel";
 inline constexpr const char* kExportExt = ".himmelshow";
 
@@ -28,11 +28,14 @@ inline constexpr const char* kExportExt = ".himmelshow";
 struct FileSet {
     std::vector<std::pair<std::string, std::string>> files;
 };
-FileSet project_files(const ShowData& show, const LiveSnapshot& live, const proto::Catalog& cat, uint64_t saved_ms);
+// `clips` = the clip index (clip size / length for the files).
+FileSet project_files(const ShowData& show, const LiveSnapshot& live, const proto::Catalog& cat, const ClipIndex& clips,
+                      uint64_t saved_ms);
 // The project as one document (autosave/show.json, snapshots).
-std::string show_document(const ShowData& show, const LiveSnapshot& live, const proto::Catalog& cat, uint64_t saved_ms);
+std::string show_document(const ShowData& show, const LiveSnapshot& live, const proto::Catalog& cat, const ClipIndex& clips,
+                          uint64_t saved_ms);
 
-// Load result. `missing` = clips named by the project that the catalog lacks.
+// Load result. `missing` = clips the project names that the clip index lacks (by library id, hash or name).
 struct LoadInfo {
     bool ok = false;
     bool have_live = false;
@@ -42,8 +45,11 @@ struct LoadInfo {
     uint64_t saved_ms = 0;        // when it was saved (ms since 1970)
     std::string error;
 };
-LoadInfo load_project(const fs::path& folder, ShowData& show, LiveSnapshot& live, const proto::Catalog& cat);
-LoadInfo load_document(const std::string& json_text, ShowData& show, LiveSnapshot& live, const proto::Catalog& cat);
+// Clips are bound through `clips` (library id, then hash, then name); found references are upgraded.
+LoadInfo load_project(const fs::path& folder, ShowData& show, LiveSnapshot& live, const proto::Catalog& cat,
+                      const ClipIndex& clips);
+LoadInfo load_document(const std::string& json_text, ShowData& show, LiveSnapshot& live, const proto::Catalog& cat,
+                       const ClipIndex& clips);
 
 // ---- writing ----------------------------------------------------------------
 // Write to "<file>.tmp", flush, then rename over the old file (MoveFileEx
@@ -52,7 +58,7 @@ bool write_atomic(const fs::path& file, const std::string& bytes, std::string* e
 bool read_file(const fs::path& file, std::string& out);
 // Every file of the set, project.json last (it carries the CRC manifest).
 bool save_project(const fs::path& folder, const ShowData& show, const LiveSnapshot& live, const proto::Catalog& cat,
-                  uint64_t saved_ms, std::string* err);
+                  const ClipIndex& clips, uint64_t saved_ms, std::string* err);
 
 // ---- autosave journal (autosave/journal.bin) ---------------------------------
 // Header (names of the effects at write time) + records {unix ms, LiveSnapshot},
@@ -66,9 +72,9 @@ public:
     void close();
     bool is_open() const { return h_ != nullptr; }
     uint32_t records() const { return records_; }
-    // The newest good record; effect ids remapped by name to `cat`, clip ids bound by name.
-    static bool read_last(const fs::path& file, const proto::Catalog& cat, LiveSnapshot& out, uint64_t& unix_ms,
-                          uint32_t* count = nullptr);
+    // The newest good record; effect ids remapped by name to `cat`, clips bound through `clips`.
+    static bool read_last(const fs::path& file, const proto::Catalog& cat, const ClipIndex& clips, LiveSnapshot& out,
+                          uint64_t& unix_ms, uint32_t* count = nullptr);
 
 private:
     void* h_ = nullptr;

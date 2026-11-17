@@ -96,7 +96,10 @@ My Show.himmel/
 - Every JSON file starts with `"format": "himmel-show/1"` and a `"kind"`
   (`project`, `bank`, `song`, `live`, `document`, `recent`). Readers refuse
   another format and a `version` higher than theirs (forward migration: a
-  newer reader upgrades older files on load; there is only version 1 now).
+  newer reader upgrades older files on load). **Version 2** (wave 8, D210):
+  clips carry `library_id` and `hash` (§3a). Version 1 files load (clips by
+  name) and are written as version 2 by the next save. Changes are
+  append-only: new keys, never a changed meaning.
 - Tabs, one key per line, floats rounded to 4 decimals: the files diff well in
   git, and saving what was loaded gives the same bytes (tested).
 - **Clips are stored by name** (`{"name": "clip04.mov", "w": 1920, "h": 1080,
@@ -110,7 +113,7 @@ My Show.himmel/
 
 ```json
 {
-	"format": "himmel-show/1", "kind": "project", "version": 1, "app": "Himmel 0.1",
+	"format": "himmel-show/1", "kind": "project", "version": 2, "app": "Himmel 0.1",
 	"name": "My Show", "created": 1763400000, "saved": 1763401234, "saved_ms": 1763401234567,
 	"outputs": {"count": 3, "preset": "1080p", "span": true},
 	"start_focus": "prep", "default_take_ms": 2000, "locks": ["clip", "colour"],
@@ -129,7 +132,7 @@ A scene (inside `bank-NN.json` → `"pads": [scene | null × 16]`, or
 	"transition": {"kind": "cut", "seconds": 2, "on_beat": false},
 	"look": {
 		"layers": [
-			{"clip": {"name": "clip04.mov", "w": 1920, "h": 1080, "seconds": 10},
+			{"clip": {"name": "clip04.mov", "library_id": 412, "hash": "3fa2c1d09b8e7a61", "w": 1920, "h": 1080, "seconds": 10},
 			 "opacity": 1, "blend": "normal", "speed": 1,
 			 "fx": [{"effect": "Kaleido", "params": [0.5, 0.25], "mix": 1,
 			         "react": [{"knob": 0, "source": "custom", "signal": "bass", "mode": "follow", "curve": "soft",
@@ -141,11 +144,39 @@ A scene (inside `bank-NN.json` → `"pads": [scene | null × 16]`, or
 		],
 		"fx": [null, null, null, null]
 	},
-	"kit": [{"kind": "clip", "target": "layer2", "name": "clip04.mov"}, null, "... 16"],
+	"kit": [{"kind": "clip", "target": "layer2", "name": "clip04.mov", "library_id": 412, "hash": "3fa2c1d09b8e7a61"}, null, "... 16"],
 	"macros": [{"name": "INTENSITY", "value": 0.5, "binds": [{"layer": 1, "slot": 0, "param": 1, "min": 0.2, "max": 0.9}]}, "... 4"],
 	"variations": [{"name": "Scene 02", "look": {}, "kit": [], "macros": []}]
 }
 ```
+
+### 3a. Clips: library id, hash, name (version 2, wave 8, D210)
+
+A clip in a look (`"clip"`), a kit pad (kind `clip` / `cue`) and the live
+state (`live.json`, the journal) is remembered by three things, strongest first:
+
+| Key | What | When |
+|---|---|---|
+| `library_id` | the library DB row id (`library-db.md`) | library clips; left out for `media/` and `--clip` clips |
+| `hash` | the content hash, 16 lowercase hex (`library-db.md` §4; the file stem of `hap/<hash>.mov`) | library clips |
+| `name` | the clip's name in the catalog | always |
+
+Engine clip ids are never stored: they are a run-time binding (up to 8192,
+catalog v3). Binding (`bind_clip`, `src/show/include/himmel/show/clips.h`):
+1. **library id**: the newest Ready engine clip with that id (the same rule
+   as `LayerClipLib`). A known hash that differs wins over the id (another
+   library can reuse row ids).
+2. **hash**: when the id is not found, or its clip is not Ready (removed,
+   gone): the newest Ready clip with that hash. This is the **relink** of a
+   clip that was removed and imported again (a new library id, the same
+   content); the reference takes the new id.
+3. **name**: case-insensitive; never across two different known hashes.
+4. Nothing matches: the clip is **missing** (below and §6); the reference is
+   kept as it is and saved back unchanged.
+
+A found reference is brought up to date (library id, hash, the catalog's
+name), so a version 1 file (names only) carries library ids and hashes after
+its next save, and a relinked scene marks the show dirty.
 
 **`"react"` in an FX slot** (D131, added 2026-11-17; same `himmel-show/1`
 format, since it is an optional key): a list of the knobs that are not
@@ -216,10 +247,16 @@ names and ranges as `FxReact` (`command-protocol.md` §4d).
 
 ## 6. Missing clips and relink
 
-On open every named clip is looked up in the engine's catalog
-(case-insensitive). Missing ones: `FilesStatus.missing_count` and the first 8
-names; the layers stay empty (the renderer's placeholder rules apply when the
-engine gets them, build-v1 §4.4). `Project Relink` with a folder in the text
+On open every clip is bound as in §3a (library id, then hash, then name) against
+every engine clip id (catalog v3, up to 8192). Missing ones:
+`FilesStatus.missing_count` and the first 8 names; the layers stay empty and
+the reference is kept. **On recall** the clips are bound again (a clip imported
+since then, or imported again with a new library id, is found), and a layer
+whose clip is missing, or found but not Ready (its file gone, removed), is
+never silent: the recall message says so (`"Scene 02 a on B: clip
+lib350.mov missing"`, or `"… 2 clips missing (name, ...)"`), in the show
+block and the log. A found clip whose file is gone loads with `LayerClip` and
+shows the placeholder (build-v1 §4.4). `Project Relink` with a folder in the text
 box searches it (recursively) by file name and reports `relink_found`.
 `GUESS:` adding the found files to the running catalog is ENGINE / MEDIA work
 (M7); until then the operator copies them into `media/` and restarts — the
@@ -241,6 +278,11 @@ producer for paths and names.
   up to 51 commands, mean 2.7 µs, worst 21 µs — about 0.1 % of a 60 Hz frame
   (16.7 ms). Clip loads then open in the clip players' workers as with any
   `LayerClip` (the placeholder colour shows until the first frame is ready).
+  **Library clips load by library id** (`LayerClipLib`, wave 8) when their
+  clip is Ready; other clips (`media/`, `--clip`, or a library clip whose
+  file is gone) with `LayerClip` and the bound engine id. Measured
+  2026-11-17 (`show_tests`, library clips past id 256): 4 library clips,
+  8 commands, ~6 µs.
   **Knob reactions** come last: after the look's `FxSet`s (which reset a
   slot to the new effect's Default reactions), one `FxReact` per knob that
   differs: `Default` or `Off`, or for a Custom knob `Set` and then `Range`

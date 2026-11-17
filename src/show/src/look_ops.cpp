@@ -4,6 +4,7 @@
 
 #include <cctype>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 
 namespace himmel::show {
@@ -150,7 +151,7 @@ void diff_react(const ReactRow& cur0, const ReactRow& want, bool effect_changed,
 }
 
 void diff_look(const Look& cur, const Look& target, int deck, const Catalog& cat, CommandList& out, uint32_t parts,
-               uint32_t layer_mask, bool with_deck_fx) {
+               uint32_t layer_mask, bool with_deck_fx, const ClipIndex* clips) {
     const auto d = static_cast<uint8_t>(deck);
     for (int l = 0; l < kLayers; ++l) {
         if (!(layer_mask & (1u << l))) continue;
@@ -158,7 +159,15 @@ void diff_look(const Look& cur, const Look& target, int deck, const Catalog& cat
         const LayerState& b = target.layer[l];
         // Settings first, so the scene's transition / fades apply to its own clip.
         if (parts & kDiffTransport) diff_transport(cur.transport[l], target.transport[l], deck, l, out);
-        if ((parts & kDiffClips) && a.clip != b.clip) out.push(layer_cmd(CommandType::LayerClip, deck, l, b.clip));
+        if ((parts & kDiffClips) && a.clip != b.clip) {
+            // Wave 8: a Ready library clip by its library id (the engine picks the same id: the newest Ready one).
+            const int64_t lib = target.clip_lib[l];
+            if (clips && b.clip >= 0 && lib > 0 && lib <= INT32_MAX && clips->valid(b.clip) &&
+                clips->at(b.clip).library_id == lib && clips->state(b.clip) == ClipState::Ready)
+                out.push(layer_cmd(CommandType::LayerClipLib, deck, l, static_cast<int32_t>(lib)));
+            else
+                out.push(layer_cmd(CommandType::LayerClip, deck, l, b.clip));
+        }
         if (parts & kDiffMix) {
             if (differ(a.opacity, b.opacity)) out.push(layer_cmd(CommandType::LayerOpacity, deck, l, 0, b.opacity));
             if (a.blend != b.blend) out.push(layer_cmd(CommandType::LayerBlend, deck, l, b.blend));
@@ -232,13 +241,6 @@ void lerp_look(const Look& a, const Look& b, float t, Look& out) {
     }
 }
 
-int find_clip(const Catalog& cat, const char* name) {
-    if (!name || !*name) return -1;
-    for (uint32_t i = 0; i < cat.clip_count && i < static_cast<uint32_t>(kMaxClips); ++i)
-        if (ieq(cat.clip[i].name, name)) return static_cast<int>(i);
-    return -1;
-}
-
 int find_effect(const Catalog& cat, const char* name) {
     if (!name || !*name) return -1;
     for (uint32_t i = 0; i < cat.effect_count && i < static_cast<uint32_t>(kMaxEffects); ++i)
@@ -246,16 +248,20 @@ int find_effect(const Catalog& cat, const char* name) {
     return -1;
 }
 
-int bind_clips(Look& look, const Catalog& cat) {
+int bind_clips(Look& look, const ClipIndex& clips, bool* changed) {
     int missing = 0;
     for (int l = 0; l < kLayers; ++l) {
-        if (!look.clip_name[l][0]) {
-            look.layer[l].clip = -1;
-            continue;
-        }
-        const int id = find_clip(cat, look.clip_name[l]);
+        char before_hash[kHashLen], before_name[kNameLen];
+        std::memcpy(before_hash, look.clip_hash[l], kHashLen);
+        std::memcpy(before_name, look.clip_name[l], kNameLen);
+        before_hash[kHashLen - 1] = 0, before_name[kNameLen - 1] = 0;
+        const int64_t before_lib = look.clip_lib[l];
+        const int id = bind_clip(clips, layer_ref(look, l));
         look.layer[l].clip = static_cast<int16_t>(id);
-        if (id < 0) ++missing;
+        if (id < 0 && ref_used(look.clip_lib[l], look.clip_hash[l], look.clip_name[l])) ++missing;
+        if (changed && (before_lib != look.clip_lib[l] || std::strcmp(before_hash, look.clip_hash[l]) != 0 ||
+                        std::strcmp(before_name, look.clip_name[l]) != 0))
+            *changed = true;
     }
     return missing;
 }

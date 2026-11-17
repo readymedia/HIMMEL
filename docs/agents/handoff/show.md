@@ -28,6 +28,17 @@ into the drain loop), reachable through commands 25–36 and the new block
   `Local\HimmelShow`; args `--project`, `--no-show-files`, `--show-root`.
   `deck_model.cpp`: command names for logs only (slot 4 is rate limited like
   everyone; the runtime caps itself at 384 commands per frame, LEAD 2026-11-17).
+- Wave 8 (2026-11-17, branch `claude/show-w8-libids`): clips by library id
+  (D210). `ClipIndex` (`clips.h` / `clips.cpp`): the show's append-only copy
+  of the engine's clip directory (8192 ids, library id, hash from the clip
+  table's `hap/<hash>.mov`, state), synced every tick and before each
+  command; the worker reads it. Looks (`clip_lib`, `clip_hash`), kit pads
+  (`lib`, `hash`) and the journal (version 3) carry the reference; files
+  version 2 (`library_id`, `hash`; version 1 loads by name and is upgraded).
+  Recall binds the scene in place (library id → hash → name), loads Ready
+  library clips with `LayerClipLib`, and names missing clips in the recall
+  message. render_main hook: `RuntimeConfig::clip_dir` / `clip_hash` in
+  SHOW hook 1/4. Tests: `test_library_clips`.
 - Wave 6 (2026-11-17, branch `claude/show-reactions`): looks keep the knob
   reactions (D131). `ReactKnob` / `ReactRow` in `model.h` (canonical:
   Default and Off zero the rest), `diff_react` in `look_ops.cpp` (FxReact

@@ -20,8 +20,11 @@ struct DiceScope {
     int slot = -1;    // with a layer (or -1 = deck FX): FX SLOT scope 0..3
 };
 
-// A new look from `cur` (the deck as it is), respecting `locks` (LockBit).
-void dice_roll(const Look& cur, Look& out, const proto::Catalog& cat, uint32_t locks, DiceScope scope, uint64_t seed);
+// A new look from `cur` (the deck as it is), respecting `locks` (LockBit). With `clips`
+// (the runtime's clip index) clips come from every Ready clip id (catalog v3), else from
+// the catalog's ids < 256.
+void dice_roll(const Look& cur, Look& out, const proto::Catalog& cat, uint32_t locks, DiceScope scope, uint64_t seed,
+               const ClipIndex* clips = nullptr);
 
 // Keep the structure, nudge the numbers by +- amount (0..1, default 0.2).
 void dice_mutate(const Look& cur, Look& out, const proto::Catalog& cat, uint32_t locks, DiceScope scope, uint64_t seed,

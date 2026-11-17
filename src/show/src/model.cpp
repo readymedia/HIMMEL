@@ -198,7 +198,7 @@ void reset_changed_react(Look& look, const Look& ref) {
         if (look.fx[s].effect != ref.fx[s].effect) std::memset(&look.fx_react[s], 0, sizeof(ReactRow));
 }
 
-void look_from_live(const LiveState& live, const TransportSection& tr, const Catalog& cat, int deck, Look& out,
+void look_from_live(const LiveState& live, const TransportSection& tr, const ClipIndex& clips, int deck, Look& out,
                     const ReactionSection* react) {
     std::memset(&out, 0, sizeof(out));
     for (int l = 0; l < kLayers; ++l) {
@@ -206,8 +206,7 @@ void look_from_live(const LiveState& live, const TransportSection& tr, const Cat
         zero_status(out.layer[l]);
         out.transport[l] = tr.layer[deck][l];
         zero_status(out.transport[l]);
-        const int c = out.layer[l].clip;
-        if (c >= 0 && c < static_cast<int>(cat.clip_count)) copy_str(out.clip_name[l], kNameLen, cat.clip[c].name);
+        ref_from_id(clips, out.layer[l].clip, layer_ref(out, l));
     }
     for (int f = 0; f < kFxSlots; ++f) {
         out.fx[f] = live.deck[deck].fx[f];
@@ -221,10 +220,10 @@ void look_from_live(const LiveState& live, const TransportSection& tr, const Cat
     }
 }
 
-void snapshot_from_live(const LiveState& live, const TransportSection& tr, const Catalog& cat, LiveSnapshot& out,
+void snapshot_from_live(const LiveState& live, const TransportSection& tr, const ClipIndex& clips, LiveSnapshot& out,
                         const ReactionSection* react) {
     std::memset(&out, 0, sizeof(out));
-    for (int d = 0; d < kDecks; ++d) look_from_live(live, tr, cat, d, out.deck[d], react);
+    for (int d = 0; d < kDecks; ++d) look_from_live(live, tr, clips, d, out.deck[d], react);
     for (int f = 0; f < kFxSlots; ++f) {
         out.master_fx[f] = live.master_fx[f];
         out.master_fx[f].press = 0;

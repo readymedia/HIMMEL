@@ -1,7 +1,7 @@
 # SHOW track (M3): projects, show files, scenes, undo, dice - docs/interfaces/show-files.md.
 
 # Pure logic (no Windows, no heap in the frame-side functions): the model, looks -> commands, dice.
-add_library(himmel_show_model STATIC src/model.cpp src/look_ops.cpp src/dice.cpp)
+add_library(himmel_show_model STATIC src/model.cpp src/look_ops.cpp src/dice.cpp src/clips.cpp)
 target_include_directories(himmel_show_model PUBLIC include)
 target_link_libraries(himmel_show_model PUBLIC himmel_protocol himmel_engine_model)
 
