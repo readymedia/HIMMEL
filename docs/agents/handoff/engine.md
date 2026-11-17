@@ -162,11 +162,11 @@ Nothing half-done.
 
 ## How to build / run / test this track
 ```
-buildin\Release\output_tests.exe          # 111 checks, no GPU
-buildin\Release\himmel.exe --no-controller --no-weapons --no-ui --no-audio -- --outputs 3 --size 640x360 --no-show-files
-buildin\Release\himmel_cmd.exe clip a 1 0 -- outputs
-python src\engine	ools\curtain_check.py --runs 6 --gap 6   # kill -> black -> back
-buildin\Release\himmel_cmd.exe identify -- blendw 120 -- place a 2 out 3 -- outblack 3 on -- simlost 2 on
+build\bin\Release\output_tests.exe          # 111 checks, no GPU
+build\bin\Release\himmel.exe --no-controller --no-weapons --no-ui --no-audio -- --outputs 3 --size 640x360 --no-show-files
+build\bin\Release\himmel_cmd.exe clip a 1 0 -- outputs
+python src\engine\tools\curtain_check.py --runs 6 --gap 6   # kill -> black -> back
+build\bin\Release\himmel_cmd.exe identify -- blendw 120 -- place a 2 out 3 -- outblack 3 on -- simlost 2 on
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release --parallel 8
 build\bin\Release\deck_tests.exe            # 143 checks, no GPU
