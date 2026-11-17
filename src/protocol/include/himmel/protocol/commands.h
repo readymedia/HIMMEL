@@ -93,6 +93,9 @@ enum class CommandType : uint16_t {
     Identify = 71,      // i = 0 off, 1 show for 5 s, 2 show until 0 (held); fades 0.5 s in / out
     LayerPlace = 72,    // deck (or kHitDeck), layer; i = Place; param = output (Place::Out); f[0..3] = x, y, w, h (Place::Free)
     OutputConfig = 73,  // param = OutputParam; slot = output (kNone = all); i / f[0]
+    // ---- system (ENGINE) ----
+    SystemQuit = 74,    // f[0] = 1 (confirmed) or refused as BadValue; the renderer sets quit_request, the supervisor
+                        // stops every process cleanly (command-protocol.md §4d). Never sent without a confirm.
     Count
 };
 

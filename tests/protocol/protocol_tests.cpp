@@ -99,6 +99,7 @@ static void test_show_block() {
     // Wave 3 ranges (LEAD 2026-11-17): MEDIA 60..69, ENGINE 70..79, CONTROL 80..89.
     static_assert(static_cast<int>(CommandType::OutputBlack) == 70 && static_cast<int>(CommandType::OutputConfig) == 73,
                   "ENGINE M6 owns 70..79");
+    static_assert(static_cast<int>(CommandType::SystemQuit) == 74, "ENGINE: quit (command-protocol.md §4d)");
     static_assert(static_cast<int>(CommandType::Count) <= 90, "types 90+ are not given out yet");
     // Outputs block (M6, outputs-block.md).
     static_assert(std::is_trivially_copyable_v<OutputsSection> && sizeof(DisplayId) == 36);

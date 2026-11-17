@@ -56,6 +56,11 @@ public:
     // acked like every command). Without one they are refused as UnknownType.
     void set_outputs(OutputModel* outputs) { outputs_ = outputs; }
 
+    // A confirmed SystemQuit (74, f[0] = 1) was applied: the producer slot that sent it
+    // (kProducers = local), -1 = none. Sticky: the renderer reports it in its status block
+    // (EngineStatus::quit_request) and the supervisor stops every process.
+    int quit_producer() const { return quit_producer_; }
+
     // Once per frame: advance a running TAKE (lands -> program_deck flips), the
     // beat clock, every playhead, fades, transitions, waiting launches, autopilot.
     void tick(uint64_t now_us);
@@ -119,6 +124,7 @@ public:
 
 private:
     OutputModel* outputs_ = nullptr;
+    int quit_producer_ = -1;  // a confirmed SystemQuit came from this producer
     int submitting_ = -1;  // the producer of the command being applied (M6: who holds IDENTIFY)
     protocol::Reject apply(const protocol::Command& c, uint64_t now_us);
     protocol::FxSlotState* fx_slot(const protocol::Command& c);

@@ -8,7 +8,8 @@ Status: **version 1, written by the LEAD 2026-11-15** for the playable slice;
 25–36, producer slot 4 = `Show`, flags `kVariation` / `kClear`, the new block
 `Local\HimmelShow`; additive like `FxPress`, so `kCommandVersion` stays 1);
 **M6 outputs appended by ENGINE 2026-11-17** (§4c: types 70–73, the new block
-`Local\HimmelOutputs`; additive, `kCommandVersion` stays 1)
+`Local\HimmelOutputs`; additive, `kCommandVersion` stays 1);
+**`SystemQuit` (74) appended by ENGINE 2026-11-17** (§4d; additive)
 (D90). Header: [`src/protocol/include/himmel/protocol/commands.h`](../../src/protocol/include/himmel/protocol/commands.h)
 (the header is the source of truth for field layout; this page is the why and
 the rules). Change it only with a PR to this page + the header, agreed by the
@@ -159,6 +160,33 @@ The enums are in `outputs.h`. Types 37–69 are not used yet and are refused as
 | `Identify` (71) | — | `i` = 0 off (fade out), 1 = 5 s, 2 = until 0 (held) | 0.5 s fade in / out; drawn over the show. A held IDENTIFY belongs to the producer that sent it; when that producer has no heartbeat for 2 s it is let go (fade out), so an output never sticks in IDENTIFY. `himmel_cmd identify hold` therefore lasts ~2 s after the tool exits |
 | `LayerPlace` (72) | deck (or `kHitDeck`), layer | `i` = `Place` (FillAll, Out, Fit, Free); `param` = output (Out); `f[0..3]` = x, y, w, h on the canvas 0..1 (Free; w, h > 0) | Out n with n ≥ the output count is refused (`BadTarget`) |
 | `OutputConfig` (73) | `slot` = output (`kNone` = all) | `param` = `OutputParam`: Resolution (`i` = preset; a setup action, rebuilds the canvas), Refresh (`i` = `RefreshRate`), BlendWidth (`i` px 0..1024), BlendGamma (`f[0]` 1..3, clamped), Mode (`i` = span / mirror), Adopt (`slot`; `i` = 1 take the new display), SimLost (`slot`; `i` = 1 act as if the cable was pulled, 0 back: tests on one screen) | |
+
+## 4d. Quit (ENGINE, 2026-11-17)
+
+One way to close the whole of Himmel cleanly, from the GUI's QUIT button or
+the MK2 system menu (`SHIFT` + wheel → QUIT, push and hold 2 s).
+
+| Type | Targets | Argument | Notes |
+|---|---|---|---|
+| `SystemQuit` (74) | — | `f[0]` = 1 (confirmed) | anything else is refused (`BadValue`); only from producer `Perform`, `Gui` or `Tool` (`BadTarget` from `Osc` and `Show`, so the network or a show file can never quit) |
+
+Quit must never happen by accident, so the **producer asks first** and sends
+`f[0]` = 1 only after the person confirmed: the GUI asks "Quit Himmel?", the
+MK2 needs a 2 s push-and-hold with a countdown on the screen, `himmel_cmd quit`
+needs `--confirm`.
+
+What happens:
+1. The renderer acks it and sets `quit_request` (producer slot + 1) in its
+   status block `Local\HimmelEngine` (`EngineStatus`, version 2). It keeps
+   drawing the show until it is told to stop.
+2. The supervisor sees it within 50 ms and runs the same clean stop as
+   Ctrl+C: renderer (`stop_request`), GUI, audio, ingest, then every weapon
+   driver gets `stop_request` (the Lightpad gets config 13 back, LEDs off),
+   then the MK2 controller, then the curtains drop. `himmel.exe` exits 0.
+3. Without a supervisor (`himmel_render` on its own) the renderer quits by
+   itself when nobody has asked it to stop 3 s after `quit_request`.
+
+A renderer restart clears `quit_request` (the block is recreated).
 
 ## 5. Validation (the engine, before anything else)
 
