@@ -114,7 +114,14 @@ Read `docs/interfaces/engine-state.md` v2 (transport) and
    `docs/interfaces/audio-block.md`, `docs/agents/handoff/audio.md`; engine-side
    reaction code by agreement with ENGINE (small, in `src/engine/src/reactions*`).
 
-### Wave 3 — **ready to start** (written 2026-11-17, after wave 2)
+### Wave 3 — **in progress** (CONTROL M4 merged 2026-11-17)
+
+| Track | Branch | State |
+|---|---|---|
+| CONTROL M4 | `claude/control-m4-perform` | **merged** 2026-11-17 (b354cae → d93acb1). A whole song from the MK2 alone in `mk2_e2e.py` (song stage); input → glass median 32 ms, p90 38 ms (`docs/measurements/2026-11-17-control-m4-input-to-glass.md`). `Mk2Perform::set_context` hook in render_main. D160–D162 PROPOSED. M9 Lightpad not started |
+| MEDIA M7 | `claude/media-m7-ingest` | in progress. SQLite approved (agreed stack); fenced hooks in render_main / ClipPlayer / supervisor |
+| ENGINE M6 | `claude/engine-m6-outputs` | in progress. Types 70–73 + `Local\HimmelOutputs` approved; SpoutDX approved (agreed stack, BSD-2) |
+
 
 **LEAD call:** CONTROL takes **M4** (MK2 Perform v4) before M9. Wave 2 delivered SHOW, so the MK2 can now play a whole song: scenes, REC, ERASE and ENTER. That is the shortest path to "a working version". M9 Lightpad and M13 OSC come next.
 

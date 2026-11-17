@@ -168,6 +168,9 @@ Mappers turn weapon events into commands. They live in `src/perform/`
   (or at ~30 Hz) for time-based behaviour and the LED / screen outputs, which
   the engine then writes into `Local\HimmelMk2`;
 - `Mk2Perform::reset()` when the MK2 (re)connects.
+- `Mk2Perform::set_context(show_status, transport)` once after the mapper is
+  made (M4): read-only pointers to the show runtime's status and the transport
+  model, so pages and pads can show scenes, cues and beat state.
 
 They are pure logic: **no heap, no locks, no I/O, no Windows calls** (they
 run in the frame loop), unit-tested without hardware. Header:

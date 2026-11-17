@@ -970,6 +970,9 @@ int main(int argc, char** argv) {
     LocalSink sink;
     sink.ring = perform_ring.get();
     auto perform = std::make_unique<himmel::perform::Mk2Perform>();
+    // CONTROL M4: the mapper reads the show status (LOOKS pads, macros, undo) and the transport
+    // (cue points, clock); both objects live as long as the loop.
+    perform->set_context(&show->status(), &model->transport());
     Mk2Link mk2link;
 
     const uint64_t t0 = now_us();
