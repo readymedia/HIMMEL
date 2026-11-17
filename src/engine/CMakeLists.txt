@@ -8,7 +8,8 @@ target_include_directories(himmel_engine_shared PUBLIC include)
 target_link_libraries(himmel_engine_shared PUBLIC himmel_media PRIVATE d3d11 mfplat mf mfreadwrite mfuuid ole32 ws2_32 winmm)
 
 # The slice's show model (pure: no GPU, no Windows) - docs/interfaces/command-protocol.md.
-add_library(himmel_engine_model STATIC src/deck_model.cpp src/transport.cpp src/fx_catalog.cpp src/reactions.cpp)
+add_library(himmel_engine_model STATIC src/deck_model.cpp src/transport.cpp src/fx_catalog.cpp src/reactions.cpp
+            src/output_model.cpp)
 target_include_directories(himmel_engine_model PUBLIC include)
 target_link_libraries(himmel_engine_model PUBLIC himmel_protocol himmel_fx himmel_audio_block)
 
@@ -41,9 +42,12 @@ add_test(NAME deck_tests COMMAND deck_tests)
 add_executable(transport_tests ${PROJECT_SOURCE_DIR}/tests/engine/transport_tests.cpp)
 target_link_libraries(transport_tests PRIVATE himmel_engine_model)
 add_test(NAME transport_tests COMMAND transport_tests)
+add_executable(output_tests ${PROJECT_SOURCE_DIR}/tests/engine/output_tests.cpp)
+target_link_libraries(output_tests PRIVATE himmel_engine_model)
+add_test(NAME output_tests COMMAND output_tests)
 
 foreach(t himmel_engine_shared himmel_engine_model himmel_engine_ipc himmel_render himmel_render_legacy himmel himmel_cmd
-          preview_dump deck_tests transport_tests)
+          preview_dump deck_tests transport_tests output_tests)
     if(MSVC)
         target_compile_options(${t} PRIVATE /W4 /permissive- /utf-8)
     endif()

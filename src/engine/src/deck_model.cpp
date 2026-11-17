@@ -247,6 +247,12 @@ Reject DeckModel::validate(const Command& c) const {
             if (!finite(c.f[0])) return Reject::BadValue;
             if (static_cast<ClockParam>(c.param) == ClockParam::Grid && !enum_ok<GridDiv>(c.i)) return Reject::BadValue;
             return Reject::None;
+        // ---- M6 outputs ----
+        case CommandType::OutputBlack:
+        case CommandType::Identify:
+        case CommandType::LayerPlace:
+        case CommandType::OutputConfig:
+            return outputs_ ? outputs_->validate(c, c.type == CommandType::LayerPlace ? slot : -1) : Reject::UnknownType;
         default:
             return Reject::UnknownType;
     }
@@ -804,6 +810,13 @@ Reject DeckModel::apply(const Command& c, uint64_t now_us) {
             }
             last_beat_ = clock_.beat(now_us);  // a clock change is not a jump of every beat timer
             break;
+        case CommandType::OutputBlack:
+        case CommandType::Identify:
+        case CommandType::LayerPlace:
+        case CommandType::OutputConfig:
+            if (!outputs_) return Reject::UnknownType;
+            outputs_->apply(c, slot, now_us);
+            break;
         default: return Reject::UnknownType;
     }
     return Reject::None;
@@ -1058,6 +1071,13 @@ const char* command_name(CommandType t) {
                                              // show (M3)
                                              "recall", "save", "undo", "reset", "dice", "locks", "project", "select",
                                              "kit", "macroset", "macro", "song"};
+    switch (t) {  // M6 (types 70..73)
+        case CommandType::OutputBlack: return "outblack";
+        case CommandType::Identify: return "identify";
+        case CommandType::LayerPlace: return "place";
+        case CommandType::OutputConfig: return "outconfig";
+        default: break;
+    }
     const auto i = static_cast<size_t>(t);
     return i < sizeof(kNames) / sizeof(kNames[0]) ? kNames[i] : "?";
 }

@@ -18,6 +18,7 @@
 
 #include <cstdint>
 
+#include "himmel/engine/output_model.h"
 #include "himmel/engine/transport.h"
 #include "himmel/protocol/commands.h"
 #include "himmel/protocol/state.h"
@@ -50,6 +51,10 @@ public:
 
     // Validation only (§5 steps 1-4); no side effects.
     protocol::Reject validate(const protocol::Command& c) const;
+
+    // M6: the output commands (types 70..73) go to this model (validated, rate limited and
+    // acked like every command). Without one they are refused as UnknownType.
+    void set_outputs(OutputModel* outputs) { outputs_ = outputs; }
 
     // Once per frame: advance a running TAKE (lands -> program_deck flips), the
     // beat clock, every playhead, fades, transitions, waiting launches, autopilot.
@@ -112,6 +117,7 @@ public:
     uint32_t default_take_ms = kDefaultTakeMs;
 
 private:
+    OutputModel* outputs_ = nullptr;
     protocol::Reject apply(const protocol::Command& c, uint64_t now_us);
     protocol::FxSlotState* fx_slot(const protocol::Command& c);
     const protocol::FxSlotState* fx_slot(const protocol::Command& c) const;

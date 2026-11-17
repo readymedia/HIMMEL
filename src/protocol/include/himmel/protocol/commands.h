@@ -87,6 +87,12 @@ enum class CommandType : uint16_t {
     MacroSet = 34,      // deck (whose scene); slot = macro 0..3; param = bind 0..7; layer = target layer (kNone = deck FX); i = fx slot * 16 + fx param; f[0] min, f[1] max; flags kClear
     MacroValue = 35,    // slot = macro 0..3; f[0] 0..1 (Relative: delta); always the PROGRAM deck (knobs 5-8)
     SongEdit = 36,      // param = SongAction; i = song; slot = position; f[0] = value
+    // 37..69: SHOW (..39), AUDIO (40..49), GUI (50..59), MEDIA (60..69) - not used yet (refused as UnknownType)
+    // ---- outputs (M6, ENGINE; enums + the Local\HimmelOutputs block in outputs.h, docs/interfaces/outputs-block.md) ----
+    OutputBlack = 70,   // slot = output 0..7 (kNone = every output); i = Toggle value
+    Identify = 71,      // i = 0 off, 1 show for 5 s, 2 show until 0 (held); fades 0.5 s in / out
+    LayerPlace = 72,    // deck (or kHitDeck), layer; i = Place; param = output (Place::Out); f[0..3] = x, y, w, h (Place::Free)
+    OutputConfig = 73,  // param = OutputParam; slot = output (kNone = all); i / f[0]
     Count
 };
 
