@@ -69,7 +69,7 @@ default and stay PROPOSED (D94–D100 are run that way).
 | 2 | AUDIO · `claude/audio-m8-reactions` | M8 audio-reactive everything — **merged 2026-11-17** |
 | 3 | MEDIA · `claude/media-m7-ingest` | M7 ingest — **merged 2026-11-17** |
 | 3 | ENGINE · `claude/engine-m6-outputs` | M6 outputs, curtains, displays by identity — **merged 2026-11-17** (Spout to follow) |
-| 3 | CONTROL · `claude/control-m4-perform` | M4 MK2 Perform v4 (scenes now exist), then M9 Lightpad, M13 OSC — **M4 + M9 merged 2026-11-17**; M13 OSC next |
+| 3 | CONTROL · `claude/control-m4-perform` | M4 MK2 Perform v4 (scenes now exist), then M9 Lightpad, M13 OSC — **M4 + M9 + M13 merged 2026-11-17** |
 
 ## 1. What we have to build on
 
