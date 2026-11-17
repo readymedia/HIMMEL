@@ -18,12 +18,13 @@ Chain under test:
   and back: Perform LEDs / screens -> Local\\HimmelMk2 outputs -> controller -> UDP -> SimMk2
 
 Run (it starts and stops its own stack unless --attach):
-  python tools/mk2_e2e.py                 start himmel.exe --sim --no-ui --no-weapons -- --no-show-files, test, stop
+  python tools/mk2_e2e.py                 start himmel.exe --sim --no-ui --weapons lightpad -- --no-show-files, test, stop
   python tools/mk2_e2e.py --attach        test a Himmel that is already running with --sim
   python tools/mk2_e2e.py --bin DIR       where himmel.exe / himmel_cmd.exe / show_cmd.exe live (default build/bin/Release)
   python tools/mk2_e2e.py --basic         only the basic checks (no song, no latency)
   python tools/mk2_e2e.py --no-latency    skip the input -> glass measurement
   python tools/mk2_e2e.py --runs N        latency samples (default 20)
+  python tools/mk2_e2e.py --no-lightpad   no Lightpad (M9) stage, and no weapon drivers
 
 The song needs clips: media/*.mov (python tools/make_test_clips.py makes them).
 --no-show-files: the run never opens or writes the owner's project or autosave.
@@ -405,6 +406,107 @@ def song(bin_dir, sim, check):
     check(st["rej"] == 0, "no Perform command refused by the engine", "rej %d" % st["rej"])
 
 
+# ------------------------------------------------------------------------------------- the Lightpad (M9)
+def lightpad(bin_dir, sim, check):
+    """The Block next to the MK2 (hardware-mapping.md §5): MIX fades the decks with soft takeover
+    against the wheel, TAKE row, LED feedback, TOUCH FX. Needs weapon_blocks.exe lightpad --sim."""
+    import lightpad_sim
+    hand = Player(sim)
+    pad = lightpad_sim.SimLightpad()
+    try:
+        if not check(wait_for(pad.engine_active, timeout=10), "weapon_blocks talks to the simulated Lightpad"):
+            return
+        # The engine's picture reaches the block: TOUCH mode has a red top row.
+        def top_red():
+            px = pad.leds()
+            return all(int(p[0:2], 16) > 60 and int(p[2:4], 16) < 30 for p in px[:15])
+        check(bool(wait_for(top_red, timeout=6)), "the engine draws TOUCH on the block (red border)")
+
+        def mode_double_tap():
+            for _ in range(2):
+                pad.press(True)
+                time.sleep(0.04)
+                pad.press(False)
+                time.sleep(0.06)
+            time.sleep(0.5)
+
+        def xf():
+            return state(bin_dir)["xfade"]
+
+        def finger(phase, x, y=0.5, z=0.5):
+            pad.touch(1, x, y, z, phase)
+            time.sleep(0.15)
+
+        # TOUCH: a finger puts a touch effect on PROGRAM (master FX slot 2); lifting takes it off.
+        finger("start", 0.05, 0.2)
+        got = wait_for(lambda: (lambda s: s if 2 in s["master_fx"] else None)(state(bin_dir)), timeout=2)
+        check(bool(got), "TOUCH: a finger puts an effect on PROGRAM", got["master_fx"].get(2) if got else "")
+        finger("end", 0.05, 0.2)
+        check(bool(wait_for(lambda: (lambda s: s if 2 not in s["master_fx"] else None)(state(bin_dir)), timeout=2)),
+              "TOUCH: lifting takes it off")
+
+        # MIX (double-tap Mode).
+        mode_double_tap()
+
+        def white_column():
+            px = pad.leds()
+            want = max(0, min(14, round(xf() * 14)))
+            p = px[7 * 15 + want]
+            return all(int(p[k:k + 2], 16) > 0xC0 for k in (0, 2, 4))
+        check(bool(wait_for(white_column, timeout=3)), "MIX: the block shows the crossfader as a white line")
+
+        # Put the crossfader in the middle with the MK2 wheel (A on air: + = towards B).
+        p0 = state(bin_dir)["program"]
+        sign = 1 if p0 == "A" else -1
+        hand.wheel(15 * sign)
+        x0 = xf()
+        check(abs(x0 - 0.5) < 0.04, "the wheel set the crossfader to the middle", "%.3f" % x0)
+
+        # Soft takeover: a finger far from the fader does nothing until it crosses it.
+        finger("start", 0.1)
+        finger("move", 0.3)
+        check(abs(xf() - x0) < 0.01, "MIX: a finger away from the fader does not jump it", "%.3f" % xf())
+        finger("move", 0.7)
+        got = wait_for(lambda: abs(xf() - 0.7) < 0.02, timeout=2)
+        check(bool(got), "MIX: once the finger crosses the fader it drives it (0.70)", "%.3f" % xf())
+        finger("move", 0.8)
+        check(bool(wait_for(lambda: abs(xf() - 0.8) < 0.02, timeout=2)), "MIX: the fader follows the finger (0.80)")
+
+        # The wheel moves the fader under the resting finger: the finger lets go.
+        hand.wheel(-6 * sign)
+        x1 = xf()
+        check(abs(x1 - 0.6) < 0.03, "the MK2 wheel moved the fader under the finger", "%.3f" % x1)
+        finger("move", 0.9)
+        time.sleep(0.2)
+        check(abs(xf() - x1) < 0.01, "MIX: after the wheel moved, the finger does not jump the fader back",
+              "%.3f" % xf())
+        finger("move", x1 + 0.01)
+        finger("move", x1 + 0.1)
+        check(bool(wait_for(lambda: abs(xf() - (x1 + 0.1)) < 0.02, timeout=2)),
+              "MIX: the finger catches the fader again where the wheel left it")
+        # A swipe all the way fades the decks: PROGRAM flips.
+        prog = state(bin_dir)["program"]
+        for v in (0.9, 0.95, 1.0) if sign > 0 else (0.5, 0.2, 0.0):
+            finger("move", v)
+        got = wait_for(lambda: (lambda s: s if s["program"] != prog else None)(state(bin_dir)), timeout=3)
+        check(bool(got), "MIX: a swipe to the end fades PREVIEW in (PROGRAM %s -> %s)" % (prog, "B" if prog == "A" else "A"))
+        finger("end", 1.0 if sign > 0 else 0.0)
+
+        # The top row = TAKE.
+        prog = state(bin_dir)["program"]
+        finger("start", 0.5, 0.02)
+        finger("end", 0.5, 0.02)
+        got = wait_for(lambda: (lambda s: s if s["program"] != prog and not s["take"] else None)(state(bin_dir)), timeout=5)
+        check(bool(got), "MIX: the top row runs a TAKE")
+        mode_double_tap()  # SCRUB
+        mode_double_tap()  # TOUCH again
+        st = state(bin_dir)
+        check(st["rej"] == 0, "no Perform command refused (MK2 + Lightpad)", "rej %d" % st["rej"])
+    finally:
+        pad.release_all()
+        pad.close()
+
+
 # ------------------------------------------------------------------------------------- input -> glass
 class Glass:
     """Reads the output window from the composed desktop (GDI StretchBlt of the whole client
@@ -549,8 +651,9 @@ def main():
     if not attach:
         exe = os.path.join(bin_dir, "himmel.exe")
         # --no-show-files: a test run never opens or autosaves the owner's project (SHOW M3, D109)
-        print("starting", exe, "--sim --no-ui --no-weapons -- --no-show-files")
-        stack = subprocess.Popen([exe, "--sim", "--no-ui", "--no-weapons", "--", "--no-show-files"], cwd=ROOT,
+        weapons = ["--no-weapons"] if "--no-lightpad" in args else ["--weapons", "lightpad"]
+        print("starting", exe, "--sim --no-ui", " ".join(weapons), "-- --no-show-files")
+        stack = subprocess.Popen([exe, "--sim", "--no-ui"] + weapons + ["--", "--no-show-files"], cwd=ROOT,
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                  creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
     check = Check()
@@ -573,6 +676,9 @@ def main():
         if "--basic" not in args:
             print("song (from the MK2 alone)")
             song(bin_dir, sim, check)
+            if "--no-lightpad" not in args:
+                print("Lightpad (M9)")
+                lightpad(bin_dir, sim, check)
             if "--no-latency" not in args:
                 print("input -> glass")
                 result = latency(bin_dir, sim, check, runs)
