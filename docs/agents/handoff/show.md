@@ -26,8 +26,11 @@ into the drain loop), reachable through commands 25–36 and the new block
   `render_main.cpp` routes types ≥ 25 to `ShowRuntime::submit`, calls
   `show->tick` after `model->tick`, logs show messages, maps
   `Local\HimmelShow`; args `--project`, `--no-show-files`, `--show-root`.
-  `deck_model.cpp`: slot 4 is exempt from the rate limit; command names for
-  logs.
+  `deck_model.cpp`: command names for logs only (slot 4 is rate limited like
+  everyone; the runtime caps itself at 384 commands per frame, LEAD 2026-11-17).
+- LEAD conditions (2026-11-17) done: ranges 25–39 / slot 4 / D109–D119,
+  `show-block.md` with the text-id handshake, layout `static_assert`s in
+  `protocol_tests`, the four render_main hooks marked `SHOW (M3) hook n/4`.
 - Measured (`show_tests`, dev laptop, 2026-11-17): a recall between two full
   4-layer scenes = up to 51 commands, mean 2.7 µs, worst 21 µs.
 

@@ -16,6 +16,7 @@
 // Readers copy a section with seq_read and work on the copy.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 #include "himmel/protocol/commands.h"
@@ -55,13 +56,13 @@ enum class LockOp : uint8_t { Set = 0, Toggle = 1, Clear = 2, Count };
 
 enum class ProjectAction : uint8_t {
     New = 0,             // i = screens of the template (1 or 3, 0 = 3); the new project is "Untitled" until saved as
-    Open = 1,            // i = recent index 0..9, or -1 = the path in the producer's text box (folder or .himmelshow)
+    Open = 1,            // slot = recent index 0..9; slot = kNone: i = text id, the path (folder or .himmelshow) is in the box
     Save = 2,            // the project folder (an untitled project needs SaveAs)
-    SaveAs = 3,          // text box = new folder path or a name (then it goes into the projects folder)
-    Export = 4,          // i = 0: next to the project folder; i = 1: the .himmelshow path in the text box
+    SaveAs = 3,          // i = text id: a new folder path or a name (then it goes into the projects folder)
+    Export = 4,          // i = 0: next to the project folder; else i = text id: the .himmelshow path
     Revert = 5,          // back to the last save
     RestoreAutosave = 6, // load the newest autosave (journal) of the current project
-    Relink = 7,          // text box = a folder to search for the missing clips (by name)
+    Relink = 7,          // i = text id: a folder to search for the missing clips (by name)
     Count
 };
 
@@ -77,14 +78,14 @@ enum class PadTarget : uint8_t { Selected = 0, Layer1 = 1, Layer2 = 2, Layer3 = 
 enum class PadAction : int32_t { Black = 0, WhiteFlash = 1, Freeze = 2, NextScene = 3, DiceLayer = 4, Count };
 
 enum class SongAction : uint8_t {
-    New = 0,             // i = 1: the name is in the text box (0 = "Song n"); added at the end of the setlist
+    New = 0,             // i = text id of the name (0 = "Song n"); added at the end of the setlist
     Delete = 1,          // i = song
     AddScene = 2,        // i = song; deck = source: the deck's look becomes a new scene at the end of the song
     RemoveScene = 3,     // i = song, slot = position 0..15
     Bpm = 4,             // i = song, f[0] = 20..300 (0 = none)
-    Rename = 5,          // i = song, text box = name
+    Rename = 5,          // slot = song, i = text id of the name
     Move = 6,            // i = song, slot = new place in the setlist
-    RenameScene = 7,     // i = pad on the current page, text box = name
+    RenameScene = 7,     // slot = pad on the current page, i = text id of the name
     Count
 };
 
@@ -166,11 +167,40 @@ struct FilesStatus {
 };
 
 // ---- text boxes (one per producer) -----------------------------------------
+// Handshake: the producer picks a new non-zero id (its next command seq is a good one),
+// writes id + text with write_text(), then sends the command with i = that id. The
+// runtime refuses the command (BadValue) when the box does not hold that id, so a stale
+// or half-written text is never used.
 struct TextBox {
-    std::atomic<uint32_t> seq;     // seqlock (seq_write_bytes / seq_read_bytes over text)
-    uint32_t reserved;
+    std::atomic<uint32_t> seq;     // seqlock over id + text
+    uint32_t id;                   // the id of the text below (0 = none)
     char text[kPathLen];           // UTF-8, NUL-terminated
 };
+static_assert(offsetof(TextBox, text) == offsetof(TextBox, id) + sizeof(uint32_t), "id and text are one seqlock range");
+
+inline void write_text(TextBox& b, uint32_t id, const char* s) {   // the box's producer only
+    uint8_t buf[sizeof(uint32_t) + kPathLen] = {};
+    std::memcpy(buf, &id, sizeof(id));
+    for (int k = 0; s && s[k] && k < kPathLen - 1; ++k) buf[sizeof(id) + k] = static_cast<uint8_t>(s[k]);
+    seq_write_bytes(b.seq, reinterpret_cast<uint8_t*>(&b.id), buf, sizeof(buf));
+}
+// False when the writer stayed busy; `out` gets the text, NUL-terminated.
+inline bool read_text(const TextBox& b, uint32_t& id, char (&out)[kPathLen]) {
+    uint8_t buf[sizeof(uint32_t) + kPathLen];
+    if (!seq_read_bytes(b.seq, reinterpret_cast<const uint8_t*>(&b.id), buf, sizeof(buf))) return false;
+    std::memcpy(&id, buf, sizeof(id));
+    std::memcpy(out, buf + sizeof(id), kPathLen);
+    out[kPathLen - 1] = 0;
+    return true;
+}
+
+// Slot 4 (Show) goes through the deck model's validation and rate limit like every producer.
+// The runtime sends at most this many commands per frame (one deck's full look = 352 worst
+// case, so a recall always lands in one frame); the rest waits in its outbox for the next
+// frame, and it never sends more than kMaxCommandsPerSecond in a second.
+inline constexpr int kShowCommandsPerFrame = 384;
+inline constexpr int kLookCommandsMax = kLayersPerDeck * (28 + 1 + 4 + kFxSlots * (3 + kFxParams)) + kFxSlots * (3 + kFxParams);
+static_assert(kLookCommandsMax <= kShowCommandsPerFrame, "a full one-deck recall must fit one frame");
 
 #ifdef _MSC_VER
 #pragma warning(push)

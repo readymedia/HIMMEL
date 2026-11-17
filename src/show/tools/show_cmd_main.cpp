@@ -74,11 +74,11 @@ struct Link {
         }
         return true;
     }
-    void text(const std::string& t) {
-        char buf[kPathLen] = {};
-        std::snprintf(buf, sizeof(buf), "%s", t.c_str());
-        seq_write_bytes(show->text[kSlot].seq, reinterpret_cast<uint8_t*>(show->text[kSlot].text),
-                        reinterpret_cast<const uint8_t*>(buf), kPathLen);
+    // The text handshake (show-block.md §2): the id is the next command seq.
+    int text(const std::string& t) {
+        const uint32_t id = seq + 1;
+        write_text(show->text[kSlot], id, t.c_str());
+        return static_cast<int>(id);
     }
     int send(Command c) {
         c.seq = ++seq;
@@ -218,17 +218,16 @@ int main(int argc, char** argv) {
         for (int i = 0; i < 8; ++i)
             if (a == names[i]) act = i;
         if (act < 0) return usage();
-        int i = 0;
+        int i = 0, slot = kNone;
         const std::string t = arg(3);
         if (act == 0) i = t.empty() ? 3 : std::atoi(t.c_str());
         if (act == 1) {
             const bool num = !t.empty() && t.find_first_not_of("0123456789") == std::string::npos;
-            i = num ? std::atoi(t.c_str()) : -1;
-            if (!num) l.text(t);
+            if (num) slot = std::atoi(t.c_str());
+            else i = l.text(t);
         }
-        if (act == 3 || act == 7 || (act == 4 && !t.empty())) l.text(t);
-        if (act == 4) i = t.empty() ? 0 : 1;
-        const int r = l.send(make_show(CommandType::Project, kNone, kNone, kNone, act, i));
+        if (act == 3 || act == 7 || (act == 4 && !t.empty())) i = l.text(t);
+        const int r = l.send(make_show(CommandType::Project, kNone, kNone, slot, act, i));
         std::this_thread::sleep_for(std::chrono::milliseconds(300));
         print_status(l);
         return r;
@@ -249,7 +248,10 @@ int main(int argc, char** argv) {
         return l.send(make_show(CommandType::KitSet, deck_of(arg(2, "a").c_str()), target, std::atoi(arg(3, "1").c_str()) - 1, kind,
                                 std::atoi(arg(5, "0").c_str())));
     }
-    if (v == "songnew") return l.text(arg(2)), l.send(make_show(CommandType::SongEdit, kNone, kNone, kNone, 0, 1));
+    if (v == "songnew") {
+        const int id = arg(2).empty() ? 0 : l.text(arg(2));
+        return l.send(make_show(CommandType::SongEdit, kNone, kNone, kNone, 0, id));
+    }
     if (v == "songadd")
         return l.send(make_show(CommandType::SongEdit, deck_of(arg(3, "a").c_str()), kNone, kNone, 2, std::atoi(arg(2, "1").c_str()) - 1));
     if (v == "songbpm")

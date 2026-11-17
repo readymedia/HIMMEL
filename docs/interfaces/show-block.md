@@ -12,15 +12,19 @@ files behind it: [`show-files.md`](show-files.md).
 
 ## 1. Parts
 
-Header magic `HMSW`, version 1, size = `sizeof(ShowBlock)`. Whoever comes
-first creates it (the render process at start-up); a reader checks magic,
-version and size and treats a mismatch as "not there".
+Header magic `HMSW`, version 1, size = `sizeof(ShowBlock)` (pinned in
+`tests/protocol/protocol_tests.cpp`). The render process creates it at
+start-up (`open_or_create`; it zero-fills and writes the header last when the
+header is missing or wrong). Readers and producers open the existing block
+and check magic, version and size; a mismatch = "not there" (log once, retry
+every second). Writers: `status` = the render process's frame loop only,
+`files` = its save worker only, `text[n]` = producer slot n only.
 
 | Part | Seqlock | Writer | Written | Holds |
 |---|---|---|---|---|
 | `status` (`ShowStatus`) | `status_seq` | render process (frame loop) | when something changed, at most once per frame, and every 250 ms | project name, dirty dot, busy, bank / song / setlist mode, song name + BPM, the **16 pads of the page** (name, used, variation count, on deck A / B, colour), **per deck** the scene / pad / variation letter / edited / morphing + progress / dice position, locks, undo / redo depth, the PROGRAM scene's 4 macro names + values, last recall µs, scene count, **acks of show commands** (`acked_seq`, `rejected`, `last_reject` per producer), last message + `message_seq` |
 | `files` (`FilesStatus`) | `files_seq` | save worker | after every file operation and journal batch | project path (`""` = untitled), last save, newest autosave, `restored` (0 none, 1 autosave, 2 interrupted save), save ok, saves, journal records, **recent projects** (10: name, path, date, outputs), missing clips (count + the first 8 names), relink result, last error |
-| `text[8]` (`TextBox`) | one per box | each producer its own | before a command that needs it | a UTF-8 path or name, 520 bytes |
+| `text[8]` (`TextBox`) | one per box (over `id` + `text`) | each producer its own | before a command that needs it | `id` (the handshake) + a UTF-8 path or name, 520 bytes |
 
 ## 2. Rules
 
@@ -30,11 +34,15 @@ version and size and treats a mismatch as "not there".
   `LiveState.acked_seq` (that stays the deck model's). A producer that sends
   both kinds keeps one running `seq` and watches both. Refusals count in
   `status.rejected[producer]` with the reason in `last_reject`.
-- **Text boxes.** Commands carry no strings. Write your box with
-  `seq_write_bytes`, then send the command. A box keeps its last text, so a
-  command where the text is optional reads it only when it says so
-  (`Project Export` with `i = 1`, `Project Open` with `i = −1`, `SongEdit New`
-  with `i = 1`); `SaveAs`, `Relink` and the renames always read it.
+- **Text boxes: the handshake.** Commands carry no strings. The producer
+  picks a new non-zero id (its next command `seq` is a good choice), writes id
+  + text into its own box with `write_text()` (one seqlock covers both), then
+  sends the command with `i` = that id. The runtime reads the box with
+  `read_text()` and refuses the command (`BadValue`) when the id differs, the
+  writer was busy, or the text is empty — so a stale or half-written text is
+  never used. Commands that take a text: `Project SaveAs` / `Relink` /
+  `Export` (`i` ≠ 0) / `Open` (`slot` = `kNone`), `SongEdit New` (`i` ≠ 0) /
+  `Rename` / `RenameScene`, `MacroSet` rename (`param` = `kNone`).
 - **Messages.** `status.message` is short and meant for a screen line
   ("3c saved", "Saved My Show", "Autosave 22:41 restored"); `message_seq`
   bumps on each new one, so a reader can show it once.

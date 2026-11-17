@@ -10,6 +10,7 @@
 #endif
 #include <windows.h>
 #include <shlobj.h>
+#include <share.h>
 
 #include <algorithm>
 #include <cctype>
@@ -95,8 +96,15 @@ fs::path default_app_dir() {
 }
 
 bool read_file(const fs::path& file, std::string& out) {
+    // Shared read (a scanner or the indexer may have the file open for a moment): retry briefly.
     FILE* f = nullptr;
-    if (_wfopen_s(&f, file.c_str(), L"rb") != 0 || !f) return false;
+    for (int attempt = 0; attempt < 20 && !f; ++attempt) {
+        f = _wfsopen(file.c_str(), L"rb", _SH_DENYNO);
+        std::error_code ec;
+        if (!f && !fs::exists(file, ec)) return false;  // gone: no retry
+        if (!f) Sleep(10);
+    }
+    if (!f) return false;
     out.clear();
     char buf[65536];
     size_t n;

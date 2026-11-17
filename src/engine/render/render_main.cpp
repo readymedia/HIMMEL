@@ -839,7 +839,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    // ---- the show (M3): Local\HimmelShow + the runtime; its worker opens the last project
+    // ==== SHOW (M3) hook 1/4: Local\HimmelShow + the runtime (its worker opens the last project) ====
     himmel::engine::ShmBlock show_shm;
     proto::ShowBlock* show_blk = nullptr;
     {
@@ -870,6 +870,7 @@ int main(int argc, char** argv) {
                                        : "no files (--no-show-files)");
     }
     uint32_t show_msg_seq = 0;
+    // ==== end SHOW hook 1/4 ====
 
     // ---- GPU + outputs
     Gpu g;
@@ -1000,6 +1001,7 @@ int main(int argc, char** argv) {
         auto drain = [&](int slot, proto::CommandRing& ring) {
             proto::Command c;
             for (int k = 0; k < kDrainPerProducer && ring.pop(c); ++k) {
+                // ==== SHOW (M3) hook 2/4: show commands (types 25..39) go to the show runtime ====
                 const proto::Reject r = proto::is_show_command(c.type) ? show->submit(slot, c, t, *model)
                                                                         : model->submit(slot, c, t);
                 if (r == proto::Reject::None) {
@@ -1035,12 +1037,14 @@ int main(int argc, char** argv) {
         }
         // ==== END AUDIO (M8) ====
         model->tick(t);
+        // ==== SHOW (M3) hook 3/4: once per frame, after the model ====
         show->tick(*model, t);
         if (show->status().message_seq != show_msg_seq) {
             show_msg_seq = show->status().message_seq;
             LOG("show: %s (last recall %u us, %d commands)", show->status().message, show->last_recall_us(),
                 show->last_recall_commands());
         }
+        // ==== end SHOW hook 3/4 ====
         if (t >= alive_next) {
             alive_next = t + 250000;
             model->set_producer_alive(0, mk2_alive);
@@ -1395,7 +1399,7 @@ int main(int argc, char** argv) {
     }
     if (preview.blk)
         for (auto& st : preview.blk->stream) st.active.store(0);
-    show->stop();  // flushes the autosave journal
+    show->stop();  // ==== SHOW (M3) hook 4/4: flushes the autosave journal ====
     set_msg("stopped");
     timeEndPeriod(1);
     return exit_code;

@@ -72,8 +72,9 @@ public:
     const protocol::ShowStatus& status() const { return status_; }
     protocol::FilesStatus files() const;     // the worker's file status (from the block; zero without one)
     bool dirty() const;
-    // Text for a producer when there is no shared block (tests): as if it had written its text box.
-    void set_text(int producer, const char* text);
+    // Write a producer's text box (as that producer would; tests and tools). Returns the id to
+    // send in the command's `i`.
+    uint32_t set_text(int producer, const char* text);
     // Tests / tools only (never the frame): wait until the worker has nothing to do (and has
     // handed over what it loaded; call tick() meanwhile). Returns false on timeout.
     bool worker_idle() const;
@@ -124,14 +125,16 @@ private:
     void apply_macro(engine::DeckModel& m, int macro, uint64_t now_us);
     int pad_of(int scene) const;
     int page_next(int from_pad, int step) const;
-    bool want(Req kind, int producer, int32_t i, uint64_t now_us);   // queue a worker request
+    bool want(Req kind, int producer, int32_t i, const char* text);   // queue a worker request
     void fill_stage(engine::DeckModel& m);
     void sync(engine::DeckModel& m);       // last_ = the model now, no undo step
     void push_undo(const LiveSnapshot& s);
     void take_loaded(engine::DeckModel& m, uint64_t now_us);
     void write_status(const engine::DeckModel& m, uint64_t now_us);
     void message(const char* fmt, ...);
-    bool read_text(int producer, char* out) const;
+    bool take_text(int producer, int32_t id, char (&out)[protocol::kPathLen]) const;  // false: no such id in the box
+    void flush(engine::DeckModel& m, uint64_t now_us);  // outbox -> model, inside the frame cap + rate budget
+    void drop_outbox() { outbox_->clear(), outbox_head_ = 0; }
     void changed() { ++show_gen_, status_dirty_ = true; }
     Scene* deck_scene_ptr(int deck);
 
@@ -183,7 +186,13 @@ private:
     float macro_fallback_[4] = {0.5f, 0.5f, 0.5f, 0.5f};  // macro values when the PROGRAM deck has no scene
     bool status_dirty_ = true;
     uint64_t status_next_us_ = 0;
-    char local_text_[protocol::kProducers][protocol::kPathLen] = {};
+    protocol::TextBox local_text_[protocol::kProducers] = {};  // used when there is no shared block
+    uint32_t text_ids_ = 0;
+    std::unique_ptr<CommandList> outbox_;
+    int outbox_head_ = 0;
+    int frame_sent_ = 0;
+    uint64_t budget_window_us_ = 0;
+    uint32_t budget_used_ = 0;
 };
 
 }  // namespace himmel::show

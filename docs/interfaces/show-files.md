@@ -31,6 +31,15 @@ Local\HimmelShow ◄── status (frame) · files (worker) · text boxes (produ
   (it sends whole scenes), nothing else.
 - Only what differs is sent, and it is sent in the same frame: a recall
   between two full 4-layer scenes is ~50 commands and costs ~3 µs (measured, §8).
+- **The cap (LEAD, 2026-11-17).** Slot 4 has the same validation and rate
+  limit (4000/s) as every producer. The runtime sends at most
+  `kShowCommandsPerFrame` = 384 commands per frame and keeps its own count
+  of the second's budget; what does not fit waits in its outbox (1024) and goes
+  out first in the next frame. One deck's full look is at most 352 commands
+  (`kLookCommandsMax`, static_assert), so **a recall always lands in one
+  frame**; an undo of both decks in the worst case takes two. A new recall /
+  undo / dice / reset drops what is still waiting (it is computed against the
+  model as it is), and a morph waits a frame instead of piling up.
 - Only the save worker touches disk. The frame hands it copies (the whole
   `ShowData`, ~1 MB, only when a save or a coalesced autosave needs it; the live
   state, ~4 KB, at most 10 times a second). JSON is parsed and written in the

@@ -95,6 +95,15 @@ struct ShowRuntime::Worker {
     std::atomic<bool> ready{false};  // the start-up open is done: the frame may autosave / journal
     std::atomic<bool> quit{false};
     std::atomic<int> busy{0};
+    std::atomic<uint32_t> sent{0};   // requests pushed (frame thread)
+    std::atomic<uint32_t> done{0};   // requests handled (worker thread)
+    std::atomic<uint32_t> recs{0};   // journal records popped (worker thread)
+    uint32_t recs_wanted = 0;        // journal records pushed (frame thread)
+    bool push(const Request& r) {    // frame thread
+        if (!req->push(r)) return false;
+        sent.fetch_add(1);
+        return true;
+    }
     // worker only
     std::unique_ptr<ShowData> wshow = std::make_unique<ShowData>();
     LiveSnapshot wlive{};
@@ -422,7 +431,7 @@ struct ShowRuntime::Worker {
                     break;
                 }
                 const std::string base = F::safe_name(wshow->name);
-                fs::path out = r.i != 1 || text.empty() ? (folder.empty() ? projects_root() : folder.parent_path()) / F::from_utf8(base + F::kExportExt)
+                fs::path out = text.empty() ? (folder.empty() ? projects_root() : folder.parent_path()) / F::from_utf8(base + F::kExportExt)
                                             : F::from_utf8(text);
                 if (F::utf8(out.extension()) != F::kExportExt) out += F::kExportExt;
                 const fs::path tmp = app_dir() / "export" / F::from_utf8(base + F::kProjectExt);
@@ -499,16 +508,20 @@ struct ShowRuntime::Worker {
             while (req->pop(r)) {
                 busy.store(1);
                 handle(r);
+                done.fetch_add(1);
                 did = true;
             }
             LiveRec rec;
             uint32_t n = 0;
+            uint32_t popped = 0;
             while (live->pop(rec)) {
+                ++popped;
                 if (rec.epoch != handed) continue;  // the live state of a show that was replaced
                 wlive = rec.snap;
                 if (journal.is_open()) journal.append(rec.snap, rec.unix_ms);
                 ++n;
             }
+            recs.fetch_add(popped);
             if (n) {
                 fstat->autosave_unix = rec.unix_ms / 1000;
                 fstat->journal_records = journal.records();
@@ -540,6 +553,7 @@ ShowRuntime::ShowRuntime() {
     redo_ = std::make_unique<LiveSnapshot[]>(kUndoDepth);
     hist_ = std::make_unique<Look[]>(kDecks * kDiceHistory);
     scratch_ = std::make_unique<CommandList>();
+    outbox_ = std::make_unique<CommandList>();
     pending_ = std::make_unique<Request[]>(kPendingData);
     for (auto& l : recalled_) clear_look(l);
 }
@@ -559,8 +573,7 @@ bool ShowRuntime::start(const RuntimeConfig& cfg, const Catalog& cat, ShowBlock*
     w_->load = bufs_[2].get();
     Request r;
     r.kind = Req::Startup;
-    w_->req->push(r);
-    w_->busy.store(1);
+    w_->push(r);
     w_->th = std::thread([this] { w_->run(); });
     return true;
 }
@@ -574,8 +587,9 @@ void ShowRuntime::stop() {
 
 bool ShowRuntime::worker_idle() const {
     if (!w_) return true;
-    return w_->req->size() == 0 && w_->busy.load() == 0 && pending_n_ == 0 && !w_->stage_full.load() &&
-           !w_->load_ready.load() && w_->live->size() == 0;
+    // Counters, not ring sizes: a request the worker has popped but not finished still counts.
+    return w_->done.load() == w_->sent.load() && pending_n_ == 0 && !w_->stage_full.load() && !w_->load_ready.load() &&
+           w_->live->size() == 0 && w_->recs_wanted == w_->recs.load();
 }
 
 FilesStatus ShowRuntime::files() const {
@@ -586,27 +600,19 @@ FilesStatus ShowRuntime::files() const {
 
 bool ShowRuntime::dirty() const { return show_gen_ != saved_show_gen_ || live_gen_ != saved_live_gen_; }
 
-void ShowRuntime::set_text(int producer, const char* text) {
-    if (producer < 0 || producer >= kProducers) return;
-    copy_str(local_text_[producer], kPathLen, text);
-    if (block_) {
-        char buf[kPathLen] = {};
-        copy_str(buf, kPathLen, text);
-        seq_write_bytes(block_->text[producer].seq, reinterpret_cast<uint8_t*>(block_->text[producer].text),
-                        reinterpret_cast<const uint8_t*>(buf), kPathLen);
-    }
+uint32_t ShowRuntime::set_text(int producer, const char* text) {
+    if (producer < 0 || producer >= kProducers) return 0;
+    const uint32_t id = 0x40000000u + ++text_ids_;
+    write_text(block_ ? block_->text[producer] : local_text_[producer], id, text);
+    return id;
 }
 
-bool ShowRuntime::read_text(int producer, char* out) const {
-    if (block_) {
-        if (!seq_read_bytes(block_->text[producer].seq, reinterpret_cast<const uint8_t*>(block_->text[producer].text),
-                            reinterpret_cast<uint8_t*>(out), kPathLen))
-            return false;
-        out[kPathLen - 1] = 0;
-        return true;
-    }
-    std::memcpy(out, local_text_[producer], kPathLen);
-    return true;
+bool ShowRuntime::take_text(int producer, int32_t id, char (&out)[kPathLen]) const {
+    out[0] = 0;
+    if (id == 0) return false;
+    uint32_t have = 0;
+    if (!read_text(block_ ? block_->text[producer] : local_text_[producer], have, out)) return false;
+    return have == static_cast<uint32_t>(id);
 }
 
 void ShowRuntime::message(const char* fmt, ...) {
@@ -622,12 +628,23 @@ void ShowRuntime::message(const char* fmt, ...) {
 // commands -> the model
 // ============================================================================
 void ShowRuntime::send(engine::DeckModel& m, uint64_t now_us) {
-    for (int k = 0; k < scratch_->n; ++k) {
-        Command c = scratch_->c[k];
-        c.seq = ++seq_;
-        m.submit(kShowSlot, c, now_us);
-    }
+    // Into the outbox, then out as far as this frame's cap and the second's budget allow.
+    if (outbox_head_ == outbox_->n) drop_outbox();
+    for (int k = 0; k < scratch_->n; ++k) outbox_->push(scratch_->c[k]);
     scratch_->clear();
+    flush(m, now_us);
+}
+
+void ShowRuntime::flush(engine::DeckModel& m, uint64_t now_us) {
+    if (now_us - budget_window_us_ >= 1000000 || now_us < budget_window_us_) budget_window_us_ = now_us, budget_used_ = 0;
+    while (outbox_head_ < outbox_->n && frame_sent_ < kShowCommandsPerFrame && budget_used_ < kMaxCommandsPerSecond) {
+        Command c = outbox_->c[outbox_head_++];
+        c.seq = ++seq_;
+        m.submit(kShowSlot, c, now_us);  // validated (and rate limited) like every other producer
+        ++frame_sent_;
+        ++budget_used_;
+    }
+    if (outbox_head_ == outbox_->n) drop_outbox();
 }
 
 void ShowRuntime::apply_look(engine::DeckModel& m, int deck, const Look& target, uint64_t now_us, uint32_t mask, bool deck_fx,
@@ -705,6 +722,7 @@ void ShowRuntime::start_morph(int deck, const Look& from, const Look& to, float 
 }
 
 void ShowRuntime::tick_morphs(engine::DeckModel& m, uint64_t now_us) {
+    if (outbox_head_ < outbox_->n) return;  // the last step is still going out: no new one on top of it
     for (int d = 0; d < kDecks; ++d) {
         Morph& mo = morph_[d];
         if (!mo.active) continue;
@@ -749,6 +767,7 @@ void ShowRuntime::recall(engine::DeckModel& m, int deck, int scene, float morph_
     Scene& s = front_->scene[scene];
     Look target = s.look;
     bind_clips(target, m.catalog());  // names -> ids for this catalog (a relinked clip comes back)
+    drop_outbox();  // a new look replaces whatever was still on its way
     capture(m, now_us);
     push_undo(last_);
     redo_n_ = 0;
@@ -820,18 +839,15 @@ void ShowRuntime::apply_macro(engine::DeckModel& m, int macro, uint64_t now_us) 
     send(m, now_us);
 }
 
-bool ShowRuntime::want(Req kind, int producer, int32_t i, uint64_t now_us) {
-    (void)now_us;
+bool ShowRuntime::want(Req kind, int producer, int32_t i, const char* text) {
     if (!w_) return false;
     Request r;
     r.kind = kind;
     r.producer = static_cast<uint8_t>(producer);
     r.i = i;
-    // The text box is read only when the command says so (boxes keep their last text).
-    if (kind == Req::SaveAs || kind == Req::Relink || (kind == Req::Export && i == 1) || (kind == Req::Open && i == -1))
-        read_text(producer, r.text);
+    copy_str(r.text, kPathLen, text);
     const bool needs_data = kind == Req::Save || kind == Req::SaveAs || kind == Req::Export || kind == Req::Autosave;
-    if (!needs_data) return w_->req->push(r);
+    if (!needs_data) return w_->push(r);
     if (pending_n_ >= kPendingData) return false;
     pending_[pending_n_++] = r;
     return true;
@@ -979,6 +995,7 @@ Reject ShowRuntime::do_command(int producer, const Command& c, uint64_t now_us, 
         }
         case CommandType::Undo: {
             if (c.i != 0 && c.i != 1) return Reject::BadValue;
+            drop_outbox();
             capture(m, now_us);
             morph_[0].active = morph_[1].active = false;
             if (c.i == 0) {
@@ -1009,6 +1026,7 @@ Reject ShowRuntime::do_command(int producer, const Command& c, uint64_t now_us, 
             if (!deck_ok) return Reject::BadTarget;
             if (c.layer != kNone && c.layer >= kLayers) return Reject::BadTarget;
             if (deck_scene_[c.deck] < 0) return Reject::BadTarget;
+            drop_outbox();
             capture(m, now_us);
             push_undo(last_);
             redo_n_ = 0;
@@ -1082,6 +1100,7 @@ Reject ShowRuntime::do_command(int producer, const Command& c, uint64_t now_us, 
                 h[hist_n_[d]] = next;
                 hist_pos_[d] = hist_n_[d]++;
             }
+            drop_outbox();
             capture(m, now_us);
             push_undo(last_);
             redo_n_ = 0;
@@ -1109,8 +1128,17 @@ Reject ShowRuntime::do_command(int producer, const Command& c, uint64_t now_us, 
             if (!w_) return Reject::BadTarget;  // no disk in this run
             static const Req kMap[] = {Req::New, Req::Open, Req::Save, Req::SaveAs, Req::Export, Req::Revert, Req::RestoreAutosave, Req::Relink};
             const auto a = static_cast<ProjectAction>(c.param);
-            if (a == ProjectAction::Open && (c.i < -1 || c.i >= kRecent)) return Reject::BadId;
-            if (!want(kMap[c.param], producer, c.i, now_us)) return Reject::RateLimited;
+            char t[kPathLen] = {};
+            int32_t arg = c.i;
+            // Text handshake (show-block.md §2): i = the id the producer wrote with its text.
+            const bool needs_text = a == ProjectAction::SaveAs || a == ProjectAction::Relink ||
+                                    (a == ProjectAction::Export && c.i != 0) || (a == ProjectAction::Open && c.slot == kNone);
+            if (needs_text && (!take_text(producer, c.i, t) || !t[0])) return Reject::BadValue;
+            if (a == ProjectAction::Open) {
+                if (c.slot != kNone && c.slot >= kRecent) return Reject::BadId;
+                arg = c.slot == kNone ? -1 : c.slot;
+            }
+            if (!want(kMap[c.param], producer, arg, t)) return Reject::RateLimited;
             return Reject::None;
         }
         case CommandType::ShowSelect: {
@@ -1190,7 +1218,7 @@ Reject ShowRuntime::do_command(int producer, const Command& c, uint64_t now_us, 
             Macro& mac = s->macro[c.slot];
             if (c.param == kNone) {  // rename from the text box
                 char t[kPathLen];
-                if (!read_text(producer, t) || !t[0]) return Reject::BadValue;
+                if (!take_text(producer, c.i, t) || !t[0]) return Reject::BadValue;
                 copy_str(mac.name, sizeof(mac.name), t);
             } else {
                 if (c.param >= kMacroBinds) return Reject::BadTarget;
@@ -1238,7 +1266,7 @@ Reject ShowRuntime::do_command(int producer, const Command& c, uint64_t now_us, 
                     std::memset(&so, 0, sizeof(so));
                     for (auto& x : so.scene) x = -1;
                     so.used = 1;
-                    if (c.i == 1) read_text(producer, t);  // i = 1: the name is in the text box
+                    if (c.i != 0 && !take_text(producer, c.i, t)) return Reject::BadValue;  // i = text id, 0 = "Song n"
                     if (t[0]) copy_str(so.name, kSceneNameLen, t);
                     else std::snprintf(so.name, sizeof(so.name), "Song %d", sh.setlist_count + 1);
                     sh.setlist[sh.setlist_count++] = static_cast<int16_t>(id);
@@ -1301,9 +1329,9 @@ Reject ShowRuntime::do_command(int producer, const Command& c, uint64_t now_us, 
                     sh.songs[sh.setlist[c.i]].bpm = c.f[0] <= 0.0f ? 0.0f : std::clamp(c.f[0], 20.0f, 300.0f);
                     break;
                 case SongAction::Rename:
-                    if (!song_ok(c.i)) return Reject::BadId;
-                    if (!read_text(producer, t) || !t[0]) return Reject::BadValue;
-                    copy_str(sh.songs[sh.setlist[c.i]].name, kSceneNameLen, t);
+                    if (c.slot == kNone || !song_ok(c.slot)) return Reject::BadId;
+                    if (!take_text(producer, c.i, t) || !t[0]) return Reject::BadValue;
+                    copy_str(sh.songs[sh.setlist[c.slot]].name, kSceneNameLen, t);
                     break;
                 case SongAction::Move: {
                     if (!song_ok(c.i) || c.slot >= sh.setlist_count) return Reject::BadTarget;
@@ -1317,9 +1345,9 @@ Reject ShowRuntime::do_command(int producer, const Command& c, uint64_t now_us, 
                     break;
                 }
                 case SongAction::RenameScene: {
-                    const int sc = page_scene(sh, c.i);
+                    const int sc = c.slot == kNone ? -1 : page_scene(sh, c.slot);
                     if (sc < 0) return Reject::BadId;
-                    if (!read_text(producer, t) || !t[0]) return Reject::BadValue;
+                    if (!take_text(producer, c.i, t) || !t[0]) return Reject::BadValue;
                     copy_str(sh.scene[sc].name, kSceneNameLen, t);
                     break;
                 }
@@ -1337,6 +1365,7 @@ Reject ShowRuntime::do_command(int producer, const Command& c, uint64_t now_us, 
 // ============================================================================
 void ShowRuntime::take_loaded(engine::DeckModel& m, uint64_t now_us) {
     if (!w_ || !w_->load_ready.load(std::memory_order_acquire)) return;
+    drop_outbox();
     std::swap(front_, w_->load);  // the old show goes back to the worker as its next load buffer
     ++epoch_;
     const Apply a = w_->load_apply;
@@ -1427,6 +1456,7 @@ void ShowRuntime::tick(engine::DeckModel& m, uint64_t now_us) {
         saved_live_gen_ = live_gen_;
     }
     take_loaded(m, now_us);
+    flush(m, now_us);  // what did not fit the last frame
     tick_morphs(m, now_us);
     capture(m, now_us);
 
@@ -1448,7 +1478,7 @@ void ShowRuntime::tick(engine::DeckModel& m, uint64_t now_us) {
         if (ready && show_gen_ != autosaved_show_gen_ && now_us - last_autosave_us_ >= 250000) {
             bool queued = false;
             for (int k = 0; k < pending_n_; ++k) queued = queued || pending_[k].kind == Req::Autosave;
-            if (!queued && want(Req::Autosave, kShowSlot, 0, now_us)) {
+            if (!queued && want(Req::Autosave, kShowSlot, 0, "")) {
                 autosaved_show_gen_ = show_gen_;
                 last_autosave_us_ = now_us;
             }
@@ -1463,7 +1493,7 @@ void ShowRuntime::tick(engine::DeckModel& m, uint64_t now_us) {
             r.live_gen = live_gen_;
             r.epoch = epoch_;
             w_->stage_full.store(1, std::memory_order_release);
-            w_->req->push(r);
+            w_->push(r);
         }
         // Live changes -> the journal (at most every journal_min_ms).
         if (ready && now_us - last_journal_us_ >= static_cast<uint64_t>(cfg_.journal_min_ms) * 1000 &&
@@ -1474,6 +1504,7 @@ void ShowRuntime::tick(engine::DeckModel& m, uint64_t now_us) {
             rec.snap = cur_;
             rec.epoch = epoch_;
             if (w_->live->push(rec)) {
+                ++w_->recs_wanted;
                 journaled_ = cur_;
                 have_journaled_ = true;
                 last_journal_us_ = now_us;
@@ -1485,6 +1516,7 @@ void ShowRuntime::tick(engine::DeckModel& m, uint64_t now_us) {
         status_dirty_ = false;
         status_next_us_ = now_us + 250000;
     }
+    frame_sent_ = 0;  // the next frame (its drain, then its tick) gets a fresh cap
 }
 
 }  // namespace himmel::show
