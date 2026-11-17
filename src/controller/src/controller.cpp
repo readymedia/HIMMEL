@@ -10,6 +10,7 @@
 
 #include <hidapi.h>
 
+#include "himmel/mk2/pages.h"
 #include "himmel/mk2/sim_link.h"
 
 namespace himmel::mk2 {
@@ -254,12 +255,41 @@ void Controller::writer_loop(Session& s) {
     }
 }
 
+// ---------------------------------------------------------------- farewell
+// Called once on a stop, after the reader and writer threads ended, with the device
+// still open: every LED off, then the "stopped" page on both screens (all strips).
+void Controller::farewell(detail::Device& dev) {
+    const LedState off{};
+    std::array<uint8_t, 49> pad_r{};
+    std::array<uint8_t, 57> grp_r{};
+    std::array<uint8_t, 32> btn_r{};
+    build_pad_led_report(off, map_, pad_r);
+    build_group_led_report(off, grp_r);
+    build_button_led_report(off, btn_r);
+    bool ok = dev.write(pad_r.data(), pad_r.size()) && dev.write(grp_r.data(), grp_r.size()) &&
+              dev.write(btn_r.data(), btn_r.size());
+    static ui::Screen page;  // 4 KB, built once per process exit
+    ui::draw_stopped(page);
+    std::array<std::array<uint8_t, kScreenBytes>, 2> half{};
+    page.split(half[0].data(), half[1].data());
+    std::array<uint8_t, kStripReportSize> strip{};
+    for (int side = 0; side < 2 && ok; ++side)
+        for (int k = 0; k < kStrips && ok; ++k) {
+            build_strip_report(side, k, half[side].data(), strip);
+            ok = dev.write(strip.data(), strip.size());
+        }
+    if (log_) log_(ok ? "Let go of the MK2: LEDs off, screens on the stopped page" : "Let go of the MK2 (a write failed)");
+}
+
 // ---------------------------------------------------------------- run loop
 void Controller::run(const std::atomic<bool>& stop) {
     auto& st = shm_->status;
+    // Ctrl+C / close in our console, or the supervisor's stop request in the block.
+    auto stopping = [&] { return stop.load() || st.stop_request.load(std::memory_order_acquire) != 0; };
     if (hid_init() != 0) set_message("hid_init failed");
     std::string last_why;
-    while (!stop.load()) {
+    bool said_stop = false;
+    while (!stopping()) {
         st.heartbeat_us.store(now_us());
         std::string why;
         std::unique_ptr<detail::Device> dev = open(why);
@@ -285,7 +315,7 @@ void Controller::run(const std::atomic<bool>& stop) {
         uint64_t next_summary = t_connect + 1000000, ctl0 = st.control_reports.load(), pad0 = st.pad_reports.load();
         uint64_t last_ev = ~uint64_t{0};
         bool warned_ring0 = false;
-        while (!stop.load()) {
+        while (!stopping()) {
             sleep_ms(20);
             const uint64_t t = now_us();
             st.heartbeat_us.store(t);
@@ -331,14 +361,20 @@ void Controller::run(const std::atomic<bool>& stop) {
         s.stop.store(true);
         reader.join();  // read() returns within 50 ms
         writer.join();
+        if (stopping() && reason.empty() && !s.io_error.load()) {
+            if (st.stop_request.load() && log_) log_("Stop requested by the supervisor");
+            said_stop = true;
+            farewell(*dev);
+        }
         dev.reset();
         st.connected.store(0);
         publish({now_us(), EventType::Disconnected, 0, 0, 0, 0});
-        if (!stop.load()) {
+        if (!stopping()) {
             st.reconnects.fetch_add(1);
             set_message("MK2 lost (" + reason + "), reopening");
         }
     }
+    if (!said_stop && st.stop_request.load() && log_) log_("Stop requested by the supervisor (no MK2 connected)");
     hid_exit();
 }
 

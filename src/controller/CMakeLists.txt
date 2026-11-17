@@ -28,7 +28,7 @@ add_executable(mk2_pages_demo app/mk2_pages_demo_main.cpp)
 target_link_libraries(mk2_pages_demo PRIVATE himmel_mk2)
 
 add_executable(mk2_tests ${PROJECT_SOURCE_DIR}/tests/controller/mk2_tests.cpp)
-target_link_libraries(mk2_tests PRIVATE himmel_mk2)
+target_link_libraries(mk2_tests PRIVATE himmel_mk2 ws2_32)
 target_compile_definitions(mk2_tests PRIVATE HIMMEL_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 add_test(NAME mk2_tests COMMAND mk2_tests)
 

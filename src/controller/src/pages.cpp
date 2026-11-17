@@ -242,6 +242,12 @@ void draw_message(Screen& c, int side, std::string_view title, std::string_view 
     if (!subtitle.empty()) text_in(c, x0 + 2, x1 - 2, 54, subtitle, Align::Center);
 }
 
+void draw_stopped(Screen& c) {
+    c.clear();
+    draw_message(c, 0, "HIMMEL", "STOPPED", "THE MK2 IS FREE");
+    draw_message(c, 1, "HIMMEL", "BYE", "START HIMMEL TO PLAY");
+}
+
 void draw_knob_align(Screen& c, int highlight) {
     c.clear();
     Header l, r;

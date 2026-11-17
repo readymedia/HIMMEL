@@ -2,12 +2,27 @@
 // Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // Unit tests for the MK2 controller core. No hardware needed.
 // Run: build\tests\...\mk2_tests.exe   (or ctest)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <winsock2.h>
+#include <ws2tcpip.h>
+
+#include <algorithm>
+#include <array>
+#include <atomic>
+#include <chrono>
 #include <cmath>
+#include <thread>
 #include <cstdio>
 #include <cstring>
 #include <string>
 #include <vector>
 
+#include "himmel/mk2/controller.h"
 #include "himmel/mk2/input.h"
 #include "himmel/mk2/map.h"
 #include "himmel/mk2/output.h"
@@ -426,6 +441,144 @@ static void test_sim_peer_policy() {
     }
 }
 
+// The supervisor's stop path (2026-11-17): status.stop_request makes a running
+// Controller let go cleanly: every LED off, the "stopped" page on both screens,
+// run() returns fast. Driven end to end through a simulated MK2 on loopback UDP
+// (a test port, never the live 8766) and a private SharedBlock (not Local\HimmelMk2).
+static void test_stop_request() {
+    std::printf("stop_request: LEDs off, stopped page, quick exit\n");
+    constexpr uint16_t kTestPort = 28766;
+    using clk = std::chrono::steady_clock;
+    auto ms_since = [](clk::time_point t) { return std::chrono::duration<double, std::milli>(clk::now() - t).count(); };
+    static SharedBlock blk{};
+    LedState lit{};
+    lit.buttons[0] = 127;
+    lit.pad_rgb[0][1] = 100;
+    lit.group_rgb[0][0][2] = 90;
+    seq_write(blk.outputs.led_seq, blk.outputs.leds, lit);
+    static uint8_t scr[kScreenBytes];
+    std::memset(scr, 0xAA, sizeof(scr));
+    seq_write_bytes(blk.outputs.screen_seq[0], blk.outputs.screen[0], scr, kScreenBytes);
+
+    WSADATA wsa;
+    WSAStartup(MAKEWORD(2, 2), &wsa);
+    ControllerConfig cfg;
+    cfg.sim = true;
+    cfg.sim_port = kTestPort;
+    cfg.heartbeat_timeout_us = 1000000;
+    auto say = [](const std::string& m) { std::printf("    controller: %s\n", m.c_str()); };
+    {
+        Controller ctl(default_map(), cfg, &blk, say);
+        std::atomic<bool> stop{false}, done{false};
+        std::thread th([&] {
+            ctl.run(stop);
+            done.store(true);
+        });
+        SOCKET so = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        sockaddr_in me{};
+        me.sin_family = AF_INET;
+        me.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        bind(so, reinterpret_cast<sockaddr*>(&me), sizeof(me));
+        DWORD tmo = 2;
+        setsockopt(so, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&tmo), sizeof(tmo));
+        sockaddr_in to = me;
+        to.sin_port = htons(kTestPort);
+        std::vector<std::vector<uint8_t>> got;
+        uint8_t pads[1 + kPadsPayload] = {0x20};
+        auto pump = [&](double max_ms, auto until) {
+            const auto t0 = clk::now();
+            while (ms_since(t0) < max_ms && !until()) {
+                sendto(so, reinterpret_cast<const char*>(pads), sizeof(pads), 0, reinterpret_cast<sockaddr*>(&to), sizeof(to));
+                uint8_t buf[600];
+                int n;
+                while ((n = recv(so, reinterpret_cast<char*>(buf), sizeof(buf), 0)) > 0) got.emplace_back(buf, buf + n);
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            }
+        };
+        auto last = [&](uint8_t id, int y = -1) -> const std::vector<uint8_t>* {
+            for (auto it = got.rbegin(); it != got.rend(); ++it)
+                if (!it->empty() && (*it)[0] == id && (y < 0 || (it->size() > 3 && (*it)[3] == y))) return &*it;
+            return nullptr;
+        };
+        pump(4000, [&] { return blk.status.connected.load() && last(0x82) && last(0xE0, 56); });
+        CHECK(blk.status.connected.load() == 1);
+        const auto* b0 = last(0x82);
+        CHECK(b0 && b0->size() == 32 && std::count_if(b0->begin() + 1, b0->end(), [](uint8_t v) { return v != 0; }) > 0);
+
+        got.clear();
+        const auto t_stop = clk::now();
+        blk.status.stop_request.store(1);
+        pump(2000, [&] { return done.load(); });
+        const double took = ms_since(t_stop);
+        pump(30, [] { return false; });  // what is still in flight
+        th.join();
+        std::printf("    run() returned %.0f ms after stop_request\n", took);
+        CHECK(done.load());
+        CHECK(took < 500.0);
+        CHECK(blk.status.connected.load() == 0);
+
+        const LedState off{};
+        std::array<uint8_t, 49> pad_r{};
+        std::array<uint8_t, 57> grp_r{};
+        std::array<uint8_t, 32> btn_r{};
+        build_pad_led_report(off, default_map(), pad_r);
+        build_group_led_report(off, grp_r);
+        build_button_led_report(off, btn_r);
+        const auto* p = last(0x80);
+        const auto* g = last(0x81);
+        const auto* b = last(0x82);
+        CHECK(p && std::equal(p->begin(), p->end(), pad_r.begin(), pad_r.end()));
+        CHECK(g && std::equal(g->begin(), g->end(), grp_r.begin(), grp_r.end()));
+        CHECK(b && std::equal(b->begin(), b->end(), btn_r.begin(), btn_r.end()));
+
+        static ui::Screen page;
+        ui::draw_stopped(page);
+        std::array<std::array<uint8_t, kScreenBytes>, 2> half{};
+        page.split(half[0].data(), half[1].data());
+        int strips_ok = 0;
+        for (int side = 0; side < 2; ++side)
+            for (int k = 0; k < kStrips; ++k) {
+                std::array<uint8_t, kStripReportSize> want{};
+                build_strip_report(side, k, half[side].data(), want);
+                const auto* st = last(static_cast<uint8_t>(0xE0 + side), k * 8);
+                if (st && std::equal(st->begin(), st->end(), want.begin(), want.end())) ++strips_ok;
+            }
+        CHECK(strips_ok == 2 * kStrips);
+        int lit_bytes = 0;
+        for (int i = 0; i < kScreenBytes; ++i) lit_bytes += half[0][i] != 0;
+        CHECK(lit_bytes > 50);  // the page says something
+        closesocket(so);
+    }
+    {
+        // No MK2 (no simulator sending): a stop request still ends run() quickly.
+        blk.status.stop_request.store(0);
+        Controller ctl(default_map(), cfg, &blk, say);
+        std::atomic<bool> stop{false};
+        std::thread th([&] { ctl.run(stop); });
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+        const auto t_stop = clk::now();
+        blk.status.stop_request.store(1);
+        th.join();
+        const double took = ms_since(t_stop);
+        std::printf("    without an MK2: run() returned %.0f ms after stop_request\n", took);
+        CHECK(took < 1000.0);
+    }
+    {
+        // Ctrl+C in the controller's own console (the old path) still ends it.
+        blk.status.stop_request.store(0);
+        Controller ctl(default_map(), cfg, &blk, say);
+        std::atomic<bool> stop{false};
+        std::thread th([&] { ctl.run(stop); });
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+        const auto t_stop = clk::now();
+        stop.store(true);
+        th.join();
+        CHECK(ms_since(t_stop) < 1000.0);
+    }
+    static_assert(kShmVersion == 2, "stop_request came with v2");
+    WSACleanup();
+}
+
 int main() {
     test_map_file_matches_default();
     test_bad_map_is_rejected();
@@ -437,6 +590,7 @@ int main() {
     test_ring_and_seqlock();
     test_pages();
     test_sim_peer_policy();
+    test_stop_request();
     std::printf("\n%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }
