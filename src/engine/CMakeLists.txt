@@ -3,12 +3,14 @@
 # Effects and generators (FX track): himmel_fx, himmel_fx_gpu, fx_tests, fx_check.
 add_subdirectory(fx)
 
-add_library(himmel_engine_shared STATIC src/engine_shared.cpp src/clip_player.cpp src/camera_capture.cpp src/touch_fx.cpp src/entrancer.cpp src/entrancer_link.cpp src/midi_in.cpp)
+add_library(himmel_engine_shared STATIC src/engine_shared.cpp src/clip_player.cpp src/camera_capture.cpp src/touch_fx.cpp src/entrancer.cpp src/entrancer_link.cpp src/midi_in.cpp
+            src/display_watch.cpp)
 target_include_directories(himmel_engine_shared PUBLIC include)
-target_link_libraries(himmel_engine_shared PUBLIC himmel_media PRIVATE d3d11 mfplat mf mfreadwrite mfuuid ole32 ws2_32 winmm)
+target_link_libraries(himmel_engine_shared PUBLIC himmel_media himmel_protocol PRIVATE d3d11 mfplat mf mfreadwrite mfuuid ole32 ws2_32 winmm)
 
 # The slice's show model (pure: no GPU, no Windows) - docs/interfaces/command-protocol.md.
-add_library(himmel_engine_model STATIC src/deck_model.cpp src/transport.cpp src/fx_catalog.cpp src/reactions.cpp)
+add_library(himmel_engine_model STATIC src/deck_model.cpp src/transport.cpp src/fx_catalog.cpp src/reactions.cpp
+            src/output_model.cpp)
 target_include_directories(himmel_engine_model PUBLIC include)
 target_link_libraries(himmel_engine_model PUBLIC himmel_protocol himmel_fx himmel_audio_block)
 
@@ -20,14 +22,14 @@ target_link_libraries(himmel_engine_ipc PUBLIC himmel_protocol himmel_media himm
 # The slice engine (decks, FX, previews, MK2 Perform).
 add_executable(himmel_render render/render_main.cpp)
 target_link_libraries(himmel_render PRIVATE himmel_engine_shared himmel_engine_model himmel_engine_ipc himmel_perform
-                      himmel_mk2 himmel_weapon himmel_fx_gpu himmel_show d3d11 dxgi d3dcompiler winmm)
+                      himmel_mk2 himmel_weapon himmel_fx_gpu himmel_show d3d11 dxgi d3dcompiler winmm dwmapi)
 
 # PARKED pre-slice renderer: test card, camera + latency test, Touch FX, Entrancer, weapon knob pages.
 add_executable(himmel_render_legacy render/legacy_main.cpp)
 target_link_libraries(himmel_render_legacy PRIVATE himmel_engine_shared himmel_mk2 himmel_weapon d3d11 dxgi d3dcompiler winmm)
 
 add_executable(himmel supervisor/supervisor_main.cpp)
-target_link_libraries(himmel PRIVATE himmel_engine_shared himmel_mk2 himmel_weapon himmel_audio_block)
+target_link_libraries(himmel PRIVATE himmel_engine_shared himmel_engine_ipc himmel_mk2 himmel_weapon himmel_audio_block dwmapi)
 
 # Tools: commands from the command line (producer slot 3), preview block -> PNG.
 add_executable(himmel_cmd tools/himmel_cmd_main.cpp)
@@ -41,9 +43,12 @@ add_test(NAME deck_tests COMMAND deck_tests)
 add_executable(transport_tests ${PROJECT_SOURCE_DIR}/tests/engine/transport_tests.cpp)
 target_link_libraries(transport_tests PRIVATE himmel_engine_model)
 add_test(NAME transport_tests COMMAND transport_tests)
+add_executable(output_tests ${PROJECT_SOURCE_DIR}/tests/engine/output_tests.cpp)
+target_link_libraries(output_tests PRIVATE himmel_engine_model)
+add_test(NAME output_tests COMMAND output_tests)
 
 foreach(t himmel_engine_shared himmel_engine_model himmel_engine_ipc himmel_render himmel_render_legacy himmel himmel_cmd
-          preview_dump deck_tests transport_tests)
+          preview_dump deck_tests transport_tests output_tests)
     if(MSVC)
         target_compile_options(${t} PRIVATE /W4 /permissive- /utf-8)
     endif()

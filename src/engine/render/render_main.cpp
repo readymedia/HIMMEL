@@ -3,6 +3,8 @@
 // himmel_render.exe - the slice engine (docs/roadmap.md §0a, task S1).
 //
 //   himmel_render [--outputs N] [--fullscreen] [--size 640x360] [--mode span|mirror]
+//                 [--resolution 720p|1080p|1440p|4k|custom] [--refresh 60|50|59.94|30|25]
+//                 [--blend PX] [--blend-gamma G]   (outputs: M6, docs/interfaces/outputs-block.md)
 //                 [--clip file.mov ...] [--no-overlay] [--preview-fps N] [--stats-csv]
 //                 [--flash-cap HZ] [--test-signal] [--ticker "TEXT"]   (effects: src/engine/fx/, M5)
 //                 [--project FOLDER|FILE.himmelshow] [--no-show-files] [--show-root DIR]   (show: src/show/, M3)
@@ -27,6 +29,12 @@
 // * The show (M3, src/show/): show commands (types 25..36) go to himmel::show::ShowRuntime,
 //   which turns scenes / undo / dice into ordinary commands on slot 4 and keeps every
 //   file in its own worker thread (Local\HimmelShow, docs/interfaces/show-files.md).
+// * Outputs (M6): 1..8 output slots onto one canvas (span with an optional edge blend, or
+//   mirror), resolution presets, black per output, IDENTIFY, layer places. Full-screen
+//   outputs belong to a display by identity (DisplayWatch, a worker): a display that goes
+//   away hides its window (the others never notice: no swap-chain rebuild, it just leaves
+//   the wait set), and it comes back to its slot. Status out: Local\HimmelOutputs (the
+//   supervisor puts its black curtains behind our windows from it).
 // * Parked (in himmel_render_legacy.exe): test card, camera + latency test,
 //   Touch FX / Entrancer, the generic-weapon knob pages.
 //
@@ -43,12 +51,14 @@
 #include <windows.h>
 #include <d3d11.h>
 #include <d3dcompiler.h>
+#include <dwmapi.h>
 #include <dxgi1_5.h>
 #include <timeapi.h>
 #include <wrl/client.h>
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -59,6 +69,8 @@
 #include "himmel/engine/clip_catalog.h"
 #include "himmel/engine/clip_player.h"
 #include "himmel/engine/deck_model.h"
+#include "himmel/engine/display_watch.h"
+#include "himmel/engine/output_model.h"
 #include "himmel/engine/reactions.h"
 #include "himmel/engine/engine_shared.h"
 #include "himmel/engine/fx_catalog.h"
@@ -72,6 +84,7 @@
 #include "himmel/perform/lightpad_perform.h"
 #include "himmel/perform/mk2_perform.h"
 #include "himmel/protocol/commands.h"
+#include "himmel/protocol/outputs.h"
 #include "himmel/protocol/preview.h"
 #include "himmel/protocol/show.h"
 #include "himmel/protocol/state.h"
@@ -93,13 +106,15 @@ using proto::kLayersPerDeck;
 
 namespace {
 
-constexpr int kMaxOutputs = 8;
+constexpr int kMaxOutputs = proto::kMaxOutputs;
 constexpr int kOverlayW = 512, kOverlayH = 12, kOverlayScale = 2;
+constexpr int kIdentW = 192, kIdentH = 80;  // IDENTIFY picture (1-bit, drawn big with point sampling)
 constexpr int kEngineRing = 0;          // ring 0 of the MK2 block belongs to the engine
 constexpr int kDrainPerProducer = 256;  // command-protocol.md §5.7
 
 himmel::engine::LogRing* g_log = nullptr;
 himmel::fx::FxGpu* g_fx = nullptr;  // effects + generators (made at start-up)
+himmel::engine::OutputModel* g_om = nullptr;  // canvas layout + layer places (M6)
 #define LOG(...) g_log->logf(__VA_ARGS__)
 
 // ---------------------------------------------------------------- config
@@ -109,6 +124,10 @@ struct Config {
     int win_w = 640, win_h = 360;
     bool mirror = false;
     bool overlay = true;
+    int resolution = -1;            // M6: ResolutionPreset, -1 = default (fullscreen 1080p, windowed custom = --size)
+    proto::RefreshRate refresh = proto::RefreshRate::Hz60;
+    int blend_px = 0;               // M6: edge-blend overlap, canvas pixels
+    float blend_gamma = 2.2f;
     int preview_fps = 20;
     std::vector<std::string> clips;
     float flash_cap = 0;       // D65: optional per-show flash cap (flashes/s), 0 = off (default)
@@ -142,6 +161,16 @@ Config parse_args(int argc, char** argv) {
         else if (a == "--project") c.project = next();
         else if (a == "--no-show-files") c.show_files = false;
         else if (a == "--show-root") c.show_root = next();
+        else if (a == "--resolution") {
+            const std::string r = next();
+            c.resolution = r == "720p" ? 0 : r == "1080p" ? 1 : r == "1440p" ? 2 : (r == "4k" || r == "4K" || r == "2160p") ? 3
+                         : r == "custom" ? 4 : -1;
+        } else if (a == "--refresh") {
+            const double hz = std::atof(next().c_str());
+            c.refresh = hz > 59.5 && hz < 59.99 ? proto::RefreshRate::Hz59_94 : hz == 50 ? proto::RefreshRate::Hz50
+                      : hz == 30 ? proto::RefreshRate::Hz30 : hz == 25 ? proto::RefreshRate::Hz25 : proto::RefreshRate::Hz60;
+        } else if (a == "--blend") c.blend_px = std::clamp(std::atoi(next().c_str()), 0, 1024);
+        else if (a == "--blend-gamma") c.blend_gamma = std::clamp(static_cast<float>(std::atof(next().c_str())), 1.0f, 3.0f);
         else if (a == "--preview-fps") c.preview_fps = std::clamp(std::atoi(next().c_str()), 15, 30);
         else if (a == "--size") {
             const std::string s = next();
@@ -154,22 +183,17 @@ Config parse_args(int argc, char** argv) {
     return c;
 }
 
-std::vector<RECT> monitors() {
-    std::vector<RECT> m;
-    EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR, HDC, LPRECT r, LPARAM p) -> BOOL {
-        reinterpret_cast<std::vector<RECT>*>(p)->push_back(*r);
-        return TRUE;
-    }, reinterpret_cast<LPARAM>(&m));
-    std::sort(m.begin(), m.end(), [](const RECT& a, const RECT& b) { return a.left < b.left; });
-    return m;
-}
-
 // Window-proc flags (the message pump runs on the render thread).
 struct WinFlags {
-    bool quit = false, resized = false, mirror = false, overlay = true;
+    bool quit = false, resized = false, mirror_toggle = false, overlay = true, display_change = false;
 };
 WinFlags g_win;
 bool g_fullscreen = false;
+// Full-screen output windows only move when we move them (M6): when a display goes
+// away, Windows would move its window onto another display - over another output.
+// WM_WINDOWPOSCHANGING refuses every move we did not make.
+HWND g_out_hwnd[proto::kMaxOutputs] = {};
+bool g_self_move = false;
 
 // ---------------------------------------------------------------- GPU
 struct LayerCB {
@@ -184,7 +208,9 @@ struct MixCB {
 struct BlitCB {
     float src[4];
     float overlay[4];
-    float info[4];
+    float info[4];   // x = gain (0 = black), y = IDENTIFY alpha
+    float edge[4];   // M6 edge blend: left / right ramp width (part of the output), 1 / gamma
+    float ident[4];  // M6 IDENTIFY picture rect in output pixels: x, y, w, h
 };
 struct DownCB {
     float src[4];
@@ -200,14 +226,26 @@ struct Rt {
 
 struct Output {
     HWND hwnd = nullptr;
-    int w = 0, h = 0;
+    int w = 0, h = 0;                  // swap chain size (display or window client)
     ComPtr<IDXGISwapChain2> swap;
     HANDLE waitable = nullptr;
     ComPtr<ID3D11RenderTargetView> rtv;
     ComPtr<ID3D11Texture2D> overlay;
     ComPtr<ID3D11ShaderResourceView> overlay_srv;
     std::array<uint8_t, kOverlayW * kOverlayH> overlay_px{};
+    ComPtr<ID3D11Texture2D> ident;     // IDENTIFY picture (R8, kIdentW x kIdentH)
+    ComPtr<ID3D11ShaderResourceView> ident_srv;
+    std::array<uint8_t, kIdentW * kIdentH> ident_px{};
     float src[4] = {0, 0, 1, 1};
+    // M6: where it is.
+    proto::OutputState state = proto::OutputState::Window;
+    int display = -1;                  // index into the current DisplayList (full screen)
+    proto::DisplayId id{};             // the display this slot belongs to
+    char name[proto::kDisplayNameLen] = "";
+    float hz = 0;
+    RECT rect{};                       // window rect on the desktop
+    uint64_t lost_us = 0;
+    uint32_t lost_count = 0, returned_ms = 0;
 };
 
 struct Gpu {
@@ -371,17 +409,33 @@ void pass(Gpu& g, ID3D11RenderTargetView* rtv, int w, int h, ID3D11PixelShader* 
 }
 
 // ---------------------------------------------------------------- windows
+// The visible window rect (without the invisible resize borders), for the curtains.
+void window_rect(HWND h, RECT& r) {
+    if (FAILED(DwmGetWindowAttribute(h, DWMWA_EXTENDED_FRAME_BOUNDS, &r, sizeof(r)))) GetWindowRect(h, &r);
+}
+
 LRESULT CALLBACK wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
         case WM_SIZE: g_win.resized = true; return 0;
+        case WM_MOVE: g_win.resized = true; return 0;  // the curtain follows a moved window
         case WM_CLOSE:
             if (!g_fullscreen) g_win.quit = true;  // a show output never closes by click
             return 0;
         case WM_KEYDOWN:
             if (wp == VK_ESCAPE && (!g_fullscreen || (GetKeyState(VK_SHIFT) & 0x8000))) g_win.quit = true;
-            if (wp == 'M') g_win.mirror = !g_win.mirror, g_win.resized = true;
+            if (wp == 'M') g_win.mirror_toggle = true;
             if (wp == 'O') g_win.overlay = !g_win.overlay;
             return 0;
+        case WM_DISPLAYCHANGE: g_win.display_change = true; break;
+        case WM_WINDOWPOSCHANGING:
+            if (g_fullscreen && !g_self_move) {
+                for (HWND h : g_out_hwnd)
+                    if (h == hwnd) {
+                        reinterpret_cast<WINDOWPOS*>(lp)->flags |= SWP_NOMOVE | SWP_NOSIZE;
+                        break;
+                    }
+            }
+            break;
         case WM_SETCURSOR:
             if (g_fullscreen && LOWORD(lp) == HTCLIENT) {
                 SetCursor(nullptr);
@@ -392,20 +446,33 @@ LRESULT CALLBACK wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
-bool create_output(Gpu& g, Output& o, int index, const RECT& r, bool fullscreen) {
+// Start-up only. A full-screen output with no display yet is made hidden at `r`
+// (its swap chain at that size) and shown when its display comes.
+bool create_output(Gpu& g, Output& o, int index, const RECT& r, bool fullscreen, bool visible) {
     const DWORD style = fullscreen ? WS_POPUP : WS_OVERLAPPEDWINDOW;
     RECT wr = r;
     if (!fullscreen) AdjustWindowRect(&wr, style, FALSE);
     wchar_t title[64];
     swprintf_s(title, L"Himmel output %d", index + 1);
-    o.hwnd = CreateWindowExW(fullscreen ? WS_EX_TOPMOST : 0, L"HimmelOutput", title, style, wr.left, wr.top,
-                             wr.right - wr.left, wr.bottom - wr.top, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+    g_self_move = true;
+    o.hwnd = CreateWindowExW(fullscreen ? (WS_EX_TOPMOST | WS_EX_NOACTIVATE) : 0, L"HimmelOutput", title, style, wr.left,
+                             wr.top, wr.right - wr.left, wr.bottom - wr.top, nullptr, nullptr, GetModuleHandleW(nullptr),
+                             nullptr);
+    if (o.hwnd) {
+        // No DWM show / hide / close animations: a lost output vanishes at once, and a dying
+        // renderer's windows do not fade over the curtains.
+        const BOOL off = TRUE;
+        DwmSetWindowAttribute(o.hwnd, DWMWA_TRANSITIONS_FORCEDISABLED, &off, sizeof(off));
+    }
+    if (o.hwnd && visible) ShowWindow(o.hwnd, SW_SHOWNOACTIVATE);
+    g_self_move = false;
     if (!o.hwnd) return false;
-    ShowWindow(o.hwnd, SW_SHOWNOACTIVATE);
+    g_out_hwnd[index] = o.hwnd;
     RECT cr;
     GetClientRect(o.hwnd, &cr);
     o.w = std::max<LONG>(1, cr.right);
     o.h = std::max<LONG>(1, cr.bottom);
+    window_rect(o.hwnd, o.rect);
 
     DXGI_SWAP_CHAIN_DESC1 sd{};
     sd.Width = static_cast<UINT>(o.w);
@@ -439,13 +506,20 @@ bool create_output(Gpu& g, Output& o, int index, const RECT& r, bool fullscreen)
     td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
     g.dev->CreateTexture2D(&td, nullptr, &o.overlay);
     g.dev->CreateShaderResourceView(o.overlay.Get(), nullptr, &o.overlay_srv);
-    LOG("output %d: %dx%d %s", index + 1, o.w, o.h, fullscreen ? "fullscreen" : "window");
+    td.Width = kIdentW;
+    td.Height = kIdentH;
+    g.dev->CreateTexture2D(&td, nullptr, &o.ident);
+    g.dev->CreateShaderResourceView(o.ident.Get(), nullptr, &o.ident_srv);
+    LOG("output %d: %dx%d %s%s", index + 1, o.w, o.h, fullscreen ? "fullscreen" : "window",
+        visible ? "" : " (hidden: no display yet)");
     return true;
 }
 
+// The swap chain follows its window's client size. Only this output's swap chain is touched.
 void resize_output(Gpu& g, Output& o) {
     RECT cr;
     GetClientRect(o.hwnd, &cr);
+    window_rect(o.hwnd, o.rect);
     const int w = std::max<LONG>(1, cr.right), h = std::max<LONG>(1, cr.bottom);
     if (w == o.w && h == o.h) return;
     o.rtv.Reset();
@@ -460,23 +534,24 @@ void resize_output(Gpu& g, Output& o) {
     o.h = h;
 }
 
-// Canvas layout: span = side by side, mirror = one output-sized canvas.
-void layout(Gpu& g, std::vector<Output>& outs, bool mirror) {
-    int total_w = 0, max_w = 0, max_h = 0;
-    for (auto& o : outs) total_w += o.w, max_w = std::max(max_w, o.w), max_h = std::max(max_h, o.h);
-    make_canvas(g, mirror ? max_w : total_w, max_h);
-    int x = 0;
-    for (auto& o : outs) {
-        if (mirror) {
-            o.src[0] = 0, o.src[1] = 0, o.src[2] = 1, o.src[3] = 1;
-        } else {
-            o.src[0] = static_cast<float>(x) / g.canvas_w;
-            o.src[1] = 0;
-            o.src[2] = static_cast<float>(o.w) / g.canvas_w;
-            o.src[3] = static_cast<float>(o.h) / g.canvas_h;
-            x += o.w;
-        }
-    }
+// IDENTIFY picture: the big number, then "OUT n  WxH  HZ" and the display's name.
+// Made when the layout or the display changes (never per frame).
+void draw_ident(Gpu& g, Output& o, int index, const himmel::engine::OutputRegion& r) {
+    mk2::Canvas<kIdentW, kIdentH> c;
+    char num[8], line[64];
+    std::snprintf(num, sizeof(num), "%d", index + 1);
+    const int nw = static_cast<int>(std::strlen(num)) * 6 * 8;
+    c.text((kIdentW - nw) / 2 + 4, 2, num, true, 8);
+    if (o.hz > 0) std::snprintf(line, sizeof(line), "OUT %d  %dx%d  %.0fHZ", index + 1, r.w, r.h, o.hz);
+    else std::snprintf(line, sizeof(line), "OUT %d  %dx%d", index + 1, r.w, r.h);
+    c.text(std::max(0, (kIdentW - static_cast<int>(std::strlen(line)) * 6) / 2), 61, line);
+    char nm[proto::kDisplayNameLen];
+    std::snprintf(nm, sizeof(nm), "%s", o.name[0] ? o.name : "WINDOW");
+    for (char* q = nm; *q; ++q) *q = static_cast<char>(std::toupper(static_cast<unsigned char>(*q)));
+    c.text(std::max(0, (kIdentW - static_cast<int>(std::strlen(nm)) * 6) / 2), 71, nm);
+    for (int y = 0; y < kIdentH; ++y)
+        for (int x = 0; x < kIdentW; ++x) o.ident_px[y * kIdentW + x] = c.get(x, y) ? 255 : 0;
+    g.ctx->UpdateSubresource(o.ident.Get(), 0, nullptr, o.ident_px.data(), kIdentW, 0);
 }
 
 // ---------------------------------------------------------------- previews
@@ -744,8 +819,8 @@ struct LayerRuntime {
 
 
 // The layer constant buffer for a clip (or its placeholder colour when not ready).
-void layer_cb(Gpu& g, const LayerRuntime& rt, const proto::LayerState& ls, const proto::Catalog& cat, float opacity,
-              LayerCB& cb, ID3D11ShaderResourceView*& src);
+void layer_cb(Gpu& g, int slot, const LayerRuntime& rt, const proto::LayerState& ls, const proto::Catalog& cat,
+              float opacity, LayerCB& cb, ID3D11ShaderResourceView*& src);
 
 void overlay_text(Gpu& g, Output& o, const char* line) {
     mk2::Canvas<kOverlayW, kOverlayH> c;
@@ -772,8 +847,8 @@ void rgb_of(uint32_t rgb, float out[4]) {
     out[3] = 1.0f;
 }
 
-void layer_cb(Gpu& g, const LayerRuntime& rt, const proto::LayerState& ls, const proto::Catalog& cat, float opacity,
-              LayerCB& cb, ID3D11ShaderResourceView*& src) {
+void layer_cb(Gpu&, int slot, const LayerRuntime& rt, const proto::LayerState& ls, const proto::Catalog& cat,
+              float opacity, LayerCB& cb, ID3D11ShaderResourceView*& src) {
     cb = LayerCB{};
     cb.info[3] = opacity;
     cb.blend[0] = ls.blend;
@@ -782,17 +857,17 @@ void layer_cb(Gpu& g, const LayerRuntime& rt, const proto::LayerState& ls, const
     if (ready) {
         const auto* clip = rt.shown;
         const float cw = static_cast<float>(clip->track.width), ch = static_cast<float>(clip->track.height);
-        const float sc = std::max(g.canvas_w / cw, g.canvas_h / ch);  // cover-fit
-        cb.xform[0] = g.canvas_w / (cw * sc);
-        cb.xform[1] = g.canvas_h / (ch * sc);
+        g_om->layer_xform(slot, cw, ch, cb.xform);  // the layer's place (M6): FILL ALL / OUT n / FIT / FREE
         cb.info[0] = cw / clip->tex_w;
         cb.info[1] = ch / clip->tex_h;
         using HT = himmel::media::HapTexture;
         cb.info[2] = clip->texture == HT::DXT5 ? 1.0f : clip->texture == HT::YCoCgDXT5 ? 2.0f
                                              : clip->texture == HT::RGTC1 ? 3.0f : 0.0f;
         src = clip->srv;
-    } else if (ls.clip >= 0) {  // loading or missing: the clip's placeholder colour (build-v1 §4.4)
+    } else if (ls.clip >= 0) {  // loading or missing: the clip's placeholder colour (build-v1 §4.4), in its place
         cb.info[2] = 4.0f;
+        g_om->layer_xform(slot, static_cast<float>(cat.clip[ls.clip].width), static_cast<float>(cat.clip[ls.clip].height),
+                          cb.xform);
         rgb_of(cat.clip[ls.clip].thumb_rgb, cb.color);
     } else {  // no clip, a generator in an FX slot: it paints on transparent (effect-metadata.md §6)
         cb.info[2] = 6.0f;
@@ -802,13 +877,13 @@ void layer_cb(Gpu& g, const LayerRuntime& rt, const proto::LayerState& ls, const
 }  // namespace
 
 int main(int argc, char** argv) {
+    const uint64_t t_launch = now_us();  // M6: start-up time (a restart must be back in < 2 s)
     timeBeginPeriod(1);
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     himmel::engine::LogRing logring("render");
     g_log = &logring;
     const Config cfg = parse_args(argc, argv);
     g_fullscreen = cfg.fullscreen;
-    g_win.mirror = cfg.mirror;
     g_win.overlay = cfg.overlay;
 
     himmel::engine::EngineShm eshm;
@@ -832,6 +907,64 @@ int main(int argc, char** argv) {
             c.fps, c.seconds, c.codec, c.thumb_rgb);
     }
     auto model = std::make_unique<DeckModel>(*catalog);
+
+    // ==== OUTPUTS (M6): displays by identity, the output model, Local\HimmelOutputs ====
+    himmel::engine::DisplayWatch watch;
+    watch.start();  // the first scan runs here; then a worker keeps the list current
+    auto displays = std::make_unique<himmel::engine::DisplayList>();
+    uint32_t displays_gen = 0;
+    watch.latest(*displays, displays_gen);
+    for (uint32_t k = 0; k < displays->count; ++k) {
+        const auto& d = displays->d[displays->order[k]];
+        LOG("display %u: \"%s\" %s %04X serial %u \"%s\" connector %u  %dx%d at %d,%d  %.2f Hz", k + 1, d.name,
+            d.id.maker, d.id.product, d.id.serial, d.id.serial_text, d.id.connector, d.rect[2] - d.rect[0],
+            d.rect[3] - d.rect[1], d.rect[0], d.rect[1], d.hz);
+    }
+    himmel::engine::OutputSetup osetup;
+    // Default: one output per display in full screen, 3 windows otherwise (the default rig).
+    osetup.count = cfg.outputs ? cfg.outputs : (cfg.fullscreen ? std::max(1, static_cast<int>(displays->count)) : 3);
+    osetup.fullscreen = cfg.fullscreen;
+    osetup.preset = cfg.resolution >= 0 ? static_cast<proto::ResolutionPreset>(cfg.resolution)
+                                       : (cfg.fullscreen ? proto::ResolutionPreset::P1080 : proto::ResolutionPreset::Custom);
+    osetup.custom_w = static_cast<uint32_t>(cfg.win_w), osetup.custom_h = static_cast<uint32_t>(cfg.win_h);
+    osetup.mode = cfg.mirror ? proto::CanvasMode::Mirror : proto::CanvasMode::Span;
+    osetup.blend_px = static_cast<uint32_t>(cfg.blend_px);
+    osetup.blend_gamma = cfg.blend_gamma;
+    osetup.refresh = cfg.refresh;
+    auto om = std::make_unique<himmel::engine::OutputModel>(osetup);
+    g_om = om.get();
+    model->set_outputs(om.get());
+    const int n = om->count();
+    himmel::engine::ShmBlock outputs_shm;
+    proto::OutputsBlock* outputs_blk = nullptr;
+    auto out_sec = std::make_unique<proto::OutputsSection>();  // written into the block on change
+    proto::DisplayId slot_ids[kMaxOutputs] = {};
+    {
+        const auto r = outputs_shm.open_or_create(proto::kOutputsShmName, sizeof(proto::OutputsBlock));
+        if (r == himmel::engine::ShmBlock::Result::Failed) {
+            LOG("outputs: cannot map %ls - no output status (curtains cannot follow)", proto::kOutputsShmName);
+        } else {
+            outputs_blk = static_cast<proto::OutputsBlock*>(outputs_shm.data());
+            if (r == himmel::engine::ShmBlock::Result::Opened &&
+                himmel::engine::header_ok(outputs_blk->header, proto::kOutputsMagic, proto::kOutputsVersion,
+                                          static_cast<uint32_t>(sizeof(proto::OutputsBlock)))) {
+                auto old = std::make_unique<proto::OutputsSection>();
+                if (proto::seq_read(outputs_blk->seq, outputs_blk->s, *old)) {
+                    om->restore(*old);
+                    if (old->fullscreen && cfg.fullscreen)
+                        for (int o = 0; o < kMaxOutputs; ++o) slot_ids[o] = old->out[o].id;
+                    LOG("outputs: restored black / places%s from the previous renderer",
+                        old->config_by_command ? " / canvas settings" : "");
+                }
+            } else {
+                std::memset(static_cast<void*>(outputs_blk), 0, sizeof(proto::OutputsBlock));
+                himmel::engine::write_header(outputs_blk->header, proto::kOutputsMagic, proto::kOutputsVersion,
+                                             static_cast<uint32_t>(sizeof(proto::OutputsBlock)));
+            }
+            outputs_blk->status.pid.store(GetCurrentProcessId());
+        }
+    }
+    // ==== end OUTPUTS ====
 
     // ==== AUDIO (M8): Local\HimmelAudio, mapped once; himmel_audio.exe may come and go ====
     himmel::engine::AudioLink audio_link;
@@ -938,37 +1071,87 @@ int main(int argc, char** argv) {
     wc.lpszClassName = L"HimmelOutput";
     RegisterClassW(&wc);
 
-    const auto mons = monitors();
-    const int n = cfg.outputs ? cfg.outputs : (cfg.fullscreen ? static_cast<int>(mons.size()) : 3);
+    // Full screen: slot -> display by identity (unknown slots take the displays left to right).
     std::vector<Output> outs(static_cast<size_t>(n));
+    int slot_display[kMaxOutputs];
+    bool slot_other[kMaxOutputs];
+    proto::DisplayId disp_ids[himmel::engine::kMaxDisplays];
+    auto match_now = [&]() {
+        for (uint32_t k = 0; k < displays->count; ++k) disp_ids[k] = displays->d[k].id;
+        himmel::engine::match_displays(slot_ids, n, disp_ids, displays->order, static_cast<int>(displays->count),
+                                       slot_display, slot_other);
+        for (int o = 0; o < n; ++o)
+            if (om->sim_lost(o)) slot_display[o] = -1, slot_other[o] = false;
+    };
+    match_now();
     for (int i = 0; i < n; ++i) {
+        Output& o = outs[static_cast<size_t>(i)];
         RECT r;
-        const bool fs = cfg.fullscreen && i < static_cast<int>(mons.size());
-        if (fs) r = mons[static_cast<size_t>(i)];
-        else {
+        bool visible = true;
+        if (cfg.fullscreen) {
+            const int d = slot_display[i];
+            if (d >= 0) {
+                const auto& di = displays->d[d];
+                r = {di.rect[0], di.rect[1], di.rect[2], di.rect[3]};
+                o.display = d, o.id = di.id, o.hz = di.hz;
+                std::memcpy(o.name, di.name, sizeof(o.name));
+                slot_ids[i] = di.id;
+                o.state = proto::OutputState::Ok;
+            } else {  // no display yet: hidden, far away, preset-sized; shown when its display comes
+                const auto& rg = om->region(i);
+                r = {-32000, -32000, -32000 + std::max(64, rg.w), -32000 + std::max(64, rg.h)};
+                visible = false;
+                o.state = slot_other[i] ? proto::OutputState::Other : proto::OutputState::Lost;
+                o.lost_us = now_us();
+            }
+        } else {
             const int x0 = 40 + i * (cfg.win_w + 24) % 1800, y0 = 80 + (i * (cfg.win_w + 24) / 1800) * (cfg.win_h + 60);
             r = {x0, y0, x0 + cfg.win_w, y0 + cfg.win_h};
+            o.state = proto::OutputState::Window;
+            if (displays->count) o.hz = displays->d[displays->order[0]].hz;  // GUESS: the windows sit on the first display
         }
-        if (!create_output(g, outs[static_cast<size_t>(i)], i, r, fs)) return 2;
+        if (!create_output(g, o, i, r, cfg.fullscreen, visible)) return 2;
     }
     if (es) es->outputs.store(static_cast<uint32_t>(n));
-    std::vector<HANDLE> waits;
-    for (auto& o : outs) waits.push_back(o.waitable);
+    // The refresh (operations.md §3): full-screen displays are switched by the watcher's worker.
+    auto ask_refresh = [&]() {
+        if (!cfg.fullscreen) return;
+        watch.want_refresh(*displays, slot_display, n, proto::refresh_hz(om->setup().refresh));
+    };
+    ask_refresh();
+    uint32_t refresh_gen_seen = om->refresh_gen();
+    uint32_t adopt_seen[kMaxOutputs];
+    for (int o = 0; o < kMaxOutputs; ++o) adopt_seen[o] = om->adopt_gen(o);
+    LOG("outputs: %d %s, canvas %ux%u (%s%s), refresh %.2f Hz%s", n, cfg.fullscreen ? "full screen" : "window(s)",
+        om->canvas_w(), om->canvas_h(), om->setup().mode == proto::CanvasMode::Mirror ? "mirror" : "span",
+        om->setup().blend_px ? ", edge blend" : "", proto::refresh_hz(om->setup().refresh),
+        cfg.fullscreen ? "" : " (windowed: the desktop's refresh)");
 
     PreviewWriter preview;
     preview.fps = cfg.preview_fps;
     if (!preview.open()) LOG("preview: cannot map %ls - no previews", proto::kPreviewShmName);
+    // The canvas follows the output model (presets, span / mirror, blend): made now and
+    // rebuilt only when a setup command changes it (one hitch, like a window resize).
+    // DeckA / DeckB / Main previews have the canvas aspect (3 x 16:9 span = a 48:9 strip);
+    // Output1..3 have their output's aspect.
     auto configure_previews = [&]() {
-        layout(g, outs, g_win.mirror);
+        make_canvas(g, static_cast<int>(om->canvas_w()), static_cast<int>(om->canvas_h()));
+        for (int i = 0; i < n; ++i) {
+            const auto& rg = om->region(i);
+            std::memcpy(outs[static_cast<size_t>(i)].src, rg.uv, sizeof(rg.uv));
+            draw_ident(g, outs[static_cast<size_t>(i)], i, rg);
+        }
         const float full[4] = {0, 0, 1, 1};
         const float aspect = static_cast<float>(g.canvas_w) / g.canvas_h;
         for (int i = 0; i < 3; ++i) preview.configure(g, i, true, aspect, full);
         for (int i = 0; i < 3; ++i) {
             const bool on = i < n;
-            const float* src = on ? outs[static_cast<size_t>(i)].src : full;
-            const float a = on ? static_cast<float>(outs[static_cast<size_t>(i)].w) / outs[static_cast<size_t>(i)].h : aspect;
+            const auto& rg = om->region(on ? i : 0);
+            const float* src = on ? rg.uv : full;
+            const float a = on && rg.h > 0 ? static_cast<float>(rg.w) / rg.h : aspect;
             preview.configure(g, 3 + i, on, a, src);
         }
+        om->clear_layout_dirty();
     };
     configure_previews();
 
@@ -1005,10 +1188,111 @@ int main(int argc, char** argv) {
     int q_index = 0;
     char overlay_line[160] = "";
     set_msg("running");
+    LOG("start-up took %.0f ms (process start -> first frame)", (now_us() - t_launch) / 1000.0);
+
+    // ==== OUTPUTS (M6): a slot's display comes and goes; the other outputs never notice ====
+    auto shown = [](const Output& o) {
+        return o.state == proto::OutputState::Ok || o.state == proto::OutputState::Window;
+    };
+    bool outputs_dirty = true;
+    uint64_t outputs_next_us = 0;
+    bool sim_seen[kMaxOutputs] = {};
+    auto set_display = [&](int i, int d, uint64_t t) {  // rare events only (a cable, a mode, a test)
+        Output& o = outs[static_cast<size_t>(i)];
+        const bool was_shown = shown(o);
+        if (!cfg.fullscreen) {
+            if (d < 0 && was_shown) {
+                ShowWindow(o.hwnd, SW_HIDE);
+                o.state = proto::OutputState::Lost;
+            } else if (d >= 0 && !was_shown) {
+                ShowWindow(o.hwnd, SW_SHOWNOACTIVATE);
+                o.state = proto::OutputState::Window;
+            }
+        } else if (d < 0) {
+            const auto st = slot_other[i] ? proto::OutputState::Other : proto::OutputState::Lost;
+            if (was_shown) ShowWindow(o.hwnd, SW_HIDE);
+            if (st != o.state) LOG("OUT %d: %s", i + 1, st == proto::OutputState::Other
+                                                          ? "lost - a different display is free (Adopt to use it)"
+                                                          : "lost - its part of the canvas keeps rendering");
+            o.state = st;
+            o.display = -1;
+        } else {
+            const auto& di = displays->d[d];
+            const RECT r{di.rect[0], di.rect[1], di.rect[2], di.rect[3]};
+            const bool moved = !EqualRect(&r, &o.rect);
+            if (was_shown && !moved && o.display == d && o.hz == di.hz) return;  // nothing changed
+            if (!was_shown || moved) {
+                g_self_move = true;
+                SetWindowPos(o.hwnd, HWND_TOPMOST, r.left, r.top, r.right - r.left, r.bottom - r.top,
+                             SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                g_self_move = false;
+                resize_output(g, o);  // only this output's swap chain, and only if the size changed
+            }
+            o.display = d, o.id = di.id, o.hz = di.hz;
+            std::memcpy(o.name, di.name, sizeof(o.name));
+            slot_ids[i] = di.id;
+            o.state = proto::OutputState::Ok;
+            draw_ident(g, o, i, om->region(i));
+            if (moved && was_shown) LOG("OUT %d: its display moved on the desktop - followed it", i + 1);
+        }
+        const bool now_shown = shown(o);
+        if (was_shown && !now_shown) {
+            o.lost_us = t;
+            ++o.lost_count;
+            if (!cfg.fullscreen) LOG("OUT %d: lost (simulated) - its part of the canvas keeps rendering", i + 1);
+        } else if (!was_shown && now_shown) {
+            o.returned_ms = o.lost_us ? static_cast<uint32_t>((t - o.lost_us) / 1000) : 0;
+            LOG("OUT %d: back on \"%s\" after %u ms", i + 1, o.name[0] ? o.name : "its window", o.returned_ms);
+            if (cfg.fullscreen) ask_refresh();
+        }
+        outputs_dirty = true;
+        overlay_next = 0;
+    };
+    auto update_outputs = [&](uint64_t t) {
+        bool changed = watch.latest(*displays, displays_gen);
+        if (changed) LOG("displays: %u now", displays->count);
+        for (int i = 0; i < n; ++i) {
+            if (om->adopt_gen(i) != adopt_seen[i]) {
+                adopt_seen[i] = om->adopt_gen(i);
+                if (outs[static_cast<size_t>(i)].state == proto::OutputState::Other) {
+                    slot_ids[i] = proto::DisplayId{};  // forget the old display: take the free one
+                    changed = true;
+                    LOG("OUT %d: adopting the new display", i + 1);
+                }
+            }
+            const bool sim_shown = !om->sim_lost(i);
+            if (!cfg.fullscreen && sim_shown != shown(outs[static_cast<size_t>(i)])) set_display(i, sim_shown ? 0 : -1, t);
+            if (cfg.fullscreen && om->sim_lost(i) != sim_seen[i]) changed = true;
+            sim_seen[i] = om->sim_lost(i);
+        }
+        if (cfg.fullscreen && changed) {
+            match_now();
+            for (int i = 0; i < n; ++i) set_display(i, slot_display[i], t);
+        }
+        if (om->refresh_gen() != refresh_gen_seen) {
+            refresh_gen_seen = om->refresh_gen();
+            ask_refresh();
+            LOG("outputs: refresh %.2f Hz asked%s", proto::refresh_hz(om->setup().refresh),
+                cfg.fullscreen ? "" : " (windowed: noted only)");
+            outputs_dirty = true;
+        }
+    };
+    // ==== end OUTPUTS ====
+
+    // The frame period for "late": the asked refresh in full screen, the desktop's in a window.
+    double frame_period = 1.0 / proto::refresh_hz(om->setup().refresh);
+    if (!cfg.fullscreen && displays->count && displays->d[displays->order[0]].hz > 1.0f)
+        frame_period = 1.0 / displays->d[displays->order[0]].hz;
 
     while (!g_win.quit) {
-        // 1. Wait until the swap chains can take a frame (max latency 1).
-        WaitForMultipleObjects(static_cast<DWORD>(waits.size()), waits.data(), TRUE, 100);
+        // 1. Wait until the shown swap chains can take a frame (max latency 1). A hidden
+        //    output (its display is gone) leaves the wait set, so it never holds up the others.
+        HANDLE waits[kMaxOutputs];
+        DWORD nwaits = 0;
+        for (const auto& o : outs)
+            if (shown(o)) waits[nwaits++] = o.waitable;
+        if (nwaits) WaitForMultipleObjects(nwaits, waits, TRUE, 100);
+        else Sleep(static_cast<DWORD>(1000.0f / proto::refresh_hz(om->setup().refresh)));
         const uint64_t t = now_us();
         const double dt = (t - last_frame) / 1e6;
         last_frame = t;
@@ -1020,10 +1304,22 @@ int main(int argc, char** argv) {
             DispatchMessageW(&msg);
         }
         if (es && es->stop_request.load()) g_win.quit = true;
-        if (g_win.resized) {  // allowed to allocate: a window changed size (never during a fullscreen show)
+        if (g_win.display_change) {  // a display came, went or changed mode: rescan now
+            g_win.display_change = false;
+            watch.poke();
+        }
+        if (g_win.mirror_toggle) {  // the M key: same as OutputConfig Mode
+            g_win.mirror_toggle = false;
+            proto::Command c = proto::make(proto::CommandType::OutputConfig);
+            c.param = static_cast<uint8_t>(proto::OutputParam::Mode);
+            c.i = om->setup().mode == proto::CanvasMode::Mirror ? 0 : 1;
+            om->apply(c, -1, t);
+        }
+        if (g_win.resized) {  // a window changed size: only its swap chain follows (the canvas stays)
             g_win.resized = false;
-            for (auto& o : outs) resize_output(g, o);
-            configure_previews();
+            for (auto& o : outs)
+                if (shown(o)) resize_output(g, o);
+            outputs_dirty = true;
             overlay_next = 0;
         }
 
@@ -1122,6 +1418,18 @@ int main(int argc, char** argv) {
         }
         const proto::LiveState& live = model->live();
 
+        // 3b. Outputs (M6): displays that came / went, adopt, refresh; a setup command
+        //     (preset, mode, blend) rebuilds the canvas here - a setup action, one hitch.
+        update_outputs(t);
+        if (om->layout_dirty()) {
+            configure_previews();
+            for (auto& l : layers) l.hold_valid = false;
+            LOG("outputs: canvas %ux%u (%s)", om->canvas_w(), om->canvas_h(),
+                om->setup().mode == proto::CanvasMode::Mirror ? "mirror" : "span");
+            outputs_dirty = true;
+            overlay_next = 0;
+        }
+
         // 4. Clip players: the model's playheads (DeckModel::tick, above) say which frame each
         //    layer shows; follow clip changes, keep cue frames warm, upload ready frames.
         //    Nothing here waits: a frame that is not decoded yet keeps the last one on screen.
@@ -1145,7 +1453,7 @@ int main(int argc, char** argv) {
                 proto::LayerState old = ls;
                 old.clip = static_cast<int16_t>(rt.requested);
                 if (rt.requested >= 0) {
-                    layer_cb(g, rt, old, *catalog, 1.0f, cb, src);
+                    layer_cb(g, s, rt, old, *catalog, 1.0f, cb, src);
                     upload_cb(g, g.cb_layer.Get(), cb);
                     g.ctx->PSSetConstantBuffers(0, 1, g.cb_layer.GetAddressOf());
                     pass(g, g.hold[s].rtv.Get(), g.canvas_w, g.canvas_h, g.ps_source.Get(), nullptr, src);
@@ -1287,7 +1595,7 @@ int main(int argc, char** argv) {
                 if ((ls.clip < 0 && !g_fx->has_generator(ls.fx)) || ls.mute || opacity <= 0.001f) continue;
                 LayerCB cb;
                 ID3D11ShaderResourceView* src = nullptr;
-                layer_cb(g, rt, ls, *catalog, opacity, cb, src);
+                layer_cb(g, s, rt, ls, *catalog, opacity, cb, src);
                 const bool ready = cb.info[2] < 3.5f;
                 bool any_fx = false;
                 for (const auto& f : ls.fx) any_fx |= fx_active(f);
@@ -1338,11 +1646,21 @@ int main(int argc, char** argv) {
                           live.black ? "  BLACK" : "", live.focus_deck < kDecks ? 'A' + live.focus_deck : '-',
                           live.focus_layer < kLayersPerDeck ? live.focus_layer + 1 : 0, mk2_alive ? "OK" : "-",
                           live.producer_alive[1] ? "OK" : "-", live.producer_alive[3] ? "OK" : "-", late);
+            for (int i = 0; i < n; ++i) {  // "OUT 2 LOST" (operations.md §1)
+                const auto st = outs[static_cast<size_t>(i)].state;
+                if (st != proto::OutputState::Lost && st != proto::OutputState::Other) continue;
+                const size_t len = std::strlen(overlay_line);
+                std::snprintf(overlay_line + len, sizeof(overlay_line) - len, "  OUT%d %s", i + 1,
+                              st == proto::OutputState::Other ? "NEW?" : "LOST");
+            }
         }
         HRESULT present_hr = S_OK;
-        for (size_t i = 0; i < outs.size(); ++i) {
-            auto& o = outs[i];
+        const float ident_a = om->identify_alpha(t);
+        for (int i = 0; i < n; ++i) {
+            auto& o = outs[static_cast<size_t>(i)];
+            if (!shown(o)) continue;  // its display is gone: its part of the canvas is still in MAIN / the previews
             if (overlay_due) overlay_text(g, o, overlay_line);
+            const auto& rg = om->region(i);
             BlitCB bcb{};
             std::memcpy(bcb.src, o.src, sizeof(bcb.src));
             if (g_win.overlay) {
@@ -1350,10 +1668,30 @@ int main(int argc, char** argv) {
                 bcb.overlay[2] = static_cast<float>(kOverlayW * kOverlayScale);
                 bcb.overlay[3] = static_cast<float>(kOverlayH * kOverlayScale);
             }
-            bcb.info[0] = live.black ? 0.0f : 1.0f;
+            bcb.info[0] = live.black || om->black(i) ? 0.0f : 1.0f;  // master black, black per output (M6)
+            // Edge blend: ramp widths as parts of this output, and 1 / gamma (engine.md §2.0).
+            if (rg.w > 0) {
+                bcb.edge[0] = rg.blend_left / rg.w;
+                bcb.edge[1] = rg.blend_right / rg.w;
+            }
+            bcb.edge[2] = 1.0f / om->setup().blend_gamma;
+            // IDENTIFY: the picture centred, 60 % of the output's height (operations.md §2).
+            if (ident_a > 0.0f) {
+                const float ih = o.h * 0.6f, iw = ih * kIdentW / kIdentH;
+                const float sc = std::min(1.0f, o.w * 0.9f / iw);
+                bcb.ident[2] = iw * sc, bcb.ident[3] = ih * sc;
+                bcb.ident[0] = (o.w - bcb.ident[2]) * 0.5f, bcb.ident[1] = (o.h - bcb.ident[3]) * 0.5f;
+                bcb.info[1] = ident_a;
+            }
             upload_cb(g, g.cb_blit.Get(), bcb);
             g.ctx->PSSetConstantBuffers(3, 1, g.cb_blit.GetAddressOf());
+            ID3D11ShaderResourceView* ident_srv = o.ident_srv.Get();
+            g.ctx->PSSetShaderResources(3, 1, &ident_srv);
             pass(g, o.rtv.Get(), o.w, o.h, g.ps_blit.Get(), main_srv, o.overlay_srv.Get());
+        }
+        {
+            ID3D11ShaderResourceView* none1 = nullptr;
+            g.ctx->PSSetShaderResources(3, 1, &none1);
         }
         // 8. Previews (after the outputs are drawn, before Present).
         g.ctx->End(g.q_preview[qi].Get());
@@ -1365,6 +1703,7 @@ int main(int argc, char** argv) {
         g.q_pending[qi] = true;
         q_index = (q_index + 1) % Gpu::kQ;
         for (auto& o : outs) {
+            if (!shown(o)) continue;
             const HRESULT hr = o.swap->Present(1, 0);
             if (FAILED(hr)) present_hr = hr;
         }
@@ -1413,6 +1752,39 @@ int main(int argc, char** argv) {
             }
             state.blk->status.heartbeat_us.store(t_done);
         }
+        // Outputs block (M6): on change, while IDENTIFY runs, and every 100 ms (the supervisor's
+        // curtains follow the window rects from here). ~3 KB memcpy, no allocation.
+        if (outputs_blk) {
+            if (outputs_dirty || t_done >= outputs_next_us || ident_a > 0.0f) {
+                om->fill(*out_sec, t_done);
+                out_sec->time_us = t_done;
+                out_sec->epoch = live.epoch;
+                out_sec->hz_measured = fps;
+                out_sec->displays = displays->count;
+                for (int i = 0; i < kMaxOutputs; ++i) {
+                    auto& oi = out_sec->out[i];
+                    if (i >= n) {
+                        oi.state = static_cast<uint8_t>(proto::OutputState::Off);
+                        oi.hwnd = 0;
+                        continue;
+                    }
+                    const Output& o = outs[static_cast<size_t>(i)];
+                    oi.state = static_cast<uint8_t>(o.state);
+                    oi.id = cfg.fullscreen ? slot_ids[i] : proto::DisplayId{};
+                    std::memcpy(oi.name, o.name, sizeof(oi.name));
+                    oi.swap_w = static_cast<uint32_t>(o.w), oi.swap_h = static_cast<uint32_t>(o.h);
+                    oi.hz = o.hz;
+                    oi.rect[0] = o.rect.left, oi.rect[1] = o.rect.top, oi.rect[2] = o.rect.right, oi.rect[3] = o.rect.bottom;
+                    oi.hwnd = reinterpret_cast<uint64_t>(o.hwnd);
+                    oi.lost_count = o.lost_count;
+                    oi.returned_ms = o.returned_ms;
+                }
+                proto::seq_write(outputs_blk->seq, outputs_blk->s, *out_sec);
+                outputs_dirty = false;
+                outputs_next_us = t_done + 100000;
+            }
+            outputs_blk->status.heartbeat_us.store(t_done);
+        }
 
         // 10. Stats + heartbeat.
         if (mk2link.earliest_event_us && mk2link.earliest_event_us <= t_done) {
@@ -1424,7 +1796,7 @@ int main(int argc, char** argv) {
         interval_max = std::max(interval_max, dt);
         const double cpu_ms = (t_done - t) / 1000.0;
         cpu_sum += cpu_ms, cpu_max = std::max(cpu_max, cpu_ms);
-        if (dt > 1.5 / 60.0 && frames > 2) {
+        if (dt > 1.5 * frame_period && frames > 2) {
             ++late, ++late_period;
             late_worst_ms = std::max(late_worst_ms, dt * 1000.0);
         }
@@ -1475,6 +1847,8 @@ int main(int argc, char** argv) {
     if (preview.blk)
         for (auto& st : preview.blk->stream) st.active.store(0);
     show->stop();  // ==== SHOW (M3) hook 4/4: flushes the autosave journal ====
+    watch.stop();
+    if (outputs_blk) outputs_blk->status.pid.store(0);  // the curtains stay where the windows were
     set_msg("stopped");
     timeEndPeriod(1);
     return exit_code;
