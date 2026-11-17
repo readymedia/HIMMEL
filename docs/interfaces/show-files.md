@@ -27,8 +27,7 @@ Local\HimmelShow ◄── status (frame) · files (worker) · text boxes (produ
   (types 25–36) go to the show runtime instead of the deck model; the runtime
   changes the decks **only** by sending ordinary commands (LayerClip, FxSet,
   LayerSet, …) into `DeckModel::submit` on producer slot 4 (`Show`), so they
-  pass the same validation. Slot 4 is exempt from the per-producer rate limit
-  (it sends whole scenes), nothing else.
+  pass the same validation and the same rate limit (the cap below).
 - Only what differs is sent, and it is sent in the same frame: a recall
   between two full 4-layer scenes is ~50 commands and costs ~3 µs (measured, §8).
 - **The cap (LEAD, 2026-11-17).** Slot 4 has the same validation and rate
@@ -36,13 +35,17 @@ Local\HimmelShow ◄── status (frame) · files (worker) · text boxes (produ
   `kShowCommandsPerFrame` = 384 commands per frame and keeps its own count
   of the second's budget; what does not fit waits in its outbox (1024) and goes
   out first in the next frame. One deck's full look is at most 352 commands
-  (`kLookCommandsMax`, static_assert), so **a recall always lands in one
-  frame**; an undo of both decks in the worst case takes two. A new recall /
+  (`kLookCommandsMax`, static_assert), so **a recall's look always lands in
+  one frame**. Knob reactions (`FxReact`, at most 2 per knob, 160 per deck,
+  `kLookReactCommandsMax`) go after every other command of the recall, so in
+  the extreme case (a full look and dozens of custom reactions) the rest of
+  the reactions follow one frame later. An undo of both decks in the worst
+  case takes three frames. A new recall /
   undo / dice / reset drops what is still waiting (it is computed against the
   model as it is), and a morph waits a frame instead of piling up.
 - Only the save worker touches disk. The frame hands it copies (the whole
-  `ShowData`, ~1 MB, only when a save or a coalesced autosave needs it; the live
-  state, ~4 KB, at most 10 times a second). JSON is parsed and written in the
+  `ShowData`, ~1.7 MB, only when a save or a coalesced autosave needs it; the live
+  state, ~10 KB, at most 10 times a second). JSON is parsed and written in the
   worker; a loaded show comes back as a pointer swap at a frame boundary.
 
 ## 2. The model (what a show holds)
@@ -50,7 +53,7 @@ Local\HimmelShow ◄── status (frame) · files (worker) · text boxes (produ
 | Thing | Holds | Limits |
 |---|---|---|
 | **Show** | name, outputs (count, preset 720p / 1080p / 1440p / 4K / custom, span / mirror, refresh), start focus (PREP / PLAY, D75), default TAKE ms, locks, current bank / song / setlist mode | 256 scenes (variations included), 16 banks, 64 songs |
-| **Scene** | name, **look** (one deck: 4 layers × clip, opacity, blend, mute, speed, 4 FX slots, every transport setting; 4 deck FX slots), **kit** (16 pads), **4 macros**, transition (cut / morph / take, seconds, on beat) | variations a–h (8) |
+| **Scene** | name, **look** (one deck: 4 layers × clip, opacity, blend, mute, speed, 4 FX slots, every transport setting; 4 deck FX slots; each FX slot's **knob reactions**, D131), **kit** (16 pads), **4 macros**, transition (cut / morph / take, seconds, on beat) | variations a–h (8) |
 | **Variation** | a scene with `parent` = its main scene; same pad; letters b, c, … (the main is a) | |
 | **Kit pad** | kind (empty, clip, cue, effect, scene, action), target (SELECTED, LAYER 1–4, ALL, FREE, HIT, D71), id, slot, name | 16 |
 | **Macro** | name, value 0..1, up to 8 bindings (layer or deck FX, slot, param, min, max) | 4 per scene |
@@ -63,6 +66,14 @@ Local\HimmelShow ◄── status (frame) · files (worker) · text boxes (produ
 - Cue points belong to the clip, not the scene (the engine keeps them per clip).
 - Not in a look: playhead position, play / pause, the HIT layer, PRESS,
   the crossfader (these are live state, not a look).
+- **Knob reactions (D131, 2026-11-17).** Every FX slot of a look (layer,
+  deck and, in the live state / undo, master) keeps the reaction of its knobs
+  1–4 as the engine's reaction table has it (`ReactionSection`,
+  `engine-state.md`): **Default** (the effect's own reaction), **Custom**
+  (signal, mode, curve, quantise, hold, amount, attack, release, threshold,
+  and the range when it was set) or **Off**. Scenes, variations, undo steps,
+  the journal and `live.json` all carry them; a scene is "edited" when a
+  reaction differs too. Only the live values (`env`, `value`) are not kept.
 
 ## 3. On disk: the project folder
 
@@ -120,7 +131,11 @@ A scene (inside `bank-NN.json` → `"pads": [scene | null × 16]`, or
 		"layers": [
 			{"clip": {"name": "clip04.mov", "w": 1920, "h": 1080, "seconds": 10},
 			 "opacity": 1, "blend": "normal", "speed": 1,
-			 "fx": [{"effect": "Kaleido", "params": [0.5, 0.25], "mix": 1}, null, null, null],
+			 "fx": [{"effect": "Kaleido", "params": [0.5, 0.25], "mix": 1,
+			         "react": [{"knob": 0, "source": "custom", "signal": "bass", "mode": "follow", "curve": "soft",
+			                    "amount": 0.7, "attack_ms": 25, "release_ms": 300, "threshold": 0.2,
+			                    "quantise": "1/4", "hold_beats": 0.5, "range": [0.2, 0.8]},
+			                   {"knob": 1, "source": "off"}]}, null, null, null],
 			 "transport": {"mode": "loop", "in": 0, "out": 1, "loop_in": 0.25, "loop_out": 0.75, "...": "every LayerParam"}},
 			"... 4 layers"
 		],
@@ -131,6 +146,23 @@ A scene (inside `bank-NN.json` → `"pads": [scene | null × 16]`, or
 	"variations": [{"name": "Scene 02", "look": {}, "kit": [], "macros": []}]
 }
 ```
+
+**`"react"` in an FX slot** (D131, added 2026-11-17; same `himmel-show/1`
+format, since it is an optional key): a list of the knobs that are not
+Default, each `{"knob": 0..3, "source": "custom" | "off", ...}`. Custom
+knobs carry `signal` (none, level, bass, mid, high, kick, snare, hat, onset,
+beat, bar, energy, build, drop), `mode` (add, follow, trigger), `curve`
+(linear, soft, hard, steps, exp), `amount` −1..1, `attack_ms` / `release_ms`
+0..2000, `threshold` 0..1, and only when not the default: `quantise` (1/16,
+1/8, 1/4, 1/2, bar), `hold_beats` (quarter steps, 0..4) and `range` `[lo, hi]`
+(knob positions 0..1; without it the param's good range is used). The same
+names and ranges as `FxReact` (`command-protocol.md` §4d).
+- **Old files** (no `"react"` key) load with every knob Default: the
+  effect's own reaction, as before D131.
+- A knob past the effect's params, an unknown source or a broken entry is
+  skipped (that knob stays Default); numbers are clamped like `FxReact` does.
+  `"source": "default"` is accepted and means the same as leaving the knob out.
+- The master FX slots in `live.json` (`"master_fx"`) carry `"react"` the same way.
 
 ## 4. Saving (atomic, never in the frame)
 
@@ -152,7 +184,9 @@ A scene (inside `bank-NN.json` → `"pads": [scene | null × 16]`, or
 
 ## 5. Autosave, journal, restore
 
-- **Journal** (`autosave/journal.bin`): a header (format version,
+- **Journal** (`autosave/journal.bin`): a header (journal version 2 since
+  the knob reactions, D131; a version 1 journal is not restored, the show
+  then comes from `show.json` / the last save; format version,
   `sizeof(LiveSnapshot)`, the effect names at write time) and records
   `{magic, size, unix ms, CRC-32, LiveSnapshot}`. A reader takes the newest
   record whose CRC is right, so a torn last record (the process died
@@ -206,9 +240,15 @@ producer for paths and names.
   4-layer scenes, 2 FX per layer, deck FX, transport settings, 400 recalls):
   up to 51 commands, mean 2.7 µs, worst 21 µs — about 0.1 % of a 60 Hz frame
   (16.7 ms). Clip loads then open in the clip players' workers as with any
-  `LayerClip` (the placeholder colour shows until the first frame is ready). With `f[0] > 0` (or a scene transition of kind
+  `LayerClip` (the placeholder colour shows until the first frame is ready).
+  **Knob reactions** come last: after the look's `FxSet`s (which reset a
+  slot to the new effect's Default reactions), one `FxReact` per knob that
+  differs: `Default` or `Off`, or for a Custom knob `Set` and then `Range`
+  (`f[0]` < 0 = back to the param's good range) when the range differs. A
+  knob the effect does not have is never addressed. With `f[0] > 0` (or a scene transition of kind
   morph): a **morph** (numbers glide where both sides have the same thing,
-  clips swap at the middle with a dip, the rest switches at 50 %).
+  clips swap at the middle with a dip, the rest switches at 50 %; knob
+  reactions switch at 50 % too).
 - **Undo** (`Undo`): 64 steps of both decks + master FX (not the crossfader,
   TAKE / CUT / black). Edits closer than 400 ms are one step (a knob turn;
   `GUESS:` 400 ms). Recall, dice and reset are one step each. Redo until the
@@ -221,13 +261,14 @@ producer for paths and names.
   (never overwrites, D72; the message says "3c saved").
 - **Dice v1** (`Dice`, `presets-and-shuffle.md` §2): ROLL (seeded,
   deterministic), MUTATE (± amount, default 0.2), BACK / FORWARD through 64
-  results per deck (FORWARD at the end = a new roll; a roll in the middle drops
+  results per deck; a slot that gets a new effect gets that effect's Default
+  reactions, a slot that keeps its effect keeps its reactions (FORWARD at the end = a new roll; a roll in the middle drops
   the forward part), ROTATE (the deck's scene's variations, then the next scene
   of the page). Scopes: deck / layer / FX slot. Locks: CLIP (clips), FX
   (effects), LAYOUT (opacity, blend), MOTION (speed, direction, params named
   speed / rate / spin / zoom …), COLOUR (params named hue / colour / sat …).
   SOURCE / REACT / MOOD are kept as bits but do nothing yet (no generators in
-  the roll, no reactions or moods in 0.1's catalog). `GUESS:` the roll's
+  the roll, the roll does not change reactions, no moods in 0.1's catalog). `GUESS:` the roll's
   weights (1–4 layers, 60 % an effect in slot 1, …) until moods and library
   analysis exist (M7).
 - **Macros** (`MacroValue`): knobs 5–8 → the PROGRAM deck's scene's macros.
