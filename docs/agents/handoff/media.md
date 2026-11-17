@@ -85,7 +85,7 @@ location + move (69). Contract: `library-db.md` §11, block **v3**
   11 Busy; `library-db.md` §11; D180–D184.
 - 20691b2 + the next commit: the code.
   - `src/media/ingest/guard.{h,cpp}`: estimate (HAP 0.5, HAP Q / Alpha 1 byte
-    per px per frame + 64 KB), `reserve_for` (max(10 GB, 10 %)), `fits`,
+    per px per frame + 64 KB), `reserve_for` (clamp(5 %, 2 GB, 20 GB); was max(10 GB, 10 %)), `fits`,
     `output_shape` (max height, never up, multiple of 4, conform), `conform_fps`,
     `plain_error`, `BatchProgress` (n of m, ETA), `file_progress`.
   - `library_move.{h,cpp}`: plan / copy (CopyFileExW with progress + cancel,
@@ -142,11 +142,10 @@ Nothing. Waiting for the LEAD's merge (and the ENGINE answer on D181).
    does not see library clips that arrived after start (SHOW / LEAD to decide).
 
 ## GUESSES
-- **Owner decision needed (D180):** the specified reserve max(10 GB, 10 % of
-  the disk) is **102 GB on the owner's 1 TB C:**, which has ~23 GB free, so
-  the default refuses every import there until he frees ~80 GB, moves the
-  library (69) or the worker gets `--reserve-gb`. Proposed alternative:
-  cap the 10 % at 20 GB. Asked through the LEAD.
+- **D180 (owner has the question):** the first rule, max(10 GB, 10 %), was
+  102 GB on the owner's 1 TB C: and refused every import. The LEAD set the
+  interim rule clamp(5 %, 2 GB, 20 GB) (20 GB there) plus `SetReserve` (100,
+  stored in the DB; `--send reserve GB`), `--reserve-gb` for one run.
 - GUESS (high): HAP ≈ 0.5 byte / px is on the safe side: the owner's 14 clips
   are 0.33 byte / px (3.0 GB for 14 × 1080p × 313 frames). HAP Q / Alpha
   1 byte / px likewise. Noisy footage compresses less (Snappy).
@@ -183,10 +182,9 @@ Nothing. Waiting for the LEAD's merge (and the ENGINE answer on D181).
 - GUESS: the 2 s settle time is enough for files copied over a network share.
 
 ## Open questions for the owner
-- D180: keep the reserve at max(10 GB, 10 %) (refuses everything on today's
-  C:) or cap it (e.g. at 20 GB)?
-- D181: frame-rate conform at import (disk) or frame blend at playback (GPU)?
-  30 fps on 60 Hz needs neither; the GUI should badge only the show's refresh.
+- D180: is clamp(5 % of the disk, 2 GB, 20 GB) the right default reserve?
+- D181 is settled by the LEAD: ENGINE's playback blend by default; the import
+  conform stays an option, off.
 - D140–D147 are PROPOSED with the default in use (hash, SQLite, SVG, stills as
   1-frame HAP, library location, throttling, analysis rules, catalog append).
 - Is `Documents\Himmel\Library\originals` the right default drop folder?
@@ -242,6 +240,9 @@ build\bin\Release\himmel.exe --sim -- --show-root %T% --size 960x540
   supervisor window), then `rmdir /s /q %T%`.
 
 ## Gotchas found
+- The renderer's feed must not follow a library block that belongs to another
+  library (another agent's stack): `library_tests`' feed test failed that way.
+  The feed now follows only a worker first seen on its own library.
 - The gyan.dev ffmpeg's mjpeg encoder refuses limited-range YUV from a PNG
   still: thumbnails need `format=yuvj420p`.
 - `mandelbrot` (lavfi) has no `duration` option; use `trim`.

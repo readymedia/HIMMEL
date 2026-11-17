@@ -14,6 +14,8 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <cwctype>
+#include <memory>
 
 #include "himmel/library/library_block.h"
 #include "himmel/library/library_db.h"
@@ -35,6 +37,17 @@ std::filesystem::path default_library_root() {
 namespace {
 
 bool same_name(const char* a, const char* b) { return _stricmp(a, b) == 0; }
+
+// Two folder paths name the same folder (Windows: case-insensitive, / or \, trailing slash).
+bool same_dir(const std::filesystem::path& a, const std::filesystem::path& b) {
+    auto key = [](const std::filesystem::path& p) {
+        std::wstring w = p.lexically_normal().wstring();
+        for (auto& ch : w) ch = ch == L'/' ? L'\\' : static_cast<wchar_t>(towlower(ch));
+        while (w.size() > 3 && w.back() == L'\\') w.pop_back();
+        return w;
+    };
+    return key(a) == key(b);
+}
 
 bool name_taken(const ClipTable& t, uint32_t n, const char* name) {
     for (uint32_t i = 0; i < n; ++i)
@@ -128,7 +141,8 @@ void LibraryFeed::run(int poll_ms) {
     HANDLE map = nullptr;
     LibraryBlock* blk = nullptr;
     uint64_t seen_seq = 0;
-    uint32_t seen_root = 0;
+    uint32_t seen_root = 0, seen_pid = 0;
+    int owned = -1;  // v3: -1 = not judged yet, 1 = the block's worker runs on our library, 0 = another one
     ULONGLONG next_poll = 0;
     while (!stop_.load()) {
         if (!blk) {
@@ -144,16 +158,21 @@ void LibraryFeed::run(int poll_ms) {
             if (s != seen_seq) seen_seq = s, due = true;
             blk->catalog_full.store(catalog_full.load(std::memory_order_relaxed), std::memory_order_relaxed);
             // v3 (library-db.md §11.5): follow the library folder when the worker switches or moves it.
+            // Only a block whose worker was first seen on OUR library is followed (another stack's
+            // worker, or a test's, never moves this feed); a new worker pid is judged again.
             if (blk->header.version >= 3) {
                 const uint32_t rs = blk->root_seq.load(std::memory_order_acquire);
+                const uint32_t pid = blk->pid.load(std::memory_order_relaxed);
+                if (pid != seen_pid) seen_pid = pid, seen_root = 0, owned = -1;
                 if (rs != seen_root && !(rs & 1)) {
-                    LibraryRoot lr;
-                    if (protocol::seq_read(blk->root_seq, blk->root, lr)) {
+                    auto lr = std::make_unique<LibraryRoot>();
+                    if (protocol::seq_read(blk->root_seq, blk->root, *lr)) {
                         seen_root = rs;
-                        lr.path[sizeof(lr.path) - 1] = 0;
-                        const std::string u8 = lr.path;
+                        lr->path[sizeof(lr->path) - 1] = 0;
+                        const std::string u8 = lr->path;
                         const std::filesystem::path np(std::u8string(u8.begin(), u8.end()));
-                        if (!u8.empty() && np != root_) {
+                        if (owned < 0 && !u8.empty()) owned = same_dir(np, root_) ? 1 : 0;
+                        if (owned == 1 && !u8.empty() && !same_dir(np, root_)) {
                             if (auto* db = static_cast<LibraryDb*>(db_)) db->close();
                             root_ = np;
                             root_changes.fetch_add(1, std::memory_order_relaxed);
