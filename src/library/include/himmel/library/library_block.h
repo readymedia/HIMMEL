@@ -39,8 +39,14 @@ enum class IngestCommandType : uint16_t {
     // v3 (wave 7):
     ClearQueue = 68, // every queued / unfinished import leaves the queue at once (ready clips stay)
     Library = 69,    // path = a folder: the library moves there (kIngestMove) or the worker switches to it
+    // MEDIA's second range in this block's own namespace: 100..119 (LEAD, wave 7)
+    SetReserve = 100,  // i = GB the disk guard keeps free (stored in the DB); 0 = back to the default
 };
 inline constexpr uint16_t kIngestFirst = 60, kIngestLast = 69;
+inline constexpr uint16_t kIngestFirst2 = 100, kIngestLast2 = 119;
+inline constexpr bool is_ingest_type(uint16_t t) {
+    return (t >= kIngestFirst && t <= kIngestLast) || (t >= kIngestFirst2 && t <= kIngestLast2);
+}
 
 // IngestCommand.flags
 inline constexpr uint16_t kIngestWatch = 1u << 0;   // Import: add the folder to the watch list (stored in the DB)
@@ -206,7 +212,8 @@ struct LibraryBlock {
     std::atomic<uint32_t> disk_low;         // 1 = the disk guard holds the queue: the next file would eat into the reserve
     std::atomic<uint64_t> disk_free;        // bytes free on the library's disk (updated every 2 s)
     std::atomic<uint64_t> disk_total;       // size of that disk
-    std::atomic<uint64_t> disk_reserve;     // bytes the guard keeps free: max(10 GB, 10 % of the disk) by default
+    std::atomic<uint64_t> disk_reserve;     // bytes the guard keeps free: clamp(5 % of the disk, 2 GB, 20 GB) by default,
+                                            // or SetReserve (100, stored), or --reserve-gb for one run
     std::atomic<uint64_t> library_bytes;    // bytes the library uses (hap/ stills/ thumbs/ meta/ + the DB)
     std::atomic<uint64_t> queue_bytes;      // estimated bytes the queue still has to write
     std::atomic<uint32_t> progress_seq;

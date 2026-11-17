@@ -669,10 +669,14 @@ static void test_ingest_cli() {
 // ---- v3 (wave 7): disk guard maths, options, progress, plain errors, location, move ----
 static void test_v3_guard() {
     using namespace himmel::ingest;
-    // The reserve: max(10 GB, 10 % of the disk), or the override.
-    CHECK(reserve_for(100 * kGB) == 10 * kGB);
-    CHECK(reserve_for(2000 * kGB) == 200 * kGB);
+    // The reserve (D180, interim): clamp(5 % of the disk, 2 GB, 20 GB), or the override.
+    CHECK(reserve_for(100 * kGB) == 5 * kGB);
+    CHECK(reserve_for(20 * kGB) == 2 * kGB);
+    CHECK(reserve_for(1023 * kGB) == 20 * kGB);   // the owner's 1 TB C:
     CHECK(reserve_for(2000 * kGB, 5 * kGB) == 5 * kGB);
+    // The owner's PC: 7.3 GB free, 20 GB reserve on 1 TB: refused; 23 GB free: a 2 GB import fits.
+    CHECK(!fits(static_cast<uint64_t>(7.3 * kGB), 0, 1 * kGB, reserve_for(1023 * kGB)));
+    CHECK(fits(23 * kGB, 0, 2 * kGB, reserve_for(1023 * kGB)));
     // The owner's case (2026-11-17): 7.3 GB free, 17 GB needed -> refused.
     CHECK(!fits(static_cast<uint64_t>(7.3 * kGB), 0, 17 * kGB, 10 * kGB));
     CHECK(!fits(5 * kGB, 0, 0, 10 * kGB));  // already below the reserve

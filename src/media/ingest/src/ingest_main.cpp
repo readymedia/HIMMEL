@@ -21,7 +21,7 @@
 //
 // Commands 60..69 (import, rescan, remove, relink, reanalyse, retry, mode, unwatch, clear queue,
 // library) arrive in the library block's channels (docs/interfaces/library-db.md §10-11, ingest_ops.h).
-// v3 (wave 7): the disk guard keeps a reserve free (max(10 GB, 10 %) or --reserve-gb), the
+// v3 (wave 7): the disk guard keeps a reserve free (clamp(5 %, 2 GB, 20 GB), SetReserve 100 or --reserve-gb), the
 // mode is stored in the DB, progress / plan / library root are published in the block (§11).
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -132,7 +132,7 @@ struct Config {
     int canvas_w = 1920, canvas_h = 1080;
     std::string quality = "hap";
     bool explicit_root = false;   // --library given: a switch / move is not saved as the default (D182)
-    uint64_t reserve_bytes = 0;   // --reserve-gb: the disk guard's reserve; 0 = max(10 GB, 10 %)
+    uint64_t reserve_bytes = 0;   // --reserve-gb: the disk guard's reserve; 0 = SetReserve (stored) or clamp(5 %, 2..20 GB)
     bool help = false;
     std::string error;  // a bad command line: print usage, exit 2, start nothing
 };
@@ -151,7 +151,8 @@ void print_usage() {
         "  --rebuild      recreate the DB from meta\\*.json, then exit\n"
         "  --retry        put failed clips back in the queue\n"
         "  --status       print the library counts and the disk space, then exit\n"
-        "  --reserve-gb N the disk guard keeps N GB free (default: 10 GB or 10 %% of the disk, the larger)\n"
+        "  --reserve-gb N the disk guard keeps N GB free for this run (default: the stored SetReserve value,\n"
+        "                 else 5 %% of the disk, at least 2 GB and at most 20 GB)\n"
         "An unknown argument prints this and exits with code 2 (nothing is started or written).\n");
 }
 
@@ -344,7 +345,14 @@ public:
         refresh_disk();
         return disk_;
     }
-    uint64_t reserve(uint64_t total) override { return ingest::reserve_for(total, cfg_.reserve_bytes); }
+    uint64_t reserve(uint64_t total) override { return ingest::reserve_for(total, reserve_override()); }
+    void set_reserve(uint64_t bytes) override {
+        stored_reserve_ = bytes;
+        if (cfg_.reserve_bytes) log("SetReserve stored; --reserve-gb still wins for this run");
+        refresh_disk();
+    }
+    // --reserve-gb (this run) > SetReserve (stored) > the default rule.
+    uint64_t reserve_override() const { return cfg_.reserve_bytes ? cfg_.reserve_bytes : stored_reserve_; }
     bool moving() override { return moving_; }
     void on_plan(const library::IngestPlan& plan) override {
         if (!blocks_.lib) return;
@@ -371,7 +379,7 @@ public:
             if (!ingest::empty_or_missing(to)) return say(library::IngestStatus::BadPath, "the target folder must be empty (or not exist yet)");
             const uint64_t need = ingest::library_bytes(cfg_.root) + (1u << 20);
             const auto d = ingest::disk_space(to);
-            const uint64_t res = ingest::reserve_for(d.total, cfg_.reserve_bytes);
+            const uint64_t res = ingest::reserve_for(d.total, reserve_override());
             if (d.known && !ingest::fits(d.free, 0, need, res))
                 return say(library::IngestStatus::NoSpace, "the library needs " + ingest::human_bytes(need) + " there; " +
                                                                ingest::human_bytes(d.free) + " free, " + ingest::human_bytes(res) + " kept free");
@@ -414,6 +422,7 @@ public:
         // v3: the stored mode (D183): a Hold survives a restart.
         mode_req_.store(static_cast<int>(ingest::IngestOps::stored_mode(db_)));
         if (hold()) log("on hold (stored mode): nothing is imported until the mode is changed");
+        stored_reserve_ = ingest::IngestOps::stored_reserve(db_);
         library_bytes_ = ingest::library_bytes(cfg_.root);
         blocks_.set_root(cfg_.root, library::MoveState::None, 0, 0, 0, {}, "");
         refresh_disk();
@@ -592,7 +601,7 @@ private:
     // ---- v3: disk guard, progress, library switch / move (library-db.md §11) ----
     void refresh_disk() {
         disk_ = ingest::disk_space(cfg_.root);
-        reserve_bytes_ = disk_.known ? ingest::reserve_for(disk_.total, cfg_.reserve_bytes) : 0;
+        reserve_bytes_ = disk_.known ? ingest::reserve_for(disk_.total, reserve_override()) : 0;
         last_disk_us_ = now_us();
         if (auto* b = blocks_.lib) {
             b->disk_free.store(disk_.free);
@@ -731,6 +740,8 @@ private:
         if (!job.move) {
             if (open_library(job.to, err)) {
                 mode_req_.store(static_cast<int>(ingest::IngestOps::stored_mode(db_)));
+                stored_reserve_ = ingest::IngestOps::stored_reserve(db_);
+                refresh_disk();
                 log("switched to the library in %s", ingest::u8path(cfg_.root).c_str());
                 blocks_.set_root(cfg_.root, library::MoveState::Done, 1, 0, 0, {}, "switched to this library");
             } else {
@@ -1194,6 +1205,7 @@ private:
     ingest::BatchProgress batch_;
     ingest::DiskSpace disk_;
     uint64_t reserve_bytes_ = 0, library_bytes_ = 0, queue_bytes_ = 0;
+    uint64_t stored_reserve_ = 0;                   // SetReserve (100), from the DB; 0 = the default rule
     uint64_t last_disk_us_ = 0, next_disk_check_ = 0, last_progress_us_ = 0, next_bytes_us_ = 0;
     bool disk_low_ = false, disk_abort_ = false, old_root_logged_ = false;
     int64_t cur_est_ = 0, cur_written_ = 0, err_clip_ = 0;
@@ -1286,6 +1298,7 @@ int send_command(int argc, char** argv) {
                                   static_cast<uint16_t>(import_flags() | (verb == "import-list" ? library::kIngestList : 0)));
         import_opts(c);
     } else if (verb == "clear") ok = library::make_ingest(c, T::ClearQueue);
+    else if (verb == "reserve") ok = library::make_ingest(c, T::SetReserve, 0, nullptr, 0, std::atoi(arg(3).c_str()));
     else if (verb == "library")
         ok = library::make_ingest(c, T::Library, 0, abs_path(3).c_str(),
                                   static_cast<uint16_t>((has("move") ? library::kIngestMove : 0) | (has("force") ? library::kIngestForce : 0)));
@@ -1303,6 +1316,7 @@ int send_command(int argc, char** argv) {
         std::printf("usage: himmel_ingest --send import PATH [watch] [OPTIONS] | import-list FILE [OPTIONS] | rescan [ID]\n"
                     "                     | remove ID | relink ID|0 PATH [force] | reanalyse [ID] [thumbs] | retry [ID]\n"
                     "                     | mode auto|full|background|hold | unwatch PATH | clear | library DIR [move] [force]\n"
+                    "                     | reserve GB (0 = default) | progress\n"
                     "  OPTIONS: dry (estimate only)  fit (queue what fits)  skip (skip known, removed too)\n"
                     "           hapq  720 | max=H (largest height)  conform50 | conform60\n");
         return 2;
@@ -1404,7 +1418,8 @@ int main(int argc, char** argv) {
         {
             const auto d = ingest::disk_space(cfg.root);
             log("disk: %s free of %s, %s kept free; the library uses %s; stored mode %s", ingest::human_bytes(d.free).c_str(),
-                ingest::human_bytes(d.total).c_str(), ingest::human_bytes(ingest::reserve_for(d.total, cfg.reserve_bytes)).c_str(),
+                ingest::human_bytes(d.total).c_str(),
+                ingest::human_bytes(ingest::reserve_for(d.total, cfg.reserve_bytes ? cfg.reserve_bytes : ingest::IngestOps::stored_reserve(db))).c_str(),
                 ingest::human_bytes(ingest::library_bytes(cfg.root)).c_str(),
                 db.meta_get("mode").empty() ? "auto" : db.meta_get("mode").c_str());
         }

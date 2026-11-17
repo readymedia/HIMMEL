@@ -308,6 +308,8 @@ slots are numbered like `protocol::Producer`: Perform 0, **Gui 1**, Osc 2,
 | 67 | `Unwatch` | `path` = a folder | Removes a folder that was added with `Import` + `kIngestWatch`. Its clips stay in the library. The default `originals/` folder and `--watch` folders cannot be removed. | `Ok`; `BadPath` (not in the list) |
 | 68 | `ClearQueue` | — | v3, §11.3 | `Ok`, `count` = clips taken out of the queue |
 | 69 | `Library` | `path` = a folder; `kIngestMove`, `kIngestForce` | v3, §11.5 | `Accepted` (a move runs), `Ok`, `NoSpace`, `Busy`, `BadPath` |
+| 100 | `SetReserve` | `i` = GB (0 = the default rule, 1..10000) | v3, §11.1: the disk guard's reserve, stored in the DB | `Ok`; `BadValue` |
+| 101–119 | free | | MEDIA's second range in this block's own namespace (`kIngestFirst2..kIngestLast2`, LEAD wave 7). Stars / tags and Prepare Show priority go here later | |
 
 ### 10.4 `IngestReply` (128 bytes)
 
@@ -352,7 +354,11 @@ old producers leave it at 0, which means off.
     estimate errs on the safe side. GUESS (high): Snappy saves less on noisy
     footage.
 - **The reserve** is the space the guard always leaves free on the library's
-  disk: `max(10 GB, 10 % of the disk)` by default. `--reserve-gb N` overrides it.
+  disk. Default: **5 % of the disk, at least 2 GB and at most 20 GB** (D180,
+  interim PROPOSED rule set by the LEAD; 20 GB on the owner's 1 TB C:).
+  `SetReserve` (100) stores another value in the DB (`meta.reserve_gb`, 0 = back
+  to the default), and `--reserve-gb N` overrides both for one run. The block's
+  `disk_reserve` shows the value in force.
 - **At Import.** If `free − (what the queue still needs) − (this import) <
   reserve`, the Import is **refused** with `NoSpace` and nothing is queued.
   - The reply message and the `plan` section give the space needed, the space
@@ -455,7 +461,9 @@ the value.
 - **Readers follow `root`.**
   - The renderer's feed reopens the DB in the new folder when `root_seq`
     changes. A move keeps the same DB, so no clip is added twice; a switch to
-    another library appends that library's ready clips.
+    another library appends that library's ready clips. The feed follows only
+    a worker it first saw on its own library (judged again when the block's
+    `pid` changes), so another stack's or a test's worker never moves it.
   - The GUI bridge should open the DB and the thumbnails under `root.path`, not
     under the folder it was started with.
 
@@ -490,6 +498,7 @@ PROPOSED (D181, with ENGINE); see `docs/decisions.md`. In short:
 - `library_tests` covers the guard with a fake small disk, the stored mode,
   Clear queue, the progress and ETA maths, and the options.
 - `himmel_ingest --selftest` runs them against a temp library.
+- `himmel_ingest --send reserve GB` (0 = default) sets the stored reserve.
 - `himmel_ingest --send import PATH [dry] [fit] [720 | max=H] [hapq] [skip]
   [conform50 | conform60]`, `--send import-list FILE ...`, `--send clear` and
   `--send library DIR [move] [force]` talk to a running worker;
