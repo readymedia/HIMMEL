@@ -21,6 +21,8 @@
 //   --no-ingest: do not start himmel_ingest.exe (the library import, M7). It imports into the
 //          renderer's library (render args --library DIR, or --show-root DIR -> DIR\Library);
 //          with --no-show-files and no --library it is not started (test runs, M7).
+//   --reserve-gb N: passed to himmel_ingest.exe (MEDIA wave 7: free disk space the import
+//          keeps for the show; MEDIA also stores it as a setting, command 100).
 //   --no-osc: do not start himmel_osc.exe (OSC in on UDP 7000, M13). --osc "ARGS": its
 //          arguments, e.g. --osc "--port 9000 --allow 192.168.1.0/24" (default: this PC only).
 //   --legacy: run the parked pre-slice renderer (himmel_render_legacy.exe: test
@@ -352,6 +354,7 @@ int main(int argc, char** argv) {
     bool with_osc = true;  // CONTROL (M13)
     std::wstring render_args, ctl_args, audio_args, osc_args;
     std::string weapons = "lightpad,lumi,nuvj,apc20";
+    std::wstring reserve_gb;  // ENGINE (wave 7): pass-through to himmel_ingest
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "--no-controller") with_controller = false;
@@ -365,6 +368,9 @@ int main(int argc, char** argv) {
         else if (a == "--no-curtains") with_curtains = false;
         else if (a == "--no-ingest") with_ingest = false;  // MEDIA (M7)
         else if (a == "--no-osc") with_osc = false;        // CONTROL (M13)
+        // ==== ENGINE (wave 7): --reserve-gb N goes to himmel_ingest (MEDIA's disk reserve) ====
+        else if (a == "--reserve-gb" && i + 1 < argc) reserve_gb = widen(argv[++i]);
+        // ==== end ENGINE (wave 7) ====
         else if (a == "--osc" && i + 1 < argc) osc_args = widen(argv[++i]);
         else if (a == "--") {
             for (++i; i < argc; ++i) render_args += widen(argv[i]) + L" ";
@@ -389,6 +395,9 @@ int main(int argc, char** argv) {
         // ==== GUI (M11 part 2) hook: himmel_ui lists the same library the ingest worker fills ====
         ui_args = named ? ingest_args : (no_files || no_lib) ? std::wstring(L"--no-library") : std::wstring();
     }
+    // ==== ENGINE (wave 7): --reserve-gb N -> himmel_ingest ====
+    if (!reserve_gb.empty()) ingest_args += (ingest_args.empty() ? L"" : L" ") + std::wstring(L"--reserve-gb ") + reserve_gb;
+    // ==== end ENGINE (wave 7) ====
     // ==== end MEDIA hook 1/3 ====
 
     HANDLE job = CreateJobObjectW(nullptr, nullptr);
