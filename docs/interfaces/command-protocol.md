@@ -4,7 +4,9 @@ Status: **version 1, written by the LEAD 2026-11-15** for the playable slice;
 **M2 clip transport appended by ENGINE 2026-11-16** (§4a: types 18–23,
 `PlayAction` 4–5, `kHitDeck`, `kRelease`; the block layout and
 `kCommandVersion` are unchanged, an older engine refuses the new types as
-`UnknownType`)
+`UnknownType`); **M3 show commands appended by SHOW 2026-11-17** (§4b: types
+25–36, producer slot 4 = `Show`, flags `kVariation` / `kClear`, the new block
+`Local\HimmelShow`; additive like `FxPress`, so `kCommandVersion` stays 1)
 (D90). Header: [`src/protocol/include/himmel/protocol/commands.h`](../../src/protocol/include/himmel/protocol/commands.h)
 (the header is the source of truth for field layout; this page is the why and
 the rules). Change it only with a PR to this page + the header, agreed by the
@@ -44,8 +46,9 @@ MK2 Perform     ──ring 0──┘        (in-process producer, same Command 
 | 0 `Perform` | weapon mappers (MK2 Perform, later Lightpad / NuVJ) | `himmel_render` itself |
 | 1 `Gui` | the web GUI | `himmel_ui` |
 | 2 `Osc` | OSC in (M13) | `himmel_osc` or the bridge |
-| 3 `Tool` | tests, scripts | `himmel_cmd`, test programs |
-| 4–7 | spare | — |
+| 3 `Tool` | tests, scripts | `himmel_cmd`, `show_cmd`, test programs |
+| 4 `Show` | the show runtime inside the render process (M3): recall, morph, undo, dice as ordinary commands; never a shared ring; exempt from the rate limit | `himmel_render` itself |
+| 5–7 | spare | — |
 
 Exactly one process writes a slot. A producer writes its `pid` into
 `producers[slot]` when it starts, updates `heartbeat_us` on every push, and
@@ -114,6 +117,30 @@ deck on air is `LiveState.program_deck` (the side the crossfader rests on);
 the other one is PREVIEW. Weapon mappers translate "PREVIEW layer 2" into a
 deck using the state they read; the engine never guesses what a producer meant.
 
+## 4b. Show (M3, SHOW; [`show-files.md`](show-files.md))
+
+The render process hands these to the show runtime (`src/show/`), which
+validates them, acks them in `Local\HimmelShow` ([`show-block.md`](show-block.md), `ShowStatus.acked_seq`,
+not `LiveState`) and changes the decks only through ordinary commands on slot
+4. Paths and names come from the producer's **text box** in the show block
+(write it first). Enums are in `show.h`. Types 25–39 are SHOW's range (LEAD,
+2026-11-17): 37–39 are free and already go to the show runtime.
+
+| Type | Targets | Argument | Notes |
+|---|---|---|---|
+| `SceneRecall` (25) | deck | `i` = pad 0..15 of the page, `kSceneNext` (−2, GO) / `kScenePrev` (−3); `slot` = variation 0..7 (`kNone` = the main one); `f[0]` = morph s (0 = cut, < 0 = the scene's transition) | Lands in the frame it is applied (only the differences are sent). GO past the song's end goes to the next song (setlist on) or wraps (bank) |
+| `SceneSave` (26) | deck = source | `i` = pad 0..15, −1 = next free; `flags & kVariation` = a new variation of the deck's scene | `REC`. An occupied pad keeps its kit / macros / variations and gets the new look |
+| `Undo` (27) | — | `i` = 0 undo, 1 redo | 64 steps, decks + master FX (not the mixer) |
+| `SceneReset` (28) | deck, layer (`kNone` = all) | `f[0]` = glide s (0 = 1 beat) | hold `ERASE` + group / `ALL` |
+| `Dice` (29) | deck; layer / slot = scope (`kNone` = deck) | `param` = `DiceVerb` (Roll, Mutate, Back, Forward, Rotate); `i` = seed (0 = auto) or rotate step ±1; `f[0]` = mutate amount (0 = 0.2) | applies to the addressed deck at once (producers pick PREVIEW per focus) |
+| `Locks` (30) | — | `param` = `LockOp` (Set, Toggle, Clear); `i` = `LockBit` mask | the 8 locks, kept in the show |
+| `Project` (31) | — | `param` = `ProjectAction` (New, Open, Save, SaveAs, Export, Revert, RestoreAutosave, Relink); `i` = New: screens 1 / 3; Open: recent 0..9 or −1 = the text box; Export: 0 = next to the project, 1 = the path in the text box | done by the save worker; the result is in `FilesStatus` and the message |
+| `ShowSelect` (32) | — | `param` = `SelectWhat` (Bank, Song, UseSetlist); `i` = index (`kRelative` = delta) or toggle value | which page the pads show |
+| `KitSet` (33) | deck (its scene), `slot` = pad 0..15, `layer` = `PadTarget` | `param` = `PadKind`; `i` = clip / effect id, scene pad, cue, `PadAction` | the deck must hold a saved scene (`BadTarget` otherwise) |
+| `MacroSet` (34) | deck (its scene), `slot` = macro 0..3, `layer` = target layer (`kNone` = deck FX) | `param` = binding 0..7 (`kNone` = rename from the text box); `i` = FX slot × 16 + param; `f[0]` min, `f[1]` max; `flags & kClear` = remove | |
+| `MacroValue` (35) | `slot` = macro 0..3 | `f[0]` 0..1 (`kRelative` = delta) | knobs 5–8: always the PROGRAM deck |
+| `SongEdit` (36) | deck (AddScene: source), `slot` = position | `param` = `SongAction` (New, Delete, AddScene, RemoveScene, Bpm, Rename, Move, RenameScene); `i` = song (RenameScene: pad; New: 1 = the name is in the text box, 0 = "Song n"); `f[0]` = BPM | Rename / RenameScene read the text box |
+
 ## 5. Validation (the engine, before anything else)
 
 1. Unknown `type` → refused (`Reject::UnknownType`).
@@ -163,7 +190,6 @@ ENGINE can call it before CONTROL delivers the real mapping.
 
 ## 8. Not in version 1 (later, append-only)
 
-Scenes / save / recall / undo (SHOW, M3), output routing and black per
-output (M6), reactions (M8),
-outputs and resolution (M6), project open / save (M3), strings (paths) — the
-slice uses catalog ids only.
+Output routing and black per output (M6), reactions (M8), outputs and
+resolution (M6). Strings travel through the show block's text boxes (M3), not
+in commands.

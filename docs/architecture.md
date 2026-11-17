@@ -76,6 +76,13 @@ per weapon slot (default slot = the weapon's number):
 **`Local\HimmelEngine`** (`src/engine/include/himmel/engine/engine_shared.h`):
 heartbeat, fps, frame times, late frames, input → present latency, stop request.
 
+**`Local\HimmelShow`** (`src/protocol/include/himmel/protocol/show.h`, M3,
+[interfaces/show-files.md](interfaces/show-files.md)): the show status (project,
+dirty dot, the scenes on the page, the scene on each deck, undo depth, locks,
+macros, acks of show commands), the save worker's file status (path, last save,
+autosave / restore, recent projects, missing clips) and one text box per
+producer for paths and names.
+
 All timestamps are `steady_clock` (QueryPerformanceCounter), which is the same
 clock in every process, so latency can be measured across processes.
 
@@ -110,6 +117,15 @@ instead of stopping the clip.
 Only compare-and-swap moves a slot between threads.
 
 **Camera**: classic lock-free triple buffer (one atomic index swap per frame).
+
+**The show (M3, `src/show/`)**: show commands (types 25–36) go to the
+`ShowRuntime` in the frame loop. It turns recall / morph / undo / dice into
+ordinary commands on slot 4 (only what differs, in one frame) and never
+touches disk. Its **save worker thread** does every file: project save /
+open / export, the autosave journal (live state, ≤ 10 records/s),
+`autosave/show.json`, snapshots every 5 minutes. The frame hands it copies
+through preallocated buffers and SPSC rings; a loaded show comes back as a
+pointer swap at a frame boundary.
 
 ## Inside the controller
 
@@ -170,6 +186,9 @@ src/controller/   himmel_mk2 library: map, input parsing + pad tracker, LED/scre
                   driver run loop, BLOCKS codec + session, NuVJ codec + session
                   app/: weapon_blocks, weapon_nuvj, weapon_apc20, weapon_monitor
 src/media/        himmel_media: MOV reader, HAP decoder; tools/hap_probe
+src/show/         himmel_show_model (show model, looks -> commands, dice), himmel_show
+                  (files, journal, zip, ShowRuntime + save worker); tools/show_cmd;
+                  tests in tests/show/ (show_tests, show_crash_test)
 src/engine/       engine_shared (status block), clip_player, camera_capture,
                   fx/ (himmel_fx: metadata + resolve; himmel_fx_gpu; fx_tests, fx_check),
                   render/ (himmel_render + shaders), supervisor/ (himmel)
