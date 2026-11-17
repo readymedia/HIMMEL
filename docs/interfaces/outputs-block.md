@@ -110,6 +110,20 @@ show black until the new renderer's windows come back on top.
 - Black per output is a cut (GUESS: no fade). Master black still applies to
   every output.
 
+## 5a. Spout out (`--spout NAME`)
+
+MAIN (the whole canvas, black when master black) goes out as a Spout 2 DX11
+sender named NAME. SpoutDX waits on Spout's named mutex, so it never runs on
+the render thread:
+- the frame loop copies MAIN into one of two shared textures (legacy share
+  handles) and signals;
+- a worker with its own D3D11 device on the same adapter opens the textures
+  and calls `SendTexture`.
+
+A texture the worker is still reading is skipped that frame. Any Spout
+failure is logged once, and Spout stops; the outputs go on. Off without
+`--spout`. Checked with `spout_probe.exe NAME` (a SpoutDX receiver).
+
 ## 6. Rules
 
 - The frame loop only reads the model and the watcher's snapshot. Window

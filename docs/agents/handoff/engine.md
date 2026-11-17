@@ -19,8 +19,14 @@ survives a renderer restart without a GUI), and restarts the renderer with
 at most 0.5 s back-off. Measured on the dev laptop (3 windows): kill the
 renderer → black at once (0 ms), show back after 1.0–1.6 s (6 / 6 runs,
 `src/engine/tools/curtain_check.py`). Simulated cable pull (`simlost`) on
-OUT 2: 10 cycles, 0 late frames, the others never stuttered. **Spout out is
-not done:** it waits for the LEAD's yes on the Spout SDK.
+OUT 2: 60 cycles, 1 late frame, the others never stuttered. **Spout out**
+(`--spout NAME`, LEAD yes 2026-11-17): MAIN goes out as a Spout 2 DX11 sender;
+SpoutDX (2.007h, pinned by commit + SHA256, only SpoutDX + its SpoutGL helpers
+compiled) runs on its own thread and D3D11 device, the frame loop only copies
+MAIN into one of two shared textures. Checked with `spout_probe.exe`: 60 fps,
+size follows the canvas, black follows master black. A held IDENTIFY is let go
+when its producer goes quiet (LEAD condition). The first M6 commit (3e8d15b) is
+merged on main (dcc01f9); Spout + the IDENTIFY release are the follow-up.
 
 ## Done (with commits)
 - **M6 (this branch, `claude/engine-m6-outputs`):**
@@ -110,8 +116,7 @@ not done:** it waits for the LEAD's yes on the Spout SDK.
 Nothing half-done.
 
 ## Next up (ordered)
-0. **M6 leftovers:** Spout out (waits for the LEAD: SDK or own sender);
-   check a real cable pull and a 50 Hz switch on the show PC (only simulated
+0. **M6 leftovers:** Spout per output (only MAIN now) and Spout in; check a real cable pull and a 50 Hz switch on the show PC (only simulated
    / one display here); save display identities + places in the project
    (SHOW); per-output test pattern / crosshair (mapping, later); GUI Outputs
    view on the new block and commands (GUI).
@@ -182,6 +187,9 @@ build\bin\Release\himmel_cmd.exe            # the state incl. transport + clock
 Output windows: `M` = span / mirror, `O` = overlay, `Esc` = quit (windowed).
 
 ## Gotchas found
+- M6 Spout: `SpoutDX::SendTexture` waits on Spout's named mutex - never call it
+  on the render thread. `LogRing` has one writer (the render thread): the Spout
+  worker prints its lines straight to stdout.
 - M6: a killed renderer's windows fade out (DWM close animation) over the
   curtain unless `DWMWA_TRANSITIONS_FORCEDISABLED` is set: it is now.
 - M6: a supervisor that creates `Local\HimmelCommands` must write its header,

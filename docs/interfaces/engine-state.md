@@ -19,6 +19,12 @@ GUI bridge, weapon mappers, tools. Change rules as in
 | `catalog` (`Catalog`, ~25 KB) | `catalog_seq` | when the clip or effect list changes | clips (name, size, fps, length, codec, placeholder colour) and effects (name, param names and defaults) |
 | `transport` (`TransportSection`, ~2 KB, v2) | `transport_seq` | together with `live` | the beat clock (BPM, beat, grid, tapped), per layer a `LayerTransport` (every `LayerParam` setting; status: phase, frame on screen, glided speed, fade gain, transition progress, beat loop, scratch, waiting launch + beats left, loops, the loaded clip's 16 cue points), and the **HIT layer** (`LayerState` + `LayerTransport`) |
 
+Outputs (M6) are **not** in this block: output slots, displays, canvas size,
+layer places, black per output and IDENTIFY are in their own block,
+`Local\HimmelOutputs` ([`outputs-block.md`](outputs-block.md)), and are
+changed by commands 70–73 ([`command-protocol.md`](command-protocol.md) §4c).
+The state block stays at version 2.
+
 `position` is written at frame rate while a clip plays; readers that only
 care about structure can compare everything else. GUIs should poll `live` at
 their own rate (30 Hz is plenty) and diff.

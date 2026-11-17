@@ -266,7 +266,9 @@ Reject DeckModel::submit(int producer, const Command& c, uint64_t now_us) {
         rate_count_[producer] = 0;
     }
     Reject r = ++rate_count_[producer] > kMaxCommandsPerSecond ? Reject::RateLimited : validate(c);
+    submitting_ = producer;
     if (r == Reject::None) r = apply(c, now_us);
+    submitting_ = -1;
     if (r == Reject::None) {
         live_.acked_seq[producer] = c.seq;
     } else {
@@ -815,7 +817,7 @@ Reject DeckModel::apply(const Command& c, uint64_t now_us) {
         case CommandType::LayerPlace:
         case CommandType::OutputConfig:
             if (!outputs_) return Reject::UnknownType;
-            outputs_->apply(c, slot, now_us);
+            outputs_->apply(c, slot, now_us, submitting_);
             break;
         default: return Reject::UnknownType;
     }
@@ -941,7 +943,8 @@ void DeckModel::set_frame(uint64_t frame, uint64_t time_us, float fps) {
     live_.fps = fps;
 }
 
-void DeckModel::set_producer_alive(int producer, bool alive) {
+void DeckModel::set_producer_alive(int producer, bool alive, uint64_t now_us) {
+    if (!alive && outputs_ && now_us) outputs_->producer_quiet(producer, now_us);
     uint8_t& a = live_.producer_alive[producer];
     if (a != static_cast<uint8_t>(alive)) a = static_cast<uint8_t>(alive), dirty_ = true;
 }

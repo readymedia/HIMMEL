@@ -164,7 +164,14 @@ Reject OutputModel::validate(const Command& c, int layer_slot) const {
     }
 }
 
-void OutputModel::apply(const Command& c, int layer_slot, uint64_t now_us) {
+void OutputModel::producer_quiet(int producer, uint64_t now_us) {
+    if (producer < 0 || producer != ident_holder_ || !ident_active_ || ident_off_us_ != 0) return;
+    Command off = make(CommandType::Identify);
+    off.i = 0;
+    apply(off, -1, now_us, producer);
+}
+
+void OutputModel::apply(const Command& c, int layer_slot, uint64_t now_us, int producer) {
     switch (c.type) {
         case CommandType::OutputBlack:
             for (int o = 0; o < setup_.count; ++o)
@@ -172,6 +179,7 @@ void OutputModel::apply(const Command& c, int layer_slot, uint64_t now_us) {
             return;
         case CommandType::Identify: {
             const uint64_t now = now_us ? now_us : 1;
+            ident_holder_ = c.i == 2 ? producer : -1;
             if (c.i == 0) {
                 // Fade out from where it is now (a fade-in still running fades back the same way).
                 if (ident_active_ && (ident_off_us_ == 0 || ident_off_us_ > now)) {

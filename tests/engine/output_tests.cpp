@@ -277,6 +277,25 @@ static void test_through_deck_model() {
     CHECK(send(cmd(static_cast<CommandType>(45))) == Reject::UnknownType);
     CHECK(send(cmd(CommandType::Count)) == Reject::UnknownType);
     CHECK(std::strcmp(himmel::engine::command_name(CommandType::LayerPlace), "place") == 0);
+    // IDENTIFY held by a producer that goes quiet is let go (LEAD condition, M6).
+    {
+        Command held = cmd(CommandType::Identify, kNone, 2);
+        held.seq = ++seq;
+        CHECK(dm->submit(static_cast<int>(Producer::Gui), held, 5'000'000) == Reject::None);
+        CHECK(om.identify_holder() == static_cast<int>(Producer::Gui));
+        CHECK(om.identify_on(9'000'000));
+        dm->set_producer_alive(tool, false, 9'000'000);  // another producer: no change
+        CHECK(near(om.identify_alpha(9'600'000), 1.0f));
+        dm->set_producer_alive(static_cast<int>(Producer::Gui), false, 10'000'000);
+        CHECK(near(om.identify_alpha(10'250'000), 0.5f));
+        CHECK(!om.identify_on(10'600'000) && om.identify_holder() == -1);
+        // A timed IDENTIFY (i = 1) has no holder: a quiet producer changes nothing.
+        Command timed = cmd(CommandType::Identify, kNone, 1);
+        timed.seq = ++seq;
+        dm->submit(static_cast<int>(Producer::Gui), timed, 20'000'000);
+        dm->set_producer_alive(static_cast<int>(Producer::Gui), false, 21'000'000);
+        CHECK(near(om.identify_alpha(22'000'000), 1.0f));
+    }
 }
 
 static void test_restore() {

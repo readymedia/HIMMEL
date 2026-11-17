@@ -28,7 +28,17 @@ FetchContent_Declare(snappy
     URL https://github.com/google/snappy/archive/refs/tags/1.2.1.tar.gz
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
 
-FetchContent_MakeAvailable(hidapi json snappy)
+# Spout 2 (BSD-2, Lynn Jarvis) for Spout out (ENGINE M6, LEAD 2026-11-17): only SpoutDX and the
+# few SpoutGL helpers it includes are compiled (src/engine/CMakeLists.txt, target himmel_spoutdx);
+# Spout's own CMake is never run (SOURCE_SUBDIR points at a folder without one). Pinned to the
+# commit of release 2.007h. The archive is ~60 MB, downloaded once per build folder.
+FetchContent_Declare(spout2
+    URL https://github.com/leadedge/Spout2/archive/7d32b056f9e00174aeae80e722854ccaffcb2e5a.tar.gz
+    URL_HASH SHA256=d746386ee9aff60ab05cef97d969441967c3d97c0a6c34a3e3e9bf6605553932
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    SOURCE_SUBDIR do-not-build)
+
+FetchContent_MakeAvailable(hidapi json snappy spout2)
 
 enable_testing()
 add_subdirectory(src/protocol)

@@ -19,10 +19,29 @@ add_library(himmel_engine_ipc STATIC src/shm_block.cpp src/clip_catalog.cpp src/
 target_include_directories(himmel_engine_ipc PUBLIC include)
 target_link_libraries(himmel_engine_ipc PUBLIC himmel_protocol himmel_media himmel_fx himmel_audio_block)
 
+# ==== ENGINE (M6): Spout out - SpoutDX (BSD-2) as a small static library, no OpenGL part ====
+set(SPOUT_SDK ${spout2_SOURCE_DIR}/SPOUTSDK)
+add_library(himmel_spoutdx STATIC
+    ${SPOUT_SDK}/SpoutDirectX/SpoutDX/SpoutDX.cpp
+    ${SPOUT_SDK}/SpoutGL/SpoutSenderNames.cpp ${SPOUT_SDK}/SpoutGL/SpoutDirectX.cpp
+    ${SPOUT_SDK}/SpoutGL/SpoutFrameCount.cpp ${SPOUT_SDK}/SpoutGL/SpoutCopy.cpp
+    ${SPOUT_SDK}/SpoutGL/SpoutUtils.cpp ${SPOUT_SDK}/SpoutGL/SpoutSharedMemory.cpp)
+target_include_directories(himmel_spoutdx SYSTEM PUBLIC ${SPOUT_SDK}/SpoutDirectX/SpoutDX ${SPOUT_SDK}/SpoutGL)
+target_link_libraries(himmel_spoutdx PUBLIC d3d11 dxgi shlwapi winmm version)
+if(MSVC)
+    target_compile_options(himmel_spoutdx PRIVATE /W0 /utf-8)
+endif()
+add_library(himmel_spout_out STATIC src/spout_out.cpp)
+target_include_directories(himmel_spout_out PUBLIC include)
+target_link_libraries(himmel_spout_out PRIVATE himmel_spoutdx)
+add_executable(spout_probe tools/spout_probe_main.cpp)  # a Spout receiver for checks
+target_link_libraries(spout_probe PRIVATE himmel_spoutdx)
+# ==== end ENGINE (M6) ====
+
 # The slice engine (decks, FX, previews, MK2 Perform).
 add_executable(himmel_render render/render_main.cpp)
 target_link_libraries(himmel_render PRIVATE himmel_engine_shared himmel_engine_model himmel_engine_ipc himmel_perform
-                      himmel_mk2 himmel_weapon himmel_fx_gpu himmel_show himmel_library d3d11 dxgi d3dcompiler winmm dwmapi)
+                      himmel_mk2 himmel_weapon himmel_fx_gpu himmel_show himmel_library himmel_spout_out d3d11 dxgi d3dcompiler winmm dwmapi)
 
 # PARKED pre-slice renderer: test card, camera + latency test, Touch FX, Entrancer, weapon knob pages.
 add_executable(himmel_render_legacy render/legacy_main.cpp)
@@ -47,7 +66,7 @@ add_executable(output_tests ${PROJECT_SOURCE_DIR}/tests/engine/output_tests.cpp)
 target_link_libraries(output_tests PRIVATE himmel_engine_model)
 add_test(NAME output_tests COMMAND output_tests)
 
-foreach(t himmel_engine_shared himmel_engine_model himmel_engine_ipc himmel_render himmel_render_legacy himmel himmel_cmd
+foreach(t himmel_engine_shared himmel_engine_model himmel_engine_ipc himmel_spout_out himmel_render himmel_render_legacy himmel himmel_cmd
           preview_dump deck_tests transport_tests output_tests)
     if(MSVC)
         target_compile_options(${t} PRIVATE /W4 /permissive- /utf-8)
