@@ -182,7 +182,7 @@ What is left needs the owner and real hardware:
 - a song on the real MK2, Lightpad and NuVJ;
 - a real display cable pull with 2+ screens;
 - the 8 h soak and the show-PC run (`docs/qa/README.md`);
-- the open PROPOSED decisions.
+- ~~the wave 2–4 PROPOSED decisions~~ **decided** by the owner 2026-11-17 (7997cfb); D89, D94–D103 and D106–D108 are still PROPOSED.
 
 **Old wave 4 candidates (now done or folded in):**
 - GUI: the SHOW and AUDIO panels, the reaction editor and the wizard (rest of M11);
