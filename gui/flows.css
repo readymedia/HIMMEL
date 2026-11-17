@@ -172,3 +172,4 @@ button.fsrow, .fsrow.nocb { grid-template-columns: 22px 1fr auto; }
 button.primary.bad { background: var(--live); border-color: var(--live); color: #fff; }
 .quitBtn { min-height: 32px; font-weight: 800; border-color: #5a1714; color: #ff8a80; }
 .quitBtn:hover { background: #5a1714; color: #fff; }
+.setlib { display: flex; flex-direction: column; gap: 10px; max-width: 900px; } .setdisk { margin-left: 0; } .setres input { width: 80px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 3px 4px; font-family: var(--mono); }

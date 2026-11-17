@@ -194,7 +194,8 @@ def run(port, keep):
     n_src = make_sources(src)
     print("temp show root", tmp, "·", n_src, "source files")
     exe = os.path.join(BIN, "himmel.exe")
-    stack = subprocess.Popen([exe, "--sim", "--no-weapons", "--", "--show-root", tmp, "--size", "960x540"], cwd=ROOT,
+    reserve = ["--reserve-gb", os.environ.get("HIMMEL_E2E_RESERVE_GB", "5")]   # a dev disk is often nearly full
+    stack = subprocess.Popen([exe, "--sim", "--no-weapons"] + reserve + ["--", "--show-root", tmp, "--size", "960x540"], cwd=ROOT,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                              creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
     ck = Check()

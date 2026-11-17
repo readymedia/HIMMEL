@@ -449,7 +449,7 @@
 
   // ================================================================ settings (stub)
   const SET = { page: 'status' };
-  const PAGES = [['status', 'Status'], ['engine', 'Engine & outputs'], ['controllers', 'Controllers'], ['audio', 'Audio'], ['gui', 'This GUI'], ['remote', 'Remote / OSC'], ['about', 'About']];
+  const PAGES = [['status', 'Status'], ['engine', 'Engine & outputs'], ['controllers', 'Controllers'], ['audio', 'Audio'], ['library', 'Library'], ['gui', 'This GUI'], ['remote', 'Remote / OSC'], ['about', 'About']];
   function kv(rows) {
     const t = el('table', 'kv');
     for (const [k, v] of rows) { const tr = el('tr'); tr.append(el('td', 'dim', k), el('td', 'mono', v == null ? '–' : String(v))); t.append(tr); }
@@ -465,6 +465,12 @@
       }
     }
     for (const b of nav.children) b.classList.toggle('on', b.dataset.p === SET.page);
+    if (SET.page === 'library') {   // live page (library.js): disk, keep free on disk, the library folder
+      const fresh = SET.key !== SET.page;
+      SET.key = SET.page;
+      window.Lib.settings($('setBody'), fresh);
+      return;
+    }
     if (SET.page === 'audio' || SET.page === 'remote') {   // live pages (panels.js), updated in place
       const fresh = SET.key !== SET.page;
       SET.key = SET.page;

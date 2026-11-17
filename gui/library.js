@@ -355,6 +355,7 @@
     row.append(el('div', 'spacer'), btn('Cancel', null, close));
     if (pl && pl.fit_clips > 0) row.append(btn(`IMPORT THE ${pl.fit_clips} THAT FIT`, 'Queue the clips that fit above the reserve, in the order found', () => { close(); const c = { ...cmd }; delete c.dry_run; sendImport({}, { ...c, fit: true }); }, 'primary'));
     row.append(btn('MOVE LIBRARY…', 'Move the library to another folder or disk', () => { close(); moveDialog(); }));
+    row.append(btn('KEEP FREE ON DISK…', 'How much space Himmel keeps free (Settings → Library)', () => { close(); openReserve(); }));
     box.append(row); md.append(box); document.body.append(md);
     md.addEventListener('click', e => { if (e.target === md) close(); });
   }
@@ -445,7 +446,7 @@
       const bar = el('span', 'lbdbar'); const used = el('i'); used.style.width = (d.total ? Math.min(100, (1 - d.free / d.total) * 100) : 0) + '%'; bar.append(used);
       de.append(el('span', 'lbl', 'disk'), bar, el('span', low ? 'bad' : 'dim', `${gb(d.free)} free${d.total ? ' of ' + gb(d.total) : ''}`),
         el('span', 'dim', `· library ${gb(d.lib || 0)}`));
-      if (low) de.append(el('span', 'chip bad', 'DISK LOW · the import waits'));
+      if (low) { const ch = btn('DISK LOW · the import waits', 'The import waits so the disk keeps its reserve. Click: Settings → Library (keep free on disk)', () => openReserve(), 'chip bad'); de.append(ch); }
       de.title = `${d.root}\nThe library keeps a HAP copy of every clip (often several times the original's size). The originals are never copied or touched.` + (d.reserve != null ? `\nThe import stops when less than ${gb(d.reserve)} would be left.` : '');
       de.classList.toggle('low', low);
     } else de.append(el('span', 'dim', 'disk: –'));
@@ -683,7 +684,59 @@
   });
   window.addEventListener('himmel-librows', () => { LB.listAt = performance.now(); LB.key = ''; });
 
+  // Settings → Library (LEAD wave 7): the disk, "Keep free on disk" (library command SetReserve, MEDIA; 0 = the
+  // default), the library folder. Built once per visit; the numbers update in place.
+  function openReserve() { window.Views.settingsPage('library'); window.setView('settings'); }
+  const SL = {};
+  function settings(body, fresh) {
+    const l = S.library, d = diskInfo();
+    loadDisk();
+    if (fresh || !SL.box || !body.contains(SL.box)) {
+      body.textContent = '';
+      SL.box = el('div', 'setlib');
+      body.append(el('h3', null, 'Library'), SL.box);
+      SL.disk = el('div', 'lbdisk setdisk');
+      SL.res = el('div', 'setres');
+      SL.inp = el('input'); SL.inp.type = 'number'; SL.inp.min = 0; SL.inp.max = 2000; SL.inp.step = 1; SL.inp.title = 'Gigabytes Himmel always leaves free on the library\'s disk (0 = the default)';
+      SL.inp.addEventListener('keydown', e => e.stopPropagation());
+      SL.set = btn('SET', 'Store this reserve in the library (it survives a restart)', () => {
+        const v = Math.round(+SL.inp.value);
+        if (!Number.isFinite(v) || v < 0) { toast('A whole number of GB, 0 = the default', 'bad'); return; }
+        ingest({ type: 'SetReserve', gb: v });
+      }, 'primary');
+      SL.def = btn('DEFAULT', 'Back to the default reserve', () => ingest({ type: 'SetReserve', gb: 0 }));
+      SL.note = el('div', 'dim');
+      const row = el('div', 'aurow'); row.append(el('span', 'lbl', 'keep free on disk'), SL.inp, el('span', 'dim', 'GB'), SL.set, SL.def);
+      SL.res.append(row, SL.note);
+      SL.folder = el('div', 'aurow');
+      SL.box.append(SL.disk, SL.res, el('div', 'lbl', 'LIBRARY FOLDER'), SL.folder);
+      SL.inp.value = d.reserve ? Math.round(d.reserve / 1e9) : '';
+    }
+    // disk line
+    SL.disk.textContent = '';
+    if (d.free != null) {
+      const bar = el('span', 'lbdbar'); const used = el('i'); used.style.width = (d.total ? Math.min(100, (1 - d.free / d.total) * 100) : 0) + '%'; bar.append(used);
+      SL.disk.append(el('span', 'lbl', 'disk'), bar, el('span', d.guard === 'low' ? 'bad' : null, `${gb(d.free)} free of ${gb(d.total || 0)}`),
+        el('span', 'dim', `· the library uses ${gb(d.lib || 0)}` + (d.queue ? ` · the queue still needs ~${gb(d.queue)}` : '')));
+      if (d.guard === 'low') SL.disk.append(el('span', 'chip bad', 'DISK LOW · the import waits'));
+    } else SL.disk.append(el('span', 'dim', 'disk: – (no library in this run)'));
+    const can = ingestOk() && supports('SetReserve');
+    SL.inp.disabled = SL.set.disabled = SL.def.disabled = !can;
+    SL.note.textContent = d.reserve != null
+      ? `Himmel keeps ${gb(d.reserve)} free now. An import that would go below it is refused (or only the clips that fit are taken), and a running import waits. Windows and the show need free space too.`
+      : 'The import worker does not report its reserve (older version).';
+    if (!can) SL.note.textContent += supports('SetReserve') ? ' The import worker is not running.' : ' Changing it needs the newer import worker (library command SetReserve).';
+    const fk = (l?.root_info?.path || d.root || '') + '|' + (l?.root_info?.move_state || '');
+    if (SL.fk !== fk) {
+      SL.fk = fk; SL.folder.textContent = '';
+      SL.folder.append(el('span', 'mono', l?.root_info?.path || d.root || '–'), btn('MOVE LIBRARY…', 'Move the library (HAP copies, thumbnails, database) to another folder or disk', () => moveDialog()),
+        btn('OPEN DROP FOLDER', 'Open the watched originals folder in Explorer', () => openOriginals()));
+    }
+  }
+
   window.Lib = {
+    settings,
+    openReserve,
     render() { if (S.view === 'library') render(); },
     shown() { LB.key = ''; LB.dockKey = ''; F().loadRows(true); },
     importDialog: mode => { if (!LB.built) build(); importDialog(mode); },
