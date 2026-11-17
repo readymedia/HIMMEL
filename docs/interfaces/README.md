@@ -19,5 +19,6 @@ LEAD; then both sides are built. See `docs/agents/README.md`.
 | [`library-db.md`](library-db.md) (`himmel-library.db` SQLite index, `meta/<hash>.json` sidecars `himmel-clip/1`, `Local\HimmelLibrary` import status, the engine's library feed) | MEDIA → ENGINE / SHOW / GUI | **Version 1, 2026-11-17** (M7) |
 | [`show-files.md`](show-files.md) (`himmel-show/1` project folder + `.himmelshow`, autosave journal, `Local\HimmelShow`: show status, files, text boxes) | SHOW ↔ GUI / weapons | **Version 1, 2026-11-17** (M3; moods and cues later); the block: [`show-block.md`](show-block.md) |
 | [`outputs-block.md`](outputs-block.md) (`Local\HimmelOutputs`: output slots, displays by identity, canvas, layer places, curtains) | ENGINE → supervisor / GUI / weapons | **Version 1, 2026-11-17** (M6); commands 70–73 in `command-protocol.md` §4c |
+| [`osc.md`](osc.md) (OSC in on UDP 7000: the `/himmel/...` address map, allow list, `Local\HimmelOsc` status + last messages) | lighting desks / Companion → `himmel_osc` → ENGINE (producer slot 2) | **Version 1, 2026-11-17** (M13) |
 | [`audio-block.md`](audio-block.md) (`Local\HimmelAudio`: signals, input, MIDI clock, config) | AUDIO → ENGINE / GUI | **Version 1, 2026-11-17** (M8) |
 | `table-format.md` (`himmel-table/1`) | GUI (table) ↔ ENGINE | **Phase 10** (draft in `docs/vj-table-design.md`) |

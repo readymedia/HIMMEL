@@ -1,8 +1,8 @@
 # CONTROL handoff
-Updated: 2026-11-17 by the CONTROL wave-3 session (M4 merged; M9 Lightpad) · Branch: claude/control-m9-lightpad · Last commit: see git log
+Updated: 2026-11-17 by the CONTROL wave-3 session (M4 + M9 merged; M13 OSC in) · Branch: claude/control-m13-osc · Last commit: see git log
 
 ## State in one paragraph
-MK2: verified map, C++ controller (`src/controller`, shared memory `Local\HimmelMk2`, LEDs, screens, reconnect, `--sim` over UDP 8766), screen pages (`pages.cpp`), Python live view + simulator + games. Generic weapon block + drivers for Lightpad / LUMI / NuVJ / APC20 (`weapons/README.md`). **New (M4, 2026-11-17): `himmel::perform::Mk2Perform` plays Perform v4** (`src/perform/`, `docs/design/perform.md`, `hardware-mapping.md` §3): focus PREP / PLAY with double-tap, wheel = TAKE, Top buttons (locks, FREEZE / STROBE / BLACK / ASSIST), knob pages PLAY / CLIP / LAYER / FX / MIX, knobs 5–8 = the PROGRAM scene's macros, pads CLIPS / SLICE / LOOKS / FX PADS (+ MOODS stub), pad targets, PRESS, HIT, `REC` / `ERASE` / `ENTER`, both screens. 219 unit checks in `perform_tests.exe`. **A whole song is played from the MK2 alone** in `himmel.exe --sim` (`python tools/mk2_e2e.py`: build 3 scenes with pads + REC, LOOKS recall, wheel TAKE, ENTER × 3, macro, BLACK, FX PAD, PLAY-focus edit + variation, ERASE undo, SOLO HIT; PASS) and **input → glass is measured: median 32 ms, p90 38 ms, max 40 ms** (`docs/measurements/2026-11-17-control-m4-input-to-glass.md`). **M9 (2026-11-17): `himmel::perform::LightpadPerform`** plays the Block next to the MK2: TOUCH (Touch FX on PROGRAM), MIX (a real crossfader with soft takeover against the wheel, top row TAKE, bottom row CUT) and SCRUB, with its 15 × 15 LEDs; `himmel_render` reads the Lightpad's weapon slot itself. 50 checks in `lightpad_tests.exe`; `mk2_e2e.py` has a Lightpad stage against the simulated Block (`weapon_blocks.exe lightpad --sim`).
+MK2: verified map, C++ controller (`src/controller`, shared memory `Local\HimmelMk2`, LEDs, screens, reconnect, `--sim` over UDP 8766), screen pages (`pages.cpp`), Python live view + simulator + games. Generic weapon block + drivers for Lightpad / LUMI / NuVJ / APC20 (`weapons/README.md`). **New (M4, 2026-11-17): `himmel::perform::Mk2Perform` plays Perform v4** (`src/perform/`, `docs/design/perform.md`, `hardware-mapping.md` §3): focus PREP / PLAY with double-tap, wheel = TAKE, Top buttons (locks, FREEZE / STROBE / BLACK / ASSIST), knob pages PLAY / CLIP / LAYER / FX / MIX, knobs 5–8 = the PROGRAM scene's macros, pads CLIPS / SLICE / LOOKS / FX PADS (+ MOODS stub), pad targets, PRESS, HIT, `REC` / `ERASE` / `ENTER`, both screens. 219 unit checks in `perform_tests.exe`. **A whole song is played from the MK2 alone** in `himmel.exe --sim` (`python tools/mk2_e2e.py`: build 3 scenes with pads + REC, LOOKS recall, wheel TAKE, ENTER × 3, macro, BLACK, FX PAD, PLAY-focus edit + variation, ERASE undo, SOLO HIT; PASS) and **input → glass is measured: median 32 ms, p90 38 ms, max 40 ms** (`docs/measurements/2026-11-17-control-m4-input-to-glass.md`). **M9 (2026-11-17): `himmel::perform::LightpadPerform`** plays the Block next to the MK2: TOUCH (Touch FX on PROGRAM), MIX (a real crossfader with soft takeover against the wheel, top row TAKE, bottom row CUT) and SCRUB, with its 15 × 15 LEDs; `himmel_render` reads the Lightpad's weapon slot itself. 50 checks in `lightpad_tests.exe`; `mk2_e2e.py` has a Lightpad stage against the simulated Block (`weapon_blocks.exe lightpad --sim`). **M13 (2026-11-17): OSC in** — `himmel_osc.exe` (UDP 7000, started by the supervisor) turns `/himmel/go`, `/himmel/scene n`, macros, BLACK, TAKE ... into commands on producer slot 2, behind an allow list and a strict parser; garbage never reaches the engine (200 000-packet fuzz in `osc_tests.exe`); `Local\HimmelOsc` keeps the last 32 messages. Address map: `docs/interfaces/osc.md`.
 
 ## Perform mapping (M4)
 `docs/design/perform.md` v4 wins; owner choices are PROPOSED D160–D162 in `docs/decisions.md`. Focus is a **role** (PREP = the PREVIEW deck, PLAY = the PROGRAM deck) + a layer; after a TAKE the rows keep meaning prepare / live, and the mapper re-sends `Focus` for the deck that now has the role. A focus set by the GUI is adopted.
@@ -65,13 +65,19 @@ MK2: verified map, C++ controller (`src/controller`, shared memory `Local\Himmel
 
 Not built (M9 follow-ups): Y = speed in SCRUB; LOOKS and MOOD modes; `SHIFT` + `PAD MODE` on the MK2 to switch the Block's mode; the strip under the finger in SCRUB glowing the clip colour (the whole band glows instead).
 
+## OSC in (M13)
+Contract and address map: **`docs/interfaces/osc.md`**. Code: `src/osc/` (`himmel_osc_lib`: parser, map, allow list, status block; `app/osc_main.cpp`: `himmel_osc.exe`), tests `tests/osc/osc_tests.cpp` (83 checks incl. the fuzz). The supervisor starts it (`--no-osc`, `--osc "ARGS"`), restart on exit only (no heartbeat kill; `GUESS:` like the UI). PROPOSED D164.
+- Try it: `build\bin\Release\himmel_osc.exe --send /himmel/go`, `--send /himmel/scene 3`, `--send /himmel/macro/1 0.5`; `himmel_osc.exe --status` = counters + the last messages with the reason.
+- Not built: OSC out, song by name, master dimmer (no engine dimmer), patterns, the Settings › Remote page (GUI), a heartbeat check in the supervisor.
+
 ## Done (with commits)
+- **M13 (2026-11-17, branch `claude/control-m13-osc`):** `src/osc/` + `osc_tests` + `docs/interfaces/osc.md` (+ a row in `docs/interfaces/README.md`), supervisor starts `himmel_osc.exe` (ENGINE file, +16 lines), `mk2_e2e.py` OSC stage (`--no-osc` skips it), D164.
 - **M9 (2026-11-17, branch `claude/control-m9-lightpad`):** `LightpadPerform` + `lightpad_tests` (50 checks), the Lightpad slot in `render_main.cpp` (ENGINE file: `LightpadLink`, ~45 lines, `himmel_render` links `himmel_weapon`), `mk2_e2e.py` Lightpad stage (the stack now starts with `--weapons lightpad`; `--no-lightpad` = the old way), D163.
 - **M4 (2026-11-17, branch `claude/control-m4-perform`):** the mapper above, `set_context(ShowStatus*, TransportSection*)` (one call in `render_main.cpp`), 219 unit checks, `mk2_chain_tests` updated (knob 1 opacity now on the LAYER page), `tools/mk2_e2e.py` = basic + song + input → glass, measurement doc, D160–D162.
 - S2 slice mapper (branch `claude/control-slice-perform`). Earlier history: `CLAUDE.md` "Next steps" and `docs/roadmap.md`.
 
 ## In progress
-- Nothing. M4 merged (main a9f6198); M9 ready to merge.
+- Nothing. M4 and M9 merged; M13 ready to merge.
 
 ## Done 2026-11-16: MK2 input end to end (owner: "neither the sim nor the MK2 drives the engine")
 - **Measured, not guessed.** On main (35e662e) with exactly ONE simulator, the whole chain works: scripted `SimMk2`, the live view over HTTP, and clicks in the browser page all reached the engine (every group, 12 quick presses, knob 1, wheel +6 = 0.200, PLAY TAKE), and the engine's Perform screens / LEDs showed on the page.
@@ -104,6 +110,7 @@ Not built (M9 follow-ups): Y = speed in SCRUB; LOOKS and MOOD modes; `SHIFT` + `
 - The input → glass number covers UDP + engine + DWM, not USB and not the panel (see the measurement doc).
 
 ## Open questions for the owner
+- PROPOSED D164 (OSC: UDP 7000, this PC only by default, out-of-range values refused, the extra addresses `/himmel/back`, `/go/preview`, `/xfade`, `/undo`, `/redo`, `/beat` = a tap).
 - PROPOSED D163 (Lightpad: MIX absolute A ↔ B with soft takeover, TOUCH zones = the first 5 effects in master FX slot 2, Mode tap = hold / double-tap = next mode).
 - PROPOSED D160 (knob pages, knobs 5–8 always macros), D161 (stand-ins for FREEZE / STROBE / FX PADS / PANIC / NOTE REPEAT / GRID / dice buttons), D162 (session pad targets, REC / ERASE on release, LOOKS fires on the hit) in `docs/decisions.md`.
 
