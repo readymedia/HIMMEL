@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 // The views around Perform (M11): the start wizard (gui.md §3, steps 1-4 against what 0.1 has),
-// the MK2 picture with live feedback (gui.md §4.5) and the Settings view stub (gui.md §19).
+// the MK2 picture with live feedback (gui.md §4.5) and the Settings view (gui.md §19).
+// M11 part 2: the wizard uses the OUTPUTS / AUDIO / LIBRARY / weapon blocks through window.Panels.
 // Uses the state app.js keeps in window.S and its helpers in window.H.
 'use strict';
 
@@ -37,29 +38,45 @@
       b.classList.toggle('on', +b.dataset.step === W.step);
     }
     const key = W.step + '|' + stepKey(W.step);
-    if (W.key === key) return;
+    if (W.key === key) { if (W.step === 4 && W.u) window.Panels.W.updatePicker(W.u); return; }
     W.key = key;
     const body = $('wizBody'); body.textContent = '';
     body.append(el('h2', null, ['', 'Add clips', 'Choose your weapon', 'Set outputs', 'Play'][W.step]));
+    W.u = null;
     ({ 1: step1, 2: step2, 3: step3, 4: step4 })[W.step](body);
     body.append(wizNav());
+    if (W.u) window.Panels.W.updatePicker(W.u);
   }
   function stepKey(step) {
-    const b = S.bridge, m = S.mk2, L = S.live;
-    if (step === 1) return (S.cat?.clips.length ?? -1) + ',' + (S.cat?.effects.length ?? -1);
-    if (step === 2) return [m?.present, m?.connected, m?.alive, (m?.pressed || []).join('+'), L?.producer?.[0]?.alive, L?.producer?.[1]?.alive].join(',');
-    if (step === 3) return [b?.preview, b?.engine].join(',');
-    return [b?.engine, S.cat?.clips.length, m?.connected, b?.fps ? Math.round(b.fps) : 0].join(',');
+    const b = S.bridge, m = S.mk2, L = S.live, lib = S.library, o = S.outputs, a = S.audio;
+    if (step === 1) return JSON.stringify([S.cat?.clips.length ?? -1, S.cat?.effects.length ?? -1, lib?.present, lib?.alive, lib?.queued, lib?.working, lib?.ready_total, lib?.failed_total, lib?.job?.name, lib?.catalog_full]);
+    if (step === 2) return JSON.stringify([m?.present, m?.connected, m?.alive, (m?.pressed || []).join('+'), L?.producer?.[0]?.alive, L?.producer?.[1]?.alive, S.weapons, a?.present]);
+    if (step === 3) return JSON.stringify([b?.preview, b?.engine, o]);
+    // Step 4 holds a live meter: rebuilt only when the input changes; the meter updates in place.
+    return JSON.stringify([b?.engine, S.cat?.clips.length, m?.connected, a?.present, a?.input?.device, a?.input?.state, o?.count, (o?.outputs || []).map(x => x.state)]);
   }
 
   function step1(body) {
     const n = S.cat?.clips.length ?? 0, g = (S.cat?.effects || []).filter(e => e.kind === 'generator').length;
+    const lib = S.library, PW = window.Panels.W;
     const drop = el('div', 'drop');
-    drop.append(el('div', 'big', 'Drop folders or clips here'),
-      el('div', 'dim', 'Import (convert → analyse → tag → ready) comes with M7. For now the engine plays every HAP .mov in media/ (or --clip PATH). Make test clips with: python tools/make_test_clips.py'));
+    const root = lib?.root || '';
+    drop.append(el('div', 'big', 'Drop clips into the library folder'),
+      el('div', 'mono', root ? root + '\\originals' : 'Documents\\Himmel\\Library\\originals'),
+      el('div', 'dim', 'Video, stills, GIFs, SVG and image sequences are converted to HAP, analysed (colours, motion, mood, loops) and tagged, in the background. A browser cannot hand files to Himmel: copy them into that folder (Explorer), they appear in the LIBRARY view when ready.'));
     drop.addEventListener('dragover', e => e.preventDefault());
-    drop.addEventListener('drop', e => { e.preventDefault(); window.H.toast('Import is not built yet (M7). Put HAP .mov files in media/ and restart the renderer.'); });
+    drop.addEventListener('drop', e => { e.preventDefault(); window.H.toast('Copy the files into ' + (root ? root + '\\originals' : 'the originals folder') + ' with Explorer: the page cannot import them itself.'); });
     body.append(drop);
+    const st = el('div');
+    if (PW.has(lib)) {
+      st.append(el('div', 'wstat ' + (lib.alive ? 'ok' : 'warn'), lib.alive ? (lib.working || lib.queued ? 'IMPORTING' : 'READY FOR NEW FILES') : 'IMPORT WORKER NOT RUNNING'),
+        el('div', 'mono dim', `${lib.queued} queued · ${lib.working} working · ${lib.ready_total} ready · ${lib.failed_total} failed`));
+      if (lib.job.name) st.append(el('div', null, `${lib.job.name} · ${lib.job.stage} · ${Math.round(lib.job.progress * 100)}%`));
+      if (lib.catalog_full) st.append(el('div', 'bad', `Catalog full: ${lib.catalog_full} ready clips are not playable (256 max in 0.1).`));
+    } else {
+      st.append(el('div', 'wstat warn', 'IMPORT WORKER NOT RUNNING'), el('div', 'dim', 'himmel.exe starts himmel_ingest (not with --no-show-files unless --library is given). The engine still plays every HAP .mov in media/.'));
+    }
+    const open = el('button', null, 'Open the LIBRARY view'); open.addEventListener('click', () => window.setView('library')); st.append(open);
     const row = el('div', 'wrow');
     const list = el('div', 'wlist');
     (S.cat?.clips || []).slice(0, 40).forEach(c => {
@@ -68,8 +85,8 @@
       it.append(sw, el('span', null, c.name.replace(/\.mov$/i, '')), el('span', 'dim mono', `${c.width}×${c.height} · ${c.seconds.toFixed(0)} s · ready`));
       list.append(it);
     });
-    if (!n) list.append(el('div', 'dim', S.cat ? 'The engine has no clips. Generators still play (step 4 → GENERATORS).' : 'Waiting for the engine catalog…'));
-    row.append(card(`${n} clips in the library`, list), card('Starter looks', `${g} generators are built in (Lines, Rings, Noise, Shapes, Solid, Ticker): they play on an empty layer, no clips needed.`));
+    if (!n) list.append(el('div', 'dim', S.cat ? 'The engine has no clips yet. Generators still play (step 4 → GENERATORS).' : 'Waiting for the engine catalog…'));
+    row.append(card('Import', st), card(`${n} clips ready to play`, list), card('Starter looks', `${g} generators are built in (Lines, Rings, Noise, Shapes, Solid, Ticker): they play on an empty layer, no clips needed.`));
     body.append(row);
   }
 
@@ -82,49 +99,60 @@
       el('div', 'dim', '2 screens · 8 knobs · wheel · 16 pressure pads'),
       el('div', null, 'Layout: PREVIEW left (knobs 1–4, groups A–D), PROGRAM right (knobs 5–8, groups E–H), wheel = TAKE.'),
       el('div', 'dim', (m.pressed && m.pressed.length) ? 'Touched: ' + m.pressed.join(' + ') : 'Touch any control on the MK2: it shows here (a hardware test).'));
-    const sim = el('div', 'dim', 'No MK2? Start Himmel with --sim and use the simulator: python tools/mk2_live.py --sim');
-    mk2.append(sim);
-    const c1 = card('MAIN WEAPON · MK2', mk2, m.connected ? 'sel' : '');
-    const nu = card('MAIN WEAPON · NuVJ', 'The NuVJ as main weapon comes with M10 (its driver already feeds the engine as a side arm).', 'off');
-    const kb = card('KEYBOARD + MOUSE', 'Always there: this page plays the MK2 layout. Space = TAKE, Enter = CUT, T = tap.', L?.producer?.[1]?.alive ? 'sel' : '');
-    row.append(c1, nu, kb);
-    body.append(el('div', 'lbl', 'MAIN WEAPON (pick one)'), row);
+    mk2.append(el('div', 'dim', 'No MK2? Start Himmel with --sim and use the simulator: python tools/mk2_live.py --sim'));
+    const ws = Array.isArray(S.weapons) ? S.weapons.filter(w => w.state === 'ok') : [];
+    const nuvj = ws.find(w => w.weapon === 'nuvj');
+    row.append(card('MAIN WEAPON · MK2', mk2, m.connected ? 'sel' : ''),
+      card('MAIN WEAPON · NuVJ', nuvj ? `${nuvj.connected ? 'CONNECTED' : 'driver runs, not connected'}${nuvj.simulated ? ' (simulated)' : ''}. The crossfader decides PROGRAM (D73).` : 'Driver not running.', nuvj?.connected ? 'sel' : 'off'),
+      card('KEYBOARD + MOUSE', 'Always there: this page plays the MK2 layout. Space = TAKE, Enter = CUT, T = tap.', L?.producer?.[1]?.alive ? 'sel' : ''));
+    body.append(el('div', 'lbl', 'MAIN WEAPON'), row);
     const arms = el('div', 'wrow');
-    for (const [nm, txt] of [['Lightpad Block', 'TOUCH / MIX / SCRUB with M9'], ['LUMI Keys', 'keys + pressure (driver runs, mapping later)'], ['Ohm64 · APC20 · KF4', 'simulated only so far']])
-      arms.append(card(nm, txt, 'off'));
-    body.append(el('div', 'lbl', 'SIDE ARMS (add any)'), arms);
+    for (const w of ws.filter(x => x.weapon !== 'nuvj')) {
+      const t = el('div');
+      t.append(el('div', 'wstat ' + (w.connected ? 'ok' : w.alive ? 'warn' : 'bad'), w.connected ? 'CONNECTED' : w.alive ? 'DRIVER RUNS · NOT CONNECTED' : 'DRIVER STOPPED'),
+        el('div', 'dim mono', `${w.driver} · slot ${w.slot}${w.simulated ? ' · simulated' : ''}`));
+      arms.append(card(w.name || w.weapon, t, w.connected ? 'sel' : ''));
+    }
+    if (!ws.length) arms.append(card('No side arms found', 'Lightpad, LUMI, NuVJ and APC20 drivers run under himmel.exe (--weapons LIST); none is running now.', 'off'));
+    body.append(el('div', 'lbl', `WEAPONS FOUND (${ws.length} driver${ws.length === 1 ? '' : 's'})`), arms);
     const p0 = L?.producer?.[0]?.alive;
-    body.append(el('div', 'loadout', 'Loadout: MK2' + (m.connected ? '' : ' (not connected)') + ' + keyboard / mouse' + (p0 ? ' · engine mapper alive' : '')));
-    body.append(card('Sound in', 'Mic / line in / "sound on this PC", live meter and the three bands come with M8 (himmel_audio). Until then effects react to nothing (or --test-signal).', 'off'));
+    body.append(el('div', 'loadout', 'Loadout: MK2' + (m.connected ? '' : ' (not connected)') + ws.filter(w => w.connected).map(w => ' + ' + (w.name || w.weapon)).join('') + ' + keyboard / mouse' + (p0 ? ' · engine mapper alive' : '')));
   }
 
   function step3(body) {
+    const o = S.outputs, PW = window.Panels.W;
     const row = el('div', 'wrow');
-    row.append(card('SCREENS', 'TVs, monitors, LED walls: the edges just meet, no mapping.', 'sel'), card('PROJECTORS', 'Keystone, warp, edge blend (later, §13).', 'off'));
+    row.append(card('SCREENS', 'TVs, monitors, LED walls: the edges just meet, no mapping.', 'sel'), card('PROJECTORS', 'Keystone, warp, edge blend (later, §13). The blend width is on the OUTPUTS view.', 'off'));
     body.append(el('div', 'lbl', 'WHERE DOES THE PICTURE GO?'), row);
-    const how = el('div', 'chips');
-    for (const n of ['1', '2 side by side', '3 side by side']) how.append(el('span', 'chip2 off', n));
-    const res = el('div', 'chips');
-    for (const [n, t] of [['720p', ''], ['1080p', 'recommended'], ['1440p', 'big rigs'], ['4K', 'big rigs']]) {
-      const c = el('span', 'chip2 off' + (n === '1080p' ? ' on' : ''), n + (t ? ' · ' + t : '')); res.append(c);
+    if (!PW.has(o)) {
+      body.append(card('Outputs', o?.state === 'version' ? 'The renderer is another version than this GUI (outputs block).' : 'The renderer is not running (no outputs block yet). himmel.exe starts it.', 'off'));
+      return;
     }
-    const hz = el('div', 'chips'); hz.append(el('span', 'chip2 on off', '60 Hz'), el('span', 'chip2 off', '50 Hz'));
-    const box = el('div');
-    box.append(el('div', 'lbl', 'HOW MANY'), how, el('div', 'lbl', 'RESOLUTION PER OUTPUT'), res, el('div', 'lbl', 'REFRESH'), hz,
-      el('div', 'dim', 'Outputs, resolution presets, IDENTIFY and 50 / 60 Hz are set on the renderer command line for now (himmel_render --outputs N --size WxH --mode span|mirror); the GUI controls come with M6. The chips show the defaults.'));
-    const ident = el('button', null, 'IDENTIFY'); ident.disabled = true; ident.title = 'Big numbers on every display (M6)';
-    body.append(card('Outputs', box), ident);
-    const b = S.bridge;
-    body.append(el('div', 'dim', `Preview block: ${b?.preview || '–'} · engine: ${b?.engine || '–'}. The GUI screens are never show outputs.`));
+    const cards = el('div', 'wrow');
+    o.outputs.forEach((x, k) => cards.append(PW.outputCard(x, k, true)));
+    body.append(el('div', 'lbl', `${o.count} OUTPUT${o.count === 1 ? '' : 'S'} · ${o.mode.toUpperCase()} · canvas ${o.canvas[0]}×${o.canvas[1]} · ${o.displays} displays found`), cards);
+    const ctl = el('div', 'wctl');
+    const res = (o.outputs[0] || {}).preset || 'P1080';
+    ctl.append(el('span', 'lbl', 'RESOLUTION PER OUTPUT'), PW.presetSel(res, v => PW.setResolution(v)),
+      el('span', 'lbl', 'REFRESH'), PW.refreshSel(o.refresh, v => window.H.send({ type: 'OutputConfig', param: 'Refresh', value: v })),
+      PW.identifyBtn(false));
+    body.append(ctl,
+      el('div', 'dim', 'IDENTIFY shows a big number on every output for 5 s: check that OUT 1 is on the left. 1080p is the safe choice; 1440p / 4K for big rigs. 50 Hz in countries with 50 Hz light and cameras. The number of outputs is set when Himmel starts (himmel.exe -- --outputs N) in 0.1.'));
+    const more = el('button', null, 'More on the OUTPUTS view'); more.addEventListener('click', () => window.setView('outputs')); body.append(more);
   }
 
   function step4(body) {
-    const b = S.bridge, m = S.mk2;
+    const b = S.bridge, m = S.mk2, o = S.outputs, PW = window.Panels.W;
     const ok = b?.engine === 'ok';
     const n = S.cat?.clips.length ?? 0;
-    body.append(el('div', 'health ' + (ok ? 'ok' : 'bad'),
-      ok ? `All good: ${n} clips, ${m?.connected ? 'MK2 connected' : 'no MK2 (keyboard + mouse)'}, engine ${Math.round(b.fps)} fps.` : 'The engine is not running: start himmel.exe (or himmel_render.exe). This page waits for it.'));
-    body.append(el('div', 'dim', 'Perform: PREVIEW (green) left, PROGRAM (red) right, TAKE in the middle. Click a layer = focus; the CLIP tab edits its transport, LAYER FX its effects.'));
+    const lost = (o?.outputs || []).filter(x => x.state === 'Lost' || x.state === 'Other').length;
+    body.append(el('div', 'health ' + (ok && !lost ? 'ok' : 'bad'),
+      !ok ? 'The engine is not running: start himmel.exe (or himmel_render.exe). This page waits for it.'
+        : `${lost ? `⚠ ${lost} output${lost > 1 ? 's' : ''} lost · ` : 'All good: '}${n} clips, ${m?.connected ? 'MK2 connected' : 'no MK2 (keyboard + mouse)'}, ${o?.count ?? '?'} output${o?.count === 1 ? '' : 's'}, engine ${Math.round(b.fps)} fps.`));
+    const snd = el('div');
+    W.u = PW.audioPicker(snd, true);
+    body.append(card('SOUND IN · every effect reacts to it', snd));
+    body.append(el('div', 'dim', 'Perform: PREVIEW (green) left, PROGRAM (red) right, TAKE in the middle. Click a layer = focus; the CLIP tab edits its transport, LAYER FX its effects, SCENES saves and recalls looks.'));
   }
 
   // ================================================================ MK2 picture
@@ -236,8 +264,14 @@
       }
     }
     for (const b of nav.children) b.classList.toggle('on', b.dataset.p === SET.page);
+    if (SET.page === 'audio' || SET.page === 'remote') {   // live pages (panels.js), updated in place
+      const fresh = SET.key !== SET.page;
+      SET.key = SET.page;
+      window.Panels.settings(SET.page, $('setBody'), fresh);
+      return;
+    }
     const b = S.bridge || {}, L = S.live, m = S.mk2 || {}, c = S.tr?.clock;
-    const key = SET.page + JSON.stringify([b.engine, b.commands, b.preview, b.epoch, b.pushed, b.dropped, Math.round(b.fps || 0), m.connected, m.present, L?.producer, c?.bpm, c?.grid]);
+    const key = SET.page + JSON.stringify([b.engine, b.commands, b.preview, b.epoch, b.pushed, b.dropped, Math.round(b.fps || 0), m.connected, m.present, L?.producer, c?.bpm, c?.grid, SET.page === 'controllers' ? S.weapons : 0]);
     if (key === SET.key) return;
     SET.key = key;
     const body = $('setBody'); body.textContent = '';
@@ -255,23 +289,19 @@
       (L?.producer || []).forEach((p, i) => { if (i > 3) return; const r = el('tr'); r.append(el('td', null, i + ' ' + prodNames[i]), el('td', null, p.alive ? '● yes' : '○ no'), el('td', 'mono', '#' + p.acked), el('td', 'mono', p.rejected + (p.rejected ? ' · ' + p.last_reject : ''))); t.append(r); });
       body.append(el('h3', null, 'Producers (command-protocol.md §3)'), t);
     } else if (P === 'engine') {
-      body.append(el('h2', null, 'Engine & outputs'), el('p', 'dim', 'The renderer is configured on its command line in 0.1. Output settings (count, resolution presets 720p / 1080p / 1440p / 4K, 50 / 60 Hz, IDENTIFY, black per output) come with M6.'),
-        kv([['outputs', '--outputs N (1..6)'], ['size', '--size WxH'], ['mode', '--mode span | mirror'], ['fullscreen', '--fullscreen'], ['flash cap (D65, off by default)', '--flash-cap N'], ['test reaction signal', '--test-signal'], ['ticker text', '--ticker "TEXT"']]));
+      body.append(el('h2', null, 'Engine & outputs'), el('p', 'dim', 'Resolution, refresh, blend, IDENTIFY, black per output and the layer places are on the OUTPUTS view. The rest is on the renderer command line in 0.1 (himmel.exe -- ARGS).'),
+        kv([['outputs', '--outputs N (1..6)'], ['size', '--size WxH (custom)'], ['fullscreen', '--fullscreen'], ['AV offset', '--av-offset MS (−200..200)'], ['flash cap (D65, off by default)', '--flash-cap N'], ['test reaction signal', '--test-signal'], ['ticker text', '--ticker "TEXT"']]));
+      const ov = el('button', null, 'Open the OUTPUTS view'); ov.addEventListener('click', () => window.setView('outputs')); body.append(ov);
       const bt = el('button', null, 'Black (master)'); bt.addEventListener('click', () => window.H.send({ type: 'Black', value: 2 }));
       body.append(bt);
     } else if (P === 'controllers') {
       body.append(el('h2', null, 'Controllers'), kv([
         ['MK2 controller block', m.present ? 'present' : 'not found'], ['MK2 USB', m.connected ? 'connected' : 'not connected'],
         ['MK2 map', m.map_verified ? 'verified map loaded' : m.present ? 'built-in default' : '–'], ['MK2 events dropped on GUI ring', m.dropped ?? '–'],
-        ['Lightpad / LUMI / NuVJ / APC20', 'drivers run under himmel.exe; their pages come with M9 / M10']]));
+        ...(Array.isArray(S.weapons) ? S.weapons : []).map(w => [`slot ${w.slot} · ${w.name || w.weapon || '?'}`, w.state !== 'ok' ? 'other block version' : `${w.connected ? 'connected' : 'not connected'} · ${w.alive ? 'driver alive' : 'driver stopped'}${w.simulated ? ' · simulated' : ''}`])]));
       const b2 = el('button', null, 'Open the MK2 picture'); b2.addEventListener('click', () => window.setView('mk2')); body.append(b2);
-    } else if (P === 'audio') {
-      body.append(el('h2', null, 'Audio'), el('p', 'dim', 'Sound in (mic / line in / this PC), auto gain, gate, the live meter, bands, onsets and the reaction editor come with M8 (himmel_audio). Every effect already has a default reaction (fx/<id>/effect.json); the effect browser shows what each one reacts to.'));
-      if (c) body.append(kv([['clock', `${c.bpm} BPM (${c.source})`], ['grid', c.grid]]));
     } else if (P === 'gui') {
       body.append(el('h2', null, 'This GUI'), kv([['bridge', 'himmel_ui on http://127.0.0.1:8790 (only answers this PC)'], ['theme', 'dark (D28)'], ['keys', 'space = TAKE · enter = CUT · T = tap · Esc = cancel'], ['restart safety', 'killing himmel_ui or this page changes nothing on the outputs']]));
-    } else if (P === 'remote') {
-      body.append(el('h2', null, 'Remote / OSC'), el('p', 'dim', 'OSC in on UDP 7000 (basic set), allowed addresses and the last messages come with M13. Producer slot 2 is reserved for it.'));
     } else {
       body.append(el('h2', null, 'About'), el('p', null, 'Himmel · open source (MIT) · © ReadyMedia.no and Himmel contributors. Every dependency is listed in THIRD_PARTY_NOTICES.md.'));
     }
@@ -284,6 +314,7 @@
       else if (S.view === 'mk2') renderMk2();
       else if (S.view === 'settings') renderSettings();
     },
+    settingsPage(p) { SET.page = p; SET.key = ''; },
     shown(v) {
       if (v === 'start') W.key = '';
       if (v === 'settings') SET.key = '';

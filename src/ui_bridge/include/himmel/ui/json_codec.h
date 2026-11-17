@@ -31,6 +31,10 @@ struct ParseResult {
     bool ok = false;
     protocol::Command cmd{};
     std::string error;   // English, shown in the page
+    // Show commands with a path / name (M3 text-box handshake, show-block.md §2): the bridge
+    // writes `text` into its box with a fresh id and sets cmd.i to that id before pushing.
+    bool needs_text = false;
+    std::string text;
 };
 
 const char* command_type_name(protocol::CommandType t);

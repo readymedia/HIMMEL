@@ -1,0 +1,152 @@
+/* SPDX-License-Identifier: MIT · Copyright (c) 2026 ReadyMedia.no and Himmel contributors */
+/* M11 part 2 panels (D121): project bar, audio meter, SCENES tab, OUTPUTS, LIBRARY, Settings → Audio / OSC. Dark only (D28). */
+.bad { color: var(--live); }
+.warn { color: var(--warn); }
+button.primary { background: var(--accent); color: #0B0D10; border-color: var(--accent); font-weight: 800; }
+button:disabled { opacity: .4; cursor: default; }
+.empty { padding: 18px; border: 1px dashed var(--line); border-radius: 8px; color: var(--text-dim); }
+.chip2.warn { color: var(--warn); border-color: #6b5c10; }
+
+/* ---- project bar (top bar) ---- */
+.projbar { display: flex; align-items: center; gap: 3px; padding-right: 6px; border-right: 1px solid var(--line); }
+.projbar button { min-height: 24px; padding: 0 7px; font-size: 11px; font-weight: 800; }
+.pname { font-weight: 800; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 3px; }
+.pname.dirty { color: var(--warn); }
+.pmsg { font-size: 11px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- audio meter (top bar) ---- */
+.audmeter { display: flex; align-items: flex-end; gap: 2px; height: 24px; padding: 2px 4px; border: 1px solid var(--line); border-radius: 5px; background: #07090b; cursor: pointer; }
+.audmeter i { display: block; width: 5px; height: 0; background: var(--preview); border-radius: 1px; transition: height 40ms linear; }
+.audmeter i.am-bass { background: #ff6b3d; } .audmeter i.am-mid { background: var(--warn); } .audmeter i.am-high { background: var(--deck-a); }
+.audmeter .amkick { width: 8px; height: 8px; border-radius: 50%; background: var(--panel-2); align-self: center; margin-left: 2px; }
+.audmeter .amkick.on { background: var(--live); }
+.audmeter.dead { opacity: .35; }
+.audmeter.clip { border-color: var(--live); }
+
+/* ---- small modals ---- */
+.askbox { width: min(560px, 92vw); padding: 12px; gap: 8px; }
+.askbox input { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-family: var(--mono); }
+.askrow { display: flex; gap: 6px; }
+.projbox { width: min(720px, 94vw); padding-bottom: 10px; }
+.projbox > .lbl, .projinfo, .projacts, .projrecent, .projmiss { margin: 0 12px; }
+.projinfo { padding: 8px 0; display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
+.projacts { display: flex; flex-wrap: wrap; gap: 5px; padding-bottom: 8px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+.projmiss { border: 1px solid #6b5c10; border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
+.projrecent { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; overflow: auto; }
+.projrecent button { display: flex; justify-content: space-between; gap: 10px; text-align: left; }
+
+/* ---- SCENES tab ---- */
+/* Compact: pads left, actions / dice / macros right, so the inspector never grows over the layer rows. */
+.scenesEd { display: grid; grid-template-columns: minmax(320px, 520px) minmax(0, 1fr); gap: 5px 14px; align-content: start; }
+.scenesEd.hidden { display: none; }
+.scenesEd > .schead { grid-column: 1 / -1; }
+.scenesEd > .scgrid { grid-column: 1; grid-row: 2 / span 4; }
+.scenesEd > .scacts, .scenesEd > .scdice, .scenesEd > .lbl, .scenesEd > .scmacros { grid-column: 2; }
+.schead, .scacts, .scdice { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.schead button, .scacts button, .scdice button { min-height: 26px; font-size: 11px; font-weight: 800; }
+.schead button.on { background: var(--accent); color: #0B0D10; }
+.scpage { font-weight: 800; min-width: 120px; text-align: center; }
+.scdecks { font-size: 11px; color: var(--text-dim); }
+.scgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; }
+.scpad { position: relative; height: 30px; min-height: 30px; padding: 1px 6px; display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
+  background: var(--panel-2); border: 1px solid var(--line); border-left: 6px solid var(--sc, transparent); color: var(--text-dim); text-align: left; }
+.scpad.used { color: var(--text); }
+.scpad.sel { box-shadow: 0 0 0 2px var(--accent); }
+.scpad .scn { font-size: 12px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.scpad .scv { font-size: 10px; color: var(--text-dim); }
+.scpad i { position: absolute; top: 4px; width: 8px; height: 8px; border-radius: 2px; display: none; }
+.scpad .sca { right: 16px; background: var(--deck-a); } .scpad .scb { right: 5px; background: var(--deck-b); }
+.scpad.ona .sca, .scpad.onb .scb { display: block; }
+.scacts button.rec { color: var(--live); border-color: #6a1a16; }
+.sclocks { display: flex; gap: 3px; flex-wrap: wrap; }
+.sclocks button.lock { font-size: 10px; min-height: 22px; opacity: .6; }
+.sclocks button.lock.on { opacity: 1; background: var(--warn); color: #0B0D10; border-color: var(--warn); }
+.scmacros { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.scmac { display: flex; flex-direction: column; gap: 2px; }
+.scmac input { width: 100%; accent-color: var(--live); }
+
+/* ---- page views (OUTPUTS, LIBRARY) ---- */
+#outputs, #library { flex: 1; min-height: 0; display: flex; }
+.pagewrap { padding: 10px 20px; overflow: auto; flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.pagewrap h2 { margin: 4px 0; }
+.otop { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.otop input { width: 64px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 3px 4px; font-family: var(--mono); }
+button.identify { font-weight: 900; letter-spacing: .1em; border-color: var(--accent); }
+button.identify.on { background: var(--accent); color: #0B0D10; }
+.ostrip { position: relative; height: 34px; background: #07090b; border: 1px solid var(--line); border-radius: 5px; }
+.oseg { position: absolute; top: 3px; bottom: 3px; border: 1px solid var(--preview); border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; background: #30d15814; }
+.oseg.st-lost, .oseg.st-other { border-color: var(--live); background: #ff3b3022; color: var(--live); }
+.oseg.st-window { border-color: var(--deck-a); background: #2ec5ff14; }
+.oseg.black { background: #000; }
+.ocards { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 8px; }
+.ocard { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--preview); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+.ocard.st-lost, .ocard.st-other { border-left-color: var(--live); }
+.ocard.st-window { border-left-color: var(--deck-a); }
+.ocard.st-off { opacity: .5; }
+.ohead { display: flex; align-items: center; gap: 8px; }
+.onum { font-weight: 900; letter-spacing: .08em; }
+.ostate { font-size: 10px; font-weight: 800; letter-spacing: .08em; color: var(--text-dim); }
+.st-lost .ostate, .st-other .ostate { color: var(--live); }
+.oblack { font-size: 10px; font-weight: 900; background: #000; border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; }
+.oname { font-weight: 700; }
+.orow { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.orow button { min-height: 24px; font-size: 11px; font-weight: 800; }
+.orow button.on { background: #000; color: var(--text); border-color: var(--text-dim); }
+.orow button.test { opacity: .7; font-weight: 600; }
+.oplaces { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 4px 12px; }
+.oplace { display: flex; align-items: center; gap: 6px; }
+.opn { width: 34px; font-weight: 800; }
+.oplace select { min-height: 24px; font-size: 11px; }
+
+.libtop { display: flex; align-items: baseline; gap: 10px; }
+.libhead { display: flex; flex-direction: column; gap: 6px; }
+.libhead > input[type=search] { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; max-width: 360px; }
+.libhead { flex-direction: row; flex-wrap: wrap; align-items: center; }
+.lbstatus { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; width: 100%; font-size: 12px; }
+.lbjob { display: inline-block; width: 120px; height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
+.lbjob i { display: block; height: 100%; background: var(--accent); }
+.libgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.lbcard { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; gap: 3px; padding-bottom: 6px; }
+.lbcard.st-failed { border-color: #6a1a16; }
+.lbthumb { position: relative; aspect-ratio: 16 / 9; background: #07090b; }
+.lbthumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lbstate, .lbin { position: absolute; top: 4px; font-size: 9px; font-weight: 900; letter-spacing: .08em; padding: 1px 4px; border-radius: 3px; background: #000c; }
+.lbstate { left: 4px; color: var(--warn); }
+.lbin { right: 4px; color: var(--preview); }
+.lbname { font-weight: 800; padding: 0 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lbmeta { font-size: 10px; padding: 0 7px; }
+.lbchips { display: flex; align-items: center; gap: 3px; padding: 0 7px; flex-wrap: wrap; }
+.lbpal { display: flex; flex: 1; min-width: 50px; height: 10px; border-radius: 2px; overflow: hidden; }
+.lbpal i { display: block; height: 100%; }
+.lbmood { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; padding: 0 7px; }
+.lbmood span { display: flex; align-items: center; gap: 2px; font-size: 9px; }
+.lbmood span i { display: block; height: 4px; background: var(--accent); border-radius: 2px; }
+.lberr { font-size: 11px; padding: 0 7px; }
+
+/* ---- Settings → Audio / Remote, wizard step 4 ---- */
+.aurow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+.aurow select { max-width: 380px; }
+.aurow input[type=number] { width: 64px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 3px 4px; font-family: var(--mono); }
+.aumrow { display: flex; gap: 12px; align-items: flex-end; margin: 6px 0; flex-wrap: wrap; }
+.aumeters { display: flex; gap: 6px; }
+.aum { position: relative; width: 34px; height: 90px; background: #07090b; border: 1px solid var(--line); border-radius: 4px; display: flex; align-items: flex-end; }
+.aum i { display: block; width: 100%; background: var(--preview); border-radius: 0 0 3px 3px; transition: height 40ms linear; }
+.aum span { position: absolute; bottom: -14px; left: 0; right: 0; text-align: center; font-size: 8px; font-weight: 800; color: var(--text-dim); }
+.aumeters { padding-bottom: 14px; }
+.auspec { display: flex; align-items: flex-end; gap: 1px; height: 90px; width: 260px; background: #07090b; border: 1px solid var(--line); border-radius: 4px; padding: 2px; margin-bottom: 14px; }
+.auspec i { flex: 1; background: var(--accent); min-height: 1px; transition: height 40ms linear; }
+.aureact { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 3px 14px; margin: 4px 0 12px; }
+.aur { display: grid; grid-template-columns: 110px 1fr 60px; align-items: center; gap: 6px; font-size: 11px; }
+.aun { font-weight: 700; }
+.aubar { height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
+.aubar i { display: block; height: 100%; background: var(--preview); }
+.osclog tr.v-refused td:last-child, .osclog tr.v-garbage td:last-child { color: var(--warn); }
+.osclog tr.v-blocked td:last-child, .osclog tr.v-ratelimited td:last-child { color: var(--live); }
+.osclog tr.v-applied td:last-child { color: var(--preview); }
+.wctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+
+/* The top bar must fit (BLACK always visible): the minor status chips give way first;
+   all of them are on Settings → Status too. */
+@media (max-width: 1800px) { #seqChip, #guiChip, #mk2Chip { display: none; } }
+@media (max-width: 1500px) { #fpsChip { display: none; } .pname { max-width: 120px; } .pmsg { display: none; } }
+@media (max-width: 1300px) { .clock .lbl, #nudgeL, #nudgeR { display: none; } }

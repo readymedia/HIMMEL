@@ -10,6 +10,8 @@
 //                      16-byte header ("HPV1", u16 width, u16 height, u32 reserved, u32 published-low)
 //                      followed by width*height RGBA bytes; 204 if nothing new (?since=published) or inactive
 //   GET  /state        everything as one JSON (debugging)
+//   M11 part 2 (optional blocks, panel hidden when missing): SSE "show", "outputs", "audio", "osc",
+//   "library"; GET /audio/devices, POST /audio/config, GET /library/clips, GET /library/thumb/<file>
 //
 // Rules (docs/interfaces/*.md, gui.md §1.5): the bridge never blocks the
 // engine and never takes it down. Engine absent / restarted / wrong version
@@ -21,6 +23,9 @@
 #include "himmel/ui/json_codec.h"
 #include "himmel/ui/shm_win.h"
 #include "http_util.h"
+#include "panels_link.h"
+#include "himmel/ui/panels_json.h"
+#include "himmel/library/feed.h"
 
 #include <algorithm>
 #include <chrono>
@@ -84,6 +89,11 @@ struct Hub {
     std::condition_variable cv;
     std::string live, catalog, bridge, transport, mk2;
     uint64_t live_ver = 0, catalog_ver = 0, bridge_ver = 0, transport_ver = 0, mk2_ver = 0;
+    // M11 part 2: the optional panels, sent as SSE events of these names.
+    static constexpr int kExtra = 6;
+    static constexpr const char* kExtraNames[kExtra] = {"show", "outputs", "audio", "osc", "library", "weapons"};
+    std::string extra[kExtra];
+    uint64_t extra_ver[kExtra] = {};
 
     void set(std::string& slot, uint64_t& ver, std::string text) {
         {
@@ -121,7 +131,7 @@ const char* engine_word(ShmStatus st, bool alive, bool seen_beat) {
 }
 
 // Push one command on slot 1. Never blocks; a full ring is counted.
-bool push_command(Command c, uint32_t& seq_out, std::string& err) {
+bool push_command(Command c, uint32_t& seq_out, std::string& err, const std::string* text = nullptr) {
     std::shared_lock vl(g_eng.views);
     std::lock_guard pl(g_eng.push_m);
     if (g_eng.commands_st != ShmStatus::Ok) {
@@ -131,6 +141,10 @@ bool push_command(Command c, uint32_t& seq_out, std::string& err) {
     auto* blk = g_eng.commands.as<CommandBlock>();
     const int slot = static_cast<int>(Producer::Gui);
     c.seq = ++g_eng.seq;
+    if (text) {   // SHOW text-box handshake: box id = this command's seq (show-block.md §2)
+        if (!himmel::ui::panels_write_show_text(c.seq, *text, err)) return false;
+        c.i = static_cast<int32_t>(c.seq);
+    }
     if (!blk->rings[slot].push(c)) {
         err = "the command ring is full (engine not reading)";
         return false;
@@ -288,6 +302,7 @@ void poller() {
     auto last_hello = Clock::now() - std::chrono::seconds(10);
     auto last_bridge = Clock::now() - std::chrono::seconds(10);
     auto last_mk2_try = Clock::now() - std::chrono::seconds(10);
+    auto last_panel_try = Clock::now() - std::chrono::seconds(10);
     auto last_beat_change = Clock::now();
     uint64_t last_beat = 0;
     bool seen_beat = false;
@@ -400,6 +415,16 @@ void poller() {
         g_hub.set(g_hub.mk2, g_hub.mk2_ver, poll_mk2(now, now - last_mk2_try >= std::chrono::seconds(1)));
         if (now - last_mk2_try >= std::chrono::seconds(1)) last_mk2_try = now;
 
+        // ---- optional panels (SHOW, OUTPUTS, AUDIO, OSC, LIBRARY) ----
+        {
+            const bool retry = now - last_panel_try >= std::chrono::seconds(1);
+            if (retry) last_panel_try = now;
+            const himmel::ui::PanelJson pj = himmel::ui::panels_poll(now_us(), retry);
+            const std::string* texts[Hub::kExtra] = {&pj.show, &pj.outputs, &pj.audio, &pj.osc, &pj.library, &pj.weapons};
+            for (int k = 0; k < Hub::kExtra; ++k)
+                if (!texts[k]->empty()) g_hub.set(g_hub.extra[k], g_hub.extra_ver[k], *texts[k]);
+        }
+
         // ---- Hello ----
         if (now - last_hello >= std::chrono::seconds(1)) {
             last_hello = now;
@@ -483,6 +508,7 @@ void handle_events(SOCKET s) {
         "Connection: keep-alive\r\nX-Accel-Buffering: no\r\n\r\nretry: 1000\n\n";
     if (!send_str(s, head)) return;
     uint64_t lv = 0, cv = 0, bv = 0, tv = 0, mv = 0;
+    uint64_t xv[Hub::kExtra] = {};
     auto last_send = Clock::now();
     while (!g_quit.load()) {
         std::string out;
@@ -490,7 +516,8 @@ void handle_events(SOCKET s) {
             std::unique_lock lk(g_hub.m);
             g_hub.cv.wait_for(lk, std::chrono::seconds(1), [&] {
                 return g_quit.load() || g_hub.live_ver != lv || g_hub.catalog_ver != cv || g_hub.bridge_ver != bv ||
-                       g_hub.transport_ver != tv || g_hub.mk2_ver != mv;
+                       g_hub.transport_ver != tv || g_hub.mk2_ver != mv ||
+                       std::memcmp(xv, g_hub.extra_ver, sizeof xv) != 0;
             });
             // Order: bridge, catalog, live (the page needs the catalog before the live view).
             if (g_hub.bridge_ver != bv) {
@@ -513,6 +540,12 @@ void handle_events(SOCKET s) {
                 mv = g_hub.mk2_ver;
                 if (!g_hub.mk2.empty()) out += "event: mk2\ndata: " + g_hub.mk2 + "\n\n";
             }
+            for (int k = 0; k < Hub::kExtra; ++k)
+                if (g_hub.extra_ver[k] != xv[k]) {
+                    xv[k] = g_hub.extra_ver[k];
+                    if (!g_hub.extra[k].empty())
+                        out += std::string("event: ") + Hub::kExtraNames[k] + "\ndata: " + g_hub.extra[k] + "\n\n";
+                }
         }
         if (out.empty() && Clock::now() - last_send > std::chrono::seconds(5)) out = ": ping\n\n";
         if (!out.empty()) {
@@ -535,7 +568,7 @@ std::string handle_cmd_body(const std::string& body) {
         }
         uint32_t seq = 0;
         std::string err;
-        if (!push_command(r.cmd, seq, err)) return {{"ok", false}, {"error", err}};
+        if (!push_command(r.cmd, seq, err, r.needs_text ? &r.text : nullptr)) return {{"ok", false}, {"error", err}};
         return {{"ok", true}, {"seq", seq}};
     };
     if (in.is_array()) {
@@ -591,7 +624,9 @@ std::string state_json() {
     std::lock_guard lk(g_hub.m);
     return "{\"bridge\":" + (g_hub.bridge.empty() ? "null" : g_hub.bridge) +
            ",\"catalog\":" + (g_hub.catalog.empty() ? "null" : g_hub.catalog) +
-           ",\"live\":" + (g_hub.live.empty() ? "null" : g_hub.live) + "}";
+           ",\"live\":" + (g_hub.live.empty() ? "null" : g_hub.live) +
+           ",\"show\":" + (g_hub.extra[0].empty() ? "null" : g_hub.extra[0]) +
+           ",\"outputs\":" + (g_hub.extra[1].empty() ? "null" : g_hub.extra[1]) + "}";
 }
 
 fs::path g_repo_dir;  // the folder that holds gui/, fx/, weapons/
@@ -712,7 +747,27 @@ void connection(SOCKET s) {
         } else if (req.method == "GET" && req.path == "/state") {
             ok = respond(s, 200, "OK", "application/json", state_json(), keep);
         } else if (req.method == "GET" && req.path == "/names") {
-            ok = respond(s, 200, "OK", "application/json", dump(himmel::ui::transport_names()), keep);
+            json names = himmel::ui::transport_names();
+            names["panels"] = himmel::ui::panels_names();
+            ok = respond(s, 200, "OK", "application/json", dump(names), keep);
+        } else if (req.method == "GET" && req.path == "/audio/devices") {
+            ok = respond(s, 200, "OK", "application/json", dump(himmel::ui::panels_audio_devices()), keep);
+        } else if (req.method == "POST" && req.path == "/audio/config") {
+            if (req.content_type.find("application/json") != 0) {
+                ok = respond(s, 415, "Unsupported Media Type", "text/plain", "send application/json", keep);
+            } else {
+                const json cfg_in = json::parse(body, nullptr, false);
+                ok = respond(s, 200, "OK", "application/json",
+                             dump(cfg_in.is_discarded() ? json{{"ok", false}, {"error", "the body is not valid JSON"}}
+                                                    : himmel::ui::panels_audio_config(cfg_in)),
+                             keep);
+            }
+        } else if (req.method == "GET" && req.path == "/library/clips") {
+            ok = respond(s, 200, "OK", "application/json", dump(himmel::ui::panels_library_clips()), keep);
+        } else if (req.method == "GET" && req.path.rfind("/library/thumb/", 0) == 0) {
+            const std::string img = himmel::ui::panels_library_thumb(req.path.substr(15));
+            ok = img.empty() ? respond(s, 404, "Not Found", "text/plain", "no such thumbnail", keep)
+                             : respond(s, 200, "OK", "image/jpeg", img, keep);
         } else if (req.method == "GET" && req.path == "/fxmeta") {
             ok = respond(s, 200, "OK", "application/json", fx_meta_json(), keep);
         } else if (req.method == "GET" && req.path.rfind("/weapons/", 0) == 0) {
@@ -731,6 +786,15 @@ void connection(SOCKET s) {
         }
         if (!ok || !keep) return;
     }
+}
+
+// A UTF-8 command-line argument as a path (u8path is deprecated in C++20).
+fs::path path_from_utf8(const char* s) {
+    const int n = MultiByteToWideChar(CP_UTF8, 0, s, -1, nullptr, 0);
+    std::wstring w(n > 1 ? static_cast<size_t>(n) : 1, L' ');
+    if (n > 1) MultiByteToWideChar(CP_UTF8, 0, s, -1, w.data(), n);
+    w.resize(n > 1 ? static_cast<size_t>(n - 1) : 0);   // drop the NUL
+    return fs::path(w);
 }
 
 fs::path find_gui_dir(const fs::path& exe_dir) {
@@ -754,14 +818,20 @@ BOOL WINAPI on_ctrl(DWORD) {
 
 int main(int argc, char** argv) {
     int port = 8790;
-    fs::path gui;
+    fs::path gui, library_root;
+    bool no_library = false;
     for (int k = 1; k < argc; ++k) {
         const std::string a = argv[k];
         if (a == "--port" && k + 1 < argc) port = std::atoi(argv[++k]);
+        else if (a == "--library" && k + 1 < argc) library_root = path_from_utf8(argv[++k]);
+        else if (a == "--show-root" && k + 1 < argc) library_root = path_from_utf8(argv[++k]) / "Library";
+        else if (a == "--no-library") no_library = true;   // test runs: never read the owner's library
         else if (a == "--gui" && k + 1 < argc) gui = argv[++k];
         else if (a == "--watch") g_watch = true;
         else if (a == "--help" || a == "-h") {
-            std::printf("himmel_ui [--port 8790] [--gui DIR]\n  Serves the web GUI on http://127.0.0.1:PORT\n");
+            std::printf("himmel_ui [--port 8790] [--gui DIR] [--watch] [--library DIR | --show-root DIR | --no-library]\n"
+                        "  Serves the web GUI on http://127.0.0.1:PORT. --library: the clip library the LIBRARY\n"
+                        "  panel lists (default Documents\\Himmel\\Library, read-only).\n");
             return 0;
         }
     }
@@ -775,6 +845,9 @@ int main(int argc, char** argv) {
     }
     g_gui_dir = gui;
     g_repo_dir = fs::absolute(gui).parent_path();
+    if (no_library) library_root.clear();
+    else if (library_root.empty()) library_root = himmel::library::default_library_root();
+    himmel::ui::panels_init(g_watch, library_root, fs::path(exe).parent_path());
     SetConsoleCtrlHandler(on_ctrl, TRUE);
 
     WSADATA wsa;
@@ -820,6 +893,7 @@ int main(int argc, char** argv) {
     closesocket(ls);
     poll.join();
     g_mk2.close();  // detach our MK2 ring
+    himmel::ui::panels_close();
     // Leave the slot quiet: the engine sees the heartbeat age out (command-protocol.md §7).
     return 0;
 }

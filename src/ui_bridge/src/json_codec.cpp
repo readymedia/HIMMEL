@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 #include "himmel/ui/json_codec.h"
+#include "himmel/ui/panels_json.h"
 
 #include <algorithm>
 #include <cmath>
@@ -226,7 +227,26 @@ const char* command_type_name(CommandType t) {
     if (t == CommandType::Hello) return "Hello";
     if (t == CommandType::Nop) return "Nop";
     const Spec* s = find_spec(t);
-    return s ? s->name : "Unknown";
+    if (s) return s->name;
+    switch (t) {   // show / output commands (panels_json.cpp)
+        case CommandType::SceneRecall: return "SceneRecall";
+        case CommandType::SceneSave: return "SceneSave";
+        case CommandType::Undo: return "Undo";
+        case CommandType::SceneReset: return "SceneReset";
+        case CommandType::Dice: return "Dice";
+        case CommandType::Locks: return "Locks";
+        case CommandType::Project: return "Project";
+        case CommandType::ShowSelect: return "ShowSelect";
+        case CommandType::KitSet: return "KitSet";
+        case CommandType::MacroSet: return "MacroSet";
+        case CommandType::MacroValue: return "MacroValue";
+        case CommandType::SongEdit: return "SongEdit";
+        case CommandType::OutputBlack: return "OutputBlack";
+        case CommandType::Identify: return "Identify";
+        case CommandType::LayerPlace: return "LayerPlace";
+        case CommandType::OutputConfig: return "OutputConfig";
+        default: return "Unknown";
+    }
 }
 
 bool command_type_from_name(std::string_view name, CommandType& out) {
@@ -253,6 +273,8 @@ ParseResult command_from_json(const json& j, const CatalogLimits& limits) {
     if (it_type == j.end() || !it_type->is_string()) return fail("missing \"type\"");
     const std::string tname = it_type->get<std::string>();
     if (iequals(tname, "Hello")) return fail("Hello is sent by the bridge itself");
+    // Show (25..36) and output (70..73) commands: their own field-driven parser (panels_json.cpp).
+    if (ParseResult pr; panel_command_from_json(j, pr)) return pr;
     CommandType type{};
     if (!command_type_from_name(tname, type)) return fail("unknown command type \"" + tname + "\"");
     const Spec& spec = *find_spec(type);

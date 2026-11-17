@@ -1,97 +1,149 @@
 # GUI handoff
-Updated: 2026-11-17 by the GUI agent (wave 2, M11) · Branch: claude/gui-m11-v1 · Last commit: see `git log claude/gui-m11-v1`
+Updated: 2026-11-17 by the GUI agent (wave 4, M11 part 2) · Branch: claude/gui-m11-panels · Last commit: see `git log claude/gui-m11-panels`
 
 ## State in one paragraph
-M11 on top of wave 1: every new engine feature of wave 1 is reachable from the browser. `himmel_ui` now speaks the
-M2 transport commands (18–23), `FxPress` (24) and the HIT layer, streams the state v2 transport section and an MK2
-mirror, and serves the FX metadata. The page (`gui/index.html`, `app.css` + `m11.css`, `app.js` + `views.js`, no build
-step, dark only) has four views: START (wizard steps 1–4 against what 0.1 has), PERFORM (the slice page + clock, CLIP
-editor tab, effect browser, PRESS, presets, generators, HIT), MK2 (the panel from its profile with live LEDs, both
-screens, pressed buttons, knobs, pad pressure) and SETTINGS (stub: status, producers, versions, what comes when).
+M11 part 1 (on main) made every wave-1 engine feature reachable from the browser: transport, the CLIP editor, the
+effect browser, PRESS, presets, generators, HIT, clock, the MK2 picture and a settings stub. Part 2 adds a panel for
+every block of waves 2–3. Each block is **optional**: missing or the wrong version gives `{"present": false}` and the
+panel hides itself; nothing fails.
+- **SHOW** (`Local\HimmelShow`): the project bar in the top bar and the SCENES tab.
+- **OUTPUTS** (`Local\HimmelOutputs`): the OUTPUTS view.
+- **LIBRARY** (`Local\HimmelLibrary` + the library DB, read-only): the LIBRARY view.
+- **AUDIO** (`Local\HimmelAudio`): the top-bar meter and Settings → Audio.
+- **OSC** (`Local\HimmelOsc`): Settings → Remote / OSC.
+- **Weapon blocks** (`Local\HimmelWeapon1..16`): "weapons found".
+
+The start wizard's steps 1–4 use these blocks. The page is plain HTML / JS / CSS with no build step and is dark only:
+`index.html`, `app.css` + `m11.css` + `panels.css`, `app.js` + `panels.js` + `views.js`.
 
 ## Done (with commits)
-- Bridge (`src/ui_bridge/`): codec for `LayerSet` (param by name or number, enum values by name), `LayerTrigger`
-  (velocity, release), `LayerCue` (cue, Jump / Set / Clear, pos), `LayerBeatLoop`, `LayerScratch`, `Clock`,
-  `LayerPlay` Release / Stop, `"deck":"hit"` on every layer command; `press` in the live FX slots; `kind` in the
-  catalog; SSE `transport` (state v2 section, enums as names, beat extrapolated to now) and `mk2`; `GET /names`,
-  `GET /fxmeta`, `GET /weapons/<id>.weapon.json`; `--watch` (read-only). `ui_bridge_tests` 246 checks.
-- `fake_engine` keeps a transport section (settings, cues per clip, clock, HIT, PRESS) so the page works without the
-  real engine.
-- Page: see "State". Docs: `docs/getting-started.md` "The rest of the web GUI (M11)", D120 PROPOSED.
-- Checked in the browser (1440 × 900) with `himmel_ui --watch` against the stack that was running on this PC
-  (control-mk2-input build, state v1): the MK2 view mirrors the real MK2 (both screens, group and pad LEDs); START
-  step 2 shows the MK2 as CONNECTED; PERFORM shows "ENGINE VERSION MISMATCH" as it should for a v1 engine.
-
-- **Checked against the real v2 engine (2026-11-17, main with SHOW M3 + AUDIO M8 merged in, `himmel.exe --sim`,
-  machine free):**
-  - `LayerSet` Mode, `Clock` Bpm, `LayerCue` Set, and `LayerBeatLoop` all reach the engine.
-  - The effect browser puts Kaleido in slot 1 by click, and the "extreme" preset sets all four params.
-  - PRESS reads 1 while held and 0 after release.
-  - A Rings generator from the GENERATORS tab lands in the first free slot, and PROGRAM renders Kaleido + Rings.
-  - HIT fires clip 1, and release clears it.
-  - Kill / restart test: `taskkill` of `himmel_ui` mid-show. The supervisor restarted it with a new PID and the
-    engine PID stayed the same. `/state` before and after differs only in the GUI producer's `acked` counter. The
-    page reconnected without a reload, and the next command worked.
-  - `tools/mk2_e2e.py` PASS. ctest 16/16. The 7 Python selftests and `himmel_audio --selftest` pass.
+- **Bridge** (`src/ui_bridge/`):
+  - `panels_json.{h,cpp}` (pure, tested): block → JSON, and the SHOW / OUTPUTS commands (25–36, 70–73) with enum names.
+    Commands that carry a path or name have a `text` key.
+  - `panels_link.{h,cpp}` (Windows): opens the optional blocks, with a heartbeat check per block.
+  - SHOW text-box handshake: box id = the command's seq. The bridge writes the box under the push lock, then sends.
+  - Writes the AUDIO `config` section (the "one controller").
+  - Runs `himmel_audio --list` for the device picker (cached 10 s, 5 s limit).
+  - Reads the library DB read-only and serves thumbnails (`<16 hex>.jpg` / `-strip.jpg` only).
+  - New SSE events: `show`, `outputs`, `audio`, `osc`, `library`, `weapons`.
+  - New routes: `GET /audio/devices`, `POST /audio/config`, `GET /library/clips`, `GET /library/thumb/<file>`;
+    `/names` gains `panels`.
+  - New args: `--library DIR | --show-root DIR | --no-library`.
+  - `ui_bridge_tests`: 358 checks (112 new).
+- **Supervisor hook** (marked `GUI (M11 part 2) hook`, in the MEDIA hook 1/3 block of
+  `src/engine/supervisor/supervisor_main.cpp`): `himmel_ui` gets the same `--library` as `himmel_ingest`, and
+  `--no-library` in test runs (`--no-show-files` / `--no-library`), so a test never reads the owner's library.
+- **Page**:
+  - `panels.js` (new): the panels listed above.
+  - `views.js`: wizard steps 1–4 (import status + drop folder; MK2 + the weapons found; output cards + resolution +
+    refresh + IDENTIFY; health + the sound-in picker with a live meter). Settings Audio / Remote are live pages,
+    Engine points to OUTPUTS, Controllers lists the weapon drivers.
+  - `app.js`: the new events, views OUTPUTS / LIBRARY, the SCENES tab.
+- **Docs**: `getting-started.md` "Project, scenes, outputs, library, audio, OSC (M11 part 2)"; D121 PROPOSED; launch
+  config `himmel-sim-test` (`himmel.exe --sim -- --show-root build/test-show-root`).
+- **Checked live 2026-11-17** with `himmel-sim-test` (my stack only, stopped afterwards; screenshots in the session):
+  - All 5 blocks present and alive; 4 weapon drivers found (sim, not connected).
+  - SHOW:
+    - LayerClip, then REC → "1 saved".
+    - Rename through the text box → "Opening".
+    - Recall into B: on both decks.
+    - Lock Clip, Dice Roll (1/1), Undo (undo 2 / redo 1), bank +1.
+    - Save As "GuiTest" → `Projects\GuiTest.himmel`, then edit → ●, then SAVE → clean.
+    - 0 refused.
+  - OUTPUTS: IDENTIFY (5 s countdown), BLACK OUT 1, SIM: PULL → LOST, blend 64, A2 FIT, A3 OUT 3, 50 Hz. 0 refused.
+  - LIBRARY: a HAP clip copied into `originals` went analysing → ready in ~2 s. The thumbnail, analysis and IN SHOW
+    show, and the engine catalog has it.
+  - AUDIO: the picker lists 14 inputs. USE THIS INPUT → `himmel_audio` switched to "CABLE Output", stereo
+    (gen 1 applied). Meters, spectrum and 25 default reactions show.
+  - OSC: `/himmel/scene 1` APPLIED, `/himmel/nonsense` REFUSED, newest first.
+  - Kill `himmel_ui` mid-show: the supervisor restarted it; the renderer PID stayed the same. `/state` (live, show,
+    outputs) was identical apart from the GUI producer's ack counter (and the OSC producer's own Hellos). The page
+    reconnected by itself, and a text-box rename and OutputBlack worked through the new bridge.
+  - Done-check: build clean, ctest 21/21, 7 Python selftests, `himmel_audio --selftest`, `mk2_e2e.py` PASS.
 
 ## In progress
 - Nothing. Ready to merge.
 
 ## Next up (ordered)
-1. SHOW / AUDIO panels: read `Local\HimmelShow` (`docs/interfaces/show-block.md`) and `Local\HimmelAudio`
-   (`docs/interfaces/audio-block.md`) as optional blocks (hide the panel if missing / wrong version): project name +
-   save state, setlist / scenes, levels + BPM source, `FxReact` (command 40) per FX slot.
-2. 4 × 4 pad grid (CLIPS / SLICE / FX PADS) of the v4 mockup once kits exist (SHOW M3).
-3. Knob tiles 1–4 / 5–8 once the engine publishes pages / macros (state addition).
-4. Effect browser with live thumbnails (needs per-effect previews from the engine), scope badges (FxScope, D106).
-5. Wizard: real import (M7), outputs / IDENTIFY (M6), sound in (M8); Settings pages fill in as those land.
+1. `FxReact` editor per FX slot once D131 (command 40 + the reaction table) is in the protocol; the AUDIO page
+   already lists every effect's default reaction with its live signal.
+2. AV offset in the GUI. It is only a renderer argument today (`--av-offset`), with no block field and no command.
+3. Kit editor (KitSet, the 16 pad targets per scene) and macro binding (MacroSet) in the SCENES tab; the setlist editor
+   (SongEdit New / AddScene / Move / Bpm). The codec and tests already cover these commands.
+4. 4 × 4 pad grid (CLIPS / SLICE / FX PADS) of the v4 mockup; knob tiles 1–4 / 5–8.
+5. Effect browser with live thumbnails (needs per-effect previews from the engine), scope badges (FxScope, D106).
 
 ## GUESSES
-- `GUESS:` MK2 consumer ring 3 belongs to the GUI bridge (ring 0 = engine; `mk2_monitor` / `mk2_pages_demo` take the
-  first free one, normally 1). A crashed bridge leaves ring 3 "attached"; the controller counts drops, nothing else.
-- `GUESS:` the clock beat between transport events is extrapolated in the page from BPM (the section's `beat` +
-  `time_us`); the beat squares can be off by a frame.
-- `GUESS:` PRESS with a mouse sends 1.0 while held (no pressure); pen / touch send `pointer.pressure`.
-- `GUESS:` a generator from the GENERATORS tab goes into the first free slot of the focused layer (or the slot that
-  already holds it), per D107.
-- `GUESS:` `fake_engine` drops a released HIT clip and a STOPped layer at once (the engine fades them).
-- Older ones (slice): layer 1 = bottom of the stack in `fake_engine`; a TAKE while one travels is ignored by
-  `fake_engine`; the TAKE ring is computed from `crossfader` + `program_deck`; clicking a strip sends `Focus`.
+- `GUESS:` the bridge counts a block's writer as alive when its heartbeat moved in the last 1.5 s. For SHOW the
+  heartbeat is `ShowStatus.time_us` (written at least every 250 ms).
+- `GUESS:` a weapon driver is "alive" when its heartbeat moved since the last check, 1 s earlier.
+- `GUESS:` the first `POST /audio/config` starts from what himmel_audio uses now (device, mode, channels) plus the doc
+  defaults (auto gain on, gate −60, sensitivity 0.5), because `config.gen` = 0 means "use the command line".
+- `GUESS:` a SCENES pad click recalls into the **focused** deck with the scene's own transition (`f = −1`); Alt = cut.
+  REC saves the focused deck on the selected pad (or the next free one, `i = −1`).
+- `GUESS:` the OUTPUTS view shows output 0's preset as "the" resolution and sends `Resolution` for all outputs.
+- Older ones: MK2 consumer ring 3 = the GUI bridge; the clock beat is extrapolated in the page; mouse PRESS = 1.0;
+  a generator goes into the first free slot (D107); `fake_engine` drops a released HIT / STOPped layer at once.
 
 ## Open questions for the owner
-- D100 (slice layout) and D120 (M11 layout: CLIP tab vs. a pop-out drawer, effect browser as cards) — PROPOSED.
+- D100 (slice layout), D120 (M11 layout) and D121 (where the part-2 panels live) are PROPOSED; the defaults are in use.
 
 ## How to build / run / test this track
 - Build: `cmake --build build --config Release --target himmel_ui fake_engine ui_bridge_tests`
-- Test: `build\bin\Release\ui_bridge_tests.exe` (246 checks, also in ctest); `node --check gui/app.js gui/views.js`.
-- Run: `himmel.exe --sim` (starts `himmel_ui`) or `fake_engine.exe` + launch config `himmel-ui`; open
-  http://127.0.0.1:8790. Read-only second view: launch config `himmel-ui-watch` (port 8791, `--watch`).
+- Test: `build\bin\Release\ui_bridge_tests.exe` (358 checks, also in ctest); `node --check gui/app.js gui/panels.js gui/views.js`.
+- Run (test data only): launch config `himmel-sim-test`. It runs `himmel.exe --sim -- --show-root build/test-show-root`;
+  the children run in `build/bin/Release`, so the root lands in `build/bin/Release/build/test-show-root`. Then open
+  http://127.0.0.1:8790. Read-only second view: launch config `himmel-ui-watch`.
 
-## Wire format (bridge ↔ page), additions in M11
-- SSE `transport`: `{clock:{bpm,grid,source,taps,beat}, layer:[deck][layer]{mode,time_base,trigger,start,target,
-  autopilot,transition,snap ("Global" = follow the grid),inner_loop,catch_up,scratch_snap,slices,step_frames,
-  autopilot_count,backward,reverse_hold,in,out,loop_in,loop_out,beats,interval,distance,step_div,glide,fade_in,
-  fade_out,transition_time,seed,phase,beat_loop,scratching,pending,beat_loop_beats,speed_now,gain,
-  transition_progress,pending_beats,velocity,loops,frame,cue[16] (-1 = none)}, hit:{LayerState without fx},
-  hit_transport:{…}}`. Enum words = the `LayerSet` value names (`GET /names`).
-- SSE `mk2`: `{present,connected,alive,map_verified,dropped,pressed:[button names],pads[16] 0..4095,knobs[8] 0..1 of a
-  turn,last_knob,encoder,leds:{pad[16][rgb],group[8][rgb],button:{name:0..127}},screen: base64 of 2 × 2048 bytes}`.
-- POST `/cmd` extra keys: `LayerSet {param, value}`, `LayerTrigger {value, velocity, release}`, `LayerCue {cue, value,
-  pos}`, `LayerScratch {value, pos}`, `Clock {param, value}`; `"deck":"hit"`. Spec + checks:
-  `src/ui_bridge/include/himmel/ui/json_codec.h`, `tests/ui_bridge/ui_bridge_tests.cpp`.
-- POST `/cmd` takes an array (≤ 256): presets send all params in one request.
+## Wire format (bridge ↔ page), additions in M11 part 2
+- Every panel event: `{"present": false, "state": "absent"|"version"|"starting", "panel": name}` when its block is
+  not usable, else `present: true` + `alive` + the fields below.
+- SSE `show`:
+  - `{project, dirty, busy, writable, use_setlist, bank, song, song_count, song_name, song_bpm,
+    pads[16]{used, name, variations, on:[a,b], rgb}, decks[2]{scene, pad, variation, edited, morphing, morph,
+    dice_pos, dice_count}, locks:[names], undo, redo, macros[4]{name, value}, last_recall_us, scene_count,
+    acked, rejected, last_reject` (the GUI slot's)`, message, message_seq, files{…}}`.
+  - `files` = `{path, saved_unix, autosave_unix, restored, save_ok, saves, journal_records, relink_found, error,
+    recent[]{name, path, saved_unix, outputs}, missing_count, missing[]}`.
+- SSE `outputs`: `{count, mode, refresh, fullscreen, identify, identify_left_ms (250 ms steps), canvas[w,h], blend_px,
+  blend_gamma, hz_target, hz_measured, displays, config_by_command, outputs[]{state, name, display{maker, product,
+  serial, serial_text, connector}, black, preset, identify, size, canvas_x, swap, hz, rect, lost_count, returned_ms,
+  blend}, places[9]{place, out, rect}}` (places 0..7 = deck × 4 + layer, 8 = HIT).
+- SSE `audio` (~30 Hz):
+  - `{sig{level, bass, mid, high, kick, snare, hat, onset, energy, build, drop}, spectrum[32], hits[3], rms_db,
+    peak_db, gain_db, gated, clipping, hop, input{…}, clock[]{kind, run, bpm, confidence, phase_valid, beat, port},
+    config{gen, applied, mode, device, …}, writable}`.
+  - `POST /audio/config` takes the keys of `audio_config_from_json`.
+- SSE `osc`: `{port, allow, counts{…}, total, last[]{unix_ms, from, verdict, reason, text}}` (newest first).
+- SSE `library`: `{mode, paused, queued, working, ready_total, failed_total, pauses, ready_seq, catalog_full,
+  job{name, stage, progress, last_error}, root}`.
+- `GET /library/clips` → `{ok, root, clips[]{id, hash, name, kind, state, error, source, codec, size, fps, seconds,
+  alpha, judder, thumb, stars, favourite, tags, analysis{…}}}`.
+- SSE `weapons` (1 Hz): `[{slot, state, weapon, name, driver, simulated, connected, alive}]`.
+- `POST /cmd`, show / output commands:
+  - Keys: `deck`, `layer`, `slot`, `param` (an enum name or a number), `value` (or `i`), `f` (a number or up to 4),
+    `relative` / `variation` / `clear`, and `text` (Project Open / SaveAs / Export / Relink, SongEdit New / Rename /
+    RenameScene, MacroSet rename).
+  - Spec + examples: `src/ui_bridge/include/himmel/ui/panels_json.h`; tests: `tests/ui_bridge/ui_bridge_tests.cpp`.
 
 ## Gotchas found
-- **One stack per machine**: the `Local\Himmel*` names are per Windows session, so another agent's (or the owner's)
-  stack shares them. `fake_engine` refuses to start when another engine's heartbeat moves; `himmel_ui --watch` is safe
-  next to anything.
-- The Bash tool on this PC chokes on some heredocs (quotes inside); write files with the editor tools instead.
+- **One stack per machine**: check `tasklist` in the same command before starting one, and stop it when you are done.
+- **`himmel_ingest` has no `--selftest`.** Run with that flag it starts as a normal import worker on the *default*
+  library (Documents\Himmel\Library). It did so once on 2026-11-17 at 10:15 and created an empty library there (no
+  files imported). The owner may delete `Documents\Himmel` if it was not there before.
+- Git Bash rewrites `/himmel/...` into a file path: send OSC tests with `MSYS_NO_PATHCONV=1`.
 - The page draws on `requestAnimationFrame`, so a hidden tab (or a hidden Claude browser pane) draws nothing until it
-  is shown. The data (`S`) keeps updating. Call `Views.render()` by hand when you test in a hidden pane.
-- Seen 2026-11-17, probably the SHOW autosave (D109): a fresh `himmel.exe --sim` started with A1 at opacity 0.64.
-  That is exactly what `mk2_e2e.py` had just left. Expect earlier runs' state at start.
+  is shown. The data (`S`) keeps updating. Call `Panels.render()` / `Views.render()` by hand when you test in a hidden
+  pane.
+- The SHOW autosave (D109) brings back the last run's state at start: use `--show-root <temp>` for tests.
+- The top bar must fit at 1440 px with BLACK visible. Below 1800 px the minor chips (sent / GUI / MK2, then fps) hide;
+  they are all on Settings → Status.
+- The Bash tool chokes on some heredocs (quotes inside); write a script file with the editor tools instead.
 - Space / Enter are TAKE / CUT only in the PERFORM view and never in text / number fields.
 
 ## Interfaces touched
-None changed. Reads `command-protocol.md` (v1 + M2 + FxPress), `engine-state.md` v2, `preview-block.md` v1,
-`effect-metadata.md` v1 and the MK2 block (`src/controller/include/himmel/mk2/shared.h`, ring 3) as written.
+- No protocol change: no new CommandTypes, and no block version changed.
+- Reads `show-block.md` v1, `outputs-block.md` v1, `audio-block.md` v1, `osc.md` (Local\HimmelOsc v1),
+  `library-db.md` v1 (block + DB read-only) and the weapon blocks as written.
+- Writes only its own parts: the SHOW text box of producer slot 1, and the AUDIO `config` section.
+- Supervisor: the marked GUI hook above.

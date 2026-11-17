@@ -11,6 +11,18 @@
       "url": "http://127.0.0.1:8790"
     },
     {
+      "name": "himmel-sim-test",
+      "runtimeExecutable": "build/bin/Release/himmel.exe",
+      "runtimeArgs": [
+        "--sim",
+        "--",
+        "--show-root",
+        "build/test-show-root"
+      ],
+      "port": 8790,
+      "url": "http://127.0.0.1:8790"
+    },
+    {
       "name": "himmel-ui",
       "runtimeExecutable": "build/bin/Release/himmel_ui.exe",
       "runtimeArgs": [
