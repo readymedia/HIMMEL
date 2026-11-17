@@ -31,6 +31,12 @@ struct EndpointInfo {
 // Call with COM initialised on this thread.
 std::vector<EndpointInfo> list_endpoints(InputMode mode);
 
+// Test player: plays DrumSynth (120 BPM kit, see synth.h) to a render endpoint
+// whose name contains `device` ("" = default) for `seconds`. For checks such as
+// "play into a virtual cable, capture the other end" (himmel_audio --play-drums).
+// Blocks; COM must be initialised on this thread. `level` = 0..1.
+bool play_drums(const std::string& device, float bpm, double seconds, float level, std::string* error);
+
 class WasapiInput {
 public:
     using Sink = void (*)(const float* mono, int n, uint64_t t_last_us, void* ctx);

@@ -268,30 +268,26 @@ void Analyzer::finish_hop() {
     if (hit(kick_, d_kick, thr, kKickRefractory) && d_kick > d_sbody) fire(kick_, strength(kick_, d_kick));
     // A snare = the noise band hits loud AND the body (150-400 Hz) is up near its own peak
     // (a hat has noise but little body; a kick has body but only a weak click of noise).
-    // A snare's rattle can lag its body by a hop, so an unclear onset gets one more hop
-    // (and a hat at the same moment waits for that answer).
+    // The onset hop may hold only the first samples of a hit, so a noise onset is
+    // judged one hop later, on a full hop (snares come 5 ms later than kicks; a hat
+    // at the same moment waits for that answer).
     auto snare_like = [&] {
         return d_sbody > snare_body_.peak_db - 12.0f && d_snoise > snare_noise_.peak_db - 12.0f &&
                d_snoise > d_sbody - 8.0f;  // GUESS: a snare's rattle is near its body; a kick + hat is 10+ dB under
     };
-    const bool noise_hit = hit(snare_noise_, d_snoise, thr, kSnareRefractory);
     const bool hat_now = hit(hat_, d_hat, thr, kHatRefractory);
-    bool snare_hit = false;
-    if (noise_hit && snare_body_.rise(d_sbody) > thr * 0.5f && snare_like()) {
-        snare_hit = true;
-    } else if (snare_pending_ && snare_like()) {
-        snare_hit = true;  // decided one hop late
-    }
-    const bool was_pending = snare_pending_;
-    snare_pending_ = !snare_hit && noise_hit && snare_body_.rise(d_sbody) > thr * 0.5f;
-    if (snare_hit) {
-        fire(snare_noise_, strength(snare_noise_, d_snoise));
-        hat_pending_ = false;
-    } else if (snare_pending_) {
-        hat_pending_ = hat_now;  // wait one hop: snare or hat?
-    } else if (hat_now || (was_pending && hat_pending_)) {
+    if (snare_pending_) {  // decide the onset of the last hop
+        if (snare_like()) {
+            fire(snare_noise_, strength(snare_noise_, d_snoise));
+        } else if (hat_pending_ || hat_now) {
+            fire(hat_, strength(hat_, d_hat));
+        }
+        snare_pending_ = hat_pending_ = false;
+    } else if (hit(snare_noise_, d_snoise, thr, kSnareRefractory) && snare_body_.rise(d_sbody) > thr * 0.5f) {
+        snare_pending_ = true;  // snare or hat? next hop
+        hat_pending_ = hat_now;
+    } else if (hat_now) {
         fire(hat_, strength(hat_, d_hat));
-        hat_pending_ = false;
     }
     kick_.update_ref(d_kick, hs, 30.0f);
     snare_body_.update_ref(d_sbody, hs, 30.0f);

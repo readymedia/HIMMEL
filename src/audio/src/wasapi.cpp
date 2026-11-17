@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 ReadyMedia.no and Himmel contributors
 #include "himmel/audio/wasapi.h"
+#include "himmel/audio/synth.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -138,6 +139,79 @@ std::vector<EndpointInfo> list_endpoints(InputMode mode) {
     }
     en->Release();
     return out;
+}
+
+bool play_drums(const std::string& device, float bpm, double seconds, float level, std::string* error) {
+    auto fail = [&](const char* what) {
+        if (error) *error = what;
+        return false;
+    };
+    IMMDeviceEnumerator* en = nullptr;
+    if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator),
+                                reinterpret_cast<void**>(&en))))
+        return fail("no device enumerator");
+    std::string name;
+    IMMDevice* dev = find_device(en, InputMode::Loopback, device, &name);  // render endpoints
+    en->Release();
+    if (!dev) return fail("render device not found");
+    IAudioClient* c = nullptr;
+    if (FAILED(dev->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, reinterpret_cast<void**>(&c)))) {
+        dev->Release();
+        return fail("activate failed");
+    }
+    dev->Release();
+    WAVEFORMATEX* wf = nullptr;
+    c->GetMixFormat(&wf);
+    bool is_float = wf->wFormatTag == WAVE_FORMAT_IEEE_FLOAT;
+    if (wf->wFormatTag == WAVE_FORMAT_EXTENSIBLE)
+        is_float = reinterpret_cast<const WAVEFORMATEXTENSIBLE*>(wf)->SubFormat == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
+    const int ch = wf->nChannels, bits = wf->wBitsPerSample, align = wf->nBlockAlign;
+    const float sr = static_cast<float>(wf->nSamplesPerSec);
+    HANDLE ev = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    HRESULT hr = c->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, 200000, 0, wf, nullptr);
+    CoTaskMemFree(wf);
+    IAudioRenderClient* rc = nullptr;
+    if (FAILED(hr) || FAILED(c->SetEventHandle(ev)) ||
+        FAILED(c->GetService(__uuidof(IAudioRenderClient), reinterpret_cast<void**>(&rc))) || !(is_float && bits == 32) && bits != 16) {
+        if (rc) rc->Release();
+        c->Release();
+        CloseHandle(ev);
+        return fail("cannot play to this device (format)");
+    }
+    UINT32 buf = 0;
+    c->GetBufferSize(&buf);
+    DrumSynth d;
+    d.sr = sr;
+    d.bpm = bpm;
+    d.level = std::clamp(level, 0.0f, 1.0f);
+    std::printf("playing drums at %.1f BPM to \"%s\" for %.0f s\n", bpm, name.c_str(), seconds);
+    c->Start();
+    const uint64_t end = now_us() + static_cast<uint64_t>(seconds * 1e6);
+    while (now_us() < end) {
+        if (WaitForSingleObject(ev, 200) != WAIT_OBJECT_0) continue;
+        UINT32 pad = 0;
+        if (FAILED(c->GetCurrentPadding(&pad))) break;
+        const UINT32 n = buf - pad;
+        BYTE* data = nullptr;
+        if (n == 0 || FAILED(rc->GetBuffer(n, &data))) continue;
+        for (UINT32 i = 0; i < n; ++i) {
+            const float v = d.next();
+            for (int k = 0; k < ch; ++k) {
+                BYTE* p = data + static_cast<size_t>(i) * align;
+                if (bits == 32) std::memcpy(p + k * 4, &v, 4);
+                else {
+                    const int16_t s16 = static_cast<int16_t>(std::clamp(v, -1.0f, 1.0f) * 32767.0f);
+                    std::memcpy(p + k * 2, &s16, 2);
+                }
+            }
+        }
+        rc->ReleaseBuffer(n, 0);
+    }
+    c->Stop();
+    rc->Release();
+    c->Release();
+    CloseHandle(ev);
+    return true;
 }
 
 bool WasapiInput::open(const InputRequest& req, std::string* error) {

@@ -125,10 +125,12 @@ void test_fft_and_filters() {
 }
 
 void test_onsets_line_and_mic() {
-    for (const float level : {1.0f, 0.1f, 0.02f}) {
+    // A line with room noise at three levels, and a clean digital source (silence
+    // between the hits, so the gate closes between beats: a virtual cable / loopback).
+    for (const float level : {1.0f, 0.1f, 0.02f, -0.3f}) {
         DrumSynth d;
-        d.level = level;
-        d.noise_gain = 0.002f;
+        d.level = std::fabs(level);
+        d.noise_gain = level < 0 ? 0.0f : 0.002f;
         Analyzer an(48000);
         const Hits h = count(d, an, 24.0, 8.0);  // 16 s after auto gain settled: 32 beats
         std::printf("  level %.2f: kicks %d (late %d, worst %.1f ms) snares %d hats %d, gain %+.1f dB\n", level, h.kicks,
@@ -170,6 +172,27 @@ void test_drum_separation() {
         CHECK(h.kicks == v.kicks);
         if (v.snares >= 0) CHECK(std::abs(h.snares - v.snares) <= 1);
         CHECK(h.hats >= v.hats_lo && h.hats <= v.hats_hi);
+    }
+}
+
+void test_hop_alignment() {
+    // The same kit with the beat landing anywhere inside a 5 ms hop.
+    for (int us = 0; us < 5000; us += 500) {
+        DrumSynth d;
+        d.level = 0.3f;
+        Analyzer an(48000);
+        for (int i = 0; i < us * 48 / 1000; ++i) {  // pad with silence
+            const float z = 0.0f;
+            const float* p = &z;
+            int n = 1;
+            an.feed(p, n);
+        }
+        const Hits h = count(d, an, 16.0, 6.0);
+        if (h.kicks != 20 || std::abs(h.snares - 10) > 1)
+            std::printf("  offset %4d us: kicks %d snares %d hats %d\n", us, h.kicks, h.snares, h.hats);
+        CHECK(h.kicks == 20);
+        CHECK(std::abs(h.snares - 10) <= 1);
+        CHECK(h.hats >= 24 && h.hats <= 36);
     }
 }
 
@@ -473,6 +496,7 @@ int main() {
     test_fft_and_filters();
     test_onsets_line_and_mic();
     test_drum_separation();
+    test_hop_alignment();
     test_no_false_kicks();
     test_gate_and_gain();
     test_midi_clock();

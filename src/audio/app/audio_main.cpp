@@ -7,6 +7,7 @@
 //                [--midi-clock NAME] [--monitor]
 //   himmel_audio --list        endpoints and MIDI ports
 //   himmel_audio --selftest    synthetic drums through the analysis (no device), exit 0 / 1
+//   himmel_audio --play-drums [DEVICE] [--bpm N] [--seconds S] [--level L]   test player (a render endpoint)
 //
 // Threads: the capture worker (WASAPI read -> analysis -> `signals`, MMCSS "Pro Audio"),
 // and the main thread (heartbeat, `input`, `clock`, `config`, stop). The MIDI port has
@@ -111,6 +112,11 @@ struct Block {
 class Worker {
 public:
     Worker(AudioBlock* b, const Settings& s) : b_(b), settings_(s) {}
+    // --record PATH [SECONDS]: the first seconds of mono input as raw float32 (start-up only).
+    void record(const std::string& path, double seconds) {
+        if (fopen_s(&record_, path.c_str(), "wb") != 0) record_ = nullptr;
+        record_left_ = static_cast<int64_t>(seconds * 48000);  // GUESS: 48 kHz; the log says the real rate
+    }
     void start() { thread_ = std::thread([this] { run(); }); }
     void join() {
         stop_ = true;
@@ -144,6 +150,16 @@ private:
 
     static void sink(const float* x, int n, uint64_t t_last, void* ctx) {
         auto* w = static_cast<Worker*>(ctx);
+        if (w->record_ && w->record_left_ > 0) {  // --record: raw mono float32 for offline checks
+            const int k = static_cast<int>(std::min<int64_t>(n, w->record_left_));
+            std::fwrite(x, sizeof(float), static_cast<size_t>(k), w->record_);
+            w->record_left_ -= k;
+            if (w->record_left_ <= 0) {
+                std::fclose(w->record_);
+                w->record_ = nullptr;
+                log("record: done");
+            }
+        }
         const float sr = w->an_.sample_rate();
         int left = n;
         const float* p = x;
@@ -272,6 +288,8 @@ private:
     InputStatus status_{};
     std::atomic<bool> stop_{false};
     std::atomic<uint64_t> last_publish_us_{0};
+    std::FILE* record_ = nullptr;
+    int64_t record_left_ = 0;
     std::thread thread_;
 };
 
@@ -398,10 +416,53 @@ void bar(char* out, float v, int width) {
 int main(int argc, char** argv) {
     Settings s;
     bool monitor = false;
+    std::string record_path;
+    double record_s = 30;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         auto has_next = [&] { return i + 1 < argc && argv[i + 1][0] != '-'; };
         if (a == "--selftest") return selftest();
+        else if (a == "--analyse" && i + 1 < argc) {  // offline: a --record file (raw mono float32, 48 kHz)
+            std::FILE* f = nullptr;
+            if (fopen_s(&f, argv[++i], "rb") != 0 || !f) return 1;
+            Analyzer an(48000.0f, s.analysis);
+            float buf[480];
+            size_t got;
+            uint32_t k = 0, sn = 0, h = 0;
+            while ((got = std::fread(buf, sizeof(float), 480, f)) > 0) {
+                const float* p = buf;
+                int n = static_cast<int>(got);
+                while (n > 0)
+                    if (an.feed(p, n)) {
+                        const Signals& o = an.out();
+                        if (o.kicks != k || o.snares != sn || o.hats != h)
+                            std::printf("%8.3f s  %s%s%s  rms %6.1f dB\n", an.seconds(), o.kicks != k ? "KICK " : "",
+                                        o.snares != sn ? "SNARE " : "", o.hats != h ? "HAT" : "", o.rms_db);
+                        k = o.kicks, sn = o.snares, h = o.hats;
+                    }
+            }
+            std::fclose(f);
+            std::printf("%.1f s: %u kicks, %u snares, %u hats\n", an.seconds(), k, sn, h);
+            return 0;
+        }
+        else if (a == "--play-drums") {  // test player: --play-drums [DEVICE] [--bpm N] [--seconds S] [--level L]
+            std::string dev;
+            float bpm = 120, level = 0.5f;
+            double secs = 30;
+            if (has_next()) dev = argv[++i];
+            for (++i; i < argc; ++i) {
+                const std::string o = argv[i];
+                if (o == "--bpm" && i + 1 < argc) bpm = std::clamp(static_cast<float>(std::atof(argv[++i])), 40.0f, 240.0f);
+                else if (o == "--seconds" && i + 1 < argc) secs = std::clamp(std::atof(argv[++i]), 1.0, 86400.0);
+                else if (o == "--level" && i + 1 < argc) level = static_cast<float>(std::atof(argv[++i]));
+            }
+            CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+            std::string err;
+            const bool ok = play_drums(dev, bpm, secs, level, &err);
+            if (!ok) std::fprintf(stderr, "play: %s\n", err.c_str());
+            CoUninitialize();
+            return ok ? 0 : 1;
+        }
         else if (a == "--list") {
             list();
             return 0;
@@ -417,6 +478,10 @@ int main(int argc, char** argv) {
         else if (a == "--sensitivity" && i + 1 < argc) s.analysis.onset_sensitivity = std::clamp(static_cast<float>(std::atof(argv[++i])), 0.0f, 1.0f);
         else if (a == "--midi-clock" && i + 1 < argc) s.midi_port = argv[++i];
         else if (a == "--monitor") monitor = true;
+        else if (a == "--record" && i + 1 < argc) {
+            record_path = argv[++i];
+            if (has_next()) record_s = std::clamp(std::atof(argv[++i]), 1.0, 600.0);
+        }
         else if (a == "--help" || a == "-h") {
             std::printf("himmel_audio [--device NAME | --loopback [NAME]] [--channels 1|2|N|N-M] [--gain DB]\n"
                         "             [--no-auto-gain] [--gate DB] [--sensitivity 0..1] [--midi-clock NAME] [--monitor]\n"
@@ -453,6 +518,7 @@ int main(int argc, char** argv) {
     MidiClockPort midi;
     midi.start(s.midi_port);
     Worker worker(b, s);
+    if (!record_path.empty()) worker.record(record_path, record_s);
     worker.start();
 
     uint64_t next_input = 0, next_cfg = 0, next_mon = 0;
