@@ -85,6 +85,7 @@
 #include "himmel/mk2/output.h"
 #include "himmel/mk2/shared.h"
 #include "himmel/mk2/types.h"
+#include "himmel/perform/lightpad_perform.h"
 #include "himmel/perform/mk2_perform.h"
 #include "himmel/protocol/commands.h"
 #include "himmel/protocol/outputs.h"
@@ -93,6 +94,7 @@
 #include "himmel/protocol/state.h"
 #include "himmel/show/files.h"
 #include "himmel/show/runtime.h"
+#include "himmel/weapon/shared.h"
 #include "slice_shaders.h"
 
 using Microsoft::WRL::ComPtr;
@@ -733,9 +735,16 @@ struct CommandLink {
 
 // The in-process Perform producer (slot 0): the mapper pushes here, the frame
 // start drains it through the same validation as the shared rings.
+// Several mappers share slot 0 (MK2, Lightpad), so the sink numbers the commands itself:
+// one running seq per producer slot (command-protocol.md §4).
 struct LocalSink final : himmel::perform::CommandSink {
     proto::CommandRing* ring = nullptr;
-    bool push(const proto::Command& c) override { return ring->push(c); }
+    uint32_t seq = 0;
+    bool push(const proto::Command& c) override {
+        proto::Command n = c;
+        n.seq = ++seq;
+        return ring->push(n);
+    }
 };
 
 // ---------------------------------------------------------------- state out
@@ -769,6 +778,40 @@ struct Mk2Link {
     }
     bool alive(uint64_t t) const {
         return open && shm.get()->status.connected.load() &&
+               t - std::min(t, shm.get()->status.heartbeat_us.load()) < 500000;
+    }
+};
+
+// ---------------------------------------------------------------- Lightpad in / out (CONTROL M9)
+// The first weapon slot (Local\HimmelWeapon<N>, weapon_blocks.exe) whose driver says "lightpad":
+// ring 0 -> himmel::perform::LightpadPerform; its 15 x 15 picture goes back as the slot's pixels.
+struct LightpadLink {
+    himmel::weapon::SharedMemory shm;
+    int slot = 0;                // 1..16 once found
+    uint64_t next_try_us = 0;
+    bool was_alive = false;
+    uint8_t px[himmel::weapon::kMaxPixels][3] = {};
+    uint8_t px_last[himmel::weapon::kMaxPixels][3] = {};
+    bool written = false;
+    uint64_t next_out_us = 0;
+
+    void poll(uint64_t t) {
+        if (slot || t < next_try_us) return;
+        next_try_us = t + 1000000;
+        for (int i = 1; i <= himmel::weapon::kMaxSlots; ++i) {
+            if (!shm.open(i)) continue;
+            if (std::strncmp(shm.get()->header.weapon, "lightpad", sizeof(shm.get()->header.weapon)) == 0) {
+                slot = i;
+                shm.get()->rings[himmel::weapon::kEngineRing].attach();
+                LOG("Lightpad found in weapon slot %d (%s%s), listening on ring %d", i, shm.get()->header.driver,
+                    shm.get()->header.simulated ? ", simulated" : "", himmel::weapon::kEngineRing);
+                return;
+            }
+            shm.close();
+        }
+    }
+    bool alive(uint64_t t) const {
+        return slot && shm.get()->status.connected.load() &&
                t - std::min(t, shm.get()->status.heartbeat_us.load()) < 500000;
     }
 };
@@ -1177,6 +1220,9 @@ int main(int argc, char** argv) {
     // (cue points, clock); both objects live as long as the loop.
     perform->set_context(&show->status(), &model->transport());
     Mk2Link mk2link;
+    auto lightpad = std::make_unique<himmel::perform::LightpadPerform>();  // CONTROL M9
+    lightpad->set_context(&model->transport());
+    LightpadLink lplink;
 
     const uint64_t t0 = now_us();
     uint64_t last_frame = t0, stats_start = t0, frames = 0, stat_frames = 0, overlay_next = 0, alive_next = 0;
@@ -1348,6 +1394,20 @@ int main(int argc, char** argv) {
                 if (!mk2link.earliest_event_us) mk2link.earliest_event_us = e.t_us;
                 perform->on_event(e, model->live(), *catalog, sink);
             }
+        }
+        // ==== CONTROL M9: the Lightpad (TOUCH / MIX / SCRUB) feeds slot 0 like the MK2 ====
+        lplink.poll(t);
+        const bool lp_alive = lplink.alive(t);
+        if (lp_alive != lplink.was_alive) {
+            if (lp_alive) lightpad->reset(), lplink.written = false;
+            LOG("Lightpad %s", lp_alive ? "connected" : "offline");
+            lplink.was_alive = lp_alive;
+        }
+        if (lplink.slot) {
+            auto& ring = lplink.shm.get()->rings[himmel::weapon::kEngineRing];
+            if (!ring.attached.load()) ring.attach();  // a restarted driver may have reset it
+            mk2::Event e;
+            for (int k = 0; k < 1024 && ring.pop(e); ++k) lightpad->on_event(e, model->live(), *catalog, sink);
         }
         auto drain = [&](int slot, proto::CommandRing& ring) {
             proto::Command c;
@@ -1538,6 +1598,18 @@ int main(int argc, char** argv) {
                     }
             }
             mk2link.written = true;
+        }
+
+        // 5b. Lightpad pixels (on change, at most ~30 Hz; the driver sends only what changed).
+        if (lp_alive) {
+            lightpad->tick(t, live, *catalog, sink,
+                           reinterpret_cast<uint8_t(*)[3]>(lplink.px));
+            if (t >= lplink.next_out_us && (!lplink.written || std::memcmp(lplink.px, lplink.px_last, sizeof(lplink.px)) != 0)) {
+                mk2::seq_write(lplink.shm.get()->outputs.pixel_seq, lplink.shm.get()->outputs.pixel, lplink.px);
+                std::memcpy(lplink.px_last, lplink.px, sizeof(lplink.px));
+                lplink.written = true;
+                lplink.next_out_us = t + 33000;
+            }
         }
 
         // 6. Render.

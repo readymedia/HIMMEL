@@ -41,7 +41,7 @@ target_link_libraries(spout_probe PRIVATE himmel_spoutdx)
 # The slice engine (decks, FX, previews, MK2 Perform).
 add_executable(himmel_render render/render_main.cpp)
 target_link_libraries(himmel_render PRIVATE himmel_engine_shared himmel_engine_model himmel_engine_ipc himmel_perform
-                      himmel_mk2 himmel_fx_gpu himmel_show himmel_library himmel_spout_out d3d11 dxgi d3dcompiler winmm dwmapi)
+                      himmel_mk2 himmel_weapon himmel_fx_gpu himmel_show himmel_library himmel_spout_out d3d11 dxgi d3dcompiler winmm dwmapi)
 
 # PARKED pre-slice renderer: test card, camera + latency test, Touch FX, Entrancer, weapon knob pages.
 add_executable(himmel_render_legacy render/legacy_main.cpp)

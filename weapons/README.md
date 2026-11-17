@@ -1181,6 +1181,15 @@ what changed.
 - On let go: LEDs off, LCD blank with "NuVJ" on the text row.
 - The start-up light shows of `nuvj_games.py` are not in the C++ driver yet.
 
+### The Lightpad in the 0.1 engine (M9, 2026-11-17)
+
+`himmel_render.exe` (the 0.1 renderer) plays the Lightpad itself: it finds the
+slot whose header says `lightpad`, feeds its touches to
+`himmel::perform::LightpadPerform` (modes TOUCH / MIX / SCRUB, MIX = the
+crossfader with soft takeover against the MK2 wheel) and writes the Block's
+15 × 15 picture back. Mapping: `docs/agents/handoff/control.md`, "Lightpad
+mapping (M9)". The role table below is the parked `himmel_render_legacy.exe`.
+
 ### What the engine skeleton does with them
 
 `himmel_render.exe` reads ring 0 of every slot it finds (checked every second).
