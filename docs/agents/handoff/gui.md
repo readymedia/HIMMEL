@@ -41,7 +41,7 @@ already on main and merged into this branch; MEDIA's contract commit is in, its 
   the button is in the project ⋯ menu and Settings → Engine, asks "Quit Himmel?", then shows "HIMMEL HAS QUIT" when the
   bridge goes away.
 - **Library rows:** `removed` (tombstones) are hidden; `source_missing` shows a line on the card when the row has it
-  (`GUESS:` the bridge does not send it yet: `ClipRecord` has no such field until MEDIA adds it).
+  (the bridge sends `source_missing` and skips `Removed` rows since MEDIA's v2 records).
 - **Page:** `gui/build.js` (BUILD view), `gui/react.js` (ears, knob ghosts, editor), `gui/build.css`; `app.js` (clip
   drawer filmstrip + FX / PRESS row, react events, `H.beatNow`), `panels.js` (library actions), `views.js` (wizard
   step 0, step 3 canvas to scale + blend).
