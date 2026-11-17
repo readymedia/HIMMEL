@@ -613,7 +613,7 @@ static void test_ingest_commands() {
     CHECK(std::string(state_name(State::Removed)) == "removed");
     CHECK(db.meta_set("watch", "[\"C:\\a\"]") && db.meta_get("watch") == "[\"C:\\a\"]");
     // The block layout the GUI builds on.
-    static_assert(sizeof(IngestCommand) == 1024 && sizeof(IngestReply) == 128 && kLibraryVersion == 2);
+    static_assert(sizeof(IngestCommand) == 1024 && sizeof(IngestReply) == 128 && kLibraryVersion == 3);
     IngestCommand c;
     std::string long_path(1200, 'a');
     CHECK(!make_ingest(c, IngestCommandType::Import, 0, long_path.c_str()));
