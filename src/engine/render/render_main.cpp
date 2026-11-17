@@ -1379,6 +1379,10 @@ int main(int argc, char** argv) {
             if (state.blk) proto::seq_write(state.blk->catalog_seq, state.blk->catalog, *catalog);
             LOG("library: %u new clip(s) in the catalog, %u in all", lib_n - before, lib_n);
         }
+        if (static bool full_logged = false; !full_logged && library_feed.catalog_full.load(std::memory_order_relaxed)) {
+            full_logged = true;  // once: the clips stay in the library (a paged catalog is a later protocol change)
+            LOG("library: the catalog is full (%d clips) - new library clips stay in the library", proto::kMaxClips);
+        }
         // ==== end MEDIA hook 3/3 ====
 
         // 10. Stats + heartbeat.

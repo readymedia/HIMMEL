@@ -90,6 +90,7 @@ int LibraryFeed::poll_once() {
         const auto u8 = play.u8string();
         if (table_->append(std::string(u8.begin(), u8.end()), clip_info_from(r, *table_, n), r.id) < 0) {
             skipped.fetch_add(1, std::memory_order_relaxed);
+            catalog_full.fetch_add(1, std::memory_order_relaxed);  // the clip stays in the library
             continue;
         }
         ++made;
@@ -114,14 +115,14 @@ void LibraryFeed::start(int poll_ms) {
 void LibraryFeed::run(int poll_ms) {
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
     HANDLE map = nullptr;
-    const LibraryBlock* blk = nullptr;
+    LibraryBlock* blk = nullptr;
     uint64_t seen_seq = 0;
     ULONGLONG next_poll = 0;
     while (!stop_.load()) {
         if (!blk) {
-            map = OpenFileMappingW(FILE_MAP_READ, FALSE, kLibraryShmName);
+            map = OpenFileMappingW(FILE_MAP_READ | FILE_MAP_WRITE, FALSE, kLibraryShmName);
             if (map) {
-                blk = static_cast<const LibraryBlock*>(MapViewOfFile(map, FILE_MAP_READ, 0, 0, sizeof(LibraryBlock)));
+                blk = static_cast<LibraryBlock*>(MapViewOfFile(map, FILE_MAP_READ | FILE_MAP_WRITE, 0, 0, sizeof(LibraryBlock)));
                 if (!blk) CloseHandle(map), map = nullptr;
             }
         }
@@ -129,6 +130,7 @@ void LibraryFeed::run(int poll_ms) {
         if (blk && reinterpret_cast<const std::atomic<uint32_t>&>(blk->header.magic).load() == kLibraryMagic) {
             const uint64_t s = blk->ready_seq.load(std::memory_order_acquire);
             if (s != seen_seq) seen_seq = s, due = true;
+            blk->catalog_full.store(catalog_full.load(std::memory_order_relaxed), std::memory_order_relaxed);
         }
         if (due) {
             int made;

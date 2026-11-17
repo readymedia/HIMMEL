@@ -42,6 +42,7 @@ public:
     std::atomic<uint32_t> added{0};       // clips appended by the worker
     std::atomic<uint32_t> skipped{0};     // ready rows that could not be added (table full, file gone)
     std::atomic<uint32_t> polls{0};
+    std::atomic<uint32_t> catalog_full{0};  // ready clips left out: the table (catalog) is full
 
 private:
     int poll_once();

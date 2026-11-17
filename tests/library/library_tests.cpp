@@ -514,6 +514,9 @@ static void test_feed() {
     for (int i = 0; i < ClipTable::kCapacity; ++i) full->append("x", media);
     CHECK(full->append("y", media) == -1);
     CHECK(full->size() == static_cast<uint32_t>(ClipTable::kCapacity));
+    LibraryFeed feed2;
+    CHECK(feed2.load_initial(d, *full) == 0);
+    CHECK(feed2.catalog_full.load() == 3);  // the 3 ready clips with files stay in the library
 }
 
 // Optional: one real round trip through ffmpeg.exe (skipped without it).

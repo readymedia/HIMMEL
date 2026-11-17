@@ -42,6 +42,9 @@ struct LibraryBlock {
     std::atomic<uint32_t> pauses;           // how many times the throttle paused (total)
     std::atomic<uint32_t> job_seq;
     IngestJob job;                          // seqlock: job_seq
+    // Written by the renderer's library feed (the only field it writes): ready clips that are
+    // not in the catalog because it is full (kMaxClips). The GUI shows "catalog full".
+    std::atomic<uint32_t> catalog_full;
 };
 
 }  // namespace himmel::library

@@ -109,7 +109,9 @@ CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);  -- 'schema', 'ready_seq'
 
 `FNV-1a 64` over: the file size (8 bytes, little endian), then three 1 MB
 samples at offsets 0, (size − 1 MB) / 2 and size − 1 MB (the whole file when
-it is under 3 MB). Fast (~3 ms per file) and stable across renames (D140).
+it is under 3 MB). Fast (~3 ms per file) and stable across renames (D140). It is
+an identity hint: the `sources` cache (path, size, mtime) decides when a file
+is hashed again.
 
 ## 5. The sidecar `meta/<hash>.json` (`"format": "himmel-clip/1"`)
 
@@ -166,6 +168,7 @@ Plain atomics plus one seqlock section.
 | `paused` | 1 while throttled (§7) |
 | `queued`, `working`, `ready_total`, `failed_total` | counts |
 | `job` (seqlock) | the current file: name, stage, progress 0..1, `last_error` |
+| `catalog_full` | written by the renderer's feed (its only field): ready clips left out of the catalog because it holds 256 (`kMaxClips`). They stay in the library; the GUI shows "catalog full"; the renderer logs it once |
 
 ## 7. Throttling (show-safe)
 

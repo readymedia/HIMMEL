@@ -52,7 +52,7 @@ Nothing. Waiting for the LEAD's merge.
 3. `library-rules.json` (tunable analysis thresholds) and tuning on the starter library.
 4. Natural beats from motion periodicity; bars at the show BPM; hover loops.
 5. Hap Q Alpha; "optimise for show" downscale; Prepare Show step 1–2.
-6. Catalog beyond 256 clips (catalog v3 / paging, with the LEAD).
+6. Catalog beyond 256 clips: a later protocol change (catalog v3 / paging, with the LEAD; LEAD 2026-11-17: not now). Today a full catalog leaves the clip in the library, `LibraryBlock::catalog_full` counts them for the GUI, the renderer logs it once.
 7. SHOW's worker keeps the start-up copy of the catalog: a project opened later
    does not see library clips that arrived after start (SHOW / LEAD to decide).
 
