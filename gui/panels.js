@@ -170,7 +170,7 @@
     SC.pads = [];
     for (let row = 3; row >= 0; --row) for (let c = 0; c < 4; ++c) {   // pad 0 = bottom-left, like the MK2
       const k = row * 4 + c;
-      const p = el('button', 'scpad');
+      const p = el('button', 'scpad'); p.title = `Scene pad ${k + 1}: click = recall into the focused deck · Shift + click = select · Alt = cut · double-click = rename`;
       p.append(el('span', 'scn', ''), el('span', 'scv', ''), el('i', 'sca'), el('i', 'scb'));
       p.addEventListener('click', e => padClick(k, e));
       p.addEventListener('dblclick', () => renameScene(k));
@@ -201,7 +201,7 @@
     SC.mac = [];
     for (let k = 0; k < 4; ++k) {
       const w = el('label', 'scmac'), n = el('span', 'lbl', `MACRO ${k + 5}`), r = el('input');
-      r.type = 'range'; r.min = 0; r.max = 1; r.step = 0.001; window.H.hold(r);
+      r.type = 'range'; r.min = 0; r.max = 1; r.step = 0.001; r.title = 'Macro value (knobs 5–8 on the MK2)'; window.H.hold(r);
       r.addEventListener('input', () => sendT('macro' + k, { type: 'MacroValue', slot: k, f: +r.value }));
       w.append(n, r); mac.append(w); SC.mac.push({ n, r });
     }
@@ -261,13 +261,13 @@
   // ================================================================ OUTPUTS
   const O = { key: '' };
   const presetSel = (cur, fn) => {
-    const s = el('select');
+    const s = el('select'); s.title = 'Output resolution (the canvas is rebuilt: one hitch, do it before the show)';
     for (const p of ['P720', 'P1080', 'P1440', 'P2160']) { const o = el('option', null, PRESET_WORDS[p] + (p === 'P1080' ? ' · recommended' : p === 'P1440' || p === 'P2160' ? ' · big rigs' : '')); o.value = p; s.append(o); }
     if (cur === 'Custom') { const o = el('option', null, 'custom (command line)'); o.value = 'Custom'; o.disabled = true; s.append(o); }
     s.value = cur; s.addEventListener('change', () => fn(s.value)); return s;
   };
   const refreshSel = (cur, fn) => {
-    const s = el('select');
+    const s = el('select'); s.title = 'Refresh rate of the outputs (50 Hz where lights and cameras run at 50 Hz)';
     for (const r of ['Hz60', 'Hz50', 'Hz59_94', 'Hz30', 'Hz25']) { const o = el('option', null, REFRESH_WORDS[r]); o.value = r; s.append(o); }
     s.value = cur; s.addEventListener('change', () => fn(s.value)); return s;
   };
@@ -318,7 +318,7 @@
     const top = el('div', 'otop');
     top.append(el('span', 'lbl', 'CANVAS'), el('span', 'mono', `${o.canvas[0]}×${o.canvas[1]}`),
       el('span', 'lbl', 'MODE'));
-    const mode = el('select');
+    const mode = el('select'); mode.title = 'SPAN = one canvas across all outputs; MIRROR = the same picture on each';
     for (const m of ['Span', 'Mirror']) { const op = el('option', null, m.toUpperCase()); op.value = m; mode.append(op); }
     mode.value = o.mode; mode.addEventListener('change', () => send({ type: 'OutputConfig', param: 'Mode', value: mode.value }));
     const blend = el('input'); blend.type = 'number'; blend.min = 0; blend.max = 1024; blend.step = 8; blend.value = o.blend_px; blend.title = 'Overlap between neighbours in canvas pixels (0 = screens butt; projectors overlap)';
@@ -352,7 +352,7 @@
     o.places.forEach((p, k) => {
       const deck = k === 8 ? 'hit' : k >> 2, layer = k === 8 ? 0 : k & 3;
       const r = el('div', 'oplace');
-      const sel = el('select');
+      const sel = el('select'); sel.title = `Where ${groupName(k)} shows: FILL ALL (the whole canvas), FIT, FREE (a rectangle) or one output`;
       for (const pl of ['FillAll', 'Fit', 'Free']) { const op = el('option', null, PLACE_WORDS[pl]); op.value = pl; sel.append(op); }
       o.outputs.forEach((_, n) => { const op = el('option', null, `OUT ${n + 1}`); op.value = 'Out' + n; sel.append(op); });
       sel.value = p.place === 'Out' ? 'Out' + p.out : p.place;
@@ -422,11 +422,11 @@
     if (!AU.dev) loadDevices();
     const u = {};
     const row = el('div', 'aurow');
-    u.mode = el('select');
+    u.mode = el('select'); u.mode.title = 'MIC / LINE IN = a sound card input; SOUND ON THIS PC = what this PC plays (loopback)';
     for (const [v, t] of [['Capture', 'MIC / LINE IN'], ['Loopback', 'SOUND ON THIS PC']]) { const o = el('option', null, t); o.value = v; u.mode.append(o); }
-    u.dev = el('select');
+    u.dev = el('select'); u.dev.title = 'The input device';
     u.mode.addEventListener('change', () => fillDevs(u, true));
-    u.ch = el('select');
+    u.ch = el('select'); u.ch.title = 'Which channels Himmel listens to';
     for (const [v, t] of [['1:0', 'mono · ch 1'], ['1:1', 'mono · ch 2'], ['2:0', 'stereo 1+2'], ['2:2', 'stereo 3+4']]) { const o = el('option', null, t); o.value = v; u.ch.append(o); }
     const apply = btn('USE THIS INPUT', 'Tell himmel_audio to switch (it reopens the input)', () => {
       const [cc, cf] = u.ch.value.split(':').map(Number);
@@ -447,7 +447,7 @@
     u.db = el('div', 'mono dim'); box.append(u.db);
     if (!compact) {
       const tune = el('div', 'aurow');
-      u.ag = el('input'); u.ag.type = 'checkbox';
+      u.ag = el('input'); u.ag.type = 'checkbox'; u.ag.title = 'Auto gain: Himmel levels the input by itself';
       u.ag.addEventListener('change', () => postAudio({ auto_gain: u.ag.checked }));
       const num = (lo, hi, step, key, title) => { const i = el('input'); i.type = 'number'; i.min = lo; i.max = hi; i.step = step; i.title = title; window.H.hold(i); i.addEventListener('change', () => postAudio({ [key]: +i.value })); return i; };
       u.gain = num(-24, 48, 1, 'gain_db', 'Manual gain, dB (-24..+48)');
@@ -457,7 +457,7 @@
       tune.append(el('span', 'lbl', 'TUNE'), agl, el('span', 'lbl', 'gain'), u.gain, el('span', 'dim', 'dB'), el('span', 'lbl', 'gate'), u.gate, el('span', 'dim', 'dBFS'), el('span', 'lbl', 'sensitivity'), u.sens);
       box.append(tune);
       const clk = el('div', 'aurow');
-      u.midi = el('select');
+      u.midi = el('select'); u.midi.title = 'A MIDI port that sends MIDI clock (a DJ mixer, a drum machine): Himmel follows its tempo';
       u.midi.addEventListener('change', () => postAudio({ midi_clock_port: u.midi.value }));
       u.clk = el('span', 'mono');
       clk.append(el('span', 'lbl', 'MIDI CLOCK IN'), u.midi, u.clk);

@@ -345,7 +345,7 @@ function buildSlots() {
     const byp = el('button', 'byp', 'BYP'); byp.title = 'Bypass';
     sh.append(n, pick, byp);
     const mix = el('div', 'prm');
-    const mixIn = el('input'); mixIn.type = 'range'; mixIn.min = 0; mixIn.max = 1; mixIn.step = 0.01;
+    const mixIn = el('input'); mixIn.type = 'range'; mixIn.min = 0; mixIn.max = 1; mixIn.step = 0.01; mixIn.title = 'MIX: how much of the effect (0 = dry, 100 = full) · double-click = 100';
     const mixV = el('span', 'pv');
     mix.append(el('span', 'pn', 'MIX'), mixIn, mixV);
     const params = el('div', 'params');
@@ -554,7 +554,7 @@ function chipGroup(label, param, values, words, title) {
   return { g, bs, set(v) { bs.forEach(b => b.classList.toggle('on', b.dataset.v === v)); } };
 }
 function numBox(label, param, lo, hi, step, unit, title) {
-  const w = el('label', 'nb'); w.title = title || '';
+  const w = el('label', 'nb'); w.title = title || (label ? label[0].toUpperCase() + label.slice(1) + (unit ? ' (' + unit + ')' : '') : param);
   const inp = el('input'); inp.type = 'number'; inp.min = lo; inp.max = hi; inp.step = step;
   w.append(el('span', 'lbl', label), inp);
   if (unit) w.append(el('span', 'u', unit));
@@ -917,23 +917,23 @@ function buildHitEditor() {
   const rel = () => { const id = +HE.sel.value; if (id >= 0) send({ type: 'LayerTrigger', deck: 'hit', value: id, release: true }); };
   fire.addEventListener('pointerup', rel); fire.addEventListener('pointercancel', rel);
   const stop = el('button', null, 'STOP'); stop.title = 'Fade the HIT layer out'; stop.addEventListener('click', () => send({ type: 'LayerPlay', deck: 'hit', value: 'Stop' }));
-  const ej = el('button', null, 'eject'); ej.addEventListener('click', () => send({ type: 'LayerClip', deck: 'hit', value: -1 }));
+  const ej = el('button', null, 'eject'); ej.title = 'Empty the HIT layer now'; ej.addEventListener('click', () => send({ type: 'LayerClip', deck: 'hit', value: -1 }));
   HE.op = el('input'); HE.op.type = 'range'; HE.op.min = 0; HE.op.max = 1; HE.op.step = 0.01; HE.op.title = 'HIT opacity'; hold(HE.op);
   HE.op.addEventListener('input', () => sendT('hitop', { type: 'LayerOpacity', deck: 'hit', value: +HE.op.value }));
-  HE.blend = el('select'); BLEND.forEach((b, i) => { const o = el('option', null, b); o.value = i; HE.blend.append(o); });
+  HE.blend = el('select'); HE.blend.title = 'HIT blend mode'; BLEND.forEach((b, i) => { const o = el('option', null, b); o.value = i; HE.blend.append(o); });
   HE.blend.addEventListener('change', () => send({ type: 'LayerBlend', deck: 'hit', value: +HE.blend.value }));
   const setH = (param, value) => send({ type: 'LayerSet', deck: 'hit', param, value });
   const nb = (label, param, lo, hi, step, unit) => {
-    const w = el('label', 'nb'); const inp = el('input'); inp.type = 'number'; inp.min = lo; inp.max = hi; inp.step = step; hold(inp);
+    const w = el('label', 'nb'); w.title = 'HIT ' + label + ' (' + unit + ')'; const inp = el('input'); inp.type = 'number'; inp.min = lo; inp.max = hi; inp.step = step; hold(inp);
     inp.addEventListener('change', () => { setH(param, +inp.value); inp.blur(); });
     w.append(el('span', 'lbl', label), inp, el('span', 'u', unit)); return { w, inp };
   };
   HE.fin = nb('fade in', 'FadeIn', 0, 10, 0.1, 's'); HE.fout = nb('fade out', 'FadeOut', 0, 10, 0.1, 's');
-  HE.trig = el('div', 'cg'); HE.trig.append(el('span', 'lbl', 'trigger'));
+  HE.trig = el('div', 'cg'); HE.trig.title = 'How FIRE behaves: NORMAL, TOGGLE, PIANO (plays while held), LEGATO'; HE.trig.append(el('span', 'lbl', 'trigger'));
   HE.trigBtns = (S.names?.params.find(p => p.name === 'Trigger')?.values || []).map(v => {
     const b = el('button', 'chip2', v.toUpperCase()); b.dataset.v = v; b.addEventListener('click', () => setH('Trigger', v)); HE.trig.append(b); return b;
   });
-  HE.mode = el('div', 'cg'); HE.mode.append(el('span', 'lbl', 'mode'));
+  HE.mode = el('div', 'cg'); HE.mode.title = 'LOOP, or play once and hold / eject'; HE.mode.append(el('span', 'lbl', 'mode'));
   HE.modeBtns = ['Loop', 'OnceHold', 'OnceEject'].map(v => { const b = el('button', 'chip2', MODE_WORDS[v]); b.dataset.v = v; b.addEventListener('click', () => setH('Mode', v)); HE.mode.append(b); return b; });
   row.append(el('span', 'lbl', 'clip'), HE.sel, fire, stop, ej, el('span', 'lbl', 'opacity'), HE.op, HE.blend);
   const row2 = el('div', 'cerow'); row2.append(HE.trig, HE.mode, HE.fin.w, HE.fout.w);

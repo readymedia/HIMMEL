@@ -27,7 +27,7 @@
   }
   function wizNav() {
     const nav = el('div', 'wiznav');
-    if (W.step > (S.show?.present ? 0 : 1)) { const b = el('button', null, '◀ Back'); b.addEventListener('click', () => go(W.step - 1)); nav.append(b); }
+    if (W.step > (S.show?.present ? 0 : 1)) { const b = el('button', null, '◀ Back'); b.title = 'The step before'; b.addEventListener('click', () => go(W.step - 1)); nav.append(b); }
     nav.append(el('div', 'spacer'));
     const n = el('button', 'primary', NEXT[W.step] + ' ▶');
     n.title = W.step < LAST ? 'The next step (you can always come back: click a step in the bar above)' : 'Play the show in PERFORM';
@@ -94,7 +94,7 @@
     }
     const row = el('div', 'wstart');
     const sure = cmd => () => { if (!sh.dirty || confirm('Unsaved changes are lost (the autosave keeps them). Go on?')) send(cmd); };
-    const big = (title, sub, fn, cls) => { const x = el('button', 'wproj' + (cls ? ' ' + cls : '')); x.append(el('b', null, title), el('span', 'dim', sub)); x.addEventListener('click', fn); return x; };
+    const big = (title, sub, fn, cls) => { const x = el('button', 'wproj' + (cls ? ' ' + cls : '')); x.title = title + ': ' + sub; x.append(el('b', null, title), el('span', 'dim', sub)); x.addEventListener('click', fn); return x; };
     row.append(
       big('Keep playing', `${sh.project}${sh.dirty ? ' (unsaved changes)' : ''}`, () => go(1), 'sel'),
       big('New project · 3 screens', 'Empty, the 3-screen template', sure({ type: 'Project', param: 'New', value: 3 })),
@@ -324,7 +324,7 @@
     }
     body.append(ctl,
       el('div', 'dim', 'IDENTIFY shows a big number on every output for 5 s: check that OUT 1 is on the left. 1080p is the safe choice; 1440p / 4K for big rigs. 50 Hz in countries with 50 Hz light and cameras. The number of outputs is set when Himmel starts (himmel.exe -- --outputs N) in 0.1.'));
-    const more = el('button', null, 'More on the OUTPUTS view'); more.addEventListener('click', () => window.setView('outputs')); body.append(more);
+    const more = el('button', null, 'More on the OUTPUTS view'); more.title = 'Black per output, layer places, blend'; more.addEventListener('click', () => window.setView('outputs')); body.append(more);
   }
 
   // The canvas to scale: each output where it sits, blend zones hatched, lost outputs hatched red.
@@ -458,7 +458,7 @@
     const nav = $('setNav');
     if (!nav.children.length) {
       for (const [id, name] of PAGES) {
-        const b = el('button', null, name); b.dataset.p = id;
+        const b = el('button', null, name); b.dataset.p = id; b.title = 'Settings: ' + name;
         b.addEventListener('click', () => { SET.page = id; SET.key = ''; renderSettings(); });
         nav.append(b);
       }
@@ -491,8 +491,8 @@
     } else if (P === 'engine') {
       body.append(el('h2', null, 'Engine & outputs'), el('p', 'dim', 'Resolution, refresh, blend, IDENTIFY, black per output and the layer places are on the OUTPUTS view. The rest is on the renderer command line in 0.1 (himmel.exe -- ARGS).'),
         kv([['outputs', '--outputs N (1..6)'], ['size', '--size WxH (custom)'], ['fullscreen', '--fullscreen'], ['AV offset', '--av-offset MS (−200..200)'], ['flash cap (D65, off by default)', '--flash-cap N'], ['test reaction signal', '--test-signal'], ['ticker text', '--ticker "TEXT"']]));
-      const ov = el('button', null, 'Open the OUTPUTS view'); ov.addEventListener('click', () => window.setView('outputs')); body.append(ov);
-      const bt = el('button', null, 'Black (master)'); bt.addEventListener('click', () => window.H.send({ type: 'Black', value: 2 }));
+      const ov = el('button', null, 'Open the OUTPUTS view'); ov.title = 'Displays, IDENTIFY, resolution, blend'; ov.addEventListener('click', () => window.setView('outputs')); body.append(ov);
+      const bt = el('button', null, 'Black (master)'); bt.title = 'Master black on / off (the outputs stay alive)'; bt.addEventListener('click', () => window.H.send({ type: 'Black', value: 2 }));
       const qt = el('button', 'bad', 'Quit Himmel…'); qt.title = 'Stop Himmel (asks first). The MK2: SHIFT + wheel → SYSTEM → QUIT, hold 2 s.';
       qt.addEventListener('click', () => window.H.quit());
       body.append(qt);
@@ -502,7 +502,7 @@
         ['MK2 controller block', m.present ? 'present' : 'not found'], ['MK2 USB', m.connected ? 'connected' : 'not connected'],
         ['MK2 map', m.map_verified ? 'verified map loaded' : m.present ? 'built-in default' : '–'], ['MK2 events dropped on GUI ring', m.dropped ?? '–'],
         ...(Array.isArray(S.weapons) ? S.weapons : []).map(w => [`slot ${w.slot} · ${w.name || w.weapon || '?'}`, w.state !== 'ok' ? 'other block version' : `${w.connected ? 'connected' : 'not connected'} · ${w.alive ? 'driver alive' : 'driver stopped'}${w.simulated ? ' · simulated' : ''}`])]));
-      const b2 = el('button', null, 'Open the MK2 picture'); b2.addEventListener('click', () => window.setView('mk2')); body.append(b2);
+      const b2 = el('button', null, 'Open the MK2 picture'); b2.title = 'The MK2 as the engine drives it'; b2.addEventListener('click', () => window.setView('mk2')); body.append(b2);
     } else if (P === 'gui') {
       body.append(el('h2', null, 'This GUI'), kv([['bridge', 'himmel_ui on http://127.0.0.1:8790 (only answers this PC)'], ['theme', 'dark (D28)'], ['keys', 'space = TAKE · enter = CUT · T = tap · Esc = cancel'], ['restart safety', 'killing himmel_ui or this page changes nothing on the outputs']]));
     } else {

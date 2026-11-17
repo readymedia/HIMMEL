@@ -85,7 +85,7 @@
 
   <aside class="library">
     <div class="libtabs">
-      <button data-lib="clips" class="on">CLIPS</button>
+      <button data-lib="clips" class="on" title="The clips the engine can play (the media folder and every ready library clip)">CLIPS</button>
       <button data-lib="gens" title="Generators: effects that paint a picture. On an empty layer they are the source.">GENERATORS</button>
     </div>
     <div class="libhead"><input id="clipFilter" type="search" placeholder="filter" autocomplete="off"></div>
@@ -96,9 +96,9 @@
   <section class="inspector" id="inspector">
     <div class="tabs">
       <button data-tab="clip" class="on" id="tabClip" title="The clip editor: transport, in / out, cue points, beat loop">CLIP</button>
-      <button data-tab="layer" id="tabLayer">LAYER FX</button>
-      <button data-tab="deck" id="tabDeck">DECK FX</button>
-      <button data-tab="master" id="tabMaster">MASTER FX</button>
+      <button data-tab="layer" id="tabLayer" title="The 4 effect slots of the focused layer">LAYER FX</button>
+      <button data-tab="deck" id="tabDeck" title="The 4 effect slots of the focused deck (over all its layers)">DECK FX</button>
+      <button data-tab="master" id="tabMaster" title="The 4 master effect slots (over everything on air)">MASTER FX</button>
       <button data-tab="hit" id="tabHit" title="The HIT layer (one-shots on top of PROGRAM)">HIT</button>
       <button data-tab="scenes" id="tabScenes" class="hidden" title="Scenes of the bank / song: recall, save (REC), rename, dice and locks, macros">SCENES</button>
       <div class="layerbar" id="layerBar">
