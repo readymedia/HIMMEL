@@ -195,6 +195,38 @@ crossfader and the clip list.
    outputs; the page reconnects by itself and says when the engine is
    missing, restarting or of another version.
 
+### The rest of the web GUI (M11)
+
+- **Views** (top left): START (the four-step wizard: clips, weapon, outputs,
+  play), PERFORM, MK2 and SETTINGS. The address keeps the view
+  (`#perform`, `#mk2`, …).
+- **Clock** (top bar): BPM (drag up / down, double-click to type, `+` / `−`,
+  Shift = 0.1), the four beat squares, TAP (or the `T` key), nudge `◀ ▶`,
+  `1` = resync, and the global GRID (beat snap).
+- **CLIP tab** (the drawer under the monitors, for the focused layer): the
+  timeline (click = jump; drag `[` `]` = in / out, the thin brackets = the
+  inner loop; Alt + drag = scratch), cue pads 1–16 (click = jump,
+  Shift + click = set at the playhead, right-click = clear), beat loop
+  1/8–16, direction and REVERSE (hold), play mode with its options, time
+  base FREE / BPM, trigger style, start, target, snap, fades, glide, inner
+  loop, catch-up, autopilot, the transition to a new clip, seed. The layer
+  bar has speed, play / pause, restart, RELEASE, STOP and eject.
+- **LAYER / DECK / MASTER FX:** click a slot's name to open the **effect
+  browser** (families, generators, cost class, help, what it reacts to);
+  each slot has its presets (`subtle`, `extreme`, …, `default`) and a
+  **PRESS** button (hold it; a pen or touch screen sends real pressure).
+  Values show in real units (degrees, ×, %).
+- **GENERATORS** (tab above the clip list): click = onto the focused layer;
+  on an empty layer the generator is the picture.
+- **HIT:** Alt + click a clip fires it on the HIT layer; the HIT tab has
+  FIRE (hold), STOP, opacity, blend, fades, trigger and mode.
+- **MK2 view:** the MK2 drawn from `weapons/mk2.weapon.json` with its LEDs
+  and both screens as the engine drives them, plus pressed buttons, knob
+  turns and pad pressure (the bridge reads `Local\HimmelMk2`).
+- `himmel_ui --watch --port 8791` (launch config `himmel-ui-watch`) is a
+  read-only second view: it sends nothing and takes no MK2 ring, so it can
+  watch a show another bridge drives.
+
 ### Playing it from the MK2
 
 > Since the playable slice (2026-11-15) `himmel_render.exe` is the deck engine

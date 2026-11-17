@@ -47,4 +47,23 @@ nlohmann::json command_to_json(const protocol::Command& c);
 nlohmann::json live_to_json(const protocol::LiveState& s);
 nlohmann::json catalog_to_json(const protocol::Catalog& c);
 
+// State v2 transport section (M2): clock settings, per layer the LayerParam settings and
+// the playhead status, the HIT layer. Enums as names (the same names LayerSet accepts).
+// The running beat is left out (it changes every frame); see clock_to_json.
+nlohmann::json transport_to_json(const protocol::TransportSection& t);
+// {"beat": the running beat at now_us, extrapolated from the engine's sample}
+nlohmann::json clock_to_json(const protocol::ClockState& c, uint64_t now_us);
+// Every name the page needs to build the transport controls (LayerParam list with kinds and
+// ranges, play actions, grid, cue actions, clock params, phases, blend modes): GET /names.
+nlohmann::json transport_names();
+
+// Commands with more than one argument (M2), the extra keys:
+//   {"type":"LayerSet","deck":0,"layer":1,"param":"Mode","value":"PingPong"}   (param: name or 0..28)
+//   {"type":"LayerTrigger","deck":"hit","value":3,"velocity":0.8,"release":false}
+//   {"type":"LayerCue","deck":0,"layer":0,"cue":4,"value":"Set","pos":0.25}   (pos < 0 / absent = playhead)
+//   {"type":"LayerBeatLoop","deck":0,"layer":0,"value":0.5}                    (0 = off)
+//   {"type":"LayerScratch","deck":0,"layer":0,"value":1,"pos":0.4}
+//   {"type":"Clock","param":"Bpm","value":128}   {"type":"Clock","param":"Grid","value":"Bar"}
+// "deck":"hit" = the HIT layer for every layer command (layer 0 or absent).
+
 }  // namespace himmel::ui

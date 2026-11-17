@@ -147,8 +147,47 @@ void init_live(LiveState& s) {
 }
 
 // ---------------------------------------------------------------- commands
+// The state v2 transport section, a light stand-in for the real M2 transport: settings are
+// stored and shown, cue points / beat loop / HIT work roughly; modes are not simulated.
+void init_transport_layer(LayerTransport& t) {
+    std::memset(&t, 0, sizeof t);
+    t.snap = kNone;
+    t.slices = 8;
+    t.step_frames = 1;
+    t.autopilot_count = 4;
+    t.scratch_snap = 1;
+    t.catch_up = 1;
+    t.out = 1.f;
+    t.loop_out = 1.f;
+    t.beats = 4.f;
+    t.interval = 1.f;
+    t.distance = 0.5f;
+    t.step_div = 0.25f;
+    t.glide = 1.f;
+    t.fade_out = 0.5f;
+    t.transition_time = 0.5f;
+    t.gain = 1.f;
+    t.transition_progress = 1.f;
+    t.frame = -1;
+    t.phase = static_cast<uint8_t>(PlayheadPhase::Empty);
+    for (float& q : t.cue) q = -1.f;
+}
+void init_transport(TransportSection& t) {
+    std::memset(&t, 0, sizeof t);
+    t.clock.bpm = 120.f;
+    for (auto& d : t.layer)
+        for (auto& l : d) init_transport_layer(l);
+    init_transport_layer(t.hit_transport);
+    t.hit.clip = -1;
+    t.hit.opacity = 1.f;
+    t.hit.speed = 1.f;
+    for (auto& f : t.hit.fx) clear_fx(f);
+}
+
 struct Model {
     LiveState s;
+    TransportSection t;
+    float cues[256][kCuePoints];  // per clip (cue points belong to the clip)
     // TAKE
     uint64_t take_start_us = 0;
     float take_from = 0, take_to = 1;
@@ -173,11 +212,131 @@ Reject apply(Model& m, const Command& c, uint64_t now) {
     const bool rel = (c.flags & kRelative) != 0;
     const float f = c.f[0];
     auto layer = [&]() -> LayerState* {
+        if (c.deck == kHitDeck && c.layer == 0) return &m.t.hit;
         if (c.deck >= kDecks || c.layer >= kLayersPerDeck) return nullptr;
         return &s.deck[c.deck].layer[c.layer];
     };
+    auto ltr = [&]() -> LayerTransport* {
+        if (c.deck == kHitDeck && c.layer == 0) return &m.t.hit_transport;
+        if (c.deck >= kDecks || c.layer >= kLayersPerDeck) return nullptr;
+        return &m.t.layer[c.deck][c.layer];
+    };
+    auto fl = [&](float cur, float lo, float hi) { return std::clamp(rel ? cur + f : f, lo, hi); };
     switch (c.type) {
         case CommandType::Hello: return Reject::None;
+        case CommandType::LayerSet: {
+            LayerTransport* t = ltr();
+            if (!t || c.param >= static_cast<uint8_t>(LayerParam::Count)) return Reject::BadTarget;
+            if (!std::isfinite(f)) return Reject::BadValue;
+            auto en = [&](int n, uint8_t& dst) { if (c.i < 0 || c.i >= n) return false; dst = static_cast<uint8_t>(c.i); return true; };
+            bool ok = true;
+            switch (static_cast<LayerParam>(c.param)) {
+                case LayerParam::Mode: ok = en(static_cast<int>(PlayMode::Count), t->mode); break;
+                case LayerParam::Direction: ok = en(2, t->backward); break;
+                case LayerParam::In: t->in = fl(t->in, 0, 1); break;
+                case LayerParam::Out: t->out = fl(t->out, 0, 1); break;
+                case LayerParam::LoopIn: t->loop_in = fl(t->loop_in, 0, 1); break;
+                case LayerParam::LoopOut: t->loop_out = fl(t->loop_out, 0, 1); break;
+                case LayerParam::InnerLoop: t->inner_loop = toggle(t->inner_loop, c.i); break;
+                case LayerParam::TimeBase: ok = en(static_cast<int>(TimeBase::Count), t->time_base); break;
+                case LayerParam::Beats: t->beats = fl(t->beats, 0.25f, 64); break;
+                case LayerParam::Interval: t->interval = fl(t->interval, 1.f / 16, 64); break;
+                case LayerParam::Distance: t->distance = fl(t->distance, 0, 1); break;
+                case LayerParam::Slices: t->slices = static_cast<uint8_t>(std::clamp(c.i, 2, 16)); break;
+                case LayerParam::StepFrames: t->step_frames = static_cast<uint8_t>(std::clamp(c.i, 1, 64)); break;
+                case LayerParam::StepDiv: t->step_div = fl(t->step_div, 1.f / 16, 16); break;
+                case LayerParam::Glide: t->glide = fl(t->glide, 0, 16); break;
+                case LayerParam::Trigger: ok = en(static_cast<int>(TriggerStyle::Count), t->trigger); break;
+                case LayerParam::StartPos: ok = en(static_cast<int>(StartPos::Count), t->start); break;
+                case LayerParam::FadeIn: t->fade_in = fl(t->fade_in, 0, 10); break;
+                case LayerParam::FadeOut: t->fade_out = fl(t->fade_out, 0, 10); break;
+                case LayerParam::Snap:
+                    if (c.i == -1) t->snap = kNone;
+                    else ok = en(static_cast<int>(GridDiv::Count), t->snap);
+                    break;
+                case LayerParam::Target: ok = en(static_cast<int>(ClipTarget::Count), t->target); break;
+                case LayerParam::Autopilot: ok = en(static_cast<int>(AutopilotMode::Count), t->autopilot); break;
+                case LayerParam::AutopilotCount: t->autopilot_count = static_cast<uint8_t>(std::clamp(c.i, 1, 64)); break;
+                case LayerParam::Transition: ok = en(static_cast<int>(TransitionType::Count), t->transition); break;
+                case LayerParam::TransitionTime: t->transition_time = fl(t->transition_time, 0, 10); break;
+                case LayerParam::CatchUp: t->catch_up = toggle(t->catch_up, c.i); break;
+                case LayerParam::ScratchSnap: t->scratch_snap = toggle(t->scratch_snap, c.i); break;
+                case LayerParam::ReverseHold: ok = en(2, t->reverse_hold); break;
+                case LayerParam::Seed: t->seed = static_cast<uint32_t>(c.i); break;
+                default: break;
+            }
+            return ok ? Reject::None : Reject::BadValue;
+        }
+        case CommandType::LayerTrigger: {
+            LayerState* L = layer();
+            LayerTransport* t = ltr();
+            if (!L || !t) return Reject::BadTarget;
+            if (c.i < -1 || c.i >= kClipCount) return Reject::BadId;
+            if (c.i == -1 && L->clip < 0) return Reject::BadValue;
+            if (c.flags & kRelease) {
+                if (c.deck == kHitDeck) L->clip = -1;  // GUESS: the fake drops the HIT clip at once (no fade)
+                return Reject::None;
+            }
+            if (c.i >= 0) L->clip = static_cast<int16_t>(c.i);
+            L->position = 0;
+            L->playing = 1;
+            t->velocity = f > 0 ? f : 1.f;
+            if (c.deck == kHitDeck) L->opacity = t->velocity;
+            return Reject::None;
+        }
+        case CommandType::LayerCue: {
+            LayerState* L = layer();
+            if (!L || c.slot >= kCuePoints) return Reject::BadTarget;
+            if (L->clip < 0) return Reject::BadTarget;
+            float* q = m.cues[L->clip];
+            switch (static_cast<CueAction>(c.i)) {
+                case CueAction::Jump: L->position = q[c.slot] >= 0 ? q[c.slot] : c.slot / 16.f; break;
+                case CueAction::Set: q[c.slot] = f < 0 ? L->position : std::min(f, 1.f); break;
+                case CueAction::Clear: q[c.slot] = -1.f; break;
+                default: return Reject::BadValue;
+            }
+            return Reject::None;
+        }
+        case CommandType::LayerBeatLoop: {
+            LayerTransport* t = ltr();
+            if (!t) return Reject::BadTarget;
+            if (!std::isfinite(f)) return Reject::BadValue;
+            t->beat_loop = f > 0;
+            t->beat_loop_beats = f > 0 ? std::clamp(f, 1.f / 16, 16.f) : 0.f;
+            return Reject::None;
+        }
+        case CommandType::LayerScratch: {
+            LayerState* L = layer();
+            LayerTransport* t = ltr();
+            if (!L || !t) return Reject::BadTarget;
+            if ((c.i != 0 && c.i != 1) || !std::isfinite(f)) return Reject::BadValue;
+            t->scratching = static_cast<uint8_t>(c.i);
+            if (!rel) L->position = std::clamp(f, 0.f, 1.f);
+            return Reject::None;
+        }
+        case CommandType::Clock: {
+            ClockState& k = m.t.clock;
+            if (!std::isfinite(f)) return Reject::BadValue;
+            switch (static_cast<ClockParam>(c.param)) {
+                case ClockParam::Tap: k.source = 1; ++k.taps; break;
+                case ClockParam::Bpm: k.bpm = std::clamp(rel ? k.bpm + f : f, 20.f, 300.f); break;
+                case ClockParam::Nudge: k.beat += std::clamp(f, -1.f, 1.f); break;
+                case ClockParam::Resync: k.beat = 0; break;
+                case ClockParam::Grid:
+                    if (c.i < 0 || c.i >= static_cast<int>(GridDiv::Count)) return Reject::BadValue;
+                    k.grid = static_cast<uint8_t>(c.i);
+                    break;
+                default: return Reject::BadTarget;
+            }
+            return Reject::None;
+        }
+        case CommandType::FxPress: {
+            FxSlotState* fx = fx_target(s, c);
+            if (!fx) return Reject::BadTarget;
+            if (!std::isfinite(f)) return Reject::BadValue;
+            fx->press = static_cast<uint8_t>(std::clamp(f, 0.f, 1.f) * 255.f + 0.5f);
+            return Reject::None;
+        }
         case CommandType::LayerClip: {
             LayerState* L = layer();
             if (!L) return Reject::BadTarget;
@@ -211,8 +370,12 @@ Reject apply(Model& m, const Command& c, uint64_t now) {
         case CommandType::LayerPlay: {
             LayerState* L = layer();
             if (!L) return Reject::BadTarget;
-            if (c.i < 0 || c.i > 3) return Reject::BadValue;
-            if (c.i == 3) {
+            if (c.i < 0 || c.i >= static_cast<int>(PlayAction::Count)) return Reject::BadValue;
+            if (c.i == static_cast<int>(PlayAction::Stop)) {
+                L->clip = -1;  // GUESS: the fake empties at once (the engine fades out first)
+            } else if (c.i == static_cast<int>(PlayAction::Release)) {
+                if (LayerTransport* t = ltr()) t->inner_loop = 0;
+            } else if (c.i == 3) {
                 L->position = L->speed < 0 ? 1.f : 0.f;
                 L->playing = 1;
             } else {
@@ -340,6 +503,32 @@ void step(Model& m, double dt, uint64_t now) {
             p -= std::floor(p);
             L.position = p;
         }
+    // Transport status (state v2).
+    TransportSection& T = m.t;
+    T.clock.beat += dt / 60.0 * T.clock.bpm;
+    T.clock.time_us = now;
+    auto status = [&](LayerState& L, LayerTransport& t) {
+        if (L.clip < 0) {
+            t.phase = static_cast<uint8_t>(PlayheadPhase::Empty);
+            t.frame = -1;
+            for (float& q : t.cue) q = -1.f;
+            return;
+        }
+        t.phase = static_cast<uint8_t>(!L.playing ? PlayheadPhase::Paused
+                                        : t.inner_loop ? PlayheadPhase::InnerLoop
+                                                       : PlayheadPhase::Playing);
+        t.frame = static_cast<int32_t>(L.position * kClips[L.clip].seconds * 30.f);
+        t.speed_now = L.speed;
+        t.gain = 1.f;
+        std::memcpy(t.cue, m.cues[L.clip], sizeof t.cue);
+    };
+    for (int d = 0; d < kDecks; ++d)
+        for (int l = 0; l < kLayersPerDeck; ++l) status(s.deck[d].layer[l], T.layer[d][l]);
+    if (T.hit.clip >= 0 && T.hit.playing) {
+        T.hit.position += static_cast<float>(dt) * T.hit.speed / kClips[T.hit.clip].seconds;
+        if (T.hit.position >= 1.f) T.hit.clip = -1;  // a one-shot
+    }
+    status(T.hit, T.hit_transport);
     if (s.take_active) {
         const float t = std::clamp(static_cast<float>(now - m.take_start_us) / (s.take_ms * 1000.f), 0.f, 1.f);
         s.take_progress = t;
@@ -555,6 +744,9 @@ int main(int argc, char** argv) {
         init_live(m->s);
     }
     m->s.epoch = old_epoch ? old_epoch + 1 : (GetTickCount() & 0xFFFF) | 1;  // a new epoch every start
+    init_transport(m->t);
+    for (auto& c : m->cues)
+        for (float& q : c) q = -1.f;
 
     auto cat = std::make_unique<Catalog>();
     fill_catalog(*cat);
@@ -602,6 +794,7 @@ int main(int argc, char** argv) {
             fps_t0 = now;
         }
         seq_write(sb->live_seq, sb->live, m->s);
+        seq_write(sb->transport_seq, sb->transport, m->t);
         sb->status.heartbeat_us.store(us, std::memory_order_release);
 
         if (now - last_pic >= std::chrono::milliseconds(33)) {  // ~30 fps pictures

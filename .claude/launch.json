@@ -21,6 +21,17 @@
       "url": "http://127.0.0.1:8790"
     },
     {
+      "name": "himmel-ui-watch",
+      "runtimeExecutable": "build/bin/Release/himmel_ui.exe",
+      "runtimeArgs": [
+        "--port",
+        "8791",
+        "--watch"
+      ],
+      "port": 8791,
+      "url": "http://127.0.0.1:8791"
+    },
+    {
       "name": "mk2-live",
       "runtimeExecutable": "python",
       "runtimeArgs": [

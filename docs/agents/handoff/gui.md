@@ -1,79 +1,97 @@
 # GUI handoff
-Updated: 2026-11-15 by the GUI agent (S3, session keen-haslett) · Branch: claude/gui-slice-web · Last commit: see `git log claude/gui-slice-web`
+Updated: 2026-11-17 by the GUI agent (wave 2, M11) · Branch: claude/gui-m11-v1 · Last commit: see `git log claude/gui-m11-v1`
 
 ## State in one paragraph
-The playable-slice GUI (roadmap §0a, S3) works against `fake_engine.exe` and was also seen working against S1's real
-`himmel_render` (real catalog, real previews, MK2 producer alive) while S1 tested on the same PC. `himmel_ui.exe`
-(`src/ui_bridge/`) serves `gui/` on 127.0.0.1:8790, streams the engine state as Server-Sent Events, turns JSON into
-validated `Command`s on producer slot 1, and serves the preview pictures. The page (`gui/index.html`, `app.css`,
-`app.js`, no build step) is the dark Perform view: PREVIEW (green) / PROGRAM (red) monitors with 4 layer strips each,
-MAIN + TAKE ring + CUT + crossfader in the middle, clip list on the right, FX panel (layer / deck / master, 4 slots with
-effect, bypass, mix and parameters) at the bottom.
+M11 on top of wave 1: every new engine feature of wave 1 is reachable from the browser. `himmel_ui` now speaks the
+M2 transport commands (18–23), `FxPress` (24) and the HIT layer, streams the state v2 transport section and an MK2
+mirror, and serves the FX metadata. The page (`gui/index.html`, `app.css` + `m11.css`, `app.js` + `views.js`, no build
+step, dark only) has four views: START (wizard steps 1–4 against what 0.1 has), PERFORM (the slice page + clock, CLIP
+editor tab, effect browser, PRESS, presets, generators, HIT), MK2 (the panel from its profile with live LEDs, both
+screens, pressed buttons, knobs, pad pressure) and SETTINGS (stub: status, producers, versions, what comes when).
 
 ## Done (with commits)
-- `himmel_ui.exe`, `fake_engine.exe`, `ui_bridge_tests.exe` (122 checks), `gui/`, launch config `himmel-ui`,
-  getting-started "Play the slice from the web GUI", D100 PROPOSED (layout). Commit on `claude/gui-slice-web`.
-- Checked in the browser preview at 1366 × 768 against `fake_engine`: load clips (click-then-layer; drag and double-click
-  wired the same way), effects + params on a layer and on master, opacity / mute / blend, TAKE (space, ring fills,
-  decks swap sides, focus follows), CUT (Enter), BLACK, a local refusal toast (clip id 99).
-- Kill / restart `himmel_ui` while the fake engine runs: the page says "BRIDGE NOT REACHABLE", reconnects by itself;
-  the show model (everything but play positions) was identical before and after, same epoch, engine frames kept going.
-- Kill the engine: the page says "ENGINE NOT RESPONDING"; a restarted engine restores the show and bumps the epoch
-  (toast "Engine (re)started").
-- Screenshots: `side-session-notes/local_5d59d0bb-…/gui-screens/` (outside the repo).
+- Bridge (`src/ui_bridge/`): codec for `LayerSet` (param by name or number, enum values by name), `LayerTrigger`
+  (velocity, release), `LayerCue` (cue, Jump / Set / Clear, pos), `LayerBeatLoop`, `LayerScratch`, `Clock`,
+  `LayerPlay` Release / Stop, `"deck":"hit"` on every layer command; `press` in the live FX slots; `kind` in the
+  catalog; SSE `transport` (state v2 section, enums as names, beat extrapolated to now) and `mk2`; `GET /names`,
+  `GET /fxmeta`, `GET /weapons/<id>.weapon.json`; `--watch` (read-only). `ui_bridge_tests` 246 checks.
+- `fake_engine` keeps a transport section (settings, cues per clip, clock, HIT, PRESS) so the page works without the
+  real engine.
+- Page: see "State". Docs: `docs/getting-started.md` "The rest of the web GUI (M11)", D120 PROPOSED.
+- Checked in the browser (1440 × 900) with `himmel_ui --watch` against the stack that was running on this PC
+  (control-mk2-input build, state v1): the MK2 view mirrors the real MK2 (both screens, group and pad LEDs); START
+  step 2 shows the MK2 as CONNECTED; PERFORM shows "ENGINE VERSION MISMATCH" as it should for a v1 engine.
 
-## Wire format (bridge ↔ page)
-- `GET /events`: SSE events `bridge` (1 Hz + on change: `engine` = ok / absent / stale / starting / version,
-  `commands`, `preview`, `epoch`, `fps`, `frame`, `seq`, `pushed`, `dropped`, `versions`), `catalog` (on change:
-  `clips[] {id,name,width,height,fps,seconds,codec,thumb_rgb}`, `effects[] {id,name,params[],defaults[]}`), `live`
-  (~30 Hz, only when changed; the `LiveState` fields minus frame / time / fps; empty FX slots are just `{effect:-1}`).
-- `POST /cmd` (`Content-Type: application/json`): one command or an array (≤ 256), e.g.
-  `{"type":"FxParam","deck":"master","slot":0,"param":1,"value":0.3}`. Names = `CommandType` names; `deck` 0/1/"A"/"B"
-  (FX also "master"); `value` is the int or float argument (blend / play / toggle also take names / booleans);
-  `"relative": true` only for float types. Answer `{"ok":true,"seq":N}` or `{"ok":false,"error":"…"}`.
-  The page shows "on air #N" from `live.producer[1].acked`. Spec + checks: `src/ui_bridge/src/json_codec.cpp`.
-- `GET /preview/N?since=P`: 16-byte header (`HPV1`, u16 w, u16 h, u32 0, u32 published) + w·h RGBA; 204 = nothing new
-  / inactive. Streams 0 DeckA, 1 DeckB, 2 Main (3..5 outputs). Raw RGBA over loopback (~0.5 MB per picture, ~20 fps
-  per stream): no encoder, no new dependency.
-- Safety: only `Host` 127.0.0.1 / localhost / [::1] and a local or empty `Origin` are answered; `/cmd` needs
-  `application/json` (so a foreign web page cannot post without a CORS preflight we never answer).
+- **Checked against the real v2 engine (2026-11-17, main with SHOW M3 + AUDIO M8 merged in, `himmel.exe --sim`,
+  machine free):**
+  - `LayerSet` Mode, `Clock` Bpm, `LayerCue` Set, and `LayerBeatLoop` all reach the engine.
+  - The effect browser puts Kaleido in slot 1 by click, and the "extreme" preset sets all four params.
+  - PRESS reads 1 while held and 0 after release.
+  - A Rings generator from the GENERATORS tab lands in the first free slot, and PROGRAM renders Kaleido + Rings.
+  - HIT fires clip 1, and release clears it.
+  - Kill / restart test: `taskkill` of `himmel_ui` mid-show. The supervisor restarted it with a new PID and the
+    engine PID stayed the same. `/state` before and after differs only in the GUI producer's `acked` counter. The
+    page reconnected without a reload, and the next command worked.
+  - `tools/mk2_e2e.py` PASS. ctest 16/16. The 7 Python selftests and `himmel_audio --selftest` pass.
 
 ## In progress
-Nothing. S1 (`claude/engine-slice-decks`) was not pushed when this was written, so the merge-and-try step is open.
+- Nothing. Ready to merge.
 
 ## Next up (ordered)
-1. When S1 is pushed: merge it locally, run `himmel.exe --sim` + `himmel_ui`, check load / FX / TAKE / CUT against the
-   real engine (do not push S1's changes from this branch). ENGINE makes the supervisor start `himmel_ui.exe`.
-2. The 4 × 4 clip pad grid of the v4 mockup (`gui.md` §17), pad 1 = bottom-left = first clip of a 16-clip page
-   (matches S2's mapper, see the S2 note), with PREVIEW / PROGRAM tags; keep the list for browsing.
-3. Knob tiles 1–4 / 5–8 under the monitors once the engine publishes pages / macros (needs a state-block addition).
-4. Wizard, weapon select, library, outputs (M11).
+1. SHOW / AUDIO panels: read `Local\HimmelShow` (`docs/interfaces/show-block.md`) and `Local\HimmelAudio`
+   (`docs/interfaces/audio-block.md`) as optional blocks (hide the panel if missing / wrong version): project name +
+   save state, setlist / scenes, levels + BPM source, `FxReact` (command 40) per FX slot.
+2. 4 × 4 pad grid (CLIPS / SLICE / FX PADS) of the v4 mockup once kits exist (SHOW M3).
+3. Knob tiles 1–4 / 5–8 once the engine publishes pages / macros (state addition).
+4. Effect browser with live thumbnails (needs per-effect previews from the engine), scope badges (FxScope, D106).
+5. Wizard: real import (M7), outputs / IDENTIFY (M6), sound in (M8); Settings pages fill in as those land.
 
 ## GUESSES
-- `GUESS:` layer 1 (A / E) is the bottom of the stack in `fake_engine`'s compositing (the contract does not say).
-  The GUI lists A at the top like the MK2 group row. Check with ENGINE.
-- `GUESS:` a TAKE while one is travelling is ignored by `fake_engine`; the real engine decides.
-- `GUESS:` the TAKE ring shows how far PREVIEW has travelled in, computed from `crossfader` and `program_deck`
-  (so the wheel and a manual fader move fill it too), not only `take_progress`.
-- `GUESS:` clicking a layer strip sends `Focus` (= pressing its group button); the strip's own controls do not.
+- `GUESS:` MK2 consumer ring 3 belongs to the GUI bridge (ring 0 = engine; `mk2_monitor` / `mk2_pages_demo` take the
+  first free one, normally 1). A crashed bridge leaves ring 3 "attached"; the controller counts drops, nothing else.
+- `GUESS:` the clock beat between transport events is extrapolated in the page from BPM (the section's `beat` +
+  `time_us`); the beat squares can be off by a frame.
+- `GUESS:` PRESS with a mouse sends 1.0 while held (no pressure); pen / touch send `pointer.pressure`.
+- `GUESS:` a generator from the GENERATORS tab goes into the first free slot of the focused layer (or the slot that
+  already holds it), per D107.
+- `GUESS:` `fake_engine` drops a released HIT clip and a STOPped layer at once (the engine fades them).
+- Older ones (slice): layer 1 = bottom of the stack in `fake_engine`; a TAKE while one travels is ignored by
+  `fake_engine`; the TAKE ring is computed from `crossfader` + `program_deck`; clicking a strip sends `Focus`.
 
 ## Open questions for the owner
-- D100 (PROPOSED): the slice page layout (see `docs/decisions.md`).
+- D100 (slice layout) and D120 (M11 layout: CLIP tab vs. a pop-out drawer, effect browser as cards) — PROPOSED.
 
 ## How to build / run / test this track
 - Build: `cmake --build build --config Release --target himmel_ui fake_engine ui_bridge_tests`
-- Test: `build\bin\Release\ui_bridge_tests.exe` (122 checks, also in ctest).
-- Run: `build\bin\Release\fake_engine.exe` (or the real engine), then launch config `himmel-ui` / `himmel_ui.exe`
-  (`--port`, `--gui DIR`; it finds `gui/` by walking up from the exe), open http://127.0.0.1:8790.
+- Test: `build\bin\Release\ui_bridge_tests.exe` (246 checks, also in ctest); `node --check gui/app.js gui/views.js`.
+- Run: `himmel.exe --sim` (starts `himmel_ui`) or `fake_engine.exe` + launch config `himmel-ui`; open
+  http://127.0.0.1:8790. Read-only second view: launch config `himmel-ui-watch` (port 8791, `--watch`).
+
+## Wire format (bridge ↔ page), additions in M11
+- SSE `transport`: `{clock:{bpm,grid,source,taps,beat}, layer:[deck][layer]{mode,time_base,trigger,start,target,
+  autopilot,transition,snap ("Global" = follow the grid),inner_loop,catch_up,scratch_snap,slices,step_frames,
+  autopilot_count,backward,reverse_hold,in,out,loop_in,loop_out,beats,interval,distance,step_div,glide,fade_in,
+  fade_out,transition_time,seed,phase,beat_loop,scratching,pending,beat_loop_beats,speed_now,gain,
+  transition_progress,pending_beats,velocity,loops,frame,cue[16] (-1 = none)}, hit:{LayerState without fx},
+  hit_transport:{…}}`. Enum words = the `LayerSet` value names (`GET /names`).
+- SSE `mk2`: `{present,connected,alive,map_verified,dropped,pressed:[button names],pads[16] 0..4095,knobs[8] 0..1 of a
+  turn,last_knob,encoder,leds:{pad[16][rgb],group[8][rgb],button:{name:0..127}},screen: base64 of 2 × 2048 bytes}`.
+- POST `/cmd` extra keys: `LayerSet {param, value}`, `LayerTrigger {value, velocity, release}`, `LayerCue {cue, value,
+  pos}`, `LayerScratch {value, pos}`, `Clock {param, value}`; `"deck":"hit"`. Spec + checks:
+  `src/ui_bridge/include/himmel/ui/json_codec.h`, `tests/ui_bridge/ui_bridge_tests.cpp`.
+- POST `/cmd` takes an array (≤ 256): presets send all params in one request.
 
 ## Gotchas found
-- **The block names are per Windows session, so every agent on this PC shares them.** S1's real engine and
-  `fake_engine` use the same `Local\Himmel*` blocks. `fake_engine` refuses to start (exit 3) when another engine's
-  heartbeat moves; a real engine started after it restores the fake show from the block (by design, engine-state §2).
-- The bridge keeps the state and preview blocks open, so they survive an engine restart (wanted). If a new engine
-  build changes a block's size, stop `himmel_ui` too, or the old mapping stays.
-- Space / Enter are TAKE / CUT everywhere except in text fields; selects and sliders drop the keyboard focus after a
-  change so the keys keep working.
+- **One stack per machine**: the `Local\Himmel*` names are per Windows session, so another agent's (or the owner's)
+  stack shares them. `fake_engine` refuses to start when another engine's heartbeat moves; `himmel_ui --watch` is safe
+  next to anything.
+- The Bash tool on this PC chokes on some heredocs (quotes inside); write files with the editor tools instead.
+- The page draws on `requestAnimationFrame`, so a hidden tab (or a hidden Claude browser pane) draws nothing until it
+  is shown. The data (`S`) keeps updating. Call `Views.render()` by hand when you test in a hidden pane.
+- Seen 2026-11-17, probably the SHOW autosave (D109): a fresh `himmel.exe --sim` started with A1 at opacity 0.64.
+  That is exactly what `mk2_e2e.py` had just left. Expect earlier runs' state at start.
+- Space / Enter are TAKE / CUT only in the PERFORM view and never in text / number fields.
 
 ## Interfaces touched
-None changed. Uses `docs/interfaces/command-protocol.md`, `engine-state.md`, `preview-block.md` (v1) as written.
+None changed. Reads `command-protocol.md` (v1 + M2 + FxPress), `engine-state.md` v2, `preview-block.md` v1,
+`effect-metadata.md` v1 and the MK2 block (`src/controller/include/himmel/mk2/shared.h`, ring 3) as written.

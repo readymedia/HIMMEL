@@ -1,16 +1,32 @@
 <!doctype html>
 <!-- SPDX-License-Identifier: MIT · Copyright (c) 2026 ReadyMedia.no and Himmel contributors -->
-<!-- Himmel Perform (playable slice, D90). Served by himmel_ui (src/ui_bridge). Plain HTML/CSS/JS, no build step. -->
+<!-- Himmel operator GUI (M11, D43). Served by himmel_ui (src/ui_bridge). Plain HTML/CSS/JS, no build step. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Himmel · Perform</title>
 <link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="m11.css">
 </head>
 <body>
 <header id="top">
   <div class="brand">HIMMEL</div>
+  <nav class="views" id="viewTabs">
+    <button data-view="start" title="The start wizard: clips, weapon, outputs, play">START</button>
+    <button data-view="perform" class="on" title="Perform (the show)">PERFORM</button>
+    <button data-view="mk2" title="The MK2 as the engine drives it: LEDs, screens, what the hands do">MK2</button>
+    <button data-view="settings" title="Settings and status">⚙ SETTINGS</button>
+  </nav>
+  <div class="clock" id="clock" title="The internal beat clock (Clock command). The audio clock comes with M8.">
+    <span class="bpm mono" id="bpmVal" title="BPM (drag up / down, or type)">–</span><span class="lbl">bpm</span>
+    <span class="beats" id="beatDots"><i></i><i></i><i></i><i></i></span>
+    <button id="tapBtn" title="TAP tempo (T)">TAP</button>
+    <button id="bpmDown" title="BPM − 1 (Shift = − 0.1)">−</button><button id="bpmUp" title="BPM + 1 (Shift = + 0.1)">+</button>
+    <button id="nudgeL" title="Nudge the phase back 1/8 beat">◀</button><button id="nudgeR" title="Nudge the phase forward 1/8 beat">▶</button>
+    <button id="resyncBtn" title="Resync: beat 1 is now">1</button>
+    <span class="lbl">grid</span><select id="gridSel" title="The global beat snap (launches and jumps on PROGRAM wait for it)"></select>
+  </div>
   <div class="chip" id="engineChip" title="The render engine, as the bridge sees it">ENGINE …</div>
   <div class="chip dim" id="fpsChip">– fps</div>
   <div class="chip dim" id="mk2Chip" title="Producer 0: weapon mappers inside the engine (MK2)">MK2</div>
@@ -22,7 +38,8 @@
   <button class="black" id="blackBtn" title="Master black (the outputs stay alive)">BLACK</button>
 </header>
 
-<main id="perform">
+<!-- ====================================================================== PERFORM -->
+<main id="perform" class="view">
   <section class="side prev" id="sidePrev">
     <div class="monhead"><span class="tally prev">PREVIEW</span><span class="deckname" id="prevDeck">Deck –</span><span class="note">off air · prepare here</span></div>
     <div class="monitor" id="monPrev"><div class="nopic">no picture</div></div>
@@ -47,6 +64,9 @@
       <div class="xfends"><span class="deckA">A</span><span class="lbl">crossfader</span><span class="deckB">B</span></div>
       <input type="range" id="xf" min="0" max="1" step="0.001" value="0" title="Crossfader (moving it cancels a running TAKE)">
     </div>
+    <div class="hitcard" id="hitCard" title="The HIT layer: on top of PROGRAM, for one-shots. Alt + click a clip = fire it here.">
+      <div class="lbl">HIT</div><div class="hitnm" id="hitName">empty</div><div class="hitbar"><i id="hitGain"></i></div>
+    </div>
   </section>
 
   <section class="side prog" id="sideProg">
@@ -56,31 +76,85 @@
   </section>
 
   <aside class="library">
-    <div class="libhead"><span class="lbl">CLIPS</span><input id="clipFilter" type="search" placeholder="filter" autocomplete="off"></div>
+    <div class="libtabs">
+      <button data-lib="clips" class="on">CLIPS</button>
+      <button data-lib="gens" title="Generators: effects that paint a picture. On an empty layer they are the source.">GENERATORS</button>
+    </div>
+    <div class="libhead"><input id="clipFilter" type="search" placeholder="filter" autocomplete="off"></div>
     <div class="cliplist" id="clipList"></div>
-    <div class="libfoot dim">Click a clip, then a layer. Or drag it onto a layer. Double-click = into the focused layer.</div>
+    <div class="libfoot dim" id="libFoot">Click a clip, then a layer. Or drag it onto a layer. Double-click = into the focused layer. Alt + click = fire on the HIT layer.</div>
   </aside>
 
   <section class="inspector" id="inspector">
     <div class="tabs">
-      <button data-tab="layer" class="on" id="tabLayer">LAYER</button>
-      <button data-tab="deck" id="tabDeck">DECK</button>
+      <button data-tab="clip" class="on" id="tabClip" title="The clip editor: transport, in / out, cue points, beat loop">CLIP</button>
+      <button data-tab="layer" id="tabLayer">LAYER FX</button>
+      <button data-tab="deck" id="tabDeck">DECK FX</button>
       <button data-tab="master" id="tabMaster">MASTER FX</button>
+      <button data-tab="hit" id="tabHit" title="The HIT layer (one-shots on top of PROGRAM)">HIT</button>
       <div class="layerbar" id="layerBar">
         <span class="nm" id="inspClip">–</span>
-        <span class="lbl">speed</span><input type="range" id="inspSpeed" min="-4" max="4" step="0.01" title="Speed (double-click = 1x)"><span class="mono val" id="inspSpeedVal">1.00x</span>
-        <div class="jump" id="inspJump" title="Click to jump"><i></i></div>
+        <span class="lbl">speed</span><input type="range" id="inspSpeed" min="-4" max="4" step="0.01" title="Target speed (the playhead glides to it; double-click = 1x)"><span class="mono val" id="inspSpeedVal">1.00x</span>
+        <button id="inspPlay" title="Play / pause">❚❚</button>
         <button id="inspRestart" title="Restart the clip">⟲</button>
-        <button id="inspEject" title="Empty this layer">eject</button>
+        <button id="inspRelease" title="RELEASE: leave the inner loop and play the outro">REL</button>
+        <button id="inspStop" title="STOP: fade out by the fade-out time, then empty">STOP</button>
+        <button id="inspEject" title="Empty this layer now">eject</button>
       </div>
     </div>
-    <div class="slots" id="slots"></div>
+    <div id="clipEd" class="clipEd"></div>
+    <div class="slots hidden" id="slots"></div>
+    <div id="hitEd" class="hitEd hidden"></div>
   </section>
 </main>
+
+<!-- ====================================================================== START (wizard) -->
+<main id="start" class="view hidden">
+  <div class="wizbar" id="wizBar">
+    <button data-step="1"><b>1</b> CLIPS</button><button data-step="2"><b>2</b> WEAPON</button>
+    <button data-step="3"><b>3</b> OUTPUTS</button><button data-step="4"><b>4</b> PLAY</button>
+  </div>
+  <div class="wizbody" id="wizBody"></div>
+</main>
+
+<!-- ====================================================================== MK2 -->
+<main id="mk2" class="view hidden">
+  <div class="mk2wrap">
+    <div class="mk2head">
+      <div><span class="lbl">MK2</span> <span id="mk2State" class="chip">…</span></div>
+      <div class="dim" id="mk2Note">The picture is drawn from <span class="mono">weapons/mk2.weapon.json</span>. LEDs and both screens are what the engine sends to the MK2; pressed buttons, knobs and pad pressure come from the controller (ring 3).</div>
+    </div>
+    <div class="mk2panel" id="mk2Panel"></div>
+    <div class="mk2legend dim">White outline = held now · fill = LED level · pad ring = pressure · knob = turned position (knobs are endless) · the last turned knob is marked.</div>
+  </div>
+</main>
+
+<!-- ====================================================================== SETTINGS -->
+<main id="settings" class="view hidden">
+  <nav class="setnav" id="setNav"></nav>
+  <div class="setbody" id="setBody"></div>
+</main>
+
+<!-- ====================================================================== effect browser -->
+<div id="fxBrowser" class="modal hidden">
+  <div class="mbox">
+    <div class="mhead">
+      <span class="lbl" id="fxbTitle">EFFECT BROWSER</span>
+      <input id="fxbFilter" type="search" placeholder="filter" autocomplete="off">
+      <div class="fams" id="fxbFams"></div>
+      <div class="spacer"></div>
+      <button id="fxbNone" title="Empty this slot">empty slot</button>
+      <button id="fxbClose" title="Close (Esc)">✕</button>
+    </div>
+    <div class="fxgrid" id="fxbGrid"></div>
+    <div class="mfoot dim" id="fxbFoot">Click = put it in the slot (PREVIEW first: you see it in the PREVIEW monitor before a TAKE). Cost class S &lt; 0.15 ms, M &lt; 0.6 ms, L heavier (GTX 1070, 1080p).</div>
+  </div>
+</div>
 
 <div id="overlay" class="overlay hidden"><div class="box"><div class="big" id="ovTitle">…</div><div id="ovText"></div></div></div>
 <div id="toasts"></div>
 <template id="cvTpl"><canvas width="480" height="270"></canvas></template>
 <script src="app.js"></script>
+<script src="views.js"></script>
 </body>
 </html>

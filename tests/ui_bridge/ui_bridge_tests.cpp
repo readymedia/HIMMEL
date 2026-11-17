@@ -79,7 +79,9 @@ static void test_layer_commands() {
     CHECK(!P(R"({"type":"LayerMute","deck":0,"layer":0,"value":3})").ok);
     r = P(R"({"type":"LayerPlay","deck":0,"layer":0,"value":"Restart"})");
     CHECK(r.ok && r.cmd.i == static_cast<int>(PlayAction::Restart));
-    CHECK(!P(R"({"type":"LayerPlay","deck":0,"layer":0,"value":4})").ok);
+    CHECK(P(R"({"type":"LayerPlay","deck":0,"layer":0,"value":4})").ok);   // Release (M2)
+    CHECK(P(R"({"type":"LayerPlay","deck":0,"layer":0,"value":"Stop"})").cmd.i == static_cast<int>(PlayAction::Stop));
+    CHECK(!P(R"({"type":"LayerPlay","deck":0,"layer":0,"value":6})").ok);
 }
 
 static void test_fx_commands() {
@@ -227,6 +229,163 @@ static void test_state_json() {
     CHECK(catalog_to_json(*c)["clips"].size() == static_cast<size_t>(kMaxClips));
 }
 
+static void test_transport_commands() {
+    std::printf("transport commands (M2)\n");
+    // LayerSet by name, enum by name and by number
+    auto r = P(R"({"type":"LayerSet","deck":0,"layer":1,"param":"Mode","value":"PingPong"})");
+    CHECK(r.ok && r.cmd.type == CommandType::LayerSet && r.cmd.param == static_cast<uint8_t>(LayerParam::Mode) &&
+          r.cmd.i == static_cast<int>(PlayMode::PingPong));
+    r = P(R"({"type":"LayerSet","deck":0,"layer":1,"param":0,"value":8})");
+    CHECK(r.ok && r.cmd.i == static_cast<int>(PlayMode::Scratch));
+    CHECK(!P(R"({"type":"LayerSet","deck":0,"layer":1,"param":"Mode","value":9})").ok);
+    CHECK(!P(R"({"type":"LayerSet","deck":0,"layer":1,"param":"Mode","value":"Wobble"})").ok);
+    CHECK(!P(R"({"type":"LayerSet","deck":0,"layer":1,"param":"Nope","value":1})").ok);
+    CHECK(!P(R"({"type":"LayerSet","deck":0,"layer":1,"param":29,"value":1})").ok);
+    CHECK(!P(R"({"type":"LayerSet","deck":0,"layer":1,"value":1})").ok);
+    // floats clamp like the engine; relative only for floats
+    r = P(R"({"type":"LayerSet","deck":1,"layer":3,"param":"Beats","value":100})");
+    CHECK(r.ok && r.cmd.f[0] == 64.f);
+    r = P(R"({"type":"LayerSet","deck":1,"layer":3,"param":"In","value":0.25})");
+    CHECK(r.ok && r.cmd.param == static_cast<uint8_t>(LayerParam::In) && std::fabs(r.cmd.f[0] - 0.25f) < 1e-6f);
+    r = P(R"({"type":"LayerSet","deck":1,"layer":3,"param":"Glide","value":-1,"relative":true})");
+    CHECK(r.ok && (r.cmd.flags & kRelative) && r.cmd.f[0] == -1.f);
+    CHECK(!P(R"({"type":"LayerSet","deck":1,"layer":3,"param":"Mode","value":1,"relative":true})").ok);
+    // ints clamp, toggles, bools, snap -1 / "global"
+    CHECK(P(R"({"type":"LayerSet","deck":0,"layer":0,"param":"Slices","value":40})").cmd.i == 16);
+    CHECK(P(R"({"type":"LayerSet","deck":0,"layer":0,"param":"InnerLoop","value":"toggle"})").cmd.i == 2);
+    CHECK(P(R"({"type":"LayerSet","deck":0,"layer":0,"param":"Direction","value":"backward"})").cmd.i == 1);
+    CHECK(!P(R"({"type":"LayerSet","deck":0,"layer":0,"param":"Direction","value":2})").ok);
+    CHECK(P(R"({"type":"LayerSet","deck":0,"layer":0,"param":"Snap","value":-1})").cmd.i == -1);
+    CHECK(P(R"({"type":"LayerSet","deck":0,"layer":0,"param":"Snap","value":"global"})").cmd.i == -1);
+    CHECK(P(R"({"type":"LayerSet","deck":0,"layer":0,"param":"Snap","value":"Bar"})").cmd.i == static_cast<int>(GridDiv::Bar));
+    CHECK(!P(R"({"type":"LayerSet","deck":0,"layer":0,"param":"Mode","value":-1})").ok);
+    // the HIT layer
+    r = P(R"({"type":"LayerSet","deck":"hit","param":"FadeOut","value":0.5})");
+    CHECK(r.ok && r.cmd.deck == kHitDeck && r.cmd.layer == 0);
+    CHECK(!P(R"({"type":"LayerSet","deck":"hit","layer":2,"param":"FadeOut","value":0.5})").ok);
+    CHECK(P(R"({"type":"LayerOpacity","deck":"hit","layer":0,"value":0.5})").ok);
+    CHECK(!P(R"({"type":"FxSet","deck":"hit","slot":0,"value":1})").ok);
+    CHECK(!P(R"({"type":"Focus","deck":"hit","layer":0})").ok);
+    // LayerTrigger
+    r = P(R"({"type":"LayerTrigger","deck":"hit","value":3,"velocity":0.8})");
+    CHECK(r.ok && r.cmd.i == 3 && std::fabs(r.cmd.f[0] - 0.8f) < 1e-6f && !(r.cmd.flags & kRelease));
+    r = P(R"({"type":"LayerTrigger","deck":0,"layer":2,"release":true})");
+    CHECK(r.ok && r.cmd.i == -1 && (r.cmd.flags & kRelease) && r.cmd.f[0] == 0.f);
+    CHECK(!P(R"({"type":"LayerTrigger","deck":0,"layer":2,"value":14})").ok);
+    CHECK(!P(R"({"type":"LayerTrigger","deck":0,"layer":2,"release":1})").ok);
+    // LayerCue
+    r = P(R"({"type":"LayerCue","deck":0,"layer":0,"cue":4,"value":"Set","pos":0.25})");
+    CHECK(r.ok && r.cmd.slot == 4 && r.cmd.i == static_cast<int>(CueAction::Set) && std::fabs(r.cmd.f[0] - 0.25f) < 1e-6f);
+    r = P(R"({"type":"LayerCue","deck":0,"layer":0,"cue":15,"value":"Set"})");
+    CHECK(r.ok && r.cmd.f[0] < 0);  // at the playhead
+    CHECK(P(R"({"type":"LayerCue","deck":0,"layer":0,"cue":0,"value":2})").cmd.i == static_cast<int>(CueAction::Clear));
+    CHECK(!P(R"({"type":"LayerCue","deck":0,"layer":0,"cue":16,"value":"Jump"})").ok);
+    CHECK(!P(R"({"type":"LayerCue","deck":0,"layer":0,"value":"Jump"})").ok);
+    CHECK(!P(R"({"type":"LayerCue","deck":0,"layer":0,"cue":1,"value":"Fly"})").ok);
+    CHECK(!P(R"({"type":"LayerCue","deck":0,"layer":0,"cue":1,"value":3})").ok);
+    // LayerBeatLoop, LayerScratch
+    CHECK(P(R"({"type":"LayerBeatLoop","deck":0,"layer":0,"value":0})").cmd.f[0] == 0.f);
+    CHECK(P(R"({"type":"LayerBeatLoop","deck":0,"layer":0,"value":0.01})").cmd.f[0] == 1.f / 16.f);
+    CHECK(P(R"({"type":"LayerBeatLoop","deck":0,"layer":0,"value":99})").cmd.f[0] == 16.f);
+    r = P(R"({"type":"LayerScratch","deck":1,"layer":0,"value":1,"pos":0.4})");
+    CHECK(r.ok && r.cmd.i == 1 && std::fabs(r.cmd.f[0] - 0.4f) < 1e-6f);
+    r = P(R"({"type":"LayerScratch","deck":1,"layer":0,"value":1,"pos":-0.5,"relative":true})");
+    CHECK(r.ok && (r.cmd.flags & kRelative) && r.cmd.f[0] == -0.5f);
+    CHECK(!P(R"({"type":"LayerScratch","deck":1,"layer":0,"value":1,"relative":true})").ok);
+    CHECK(!P(R"({"type":"LayerScratch","deck":1,"layer":0,"value":2})").ok);
+    // Clock
+    r = P(R"({"type":"Clock","param":"Bpm","value":128})");
+    CHECK(r.ok && r.cmd.param == static_cast<uint8_t>(ClockParam::Bpm) && r.cmd.f[0] == 128.f);
+    CHECK(P(R"({"type":"Clock","param":"Bpm","value":500})").cmd.f[0] == 300.f);
+    CHECK(P(R"({"type":"Clock","param":"Bpm","value":-2,"relative":true})").cmd.f[0] == -2.f);
+    CHECK(P(R"({"type":"Clock","param":"Tap"})").ok);
+    CHECK(P(R"({"type":"Clock","param":"Resync"})").ok);
+    CHECK(P(R"({"type":"Clock","param":"Grid","value":"FourBars"})").cmd.i == static_cast<int>(GridDiv::FourBars));
+    CHECK(!P(R"({"type":"Clock","param":"Grid","value":"Never"})").ok);
+    CHECK(!P(R"({"type":"Clock","param":"Tap","relative":true})").ok);
+    CHECK(!P(R"({"type":"Clock","param":"Warp"})").ok);
+    CHECK(P(R"({"type":"Clock","param":"Nudge","value":-3})").cmd.f[0] == -1.f);
+    // FxPress (M5)
+    r = P(R"({"type":"FxPress","deck":0,"layer":1,"slot":2,"value":0.7})");
+    CHECK(r.ok && r.cmd.type == CommandType::FxPress && r.cmd.slot == 2 && std::fabs(r.cmd.f[0] - 0.7f) < 1e-6f);
+    CHECK(!P(R"({"type":"FxPress","deck":0,"layer":1,"slot":2,"value":0.7,"relative":true})").ok);
+
+    // round trips through command_to_json
+    const char* cases[] = {
+        R"({"type":"LayerSet","deck":0,"layer":1,"param":"Mode","value":"Chop"})",
+        R"({"type":"LayerSet","deck":"hit","param":"FadeIn","value":1.5})",
+        R"({"type":"LayerSet","deck":1,"layer":0,"param":"Snap","value":-1})",
+        R"({"type":"LayerSet","deck":1,"layer":0,"param":"Beats","value":-2,"relative":true})",
+        R"({"type":"LayerTrigger","deck":"hit","value":2,"velocity":0.5,"release":true})",
+        R"({"type":"LayerCue","deck":0,"layer":3,"cue":7,"value":"Set","pos":0.5})",
+        R"({"type":"LayerCue","deck":0,"layer":3,"cue":7,"value":"Jump"})",
+        R"({"type":"LayerBeatLoop","deck":0,"layer":0,"value":0.25})",
+        R"({"type":"LayerScratch","deck":0,"layer":0,"value":1,"pos":0.2})",
+        R"({"type":"Clock","param":"Grid","value":"Beat"})",
+        R"({"type":"Clock","param":"Bpm","value":140})",
+        R"({"type":"FxPress","deck":"master","slot":1,"value":0.3})",
+        R"({"type":"LayerPlay","deck":0,"layer":0,"value":"Release"})",
+    };
+    for (const char* c : cases) {
+        const auto a = P(c);
+        CHECK(a.ok);
+        const auto b = command_from_json(command_to_json(a.cmd), kLim);
+        CHECK(b.ok && std::memcmp(&a.cmd, &b.cmd, sizeof(Command)) == 0);
+        if (!b.ok) std::printf("    %s -> %s: %s\n", c, command_to_json(a.cmd).dump().c_str(), b.error.c_str());
+    }
+
+    // the transport section as JSON
+    auto t = std::make_unique<TransportSection>();
+    std::memset(t.get(), 0, sizeof(TransportSection));
+    t->clock.bpm = 128.f;
+    t->clock.grid = static_cast<uint8_t>(GridDiv::Bar);
+    t->clock.beat = 10.0;
+    t->clock.time_us = 1000000;
+    t->layer[1][2].mode = static_cast<uint8_t>(PlayMode::Random);
+    t->layer[1][2].snap = kNone;
+    t->layer[1][2].out = 0.75f;
+    t->layer[1][2].phase = static_cast<uint8_t>(PlayheadPhase::InnerLoop);
+    for (float& q : t->layer[1][2].cue) q = -1.f;
+    t->layer[1][2].cue[3] = 0.5f;
+    t->hit.clip = 2;
+    t->hit_transport.mode = 99;  // garbage never crashes
+    const json tj = transport_to_json(*t);
+    CHECK(tj["clock"]["bpm"].get<double>() == 128.0 && tj["clock"]["grid"] == "Bar");
+    CHECK(tj["layer"].size() == 2 && tj["layer"][1].size() == 4);
+    CHECK(tj["layer"][1][2]["mode"] == "Random" && tj["layer"][1][2]["snap"] == "Global");
+    CHECK(tj["layer"][1][2]["phase"] == "InnerLoop" && tj["layer"][1][2]["out"].get<double>() == 0.75);
+    CHECK(tj["layer"][1][2]["cue"].size() == 16 && tj["layer"][1][2]["cue"][3].get<double>() == 0.5 &&
+          tj["layer"][1][2]["cue"][0].get<double>() == -1.0);
+    CHECK(tj["hit"]["clip"] == 2 && !tj["hit"].contains("fx") && tj["hit_transport"]["mode"] == "?");
+    CHECK(!tj["clock"].contains("beat"));
+    const double beat = clock_to_json(t->clock, 1000000 + 500000)["beat"].get<double>();  // 0.5 s at 128 BPM
+    CHECK(std::fabs(beat - (10.0 + 128.0 / 120.0)) < 1e-3);
+    const json names = transport_names();
+    CHECK(names["params"].size() == static_cast<size_t>(LayerParam::Count));
+    CHECK(names["params"][0]["name"] == "Mode" && names["params"][0]["values"].size() == static_cast<size_t>(PlayMode::Count));
+    CHECK(names["play"].size() == static_cast<size_t>(PlayAction::Count));
+    // every LayerSet name the page gets is accepted again
+    for (const auto& p : names["params"]) {
+        json cmd = {{"type", "LayerSet"}, {"deck", 0}, {"layer", 0}, {"param", p["name"]}};
+        if (p["kind"] == "enum") cmd["value"] = p["values"].back();
+        else if (p["kind"] == "float") cmd["value"] = p["lo"];
+        else cmd["value"] = 1;
+        CHECK(command_from_json(cmd, kLim).ok);
+    }
+    // the press field in the live view
+    auto s = std::make_unique<LiveState>();
+    std::memset(s.get(), 0, sizeof(LiveState));
+    s->master_fx[0].effect = 1;
+    s->master_fx[0].press = 255;
+    CHECK(live_to_json(*s)["master_fx"][0]["press"].get<double>() == 1.0);
+    auto c = std::make_unique<Catalog>();
+    std::memset(c.get(), 0, sizeof(Catalog));
+    c->effect_count = 2;
+    c->effect[1].reserved[0] = 1;
+    const json cj = catalog_to_json(*c);
+    CHECK(cj["effects"][0]["kind"] == "effect" && cj["effects"][1]["kind"] == "generator");
+}
+
 static void test_http() {
     std::printf("http helpers\n");
     HttpRequest r;
@@ -260,6 +419,7 @@ int main() {
     test_bad_input();
     test_round_trip();
     test_state_json();
+    test_transport_commands();
     test_http();
     std::printf("\n%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;

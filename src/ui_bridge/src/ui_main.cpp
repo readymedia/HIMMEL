@@ -39,6 +39,7 @@
 #include <thread>
 #include <vector>
 
+#include "himmel/mk2/shared.h"
 #include "himmel/protocol/preview.h"
 
 namespace fs = std::filesystem;
@@ -52,6 +53,9 @@ namespace {
 
 std::atomic<bool> g_quit{false};
 std::atomic<int> g_connections{0};
+// --watch: read-only. Never opens the command block (no producer slot, /cmd refuses) and never
+// attaches an MK2 ring, so it can watch a show another bridge or tool is driving.
+bool g_watch = false;
 constexpr int kMaxConnections = 64;
 
 uint64_t now_us() {
@@ -78,8 +82,8 @@ std::string dump(const json& j) { return j.dump(-1, ' ', false, json::error_hand
 struct Hub {
     std::mutex m;
     std::condition_variable cv;
-    std::string live, catalog, bridge;
-    uint64_t live_ver = 0, catalog_ver = 0, bridge_ver = 0;
+    std::string live, catalog, bridge, transport, mk2;
+    uint64_t live_ver = 0, catalog_ver = 0, bridge_ver = 0, transport_ver = 0, mk2_ver = 0;
 
     void set(std::string& slot, uint64_t& ver, std::string text) {
         {
@@ -121,7 +125,7 @@ bool push_command(Command c, uint32_t& seq_out, std::string& err) {
     std::shared_lock vl(g_eng.views);
     std::lock_guard pl(g_eng.push_m);
     if (g_eng.commands_st != ShmStatus::Ok) {
-        err = "the command block is not there (engine not started yet)";
+        err = g_watch ? "this bridge runs with --watch (read-only)" : "the command block is not there (engine not started yet)";
         return false;
     }
     auto* blk = g_eng.commands.as<CommandBlock>();
@@ -138,6 +142,144 @@ bool push_command(Command c, uint32_t& seq_out, std::string& err) {
 }
 
 // ---------------------------------------------------------------------------
+// The MK2 mirror (gui.md §4.5): what the engine sends to the MK2 (LEDs, both
+// screens) and what the hands do on it (buttons, knobs, pads), read from the
+// controller's block "Local\HimmelMk2". Read-only except for one consumer ring:
+// GUESS: ring 3 belongs to the GUI bridge (ring 0 = engine; mk2_monitor and
+// mk2_pages_demo take the first free one, normally 1). If the bridge dies the
+// ring stays "attached" and fills up; the controller then counts drops on it and
+// nothing else changes. A restarted bridge attaches again (resets the tail).
+constexpr int kMk2GuiRing = 3;
+
+struct Mk2Mirror {
+    HANDLE map = nullptr;
+    himmel::mk2::SharedBlock* blk = nullptr;
+    bool attached = false;
+    uint64_t last_beat = 0;
+    Clock::time_point last_beat_change{};
+    uint64_t pressed = 0;                          // bit = himmel::mk2::Button
+    int pads[himmel::mk2::kPads] = {};             // pressure 0..4095 by pad number - 1
+    int knobs[himmel::mk2::kKnobs] = {};           // accumulated raw units (one turn ~1008)
+    int encoder = 0;                               // accumulated detents
+    int last_knob = -1;
+    uint32_t led_seq = 0, scr_seq[2] = {};
+    himmel::mk2::LedState leds{};
+    uint8_t screen[2][himmel::mk2::kScreenBytes] = {};
+
+    void close() {
+        if (blk && attached) blk->rings[kMk2GuiRing].detach();
+        if (blk) UnmapViewOfFile(blk);
+        if (map) CloseHandle(map);
+        blk = nullptr;
+        map = nullptr;
+        attached = false;
+    }
+    bool open() {
+        close();
+        map = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, himmel::mk2::kShmName);
+        if (!map) return false;
+        blk = static_cast<himmel::mk2::SharedBlock*>(MapViewOfFile(map, FILE_MAP_ALL_ACCESS, 0, 0, 0));
+        if (!blk) {
+            close();
+            return false;
+        }
+        MEMORY_BASIC_INFORMATION mbi{};
+        if (VirtualQuery(blk, &mbi, sizeof mbi) == 0 || mbi.RegionSize < sizeof(himmel::mk2::SharedBlock) ||
+            blk->magic != himmel::mk2::kShmMagic || blk->version != himmel::mk2::kShmVersion ||
+            blk->size != sizeof(himmel::mk2::SharedBlock)) {
+            close();
+            return false;
+        }
+        if (!g_watch) blk->rings[kMk2GuiRing].attach();
+        attached = !g_watch;
+        led_seq = scr_seq[0] = scr_seq[1] = 0;
+        return true;
+    }
+};
+Mk2Mirror g_mk2;
+
+std::string base64(const uint8_t* p, size_t n) {
+    static const char* k = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve((n + 2) / 3 * 4);
+    for (size_t i = 0; i < n; i += 3) {
+        const uint32_t v = (uint32_t(p[i]) << 16) | (i + 1 < n ? uint32_t(p[i + 1]) << 8 : 0) | (i + 2 < n ? p[i + 2] : 0);
+        out += k[(v >> 18) & 63];
+        out += k[(v >> 12) & 63];
+        out += i + 1 < n ? k[(v >> 6) & 63] : '=';
+        out += i + 2 < n ? k[v & 63] : '=';
+    }
+    return out;
+}
+
+// One poll of the MK2 block; returns the JSON text of the mirror.
+std::string poll_mk2(Clock::time_point now, bool retry) {
+    using namespace himmel::mk2;
+    Mk2Mirror& m = g_mk2;
+    if (!m.blk && retry) m.open();
+    if (!m.blk) return R"({"present":false})";
+    if (m.blk->magic != kShmMagic) {  // the controller made a new block (other version) or went away
+        m.close();
+        return R"({"present":false})";
+    }
+    const uint64_t beat = m.blk->status.heartbeat_us.load(std::memory_order_acquire);
+    if (beat != m.last_beat) {
+        m.last_beat = beat;
+        m.last_beat_change = now;
+    }
+    const bool alive = now - m.last_beat_change < std::chrono::milliseconds(1500);
+    Event e{};
+    int n = 0;
+    while (m.attached && n < 4096 && m.blk->rings[kMk2GuiRing].pop(e)) {
+        ++n;
+        switch (e.type) {
+            case EventType::ButtonDown: if (e.id < kButtons) m.pressed |= 1ull << e.id; break;
+            case EventType::ButtonUp: if (e.id < kButtons) m.pressed &= ~(1ull << e.id); break;
+            case EventType::KnobDelta: if (e.id < kKnobs) { m.knobs[e.id] += e.value; m.last_knob = e.id; } break;
+            case EventType::EncoderDelta: m.encoder += e.value; break;
+            case EventType::PadHit:
+            case EventType::PadPressure:
+                if (e.id >= 1 && e.id <= kPads) m.pads[e.id - 1] = e.type == EventType::PadHit ? std::max<int>(e.raw, 1) : e.value;
+                break;
+            case EventType::PadRelease: if (e.id >= 1 && e.id <= kPads) m.pads[e.id - 1] = 0; break;
+            case EventType::Disconnected: m.pressed = 0; std::fill(std::begin(m.pads), std::end(m.pads), 0); break;
+            default: break;
+        }
+    }
+    if (const uint32_t s = himmel::mk2::seq_read(m.blk->outputs.led_seq, m.blk->outputs.leds, m.leds)) m.led_seq = s;
+    for (int k = 0; k < 2; ++k)
+        if (const uint32_t s = himmel::mk2::seq_read_bytes(m.blk->outputs.screen_seq[k], m.blk->outputs.screen[k], m.screen[k], kScreenBytes))
+            m.scr_seq[k] = s;
+
+    json j;
+    j["present"] = true;
+    j["connected"] = m.blk->status.connected.load() != 0;
+    j["alive"] = alive;
+    j["map_verified"] = m.blk->status.map_verified.load() != 0;
+    j["dropped"] = m.blk->rings[kMk2GuiRing].dropped.load();
+    json pressed = json::array();
+    for (int b = 0; b < kButtons; ++b)
+        if (m.pressed & (1ull << b)) pressed.push_back(std::string(kButtonNames[b]));
+    j["pressed"] = std::move(pressed);
+    j["pads"] = m.pads;
+    json kn = json::array();
+    for (int k = 0; k < kKnobs; ++k) kn.push_back(((m.knobs[k] % 1008) + 1008) % 1008 / 1008.0);
+    j["knobs"] = std::move(kn);
+    j["last_knob"] = m.last_knob;
+    j["encoder"] = m.encoder;
+    json pad_rgb = json::array(), grp = json::array();
+    for (int k = 0; k < kPads; ++k) pad_rgb.push_back({m.leds.pad_rgb[k][0], m.leds.pad_rgb[k][1], m.leds.pad_rgb[k][2]});
+    for (int k = 0; k < 8; ++k) grp.push_back({m.leds.group_rgb[k][0][0], m.leds.group_rgb[k][0][1], m.leds.group_rgb[k][0][2]});
+    json btn = json::object();
+    for (int k = 0; k < kButtonLeds; ++k) btn[std::string(kButtonLedNames[k])] = m.leds.buttons[k];
+    const char* const tnames[8] = {"Restart", "Transport <", "Transport >", "Grid", "Play", "Rec", "Erase", "Shift"};
+    for (int k = 0; k < 8; ++k) btn[tnames[k]] = m.leds.transport[k];
+    j["leds"] = {{"pad", std::move(pad_rgb)}, {"group", std::move(grp)}, {"button", std::move(btn)}};
+    j["screen"] = base64(&m.screen[0][0], sizeof m.screen);
+    return dump(j);
+}
+
+// ---------------------------------------------------------------------------
 // The poller: ~30 Hz. Opens blocks (retry every second), reads live +
 // catalog, publishes JSON, sends Hello every second.
 void poller() {
@@ -145,6 +287,7 @@ void poller() {
     auto last_try = Clock::now() - std::chrono::seconds(10);
     auto last_hello = Clock::now() - std::chrono::seconds(10);
     auto last_bridge = Clock::now() - std::chrono::seconds(10);
+    auto last_mk2_try = Clock::now() - std::chrono::seconds(10);
     auto last_beat_change = Clock::now();
     uint64_t last_beat = 0;
     bool seen_beat = false;
@@ -152,6 +295,7 @@ void poller() {
     std::string last_state_word, last_cmd_word, last_prev_word;
     auto live = std::make_unique<LiveState>();
     auto cat = std::make_unique<Catalog>();
+    auto trans = std::make_unique<TransportSection>();
     uint64_t frame = 0;
     float fps = 0;
     uint32_t engine_pid = 0;
@@ -191,7 +335,7 @@ void poller() {
                                                                     kPreviewMagic, kPreviewVersion, false);
                     if (g_eng.preview_st != ShmStatus::Ok) g_eng.preview.close();
                 }
-                if (g_eng.commands_st != ShmStatus::Ok) {
+                if (g_eng.commands_st != ShmStatus::Ok && !g_watch) {
                     if (!vl.owns_lock()) vl.lock();
                     std::lock_guard pl(g_eng.push_m);
                     ShmStatus st = g_eng.commands.create_or_open(kCommandShmName, sizeof(CommandBlock),
@@ -229,6 +373,12 @@ void poller() {
                     frame = live->frame;
                     fps = live->fps;
                     g_hub.set(g_hub.live, g_hub.live_ver, dump(himmel::ui::live_to_json(*live)));
+                    // State v2: the transport section (read after live, engine-state.md §2).
+                    if (seq_read(sb->transport_seq, sb->transport, *trans)) {
+                        json tj = himmel::ui::transport_to_json(*trans);
+                        tj["clock"]["beat"] = himmel::ui::clock_to_json(trans->clock, now_us())["beat"];
+                        g_hub.set(g_hub.transport, g_hub.transport_ver, dump(tj));
+                    }
                     const uint32_t cs = sb->catalog_seq.load(std::memory_order_acquire);
                     if (cs != last_catalog_seq || live->epoch != last_epoch) {
                         if (seq_read(sb->catalog_seq, sb->catalog, *cat)) {
@@ -245,6 +395,10 @@ void poller() {
                 alive = false;
             }
         }
+
+        // ---- MK2 mirror (retry opening once a second) ----
+        g_hub.set(g_hub.mk2, g_hub.mk2_ver, poll_mk2(now, now - last_mk2_try >= std::chrono::seconds(1)));
+        if (now - last_mk2_try >= std::chrono::seconds(1)) last_mk2_try = now;
 
         // ---- Hello ----
         if (now - last_hello >= std::chrono::seconds(1)) {
@@ -282,6 +436,7 @@ void poller() {
                       {"commands", cw},
                       {"preview", pw},
                       {"engine_pid", engine_pid},
+                      {"watch", g_watch},
                       {"bridge_pid", pid},
                       {"epoch", last_epoch},
                       {"frame", frame},
@@ -327,14 +482,15 @@ void handle_events(SOCKET s) {
         "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-store\r\n"
         "Connection: keep-alive\r\nX-Accel-Buffering: no\r\n\r\nretry: 1000\n\n";
     if (!send_str(s, head)) return;
-    uint64_t lv = 0, cv = 0, bv = 0;
+    uint64_t lv = 0, cv = 0, bv = 0, tv = 0, mv = 0;
     auto last_send = Clock::now();
     while (!g_quit.load()) {
         std::string out;
         {
             std::unique_lock lk(g_hub.m);
             g_hub.cv.wait_for(lk, std::chrono::seconds(1), [&] {
-                return g_quit.load() || g_hub.live_ver != lv || g_hub.catalog_ver != cv || g_hub.bridge_ver != bv;
+                return g_quit.load() || g_hub.live_ver != lv || g_hub.catalog_ver != cv || g_hub.bridge_ver != bv ||
+                       g_hub.transport_ver != tv || g_hub.mk2_ver != mv;
             });
             // Order: bridge, catalog, live (the page needs the catalog before the live view).
             if (g_hub.bridge_ver != bv) {
@@ -348,6 +504,14 @@ void handle_events(SOCKET s) {
             if (g_hub.live_ver != lv) {
                 lv = g_hub.live_ver;
                 if (!g_hub.live.empty()) out += "event: live\ndata: " + g_hub.live + "\n\n";
+            }
+            if (g_hub.transport_ver != tv) {
+                tv = g_hub.transport_ver;
+                if (!g_hub.transport.empty()) out += "event: transport\ndata: " + g_hub.transport + "\n\n";
+            }
+            if (g_hub.mk2_ver != mv) {
+                mv = g_hub.mk2_ver;
+                if (!g_hub.mk2.empty()) out += "event: mk2\ndata: " + g_hub.mk2 + "\n\n";
             }
         }
         if (out.empty() && Clock::now() - last_send > std::chrono::seconds(5)) out = ": ping\n\n";
@@ -428,6 +592,39 @@ std::string state_json() {
     return "{\"bridge\":" + (g_hub.bridge.empty() ? "null" : g_hub.bridge) +
            ",\"catalog\":" + (g_hub.catalog.empty() ? "null" : g_hub.catalog) +
            ",\"live\":" + (g_hub.live.empty() ? "null" : g_hub.live) + "}";
+}
+
+fs::path g_repo_dir;  // the folder that holds gui/, fx/, weapons/
+
+std::string read_file(const fs::path& p) {
+    std::ifstream f(p, std::ios::binary);
+    if (!f) return {};
+    std::ostringstream ss;
+    ss << f.rdbuf();
+    return ss.str();
+}
+
+// GET /fxmeta: fx/catalog.json order + every fx/<id>/effect.json (effect-metadata.md §2), so the
+// browser has units, presets, PRESS, help, family and cost. Read per request (small, rare).
+// The page matches entries to the engine catalog by position and checks the name.
+std::string fx_meta_json() {
+    const fs::path fx = g_repo_dir / "fx";
+    json cat = json::parse(read_file(fx / "catalog.json"), nullptr, false);
+    json out = {{"ok", false}, {"effects", json::array()}};
+    if (cat.is_discarded() || !cat.contains("order") || !cat["order"].is_array()) {
+        out["error"] = "fx/catalog.json not found or not valid";
+        return dump(out);
+    }
+    for (const auto& id : cat["order"]) {
+        if (!id.is_string()) continue;
+        const std::string sid = id.get<std::string>();
+        if (!himmel::ui::safe_static_path("/" + sid)) continue;
+        json e = json::parse(read_file(fx / sid / "effect.json"), nullptr, false);
+        if (e.is_discarded()) e = json{{"id", sid}, {"error", "effect.json missing or not valid"}};
+        out["effects"].push_back(std::move(e));
+    }
+    out["ok"] = true;
+    return dump(out);
 }
 
 bool serve_static(SOCKET s, const std::string& path, bool keep) {
@@ -514,6 +711,19 @@ void connection(SOCKET s) {
             }
         } else if (req.method == "GET" && req.path == "/state") {
             ok = respond(s, 200, "OK", "application/json", state_json(), keep);
+        } else if (req.method == "GET" && req.path == "/names") {
+            ok = respond(s, 200, "OK", "application/json", dump(himmel::ui::transport_names()), keep);
+        } else if (req.method == "GET" && req.path == "/fxmeta") {
+            ok = respond(s, 200, "OK", "application/json", fx_meta_json(), keep);
+        } else if (req.method == "GET" && req.path.rfind("/weapons/", 0) == 0) {
+            // Weapon profiles only (weapons/<id>.weapon.json): the MK2 picture is drawn from its profile.
+            const std::string name = req.path.substr(9);
+            const bool okname = name.size() > 12 && name.find('/') == std::string::npos &&
+                                name.compare(name.size() - 12, 12, ".weapon.json") == 0 &&
+                                himmel::ui::safe_static_path("/" + name);
+            const std::string prof = okname ? read_file(g_repo_dir / "weapons" / name) : std::string();
+            ok = prof.empty() ? respond(s, 404, "Not Found", "text/plain", "no such weapon profile", keep)
+                              : respond(s, 200, "OK", "application/json", prof, keep);
         } else if (req.method == "GET") {
             ok = serve_static(s, req.path, keep);
         } else {
@@ -549,6 +759,7 @@ int main(int argc, char** argv) {
         const std::string a = argv[k];
         if (a == "--port" && k + 1 < argc) port = std::atoi(argv[++k]);
         else if (a == "--gui" && k + 1 < argc) gui = argv[++k];
+        else if (a == "--watch") g_watch = true;
         else if (a == "--help" || a == "-h") {
             std::printf("himmel_ui [--port 8790] [--gui DIR]\n  Serves the web GUI on http://127.0.0.1:PORT\n");
             return 0;
@@ -563,6 +774,7 @@ int main(int argc, char** argv) {
         return 2;
     }
     g_gui_dir = gui;
+    g_repo_dir = fs::absolute(gui).parent_path();
     SetConsoleCtrlHandler(on_ctrl, TRUE);
 
     WSADATA wsa;
@@ -607,6 +819,7 @@ int main(int argc, char** argv) {
     logf("stopping");
     closesocket(ls);
     poll.join();
+    g_mk2.close();  // detach our MK2 ring
     // Leave the slot quiet: the engine sees the heartbeat age out (command-protocol.md §7).
     return 0;
 }
