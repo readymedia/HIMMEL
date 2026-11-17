@@ -15,7 +15,7 @@ Chain under test:
   and back: Perform LEDs / screens -> Local\\HimmelMk2 outputs -> controller -> UDP -> SimMk2
 
 Run (it starts and stops its own stack unless --attach):
-  python tools/mk2_e2e.py                 start himmel.exe --sim --no-ui --no-weapons, test, stop
+  python tools/mk2_e2e.py                 start himmel.exe --sim --no-ui --no-weapons -- --no-show-files, test, stop
   python tools/mk2_e2e.py --attach        test a Himmel that is already running with --sim
   python tools/mk2_e2e.py --bin DIR       where himmel.exe / himmel_cmd.exe live (default build/bin/Release)
 
@@ -109,8 +109,9 @@ def main():
     stack = None
     if not attach:
         exe = os.path.join(bin_dir, "himmel.exe")
-        print("starting", exe, "--sim --no-ui --no-weapons")
-        stack = subprocess.Popen([exe, "--sim", "--no-ui", "--no-weapons"], cwd=ROOT,
+        # --no-show-files: a test run never opens or autosaves the owner's project (SHOW M3, D109)
+        print("starting", exe, "--sim --no-ui --no-weapons -- --no-show-files")
+        stack = subprocess.Popen([exe, "--sim", "--no-ui", "--no-weapons", "--", "--no-show-files"], cwd=ROOT,
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                  creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
     check = Check()

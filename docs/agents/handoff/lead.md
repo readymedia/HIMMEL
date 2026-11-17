@@ -54,16 +54,16 @@ Merge order: CONTROL first (unblocks playing), then ENGINE, then FX (FX
 likely touches the uber-shader / effect catalog that ENGINE also touches:
 expect conflicts in `src/engine/`; resolve keeping both, rebuild, retest).
 
-### Wave 2 — **in progress** (2 of 3 merged 2026-11-17)
+### Wave 2 — **done 2026-11-17** (all three merged)
 
 | Track | Branch | State |
 |---|---|---|
 | SHOW M3 | `claude/show-m3-projects` | **merged** 2026-11-17 (99d78b5 + 106ffb9 → main f3058d9). Command types 25–36, slot 4 = Show (rate limited, 384 per frame cap), `Local\HimmelShow` (show-block.md), D109–D110 PROPOSED |
 | AUDIO M8 | `claude/audio-m8-reactions` | **merged** 2026-11-17 (cab5ea1 + 73d0ddc). Own block `Local\HimmelAudio` v1 (audio-block.md), `himmel_audio.exe` supervisor child, `ClockState::source` 2 = MIDI leads, D130–D132 PROPOSED (D131 FxReact = command 40, not added yet) |
-| GUI M11 | `claude/gui-m11-v1` | green offline (0a20d77); live checks against main (SHOW + AUDIO) pending |
+| GUI M11 | `claude/gui-m11-v1` | **merged** 2026-11-17 (efcb916 → 8c87280). Clip editor / transport, cues, beat loop, clock, effect browser, presets, PRESS, generators, HIT; checked live in `himmel.exe --sim` incl. killing `himmel_ui` mid-show. No protocol changes. SHOW / AUDIO panels not built yet (wave 4) |
 
 Merged main: build clean, 14 test programs, `himmel_audio --selftest`, 12 Python selftests, `mk2_e2e.py` PASS.
-Not verified live: a scene recall and an autosave restore in a running `himmel.exe`, and audio reactions under `himmel.exe`. The GUI live run will touch these.
+Not verified live: a scene recall and an autosave restore in a running `himmel.exe`, and audio reactions under `himmel.exe`. Gotcha (GUI, 2026-11-17): test runs wrote the owner's autosave. `mk2_e2e.py` now passes `-- --no-show-files`; every test stack must do the same.
 
 **Wave 2 number ranges (LEAD, 2026-11-17).** These stop the parallel branches colliding:
 
@@ -114,11 +114,59 @@ Read `docs/interfaces/engine-state.md` v2 (transport) and
    `docs/interfaces/audio-block.md`, `docs/agents/handoff/audio.md`; engine-side
    reaction code by agreement with ENGINE (small, in `src/engine/src/reactions*`).
 
-### Wave 3 (after wave 2)
-MEDIA M7 ingest · ENGINE M6 outputs / curtains / displays by identity
-(+ fix: the MAIN preview came out 480×90 for one 960×540 output — preview
-aspect, reported by FX 2026-11-16) ·
-CONTROL M9 Lightpad (then M13 OSC). Then M10 NuVJ, M12 QA soak rig.
+### Wave 3 — **ready to start** (written 2026-11-17, after wave 2)
+
+**LEAD call:** CONTROL takes **M4** (MK2 Perform v4) before M9. Wave 2 delivered SHOW, so the MK2 can now play a whole song: scenes, REC, ERASE and ENTER. That is the shortest path to "a working version". M9 Lightpad and M13 OSC come next.
+
+| Track | CommandType | Producer slot | Decisions |
+|---|---|---|---|
+| MEDIA | 60–69 | — | D140–D149 |
+| ENGINE | 70–79 | — | D150–D159 |
+| CONTROL | 80–89 | — | D160–D169 |
+
+**Rules for every wave-3 agent:**
+- **One Himmel stack per machine.** Check `tasklist` first, and stop your stack when you are done.
+- Test runs use `-- --no-show-files` or `--show-root <temp>`, so they never write the owner's autosave.
+- "Done" = build, every `*_tests.exe`, `himmel_audio --selftest`, the 12 Python selftests and `mk2_e2e.py` all green, then report "ready to merge" with the commit.
+- Do not push again after the report unless the LEAD asks.
+
+1. **MEDIA · `claude/media-m7-ingest`.** M7 in `build-v1.md` and `design/library-and-analysis.md`:
+   - a watch folder, and ffmpeg.exe → HAP (×4, chunks) as an external tool, never linked;
+   - stills, image sequences, GIF and SVG (`design/operations.md` §4);
+   - fps stored, thumbnails, analysis v1 (palette, brightness, motion, cuts, loop points, slices);
+   - SQLite + sidecar JSON, with background throttling;
+   - the catalog in the engine is refreshed without a hitch.
+
+   Start by writing `docs/interfaces/library-db.md`. Ask the LEAD before adding SQLite (license: public domain; it goes in THIRD_PARTY_NOTICES).
+   - *Done when:* 100 mixed clips import during a running show without a late frame (measured).
+   - *Owns:* `src/media/ingest*`, `src/library/`, `tests/library/`, `docs/interfaces/library-db.md`, `docs/agents/handoff/media.md`.
+2. **ENGINE · `claude/engine-m6-outputs`.** M6 (`design/operations.md` §1–3, `design/projects.md` §5, `design/engine.md` §2.0, §4):
+   - displays that drop out and come back by identity, IDENTIFY, 60 / 50 Hz, clips at their own fps;
+   - 1–3 outputs as one canvas, resolution presets 720p / 1080p / 1440p / 4K, simple blend;
+   - layer places (FILL ALL / OUT n / FIT / FREE), black per output;
+   - **curtains in the supervisor** (a renderer restart shows black, not the desktop);
+   - Spout out;
+   - **fix: the MAIN preview is 480×90 for a 960×540 output.** Preview aspect, reported by FX on 2026-11-16.
+
+   Ask the LEAD before adding the Spout SDK (BSD-2).
+   - *Done when:* killing the renderer shows black on every output and they come back in < 2 s, and pulling an output cable mid-show never stutters the others.
+   - *Owns:* `src/engine/` (outputs, supervisor), `docs/agents/handoff/engine.md`.
+3. **CONTROL · `claude/control-m4-perform`.** M4 (`design/perform.md`, `design/hardware-mapping.md` §3):
+   - MK2 Perform v4: focus, wheel TAKE, Top buttons, and the pages PLAY / CLIP / LAYER / FX / MIX;
+   - pads CLIPS / SLICE / LOOKS (SHOW scenes, command types 25–36) / FX PADS;
+   - PRESS, targets, HIT;
+   - `REC` = save, `ERASE` = undo / reset, `ENTER` = next scene, `SHIFT` + `SCENE` = moods stub;
+   - the screens.
+
+   Then M9 Lightpad (TOUCH / MIX / SCRUB with soft takeover) if time allows.
+   - *Done when:* a song is played from the MK2 alone in `himmel.exe --sim` (scripted in `mk2_e2e.py` or a sibling), and the input → glass time is measured.
+   - *Owns:* `src/perform/`, `tests/perform/`, `tools/mk2_e2e.py`, `docs/agents/handoff/control.md`.
+
+**After wave 3:**
+- GUI: the SHOW and AUDIO panels, the reaction editor and the wizard (rest of M11);
+- M9 / M13 if CONTROL did not reach them;
+- M10 NuVJ;
+- M12 QA soak rig.
 
 ## Start here tomorrow (2026-11-15 evening)
 - The owner reported: **neither the MK2 simulator nor the real MK2 drives the
