@@ -51,6 +51,8 @@ public:
     void bump_ready_seq();
     bool begin();
     bool commit();
+    // v3: writes the WAL back into the DB file (before a library move copies it).
+    bool checkpoint();
 
     // v2: the meta table ('watch', 'pending_delete': JSON arrays).
     std::string meta_get(const std::string& key);

@@ -1,5 +1,5 @@
 # MEDIA handoff
-Updated: 2026-11-17 by the MEDIA wave-6 agent (CLI fixes) · Branch: `claude/media-cli-fixes` (from main 93b8640) · Green: build, test programs, himmel_ingest --selftest; e2e pending (LEAD runs it; agents run no stack this wave)
+Updated: 2026-11-17 by the MEDIA wave-7 agent (import safety + options) · Branch: `claude/media-w7-import` (from main 522c0c7) · Green: build, 19 test programs, every selftest except `nuvj_sim.py` (not touched; fails here while another stack runs); `mk2_e2e.py` pending (another agent's stack was running)
 
 ## State in one paragraph
 M7 ingest works end to end. `himmel_ingest.exe` watches folders, probes with
@@ -18,6 +18,16 @@ frames** (`docs/measurements/2026-11-17-ingest-during-show.md`).
 Reanalyse, Retry, Mode, Unwatch) from `Local\HimmelLibrary` v2
 (`library-db.md` §10, D148–D149), each with one reply. The GUI builds its
 library buttons on that contract (pushed first, commit 0e6375e).
+
+**Wave 7 (2026-11-17): the import is safe on a full disk and has options.**
+The owner's 89-clip import nearly filled C: (7.3 GB free, ~17 GB needed). Now:
+a disk guard (estimate before queueing, reserve kept free, refuse with a
+plain message, pause "disk low" while running, never a half file), the mode
+is stored (Hold survives a restart), Clear queue (68), progress / ETA /
+bytes / plain errors in the block, import options (720p, HAP Q, frame-rate
+conform, skip known, a selection list, dry run, fit) and the library
+location + move (69). Contract: `library-db.md` §11, block **v3**
+(commit 131a896, pushed first for GUI). D180–D184 PROPOSED.
 
 ## Done (with commits)
 - `docs/interfaces/library-db.md` v1 (library folder, kinds, SQLite schema,
@@ -67,13 +77,61 @@ library buttons on that contract (pushed first, commit 0e6375e).
   cancelled it in 0.1 s and cleaned `work/`; reanalysis kept `ready_order`
   and `ready_unix`; a removed clip came back with its id on Import.
 
+### Wave 7 (2026-11-17)
+- 131a896 contract: `library_block.h` v3 (appended: `stored_mode`, `disk_*`,
+  `library_bytes`, `queue_bytes`, `progress`, `plan`, `root`), commands 68
+  `ClearQueue` / 69 `Library`, Import flags (HapQ, SkipKnown, List, DryRun,
+  Fit, Move), `IngestCommand::reserved` -> `conform_hz`, statuses 10 NoSpace /
+  11 Busy; `library-db.md` §11; D180–D184.
+- 20691b2 + the next commit: the code.
+  - `src/media/ingest/guard.{h,cpp}`: estimate (HAP 0.5, HAP Q / Alpha 1 byte
+    per px per frame + 64 KB), `reserve_for` (max(10 GB, 10 %)), `fits`,
+    `output_shape` (max height, never up, multiple of 4, conform), `conform_fps`,
+    `plain_error`, `BatchProgress` (n of m, ETA), `file_progress`.
+  - `library_move.{h,cpp}`: plan / copy (CopyFileExW with progress + cancel,
+    size check, undo) / delete the old copy (never `originals/`).
+  - `src/library/location.{h,cpp}`: `Documents\Himmel\library-location.json`,
+    `himmel-library-moved.json` redirect, `resolve_library_root`;
+    `default_library_root()` reads the saved location; the feed follows
+    `LibraryBlock::root` and resolves redirects; DB `meta.uid` (move vs switch).
+  - `ingest_ops`: Import with options / list / dry / fit / skip and the plan;
+    `enqueue_scanned` (the scan's guard); `queue_need`; `clear_queue`; stored
+    mode; `Busy` while a library job runs.
+  - `ingest_main`: guard before each file and every 0.5 s during a conversion
+    (stop, delete `work/`, back to queued, `disk_low`); ffmpeg `-progress` for
+    % of the file; plain errors in the `error` column (tech detail in the log);
+    Library switch / move between files; old-copy cleanup once the renderer that
+    loaded it is gone; `--reserve-gb N`; `--send` verbs `import ... dry fit skip
+    hapq 720|max=H conform50|conform60`, `import-list FILE`, `clear`,
+    `library DIR [move] [force]`, `progress`; test-only `HIMMEL_LIBRARY_SHM`.
+- Tests: `himmel_ingest --selftest` v3 section (fake small disk 100 GB / 15 GB
+  free: refusal, plan numbers, dry run, fit, queue counted, scan guard, unknown
+  disk; stored mode across a reopen; Clear queue; skip known; options stored;
+  list file; Busy); `library_tests` 402 checks (guard maths, conform, plain
+  errors, ETA, `-progress` parser, convert args, sidecar options, location,
+  move copy / cancel / redirect / delete old).
+- Checked live on a temp library with its own block (another agent's stack was
+  running; nothing of the owner's touched): `media/test` + 1080p30 h264 at 720
+  (-> 1280x720) + 1080p24 h264 with conform60 (-> 60 fps, 180 frames), progress
+  "5 of 6 ... 85 %, ETA 3 s"; the default reserve refused everything (see
+  GUESSES); Hold survived a worker restart; a reserve just above free space ->
+  "disk low: ... c1 needs ~93 MB - the import waits"; Clear queue cleared 3; a
+  random-bytes .mp4 -> "This file is damaged or is not a video ffmpeg can
+  read."; move 196 MB to another folder with progress, redirect written, the
+  old copy kept while a renderer runs.
+
 ## In progress
-Nothing. Waiting for the LEAD's merge.
+Nothing. Waiting for the LEAD's merge (and the ENGINE answer on D181).
 
 ## Next up (ordered)
 1. MK2 `BROWSE` (build-v1 M7 lists it; CONTROL owns Perform): needs a
    library query path for weapons (filters by mood / colour / NEW / FAV).
-2. Commands 68–69: set stars / tags, Prepare Show priority (the GUI library
+0. Wave 7 follow-ups: the GUI shows the v3 fields (disk bar, plan dialog,
+   Clear queue, options, Move library); the GUI bridge follows `root`; the
+   reserve default (D180) and judder (D181) once decided; a reserve setting
+   the GUI can change (needs a command number; MEDIA's 60–69 are used up).
+2. Stars / tags and Prepare Show priority (68–69 are now ClearQueue / Library,
+   so these need new numbers from the LEAD) (the GUI library
    view uses 60–67 now). The GUI bridge's clip list should hide `removed` rows
    and show a badge for `source_missing` (GUI track).
 3. `library-rules.json` (tunable analysis thresholds) and tuning on the starter library.
@@ -84,6 +142,23 @@ Nothing. Waiting for the LEAD's merge.
    does not see library clips that arrived after start (SHOW / LEAD to decide).
 
 ## GUESSES
+- **Owner decision needed (D180):** the specified reserve max(10 GB, 10 % of
+  the disk) is **102 GB on the owner's 1 TB C:**, which has ~23 GB free, so
+  the default refuses every import there until he frees ~80 GB, moves the
+  library (69) or the worker gets `--reserve-gb`. Proposed alternative:
+  cap the 10 % at 20 GB. Asked through the LEAD.
+- GUESS (high): HAP ≈ 0.5 byte / px is on the safe side: the owner's 14 clips
+  are 0.33 byte / px (3.0 GB for 14 × 1080p × 313 frames). HAP Q / Alpha
+  1 byte / px likewise. Noisy footage compresses less (Snappy).
+- GUESS (high): an unknown disk (GetDiskFreeSpaceEx fails, e.g. some network
+  shares) is not guarded; the import goes on.
+- GUESS (medium): the old copy after a move is deleted only once the renderer
+  that ran at move time has a new pid or is gone; if the renderer never loaded
+  that library (it ran on another one) the copy still waits. Harmless, it
+  only delays freeing the space.
+- GUESS (medium): the frame-rate conform uses ffmpeg's `framerate` filter
+  (linear blend). Not judged on a projector yet; ENGINE may prefer a playback
+  blend (D181).
 - GUESS (medium): relink-folder search caps at 16 hash checks per missing
   clip (name matches first, then same size). Big folders of same-size files
   could miss; raise the cap if the owner's media hits it.
@@ -108,6 +183,10 @@ Nothing. Waiting for the LEAD's merge.
 - GUESS: the 2 s settle time is enough for files copied over a network share.
 
 ## Open questions for the owner
+- D180: keep the reserve at max(10 GB, 10 %) (refuses everything on today's
+  C:) or cap it (e.g. at 20 GB)?
+- D181: frame-rate conform at import (disk) or frame blend at playback (GPU)?
+  30 fps on 60 Hz needs neither; the GUI should badge only the show's refresh.
 - D140–D147 are PROPOSED with the default in use (hash, SQLite, SVG, stills as
   1-frame HAP, library location, throttling, analysis rules, catalog append).
 - Is `Documents\Himmel\Library\originals` the right default drop folder?
@@ -179,6 +258,12 @@ build\bin\Release\himmel.exe --sim -- --show-root %T% --size 960x540
   library (e2e uses `--no-show-files`, no ingest).
 
 ## Interfaces touched
+- Wave 7: `library-db.md` §11 / `Local\HimmelLibrary` **v3** (appended after
+  `channels`; old fields unchanged); `IngestCommand::reserved` renamed
+  `conform_hz` (0 = off, what old producers send). New file
+  `Documents\Himmel\library-location.json`. GUI bridge: should follow
+  `LibraryBlock::root` for the DB / thumbnails (told the LEAD). No change to
+  `src/protocol/`.
 - New: `docs/interfaces/library-db.md` (v1), `Local\HimmelLibrary` (v1).
 - Wave 5: `library-db.md` v2 / `Local\HimmelLibrary` v2 (channels appended, block
   size grows; `IngestMode::Hold` = 4 appended; `State::Removed` appended). No

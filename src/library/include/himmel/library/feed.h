@@ -43,6 +43,7 @@ public:
     std::atomic<uint32_t> skipped{0};     // ready rows that could not be added (table full, file gone)
     std::atomic<uint32_t> polls{0};
     std::atomic<uint32_t> catalog_full{0};  // ready clips left out: the table (catalog) is full
+    std::atomic<uint32_t> root_changes{0};  // v3: times the worker moved / switched the library folder
 
 private:
     int poll_once();
@@ -51,6 +52,7 @@ private:
     std::filesystem::path root_;
     ClipTable* table_ = nullptr;
     int64_t last_order_ = 0;  // ready_order cursor
+    std::string uid_;         // v3: meta 'uid' of the open DB (a move keeps it, a switch changes it)
     std::thread worker_;
     std::atomic<bool> stop_{false};
     void* db_ = nullptr;  // LibraryDb*, worker-owned after start

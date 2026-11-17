@@ -69,6 +69,16 @@ struct Analysis {
     float proxy_fps = 0;
 };
 
+// v3 (wave 7): the options an import was queued with (library-db.md §11.4). Kept in the
+// sidecar ("import"), so a resumed import uses them again after a restart.
+struct ImportOptions {
+    int max_h = 0;           // largest output height, 0 = keep the source size
+    std::string codec;       // "" = the worker's default (--quality), "hap" or "hap_q"
+    int conform_hz = 0;      // 0 = off, 50 or 60 (frame-rate conform)
+    int64_t est_bytes = 0;   // the disk estimate made when it was queued (0 = none)
+    bool is_default() const { return max_h == 0 && codec.empty() && conform_hz == 0 && est_bytes == 0; }
+};
+
 struct ClipRecord {
     int64_t id = 0;         // DB id (0 = not in the DB yet); not in the sidecar
     int64_t ready_order = 0;  // DB only: 1, 2, 3 ... in the order clips turned ready (the feed's cursor)
@@ -93,6 +103,7 @@ struct ClipRecord {
     bool favourite = false;
     std::vector<std::string> user_tags;
     bool source_missing = false;  // v2: the original is gone (a ready clip still plays); sidecar only
+    ImportOptions import;         // v3: sidecar only
 };
 
 // Refresh rates (of 50 and 60 Hz) on which a clip of this fps judders:

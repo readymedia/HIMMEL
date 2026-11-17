@@ -12,7 +12,7 @@ target_include_directories(himmel_sqlite3 PUBLIC ${sqlite3_SOURCE_DIR})
 target_compile_definitions(himmel_sqlite3 PRIVATE SQLITE_THREADSAFE=2 SQLITE_DEFAULT_WAL_SYNCHRONOUS=1
                            SQLITE_OMIT_LOAD_EXTENSION SQLITE_DQS=0)
 
-add_library(himmel_library STATIC src/record.cpp src/hash.cpp src/analysis.cpp src/sidecar.cpp src/library_db.cpp src/feed.cpp)
+add_library(himmel_library STATIC src/record.cpp src/hash.cpp src/analysis.cpp src/sidecar.cpp src/library_db.cpp src/feed.cpp src/location.cpp)
 target_include_directories(himmel_library PUBLIC include)
 target_link_libraries(himmel_library PUBLIC himmel_protocol PRIVATE himmel_sqlite3 nlohmann_json::nlohmann_json shell32 ole32)
 

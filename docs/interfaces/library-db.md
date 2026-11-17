@@ -446,7 +446,8 @@ the value.
     scan after that renderer restarted or stopped.
   - A file `himmel-library-moved.json` (`{"to": "<path>"}`) is left in the old
     folder, so a process started with `--library <old>` finds the new one
-    (`resolve_library_root()`).
+    (`resolve_library_root()`; the redirect wins even before the old copy is
+    deleted).
   - A failed copy deletes the half copy and keeps the old library
     (`move_state` = Failed, with the reason).
   - While a move runs, Import, Remove, Relink, ClearQueue and Library reply
@@ -474,8 +475,9 @@ PROPOSED (D181, with ENGINE); see `docs/decisions.md`. In short:
 - `done` of `total` files in this batch, and the current `file` and `clip`;
 - `file_progress` 0..1 over all stages: probe 2 %, convert 80 %, thumbnails
   3 %, analysis 15 %. The convert part follows ffmpeg's frame counter;
-- `eta_s`, from the speed so far in pixels × frames per second (−1 until the
-  first file is done);
+- `eta_s`: the work left (the queue's estimated bytes plus the rest of the
+  current file) divided by the speed so far in estimated bytes per second
+  (−1 until the first file is done; 0 when the queue is empty);
 - `bytes_written`;
 - the last failed clip and its error **in plain words**. The same sentence
   goes in the clip's `error` column; the technical detail stays in
@@ -488,6 +490,12 @@ PROPOSED (D181, with ENGINE); see `docs/decisions.md`. In short:
 - `library_tests` covers the guard with a fake small disk, the stored mode,
   Clear queue, the progress and ETA maths, and the options.
 - `himmel_ingest --selftest` runs them against a temp library.
-- `himmel_ingest --send import PATH [dry] [fit] [720] [hapq] [skip] [conform60]`,
-  `--send import-list FILE ...`, `--send clear` and
-  `--send library DIR [move] [force]` talk to a running worker.
+- `himmel_ingest --send import PATH [dry] [fit] [720 | max=H] [hapq] [skip]
+  [conform50 | conform60]`, `--send import-list FILE ...`, `--send clear` and
+  `--send library DIR [move] [force]` talk to a running worker;
+  `--send progress` prints the v3 block fields (disk, progress, last plan,
+  library folder).
+- Test only: the environment variable `HIMMEL_LIBRARY_SHM=<name>` gives a
+  `himmel_ingest` (worker and `--send`) its own block `Local\<name>`, so a
+  temp-library check can run while another Himmel stack owns
+  `Local\HimmelLibrary`. Nothing else reads that block.
