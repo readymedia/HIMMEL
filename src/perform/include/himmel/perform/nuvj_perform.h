@@ -39,6 +39,9 @@ public:
     static constexpr int kPadsPerDeck = 9;
 
     void set_context(const protocol::TransportSection* transport) { transport_ = transport; }
+    // Wave 8: every clip the engine has (catalog v3, up to 8192), so the pad banks reach past id 255.
+    // Null = the `catalog` window (ids < 256). Set once by the renderer.
+    void set_clips(const engine::ClipDirectory* clips) { clips_ = clips; }
 
     void on_event(const mk2::Event& e, const protocol::LiveState& state, const protocol::Catalog& catalog,
                   CommandSink& sink);
@@ -55,6 +58,10 @@ public:
     uint32_t fade_ms() const { return fade_ms_; }
 
 private:
+    const engine::ClipDirectory* clips_ = nullptr;
+    int nclips(const protocol::Catalog& cat) const;
+    bool playable(const protocol::Catalog& cat, int id) const;  // a clip there that is not Removed
+    const protocol::ClipInfo* clip_at(const protocol::Catalog& cat, int id) const;
     struct Jog {
         bool active = false;      // turning (let go after kJogIdleUs without a tick)
         uint64_t last_us = 0;

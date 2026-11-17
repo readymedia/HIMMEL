@@ -87,7 +87,8 @@ struct ClipInfo {
     float fps;
     float seconds;
     uint8_t codec;             // 0 = Hap, 1 = Hap Alpha, 2 = Hap Q, 3 = other / unknown
-    uint8_t reserved[3];
+    uint8_t reserved[3];       // [0] = energy 1..5 from the library analysis, 0 = not analysed / not a
+                               // library clip (CONTROL wave 8, D202; the MK2 BROWSE ENERGY order). [1..2] free
     uint32_t thumb_rgb;        // 0xRRGGBB average colour (placeholder colour, build-v1 §4.4)
 };
 

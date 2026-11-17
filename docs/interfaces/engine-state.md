@@ -64,6 +64,11 @@ their own rate (30 Hz is plenty) and diff.
   slot's PRESS 0..255 from `FxPress`; `EffectInfo::reserved[0]` = kind
   (0 effect, 1 generator). The full metadata (units, presets, reactions)
   is in `fx/<id>/effect.json` ([`effect-metadata.md`](effect-metadata.md)).
+- Clips (CONTROL wave 8, D202, additive, no layout or version change):
+  `ClipInfo::reserved[0]` = **energy** 1..5 from the library analysis
+  (`analysis.energy`, library-db.md), 0 = not analysed or not a library clip
+  (`media/`, `--clip`). Filled by the library feed (`clip_info_from`); the MK2
+  BROWSE ENERGY order reads it. `reserved[1..2]` stay 0.
 
 - The transport section is written in the same frame as `live`; a reader
   that needs both consistent reads `live` first, then `transport`, and may

@@ -10,6 +10,7 @@
 #include <memory>
 #include <vector>
 
+#include "himmel/engine/clip_directory.h"
 #include "himmel/perform/mk2_perform.h"
 
 using namespace himmel;
@@ -1068,6 +1069,105 @@ static void test_screens() {
 }
 
 
+// Wave 8: BROWSE and the CLIPS pads on catalog v3 (the engine's ClipDirectory, past id 255).
+static void test_browse_catalog_v3() {
+    std::printf("BROWSE v3: 300 clips, pages, order, LayerClipLib, pads past 256\n");
+    auto dir = std::make_unique<himmel::engine::ClipDirectory>();
+    constexpr int kN = 300;
+    for (int i = 0; i < kN; ++i) {
+        ClipInfo ci{};
+        std::snprintf(ci.name, kNameLen, "n%03d.mov", (i * 37) % kN);  // names out of id order
+        ci.width = 1920, ci.height = 1080, ci.fps = 30.0f, ci.seconds = 75.0f;
+        ci.thumb_rgb = 0x808080;
+        ci.reserved[0] = static_cast<uint8_t>(i % 6);  // energy 0..5 (D201)
+        const ClipState st = i == 10 ? ClipState::Removed : i == 20 ? ClipState::Missing : ClipState::Ready;
+        CHECK(dir->add(ci, i < 5 ? 0 : 1000 + i, st) == i);
+    }
+    Rig r(40, 3);  // the catalog window has 40; the directory has 300 and wins
+    r.m.set_clips(dir.get());
+    ready(r);
+    r.press(Button::Browse);
+    CHECK(r.m.browsing() && r.m.browse_rows() == kN - 1);  // the removed clip is not listed
+    CHECK(r.m.browse_selected() == 0 && r.m.browse_sort() == perform::Mk2Perform::BrowseSort::Added);
+    r.ev(EventType::EncoderDelta, 0, 12);  // id 10 (removed) skipped: row 12 = id 13
+    CHECK(r.m.browse_position() == 12 && r.m.browse_selected() == 13);
+    r.down(Button::Shift);
+    r.ev(EventType::EncoderDelta, 0, 16);  // SHIFT + wheel = 16 pages of 16 = past 256
+    r.up(Button::Shift);
+    CHECK(r.m.browse_position() == 12 + 16 * 16 && r.m.browse_selected() == 269);
+    CHECK(!r.m.system_menu());  // in BROWSE, SHIFT + wheel pages instead of opening the SYSTEM menu
+    r.down(Button::Shift);
+    r.ev(EventType::KnobDelta, 0, 100);  // SHIFT + knob 1: two steps of 50 = two pages
+    r.up(Button::Shift);
+    CHECK(r.m.browse_selected() == kN - 1);  // clamped at the end
+    r.sink.clear();
+    r.press(Button::EncoderPush);  // a library clip loads by its library id
+    const Command* c = r.sink.last(CommandType::LayerClipLib);
+    CHECK(c && c->i == 1000 + kN - 1 && c->deck == 1 && c->layer == 0 && r.sink.count(CommandType::LayerClip) == 0);
+    // Knob 2: the order. NAME: n000 first (id 0); the selected clip stays selected.
+    const int keep = r.m.browse_selected();
+    r.ev(EventType::KnobDelta, 1, 100);
+    CHECK(r.m.browse_sort() == perform::Mk2Perform::BrowseSort::Name && r.m.browse_selected() == keep);
+    r.ev(EventType::EncoderDelta, 0, -1000);
+    CHECK(r.m.browse_position() == 0 && r.m.browse_selected() == 0);
+    r.ev(EventType::EncoderDelta, 0, 1);  // n001 = id 73 (73 * 37 = 2701 = 9 * 300 + 1)
+    CHECK(r.m.browse_selected() == 73);
+    r.ev(EventType::KnobDelta, 1, 100);  // NEWEST: the highest id first
+    r.ev(EventType::EncoderDelta, 0, -1000);
+    CHECK(r.m.browse_sort() == perform::Mk2Perform::BrowseSort::Newest && r.m.browse_selected() == kN - 1);
+    r.ev(EventType::KnobDelta, 1, 100);  // ENERGY: 5 first
+    r.ev(EventType::EncoderDelta, 0, -1000);
+    CHECK(r.m.browse_sort() == perform::Mk2Perform::BrowseSort::Energy && r.m.browse_selected() % 6 == 5);
+    r.ev(EventType::EncoderDelta, 0, 1000);  // unknown energy last
+    CHECK(r.m.browse_selected() % 6 == 0);
+    r.ev(EventType::KnobDelta, 1, 100);  // wraps to ADDED
+    CHECK(r.m.browse_sort() == perform::Mk2Perform::BrowseSort::Added);
+    // A clip without a library id (media/ or --clip) still loads by engine id.
+    r.ev(EventType::EncoderDelta, 0, -1000);
+    r.ev(EventType::EncoderDelta, 0, 3);
+    r.sink.clear();
+    r.press(Button::Enter);
+    c = r.sink.last(CommandType::LayerClip);
+    CHECK(c && c->i == 3 && r.sink.count(CommandType::LayerClipLib) == 0);
+    // A clip that is removed while it is listed drops out of the list.
+    CHECK(r.m.browse_rows() == kN - 1);
+    dir->set_state(299, ClipState::Removed);
+    r.tick();
+    CHECK(r.m.browse_rows() == kN - 2);
+    // Screens: the list and the detail with the swatch (a dithered grey box at the right edge).
+    r.ev(EventType::EncoderDelta, 0, 300);
+    r.tick();
+    CHECK(lit(r.screens[0], 0, 10, 256, 54) > 100);
+    CHECK(lit(r.screens[1], 256 - 48, 10, 48, 27) > 200);  // the swatch
+    r.press(Button::Browse);
+
+    // CLIPS pads: page 18 = ids 288..303 (288..298 exist, 299 now removed).
+    r.sink.clear();
+    for (int i = 0; i < 18; ++i) r.press(Button::MasterRight);
+    r.ev(EventType::PadHit, 1, 100);  // pad 1 = clip 288
+    r.ev(EventType::PadRelease, 1, 0);
+    const Command* t = r.sink.last(CommandType::LayerTrigger);
+    CHECK(t && t->i == 288);
+    r.sink.clear();
+    r.ev(EventType::PadHit, 12, 100);  // pad 12 = clip 299: removed, nothing happens
+    r.ev(EventType::PadRelease, 12, 0);
+    CHECK(r.sink.count(CommandType::LayerTrigger) == 0);
+    r.tick();
+    CHECK(r.leds.pad_rgb[0][0] + r.leds.pad_rgb[0][1] + r.leds.pad_rgb[0][2] > 0);  // pad 1 lit (a clip)
+    CHECK(r.leds.pad_rgb[11][0] + r.leds.pad_rgb[11][1] + r.leds.pad_rgb[11][2] == 0);  // pad 12 dark
+    r.press(Button::MasterRight);  // no page 19
+    r.ev(EventType::PadHit, 1, 100);
+    r.ev(EventType::PadRelease, 1, 0);
+    t = r.sink.last(CommandType::LayerTrigger);
+    CHECK(t && t->i == 288);
+    // PLAY knob 1 (SCROLL) loads the next clip by library id, skipping removed ones.
+    r.layer(1, 0).clip = 9;
+    r.sink.clear();
+    r.ev(EventType::KnobDelta, 0, 100);
+    c = r.sink.last(CommandType::LayerClipLib);
+    CHECK(c && c->i == 1011);  // 10 is removed
+}
+
 static void test_browse() {
     std::printf("BROWSE: the catalog on the screens, wheel / knob 1 scroll, push / ENTER load\n");
     Rig r(40, 3);
@@ -1256,6 +1356,7 @@ int main(int argc, char** argv) {
     test_reset_and_seq();
     test_screens();
     test_browse();
+    test_browse_catalog_v3();
     test_system_quit();
     std::printf("\nperform_tests: %d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;

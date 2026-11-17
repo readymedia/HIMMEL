@@ -504,6 +504,17 @@ static void test_feed() {
     CHECK(table->library_id[1] > 0 && table->library_id[0] == 0);
     CHECK(table->path[2].find("bbbbbbbbbbbbbbbb.mov") != std::string::npos);
     CHECK(feed.skipped.load() == 1);
+    // CONTROL (w8 energy, D202): ClipInfo.reserved[0] = the analysis energy, 0 = not analysed.
+    {
+        ClipRecord e = sample_record("ffffffffffffffff", "Hot");
+        e.analysis.energy = 3;
+        CHECK(e.analysis.version > 0 && clip_info_from(e, *table, table->size()).reserved[0] == 3);
+        e.analysis.energy = 9;  // out of range: clamped
+        CHECK(clip_info_from(e, *table, table->size()).reserved[0] == 5);
+        e.analysis.version = 0;  // not analysed
+        CHECK(clip_info_from(e, *table, table->size()).reserved[0] == 0);
+        CHECK(table->info[2].reserved[0] >= 1 && table->info[2].reserved[0] <= 5);  // from the feed itself
+    }
 
     // The worker picks up a clip that turns ready later.
     feed.start(100);

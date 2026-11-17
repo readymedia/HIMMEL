@@ -57,7 +57,8 @@ public:
     void set_library(uint32_t catalog_full) { catalog_full_ = catalog_full; }
     // ==== ENGINE (catalog v3, wave 7): every clip the engine has (up to 8192), for BROWSE past
     // id 255. Set once by the renderer (render thread only; count() / info(id) / entry(id).library_id
-    // / state(id)). Not used yet: CONTROL wave 8. The `catalog` argument stays the ids < 256 window.
+    // / state(id)). CONTROL wave 8: BROWSE and the CLIPS pad pages use it for every clip, and load
+    // library clips by library id (LayerClipLib). Null = the `catalog` window (ids < 256) only.
     void set_clips(const engine::ClipDirectory* clips) { clips_ = clips; }
     // ==== end ENGINE (catalog v3) ====
 
@@ -80,7 +81,13 @@ public:
     uint8_t pad_target(int pad) const { return pad >= 1 && pad <= 16 ? pad_target_[pad - 1] : 0; }
     const char* flash() const { return flash_; }
     bool browsing() const { return browse_; }
-    int browse_selected() const { return browse_sel_; }
+    // BROWSE order (wave 8, PROPOSED D200): knob 2 cycles it. Added = clip id order (the pad banks).
+    enum class BrowseSort : uint8_t { Added = 0, Name = 1, Newest = 2, Energy = 3, Count };
+    int browse_selected() const { return browse_sel_; }  // the selected clip id (-1 = none)
+    int browse_position() const { return browse_pos_; }  // its row in the sorted list
+    int browse_rows() const { return order_n_; }         // clips in the list (Removed ones hidden)
+    BrowseSort browse_sort() const { return browse_sort_; }
+    static constexpr int kBrowsePage = 16;               // SHIFT + wheel / knob 1 = one page (= a pad bank)
     // ==== ENGINE (quit): the SYSTEM menu (SHIFT + wheel). QUIT HIMMEL = push and hold the wheel
     // for kQuitHoldUs, with a countdown; letting go earlier cancels (command-protocol.md §4e). ====
     static constexpr uint64_t kQuitHoldUs = 2000000;
@@ -110,6 +117,13 @@ private:
     uint8_t focus_deck(const protocol::LiveState& s) const;
     uint8_t side_deck(const protocol::LiveState& s, uint8_t side) const;
     int pad_pages(const protocol::Catalog& cat) const;
+    // Wave 8: every clip the engine has (the ClipDirectory when set, else the catalog window).
+    int nclips(const protocol::Catalog& cat) const;
+    const protocol::ClipInfo* clip_at(const protocol::Catalog& cat, int id) const;  // null = no clip there
+    protocol::ClipState clip_state(int id) const;
+    int64_t clip_lib(int id) const;
+    bool loadable(const protocol::Catalog& cat, int id) const;  // a clip that is not Removed
+    void load_clip(uint8_t deck, uint8_t layer, int id, CommandSink& sink);  // LayerClipLib or LayerClip
     bool held(mk2::Button b) const { return (held_ >> static_cast<int>(b)) & 1u; }
     void say(const char* text, uint64_t now_us);
     void on_button(mk2::Button b, const protocol::LiveState& s, const protocol::Catalog& cat, CommandSink& sink,
@@ -166,9 +180,20 @@ private:
     char flash_[40] = {};            // a short message on the left screen ("3c saved")
     uint64_t flash_until_us_ = 0;
     uint32_t show_msg_seq_ = 0;
-    // BROWSE: the catalog as a list on the screens; the wheel / knob 1 scroll, push / ENTER load.
+    // BROWSE: every clip as a list on the screens; the wheel / knob 1 scroll (SHIFT = a page),
+    // knob 2 = the order, push / ENTER load. order_ = clip ids in the chosen order, rebuilt only
+    // when the clips or the order change (std::sort on a fixed array: no heap).
     bool browse_ = false;
     int browse_sel_ = 0;
+    int browse_pos_ = 0;
+    BrowseSort browse_sort_ = BrowseSort::Added;
+    uint16_t order_[protocol::kMaxCatalogClips] = {};
+    int order_n_ = 0;
+    uint64_t order_sig_ = ~uint64_t{0};
+    uint8_t thumb_[48 * 27] = {};  // the detail swatch (thumb_rgb, dithered by draw_detail)
+    void refresh_order(const protocol::Catalog& cat);
+    void browse_move(const protocol::Catalog& cat, int rows);
+    void browse_select(const protocol::Catalog& cat, int clip_id);
     uint32_t catalog_full_ = 0;
     const engine::ClipDirectory* clips_ = nullptr;  // ENGINE (catalog v3): see set_clips()
     void browse_load(const protocol::LiveState& s, const protocol::Catalog& cat, CommandSink& sink, uint64_t now_us);

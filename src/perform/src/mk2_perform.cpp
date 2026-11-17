@@ -14,6 +14,7 @@
 #include <cstring>
 #include <string_view>
 
+#include "himmel/engine/clip_directory.h"
 #include "himmel/mk2/pages.h"
 
 namespace himmel::perform {
@@ -75,7 +76,6 @@ uint8_t preview_of(const LiveState& s) { return static_cast<uint8_t>(program_of(
 
 int clip_count(const Catalog& cat) { return static_cast<int>(std::min<uint32_t>(cat.clip_count, kMaxClips)); }
 int effect_count(const Catalog& cat) { return static_cast<int>(std::min<uint32_t>(cat.effect_count, kMaxEffects)); }
-bool valid_clip(const Catalog& cat, int id) { return id >= 0 && id < clip_count(cat); }
 bool valid_effect(const Catalog& cat, int id) { return id >= 0 && id < effect_count(cat); }
 
 std::string_view cstr(const char* s, size_t max) {
@@ -83,10 +83,10 @@ std::string_view cstr(const char* s, size_t max) {
     while (n < max && s[n]) ++n;
     return {s, n};
 }
-// Clip name without its extension ("sunset.mov" -> "sunset").
-std::string_view clip_name(const Catalog& cat, int id) {
-    if (!valid_clip(cat, id)) return {};
-    std::string_view n = cstr(cat.clip[id].name, kNameLen);
+// Clip name without its extension ("sunset.mov" -> "sunset"); null = "".
+std::string_view clip_label(const ClipInfo* ci) {
+    if (!ci) return {};
+    std::string_view n = cstr(ci->name, kNameLen);
     const size_t dot = n.rfind('.');
     if (dot != std::string_view::npos && dot > 0) n = n.substr(0, dot);
     return n;
@@ -209,12 +209,12 @@ constexpr int kKnobValueY = 45;
 constexpr int kKnobBarY = 53;
 
 // One layer cell in the knob column of layer l on `side`: "2 NAME" + opacity bar.
-void layer_cell(ui::Screen& c, int side, int l, const LayerState& L, const Catalog& cat, bool focused) {
+void layer_cell(ui::Screen& c, int side, int l, const LayerState& L, std::string_view name, bool focused) {
     const ui::Column col = ui::kKnobColumn(side * 4 + l);
     Text t;
     t.num(l + 1).add(' ');
     if (L.clip < 0) t.add("--");
-    else t.add(clip_name(cat, L.clip)).add(L.missing ? "!" : "");
+    else t.add(name).add(L.missing ? "!" : "");
     const int x0 = ui::text_in(c, col.x0 + 1, col.x1 - 4, kLayerNameY, t.view());
     if (L.mute) {  // muted: struck through
         const int w = std::min(ui::text_width(t.view()), col.x1 - 4 - x0);
@@ -284,7 +284,27 @@ void fx_param_knob(KnobView& v, const FxSlotState& slot, int p, const Catalog& c
 uint8_t Mk2Perform::focus_deck(const LiveState& s) const { return side_deck(s, focus_side_); }
 uint8_t Mk2Perform::side_deck(const LiveState& s, uint8_t side) const { return side == kPlay ? program_of(s) : preview_of(s); }
 
-int Mk2Perform::pad_pages(const Catalog& cat) const { return std::max(1, (clip_count(cat) + kPadsPerPage - 1) / kPadsPerPage); }
+int Mk2Perform::pad_pages(const Catalog& cat) const { return std::max(1, (nclips(cat) + kPadsPerPage - 1) / kPadsPerPage); }
+
+// ---- every clip (wave 8): the engine's ClipDirectory when the renderer set it, else the catalog window
+int Mk2Perform::nclips(const Catalog& cat) const { return clips_ ? static_cast<int>(clips_->count()) : clip_count(cat); }
+const ClipInfo* Mk2Perform::clip_at(const Catalog& cat, int id) const {
+    if (id < 0 || id >= nclips(cat)) return nullptr;
+    return clips_ ? &clips_->info(id) : &cat.clip[id];
+}
+ClipState Mk2Perform::clip_state(int id) const { return clips_ && clips_->valid(id) ? clips_->state(id) : ClipState::Ready; }
+int64_t Mk2Perform::clip_lib(int id) const { return clips_ && clips_->valid(id) ? clips_->entry(id).library_id : 0; }
+bool Mk2Perform::loadable(const Catalog& cat, int id) const {
+    const ClipState st = clip_state(id);
+    return clip_at(cat, id) && st != ClipState::Removed && st != ClipState::Empty;
+}
+// A library clip loads by its library id (LayerClipLib: the engine refuses it while it is not
+// ready, instead of a placeholder); media/ and --clip clips by engine id.
+void Mk2Perform::load_clip(uint8_t deck, uint8_t layer, int id, CommandSink& sink) {
+    const int64_t lib = clip_lib(id);
+    if (lib > 0 && lib <= INT32_MAX) send(make(CommandType::LayerClipLib, deck, layer, static_cast<int32_t>(lib)), sink);
+    else send(make(CommandType::LayerClip, deck, layer, id), sink);
+}
 
 void Mk2Perform::send(Command c, CommandSink& sink) {
     c.seq = ++seq_;
@@ -382,8 +402,16 @@ void Mk2Perform::on_knob(int k, int delta, const LiveState& s, const Catalog& ca
     const LayerState& L = s.deck[deck].layer[layer];
     const LayerTransport* T = transport_ ? &transport_->layer[deck][layer] : nullptr;
 
-    if (browse_ && k == 0) {  // BROWSE: knob 1 scrolls the list (hardware-mapping §3.1)
-        browse_sel_ = std::clamp(browse_sel_ + steps(k, delta, kStepUnits / 2), 0, std::max(0, clip_count(cat) - 1));
+    if (browse_ && k == 0) {  // BROWSE: knob 1 scrolls the list (hardware-mapping §3.1); SHIFT = a page
+        browse_move(cat, steps(k, delta, kStepUnits / 2) * (shift_ ? kBrowsePage : 1));
+        return;
+    }
+    if (browse_ && k == 1) {  // BROWSE: knob 2 = the order (ADDED / NAME / NEWEST / ENERGY), D200
+        const int n = steps(k, delta, kStepUnits);
+        if (n == 0) return;
+        const int m = static_cast<int>(BrowseSort::Count);
+        browse_sort_ = static_cast<BrowseSort>(((static_cast<int>(browse_sort_) + n) % m + m) % m);
+        refresh_order(cat);  // keeps the selected clip
         return;
     }
     if (k >= 4) {  // knobs 5-8: always the PROGRAM scene's macros (perform.md §3)
@@ -399,12 +427,14 @@ void Mk2Perform::on_knob(int k, int delta, const LiveState& s, const Catalog& ca
     switch (page_) {
         case Page::Play:
             switch (k) {
-                case 0: {  // SCROLL: the next / previous clip loads at once
-                    const int n = steps(k, delta, kStepUnits), count = clip_count(cat);
+                case 0: {  // SCROLL: the next / previous clip loads at once (Removed clips skipped)
+                    const int n = steps(k, delta, kStepUnits), count = nclips(cat);
                     if (n == 0 || count == 0) break;
                     const int cur = L.clip >= 0 ? L.clip : (n > 0 ? -1 : 0);
-                    const int next = ((cur + n) % count + count) % count;
-                    send(make(CommandType::LayerClip, deck, layer, next), sink);
+                    int next = ((cur + n) % count + count) % count;
+                    for (int tries = 0; tries < count && !loadable(cat, next); ++tries)
+                        next = ((next + (n > 0 ? 1 : -1)) % count + count) % count;
+                    if (loadable(cat, next)) load_clip(deck, layer, next, sink);
                     break;
                 }
                 case 1: {  // DICE: right = a new look, left = back through the history (ALL = the whole deck)
@@ -601,8 +631,10 @@ void Mk2Perform::on_button(Button b, const LiveState& s, const Catalog& cat, Com
             break;
         case Button::Browse:  // LIBRARY: the catalog as a list (hardware-mapping §3.5); BROWSE again = back
             browse_ = !browse_;
-            if (browse_) browse_sel_ = std::clamp(L.clip >= 0 ? static_cast<int>(L.clip) : browse_sel_, 0,
-                                                  std::max(0, clip_count(cat) - 1));
+            if (browse_) {
+                refresh_order(cat);
+                browse_select(cat, L.clip >= 0 ? static_cast<int>(L.clip) : browse_sel_);
+            }
             break;
         case Button::EncoderPush:
             if (browse_) {  // in BROWSE the wheel push loads the selected clip
@@ -782,7 +814,7 @@ void Mk2Perform::on_pad(int pad, int velocity, const LiveState& s, const Catalog
     switch (pad_mode_) {
         case PadMode::Clips: {
             const int clip = std::min(pad_page_, pad_pages(cat) - 1) * kPadsPerPage + p;
-            if (!valid_clip(cat, clip)) break;
+            if (!loadable(cat, clip)) break;
             PadTarget target = static_cast<PadTarget>(pad_target_[p]);
             if (held(Button::Solo)) target = PadTarget::Hit;  // SOLO + pad = HIT from either focus (§4.3)
             if (target == PadTarget::Hit) {
@@ -975,6 +1007,10 @@ void Mk2Perform::on_event(const mk2::Event& e, const LiveState& s, const Catalog
             }
             break;
         case mk2::EventType::EncoderDelta: {
+            if (browse_ && shift_ && !sys_) {  // BROWSE: SHIFT + wheel = a page (D200; the SYSTEM menu after BROWSE)
+                browse_move(cat, e.value * kBrowsePage);
+                break;
+            }
             // ==== ENGINE (quit): SHIFT + wheel opens the SYSTEM menu; in it the wheel never crossfades ====
             if (shift_ && !sys_) {
                 sys_ = true;
@@ -984,7 +1020,7 @@ void Mk2Perform::on_event(const mk2::Event& e, const LiveState& s, const Catalog
             if (sys_) break;
             // ==== end ENGINE (quit) ====
             if (browse_) {  // BROWSE: the wheel scrolls the list; nothing is crossfaded (hardware-mapping §3.1)
-                browse_sel_ = std::clamp(browse_sel_ + e.value, 0, std::max(0, clip_count(cat) - 1));
+                browse_move(cat, e.value);
                 break;
             }
             if (held(Button::Tempo)) {  // TEMPO + wheel = BPM nudge
@@ -1081,7 +1117,8 @@ void Mk2Perform::tick(uint64_t now_us, const LiveState& s, const Catalog& cat, C
         switch (pad_mode_) {
             case PadMode::Clips: {
                 const int clip = pad_page_ * kPadsPerPage + p;
-                if (!valid_clip(cat, clip)) break;  // dark = empty
+                if (!loadable(cat, clip)) break;  // dark = empty (or removed)
+                const uint32_t thumb = clip_at(cat, clip)->thumb_rgb;
                 bool on_prog = false, on_prev = false;
                 for (int l = 0; l < kLayersPerDeck; ++l) {
                     on_prog = on_prog || s.deck[prog].layer[l].clip == clip;
@@ -1093,10 +1130,10 @@ void Mk2Perform::tick(uint64_t now_us, const LiveState& s, const Catalog& cat, C
                     rgb(out, lvl, 0, 0);
                 } else if (on_prev) {  // green-tinted bright
                     uint8_t c[3];
-                    pad_colour(cat.clip[clip].thumb_rgb, mine ? 127 : 72, c);
+                    pad_colour(thumb, mine ? 127 : 72, c);
                     rgb(out, c[0] / 3, std::max<int>(c[1], mine ? 127 : 72), c[2] / 3);
                 } else {
-                    pad_colour(cat.clip[clip].thumb_rgb, kPadInBank, out);
+                    pad_colour(thumb, kPadInBank, out);
                 }
                 break;
             }
@@ -1104,7 +1141,7 @@ void Mk2Perform::tick(uint64_t now_us, const LiveState& s, const Catalog& cat, C
                 if (F.clip < 0) break;
                 const bool set = FT && FT->cue[p] >= 0.0f;
                 uint8_t c[3];
-                pad_colour(valid_clip(cat, F.clip) ? cat.clip[F.clip].thumb_rgb : 0, set ? 100 : 20, c);
+                pad_colour(clip_at(cat, F.clip) ? clip_at(cat, F.clip)->thumb_rgb : 0, set ? 100 : 20, c);
                 rgb(out, c[0], c[1], c[2]);
                 break;
             }
@@ -1210,7 +1247,8 @@ void Mk2Perform::tick(uint64_t now_us, const LiveState& s, const Catalog& cat, C
     for (int side = 0; side < 2; ++side) {
         const uint8_t d = side == 0 ? prev : prog;
         for (int l = 0; l < kLayersPerDeck; ++l)
-            layer_cell(c, side, l, s.deck[d].layer[l], cat, (side == 0 ? kPrep : kPlay) == focus_side_ && l == flayer);
+            layer_cell(c, side, l, s.deck[d].layer[l], clip_label(clip_at(cat, s.deck[d].layer[l].clip)),
+                       (side == 0 ? kPrep : kPlay) == focus_side_ && l == flayer);
     }
     {  // left row 3: a flash message, else the page and the focused layer
         Text t;
@@ -1243,7 +1281,7 @@ void Mk2Perform::tick(uint64_t now_us, const LiveState& s, const Catalog& cat, C
     KnobView kv[mk2::kKnobs];
     switch (page_) {
         case Page::Play:
-            knob_text(kv[0], "SCROLL", F.clip >= 0 ? clip_name(cat, F.clip) : std::string_view("--"));
+            knob_text(kv[0], "SCROLL", F.clip >= 0 ? clip_label(clip_at(cat, F.clip)) : std::string_view("--"));
             {
                 Text v;
                 if (show_) v.num(show_->deck[fdeck].dice_pos).add('/').num(show_->deck[fdeck].dice_count);
@@ -1323,45 +1361,119 @@ void Mk2Perform::tick(uint64_t now_us, const LiveState& s, const Catalog& cat, C
 }
 
 // ============================================================================ BROWSE
+namespace {
+constexpr const char* kSortName[] = {"ADDED", "NAME", "NEWEST", "ENERGY"};
+char lower(char c) { return c >= 'A' && c <= 'Z' ? static_cast<char>(c + 32) : c; }
+int name_cmp(const ClipInfo& a, const ClipInfo& b) {
+    for (int i = 0; i < kNameLen; ++i) {
+        const char x = lower(a.name[i]), y = lower(b.name[i]);
+        if (x != y) return x < y ? -1 : 1;
+        if (!x) return 0;
+    }
+    return 0;
+}
+// Energy 1..5 from the library analysis, 0 = unknown (ClipInfo.reserved[0], D201).
+int energy_of(const ClipInfo& ci) { return ci.reserved[0] <= 5 ? ci.reserved[0] : 0; }
+}  // namespace
+
+// Rebuilds order_ when the clips or the order changed. Removed clips are left out. No heap:
+// std::sort on the fixed array. The signature sums the entries' generations, so a state change
+// (Ready -> Removed) or a new clip rebuilds it; otherwise this is one pass over the counts.
+void Mk2Perform::refresh_order(const Catalog& cat) {
+    const int n = nclips(cat);
+    uint64_t gens = 0;
+    if (clips_)
+        for (int i = 0; i < n; ++i) gens += clips_->entry(i).gen + (static_cast<uint64_t>(clips_->entry(i).state) << 32);
+    const uint64_t sig = (static_cast<uint64_t>(n) | (static_cast<uint64_t>(browse_sort_) << 14)) ^ (gens * 0x9E3779B97F4A7C15ull);
+    if (sig == order_sig_) return;
+    order_sig_ = sig;
+    order_n_ = 0;
+    for (int i = 0; i < n; ++i)
+        if (loadable(cat, i)) order_[order_n_++] = static_cast<uint16_t>(i);
+    uint16_t* first = order_;
+    uint16_t* last = order_ + order_n_;
+    switch (browse_sort_) {
+        case BrowseSort::Added: break;  // already in id order
+        case BrowseSort::Newest: std::reverse(first, last); break;
+        case BrowseSort::Name:
+            std::sort(first, last, [&](uint16_t a, uint16_t b) {
+                const int c = name_cmp(*clip_at(cat, a), *clip_at(cat, b));
+                return c ? c < 0 : a < b;
+            });
+            break;
+        case BrowseSort::Energy:
+            std::sort(first, last, [&](uint16_t a, uint16_t b) {
+                const int ea = energy_of(*clip_at(cat, a)), eb = energy_of(*clip_at(cat, b));
+                if (ea != eb) return ea > eb;  // the hottest first, unknown last
+                const int c = name_cmp(*clip_at(cat, a), *clip_at(cat, b));
+                return c ? c < 0 : a < b;
+            });
+            break;
+        default: break;
+    }
+    browse_select(cat, browse_sel_);  // keep the selected clip (its row may have moved)
+}
+
+void Mk2Perform::browse_select(const Catalog&, int clip_id) {
+    for (int r = 0; r < order_n_; ++r)
+        if (order_[r] == clip_id) {
+            browse_pos_ = r;
+            browse_sel_ = clip_id;
+            return;
+        }
+    browse_pos_ = std::clamp(browse_pos_, 0, std::max(0, order_n_ - 1));
+    browse_sel_ = order_n_ ? order_[browse_pos_] : -1;
+}
+
+void Mk2Perform::browse_move(const Catalog& cat, int rows) {
+    refresh_order(cat);
+    browse_pos_ = std::clamp(browse_pos_ + rows, 0, std::max(0, order_n_ - 1));
+    browse_sel_ = order_n_ ? order_[browse_pos_] : -1;
+}
+
 void Mk2Perform::browse_load(const LiveState& s, const Catalog& cat, CommandSink& sink, uint64_t now_us) {
-    if (!valid_clip(cat, browse_sel_)) return;
+    if (!loadable(cat, browse_sel_)) return;
     const uint8_t d = focus_deck(s);
-    send(make(CommandType::LayerClip, d, focus_layer_, browse_sel_), sink);
+    load_clip(d, focus_layer_, browse_sel_, sink);
     Text t;
     t.add("LOADED > ").add(static_cast<char>('A' + d)).num(focus_layer_ + 1).add(focus_side_ == kPlay ? " LIVE" : "");
     say(t.s, now_us);
 }
 
-// Left: the list (selected row inverted). Right: the selected clip and where it will land.
+// Left: the list (selected row inverted) in the chosen order. Right: the selected clip (name,
+// size, fps, length, codec, energy or state, a dithered swatch of its colour) and where it lands.
 void Mk2Perform::draw_browse(uint64_t now_us, const LiveState& s, const Catalog& cat, uint8_t screens[2][mk2::kScreenBytes]) {
-    const int count = clip_count(cat);
+    refresh_order(cat);
+    const int count = order_n_;
     ui::Screen c;
     c.clear();
     ui::ListModel list;
     {
         Text h;
-        h.add("LIBRARY");
+        h.add("LIBRARY ").add(kSortName[static_cast<int>(browse_sort_)]);
         list.head.left.set(h.view());
         Text r;
-        if (count) r.num(browse_sel_ + 1).add('/').num(count);
+        if (count) r.num(browse_pos_ + 1).add('/').num(count);
         else r.add("EMPTY");
         list.head.right.set(r.view());
     }
-    // A window of up to kMax rows around the selection (the catalog holds up to 256).
-    const int first = std::clamp(browse_sel_ - ui::ListModel::kMax / 2, 0, std::max(0, count - ui::ListModel::kMax));
+    // A window of up to kMax rows around the selection (the list may hold 8192).
+    const int first = std::clamp(browse_pos_ - ui::ListModel::kMax / 2, 0, std::max(0, count - ui::ListModel::kMax));
     list.count = std::min(count - first, ui::ListModel::kMax);
-    list.selected = browse_sel_ - first;
+    list.selected = browse_pos_ - first;
     for (int i = 0; i < list.count; ++i) {
-        const int id = first + i;
-        list.items[static_cast<size_t>(i)].set(clip_name(cat, id));
+        const int id = order_[first + i];
+        list.items[static_cast<size_t>(i)].set(clip_label(clip_at(cat, id)));
         bool on_prog = false, on_prev = false;
         for (int l = 0; l < kLayersPerDeck; ++l) {
             on_prog = on_prog || s.deck[program_of(s)].layer[l].clip == id;
             on_prev = on_prev || s.deck[preview_of(s)].layer[l].clip == id;
         }
-        list.tags[static_cast<size_t>(i)].set(on_prog ? "LIVE" : on_prev ? "PREV" : "");
+        const ClipState st = clip_state(id);
+        list.tags[static_cast<size_t>(i)].set(on_prog ? "LIVE" : on_prev ? "PREV" : st == ClipState::Missing ? "MISSING"
+                                              : st == ClipState::Busy ? "BUSY" : "");
     }
-    if (count == 0) list.count = 0;
+    if (count <= 0) list.count = 0;
     ui::draw_list(c, 0, list);
 
     ui::DetailModel det;
@@ -1372,26 +1484,47 @@ void Mk2Perform::draw_browse(uint64_t now_us, const LiveState& s, const Catalog&
         det.head.left.set(h.view());
         det.head.right.set("PUSH");
     }
-    if (valid_clip(cat, browse_sel_)) {
-        const ClipInfo& ci = cat.clip[browse_sel_];
-        det.lines[0].set(clip_name(cat, browse_sel_));
+    if (const ClipInfo* ci = loadable(cat, browse_sel_) ? clip_at(cat, browse_sel_) : nullptr) {
+        det.lines[0].set(clip_label(ci));
         Text a;
-        a.num(static_cast<int>(ci.width)).add('x').num(static_cast<int>(ci.height)).add(' ');
-        a.fixed(ci.fps, 1).add("FPS");
+        a.num(static_cast<int>(ci->width)).add('x').num(static_cast<int>(ci->height));
         det.lines[1].set(a.view());
         Text b;
-        b.fixed(ci.seconds, 1).add("S ");
-        static constexpr const char* kCodec[] = {"HAP", "HAP ALPHA", "HAP Q", "OTHER"};
-        b.add(kCodec[std::min<int>(ci.codec, 3)]);
+        b.fixed(ci->fps, 1).add(" FPS  ");
+        const int secs = static_cast<int>(std::lround(ci->seconds));
+        if (secs >= 60) b.num(secs / 60).add(':').add(static_cast<char>('0' + secs % 60 / 10)).add(static_cast<char>('0' + secs % 10));
+        else b.fixed(ci->seconds, 1).add('S');
         det.lines[2].set(b.view());
+        Text e;
+        static constexpr const char* kCodec[] = {"HAP", "HAP ALPHA", "HAP Q", "OTHER"};
+        e.add(kCodec[std::min<int>(ci->codec, 3)]);
+        const ClipState st = clip_state(browse_sel_);
+        if (st == ClipState::Missing) e.add(" MISSING");
+        else if (st == ClipState::Busy) e.add(" BUSY");
+        else if (energy_of(*ci)) e.add(" ENERGY ").num(energy_of(*ci));
+        det.lines[3].set(e.view());
+        // The swatch: the clip's average colour as a grey level (thumb_rgb), dithered on the screen.
+        const uint32_t rgb = ci->thumb_rgb;
+        const int luma = static_cast<int>((((rgb >> 16) & 0xFF) * 77 + ((rgb >> 8) & 0xFF) * 150 + (rgb & 0xFF) * 29) >> 8);
+        for (int y = 0; y < 27; ++y)
+            for (int x = 0; x < 48; ++x) {
+                const bool edge = x == 0 || y == 0 || x == 47 || y == 26;
+                thumb_[y * 48 + x] = static_cast<uint8_t>(edge ? 255 : std::clamp(luma, 24, 232));
+            }
+        det.thumb = thumb_;
+        det.thumb_w = 48;
+        det.thumb_h = 27;
     }
-    if (catalog_full_) {  // ready library clips the catalog (256) cannot hold (library-db.md §6)
+    if (catalog_full_) {  // ready library clips the catalog cannot hold (library-db.md §6)
         Text f;
-        f.add("CATALOG FULL: +").num(static_cast<int>(catalog_full_));
-        det.lines[3].set(f.view());
-        det.lines[4].set("IN THE LIBRARY ONLY");
+        f.add("FULL: +").num(static_cast<int>(catalog_full_)).add(" IN LIBRARY");
+        det.lines[4].set(f.view());
     } else if (flash_[0] && now_us < flash_until_us_) {
         det.lines[4].set(std::string_view(flash_));
+    } else if (count > kBrowsePage) {
+        Text p;
+        p.add("PAGE ").num(browse_pos_ / kBrowsePage + 1).add('/').num((count + kBrowsePage - 1) / kBrowsePage).add(" SHIFT");
+        det.lines[4].set(p.view());
     }
     ui::draw_detail(c, 1, det);
     c.split(screens[0], screens[1]);

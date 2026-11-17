@@ -41,6 +41,9 @@ Exit code 0 = every check passed.
 
 import ctypes
 import json
+import shutil
+import struct
+import tempfile
 import os
 import re
 import statistics
@@ -290,7 +293,7 @@ def browse(bin_dir, sim, check):
     c0 = st["clips"].get(prev + "1", 0)
     hand.tap("Browse")
     hand.wheel(2)
-    want = min(c0 + 2, 3)
+    want = min(c0 + 2, max(3, len(clip_list(bin_dir)) - 1))  # 4 clips from media/, or the whole library
     hand.tap("Master encoder (push)")
     got = wait_for(lambda: (lambda s: s if s["clips"].get(prev + "1") == want else None)(state(bin_dir)), timeout=2)
     check(bool(got), "BROWSE: wheel +2, push loads clip %d into %s1" % (want, prev),
@@ -836,6 +839,119 @@ def latency(bin_dir, sim, check, runs):
         glass.close()
 
 
+# ------------------------------------------------------------------------------------- 300+ library clips (wave 8)
+LIB300 = os.path.join(tempfile.gettempdir(), "himmel_e2e_lib300")  # a temp library, built once and reused
+LIB300_CLIPS = 310
+
+
+def clip_list(bin_dir):
+    """The engine's whole clip list (catalog v3 clip pages): [(id, library id, name, state)]."""
+    out = run_tool(bin_dir, "himmel_cmd.exe", "clips", "0", "8192")
+    if not out:
+        return []
+    return [(int(i), int(lib), name, st) for i, lib, name, st in
+            re.findall(r"^\s+(\d+)\s+lib (-?\d+)\s+(\S+)\s.*\s(\S+)\s*$", out, re.M)]
+
+
+def prepare_lib300(bin_dir):
+    """A temp library with LIB300_CLIPS tiny HAP clips (each copy has its own trailing `free` atom, so
+    its own library hash), imported once with himmel_ingest --once on that temp library (never the
+    owner's). Reused while LIB300\\ready.txt exists. Returns the Library folder or None."""
+    lib = os.path.join(LIB300, "Library")
+    marker = os.path.join(LIB300, "ready.txt")
+    if os.path.exists(marker):
+        return lib
+    src = os.path.join(LIB300, "src")
+    os.makedirs(src, exist_ok=True)
+    os.makedirs(lib, exist_ok=True)
+    base = os.path.join(LIB300, "base.mov")
+    if not os.path.exists(base):
+        r = subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=256x144:rate=25",
+                            "-t", "1", "-c:v", "hap", base], capture_output=True, text=True)
+        if r.returncode != 0:
+            print("  ffmpeg failed:", r.stderr.strip()[:300])
+            return None
+    data = open(base, "rb").read()
+    for i in range(LIB300_CLIPS):
+        p = os.path.join(src, "e2e_%03d.mov" % i)
+        if not os.path.exists(p):
+            with open(p, "wb") as f:
+                f.write(data + struct.pack(">I", 16) + b"free" + struct.pack(">Q", i))
+    print("  importing %d clips into %s (once; about 5 minutes)" % (LIB300_CLIPS, lib))
+    exe = os.path.join(bin_dir, "himmel_ingest.exe")
+    r = subprocess.run([exe, "--library", lib, "--watch", src, "--once", "--reserve-gb", "2"],
+                       capture_output=True, text=True, timeout=1800)
+    st = subprocess.run([exe, "--library", lib, "--status"], capture_output=True, text=True, timeout=60)
+    m = re.search(r"(\d+) ready", st.stdout)
+    ready = int(m.group(1)) if m else 0
+    print("  himmel_ingest --once exit %d, %d ready" % (r.returncode, ready))
+    if ready < 300:
+        print(st.stdout[-600:])
+        return None
+    with open(marker, "w", encoding="utf-8") as f:
+        f.write("%d ready %s\n" % (ready, time.strftime("%Y-%m-%d %H:%M")))
+    return lib
+
+
+def lib300(bin_dir, sim, check):
+    """CONTROL wave 8: BROWSE scrolls the whole library past id 255 (SHIFT + wheel = pages), knob 2
+    sorts it, push loads a library clip by its library id (LayerClipLib); the CLIPS pad pages reach
+    clips past 255 too. From the MK2 alone."""
+    clips = wait_for(lambda: (lambda c: c if len(c) >= 300 else None)(clip_list(bin_dir)), timeout=90)
+    if not check(bool(clips), "300+ library clips in the engine's clip list", "%d" % len(clip_list(bin_dir))):
+        return
+    n = len(clips)
+    libs = [c for c in clips if c[1] > 0]
+    check(len(libs) >= 300 and max(c[0] for c in clips) >= 300, "%d clips, %d from the library, ids up to %d" % (
+        n, len(libs), max(c[0] for c in clips)))
+    hand = Player(sim)
+    hand.tap("Group A")  # focus PREVIEW layer 1
+    time.sleep(0.4)
+    st = state(bin_dir)
+    prev = "B" if st["program"] == "A" else "A"
+    rej0 = st["rej"]
+
+    def on_prev1(want):
+        return wait_for(lambda: (lambda s: s if s["clips"].get(prev + "1") == want else None)(state(bin_dir)), timeout=3)
+
+    # 1. BROWSE (order ADDED = clip ids): SHIFT + wheel pages to the top, then 17 pages + 3 rows = row 275.
+    hand.tap("Browse")
+    hand.down("Shift")
+    hand.wheel(-(n // 16 + 2))
+    hand.wheel(17)
+    hand.up("Shift")
+    hand.wheel(3)
+    want = sorted(c[0] for c in clips if c[3] != "REMOVED")[275]
+    hand.tap("Master encoder (push)")
+    got = on_prev1(want)
+    check(bool(got), "BROWSE past 256: SHIFT + wheel 17 pages + 3, push loads clip %d (library id %d) into %s1" % (
+        want, dict((c[0], c[1]) for c in clips)[want], prev), "" if got else str(state(bin_dir)["clips"]))
+    # 2. Knob 2 = the order: NAME. To the top, push: the first name (ASCII case-insensitive, then id).
+    hand.knob(2, 100)
+    hand.down("Shift")
+    hand.wheel(-(n // 16 + 2))
+    hand.up("Shift")
+    by_name = sorted((c for c in clips if c[3] != "REMOVED"), key=lambda c: (c[2].lower(), c[0]))
+    hand.tap("Enter")  # ENTER loads too while browsing
+    got = on_prev1(by_name[0][0])
+    check(bool(got), "knob 2 = NAME order: the top row is %s (clip %d), ENTER loads it" % (by_name[0][2], by_name[0][0]),
+          "" if got else str(state(bin_dir)["clips"]))
+    for _ in range(3):  # NEWEST, ENERGY, back to ADDED
+        hand.knob(2, 100)
+    hand.tap("Browse")  # back to PERFORM
+
+    # 3. CLIPS pads: page 17 (Master > x17) = ids 272..287, pad 1 = clip 272 on PREVIEW layer 1.
+    for _ in range(17):
+        hand.tap("Master >")
+    hand.pad(1)
+    got = on_prev1(272)
+    check(bool(got), "CLIPS pad page 18, pad 1 plays clip 272 on %s1" % prev, "" if got else str(state(bin_dir)["clips"]))
+    for _ in range(17):
+        hand.tap("Master <")
+    st = state(bin_dir)
+    check(st["rej"] == rej0, "no Perform command refused (LayerClipLib by library id)", "rej %d -> %d" % (rej0, st["rej"]))
+
+
 def main():
     args = sys.argv[1:]
     attach = "--attach" in args
@@ -847,13 +963,48 @@ def main():
         mapping = json.load(f)
 
     stack = None
+    lock = None
+    lib = None
     if not attach:
+        # Wave 7 stack lock (LEAD 2026-11-17): mkdir is atomic; whoever holds it runs the one stack.
+        busy = [n for n in ("himmel.exe", "himmel_render.exe", "mk2_controller.exe", "himmel_ingest.exe")
+                if n.lower() in subprocess.run(["tasklist"], capture_output=True, text=True).stdout.lower()]
+        if busy:
+            print("Another Himmel stack runs (%s): one stack per machine. Stop it first." % ", ".join(busy))
+            return 2
+        lock = os.path.join(tempfile.gettempdir(), "himmel_stack.lock")
+        try:
+            os.mkdir(lock)
+        except FileExistsError:
+            print("The stack lock is taken (%s): someone else runs a stack. Try again later." % lock)
+            return 2
+        with open(os.path.join(lock, "owner.txt"), "w", encoding="utf-8") as f:
+            f.write("mk2_e2e.py pid %d %s\n" % (os.getpid(), time.strftime("%H:%M:%S")))
+    try:
+        return run_e2e(args, attach, bin_dir, runs, mapping, lock)
+    finally:
+        if lock:
+            shutil.rmtree(lock, ignore_errors=True)
+
+
+def run_e2e(args, attach, bin_dir, runs, mapping, lock):
+    stack = None
+    lib = None
+    if not attach:
+        # 300+ library clips (wave 8): a temp library, never the owner's (--no-lib300 skips it).
+        if "--no-lib300" not in args and "--basic" not in args and "--lightpad-only" not in args:
+            print("temp library with %d clips" % LIB300_CLIPS)
+            lib = prepare_lib300(bin_dir)
+            if not lib:
+                print("  could not build the temp library: run with --no-lib300, or fix ffmpeg / disk space")
+                return 2
         exe = os.path.join(bin_dir, "himmel.exe")
         # --no-show-files: a test run never opens or autosaves the owner's project (SHOW M3, D109)
         wl = [w for w, off in (("lightpad", "--no-lightpad"), ("nuvj", "--no-nuvj")) if off not in args]
         weapons = ["--weapons", ",".join(wl)] if wl else ["--no-weapons"]
-        print("starting", exe, "--sim --no-ui", " ".join(weapons), "-- --no-show-files")
-        stack = subprocess.Popen([exe, "--sim", "--no-ui"] + weapons + ["--", "--no-show-files"], cwd=ROOT,
+        render = ["--no-show-files"] + (["--library", lib] if lib else [])
+        print("starting", exe, "--sim --no-ui", " ".join(weapons), "--", " ".join(render))
+        stack = subprocess.Popen([exe, "--sim", "--no-ui"] + weapons + ["--"] + render, cwd=ROOT,
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                  creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
     check = Check()
@@ -892,6 +1043,9 @@ def main():
             if "--no-nuvj" not in args:
                 print("NuVJ (M10)")
                 nuvj(bin_dir, check)
+            if lib:
+                print("300+ library clips (wave 8)")
+                lib300(bin_dir, sim, check)
             if "--no-latency" not in args:
                 print("input -> glass")
                 result = latency(bin_dir, sim, check, runs)
