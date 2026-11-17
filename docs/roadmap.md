@@ -70,9 +70,9 @@ default and stay PROPOSED (D94–D100 are run that way).
 | 3 | MEDIA · `claude/media-m7-ingest` | M7 ingest — **merged 2026-11-17** |
 | 3 | ENGINE · `claude/engine-m6-outputs` | M6 outputs, curtains, displays by identity — **merged 2026-11-17** (Spout to follow) |
 | 3 | CONTROL · `claude/control-m4-perform` | M4 MK2 Perform v4 (scenes now exist), then M9 Lightpad, M13 OSC — **M4 + M9 + M13 + M10 (sim) + MK2 BROWSE merged 2026-11-17** |
-| 5 | AUDIO · audio-m8 session | D131 FxReact (command 40) + per-slot reaction table |
-| 5 | MEDIA · media-m7 session | ingest commands 60–69, `himmel_ingest --selftest` |
-| 5 | GUI · gui-m11 session | reaction editor, library actions, rest of M11 |
+| 5 | AUDIO · audio-m8 session | D131 FxReact (command 40) + per-slot reaction table — **merged 2026-11-17** |
+| 5 | MEDIA · media-m7 session | ingest commands 60–69, `himmel_ingest --selftest` — **merged 2026-11-17** |
+| 5 | GUI · gui-m11 session | reaction editor, library actions, rest of M11, QUIT — **merged 2026-11-17** (plus ENGINE `SystemQuit` 74) |
 
 ## 1. What we have to build on
 

@@ -195,6 +195,21 @@ Build and unit tests in the agent's own worktree are fine. If e2e cannot run, sa
 | MEDIA (media-m7) | ingest commands 60–69 (import folder, rescan, remove, relink, reanalyse) consumed by `himmel_ingest`; `--selftest` for `himmel_ingest`; contract doc pushed first | `src/library/`, `himmel_ingest`, `docs/interfaces/library-db.md`, `docs/agents/handoff/media.md` | `media_tests`/library tests cover each command; ingest `--selftest` green; no catalog-v3 paging yet (would clash with AUDIO's state bump) |
 | GUI (gui-m11) | the reaction editor on AUDIO's contract; library import / rescan / remove on MEDIA's contract; the rest of M11 still missing (clip editor drawer, wizard steps 5+, scene / kit editor gaps) | `gui/`, `src/ui/`, `docs/agents/handoff/gui.md` | panels work against the fake engine and the real one; GUI kill / restart never changes the outputs |
 
+**Wave 5 — done 2026-11-17.** All merged on main, green each time: the build, 19 test programs, every selftest (now including `himmel_ingest --selftest`), `mk2_e2e.py` 94 checks, and `src/engine/tools/quit_check.py`.
+- AUDIO D131 FxReact (aa36c95 → 97dd7cb → 59e1562): command 40, state v3 `ReactionSection`, per-knob reactions in the engine.
+- ENGINE quit (+ owner request; 1e754ad → fd8e0e9): `SystemQuit` 74 (command-protocol §4e; §4d is FxReact), MK2 SYSTEM → QUIT hold 2 s, supervisor clean stop, `himmel_cmd quit --confirm`.
+- MEDIA ingest commands 60–67 (072ddaf → e41e130) in library block v2; D148–D149 PROPOSED.
+- GUI M11 part 3 (bf581f2 → 41010c0): BUILD view, clip drawer filmstrip, wizard step 0, reaction editor, library actions, QUIT. D122 PROPOSED.
+- LEAD live check: the reaction editor against the real engine (shows the engine's table, signal change and OFF round-trip; gui ack 73 rej 0), and GUI QUIT stops every process (exit 0). The GUI uses `window.confirm`, which the in-app browser auto-cancels; a normal browser shows it.
+- Incidents: two agent test stacks ran at once (results void, re-run by the LEAD); `himmel_ingest --help` starts a real import worker (twice today). Rule kept for the rest of 0.1: **only the LEAD runs a stack** during a wave.
+
+Follow-ups (not started):
+- CONTROL: `mk2_controller` has no `stop_request`, so quit waits 3 s and then terminates it (most of the 4.5 s quit).
+- MEDIA: `himmel_ingest` must print usage and exit on unknown args (`--help`).
+- ENGINE: `himmel_cmd` prints `?` as the name of FxReact.
+- SHOW: scenes do not save reactions yet; a recall's FxSet resets a slot to Default.
+- Library buttons are not checked live against a real library (test stacks run with `--no-show-files`).
+
 **Old wave 4 candidates (now done or folded in):**
 - GUI: the SHOW and AUDIO panels, the reaction editor and the wizard (rest of M11);
 - M9 / M13 if CONTROL did not reach them;
