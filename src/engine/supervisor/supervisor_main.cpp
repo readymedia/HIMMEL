@@ -601,6 +601,10 @@ int main(int argc, char** argv) {
 
     log("stopping");
     if (auto* s = eshm.get()) s->stop_request.store(1);
+    // ==== CONTROL (mk2 stop): mk2_controller lets go in parallel with the others (LEDs off,
+    // "stopped" page, exit 0) instead of being terminated after 3 s (mk2-controller-spec §5.1) ====
+    if (mshm.get() || mshm.open()) mshm.get()->status.stop_request.store(1);
+    // ==== end CONTROL (mk2 stop) ====
     stop_child(ren, 3000);
     stop_child(ui, 1000);  // after the renderer: the outputs never wait for the GUI
     if (auto* b = ashm.get()) b->status.stop_request.store(1);

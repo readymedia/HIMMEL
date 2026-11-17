@@ -9,7 +9,9 @@
 //
 // Creates the shared block "Local\HimmelMk2", loads the map (falls back to the
 // built-in verified layout if the file is missing or broken), and runs until
-// Ctrl+C / close. Reconnects by itself when the USB cable is pulled.
+// Ctrl+C / close or the supervisor's stop request (status.stop_request in the
+// block): then every LED goes off, both screens show the "stopped" page, it logs
+// "Stopped" and exits 0. Reconnects by itself when the USB cable is pulled.
 //
 // Log: the console, and logs\mk2-YYYY-MM-DD.log next to the exe (shared for
 // reading, so it can be read while Himmel runs). The first lines say whether the
@@ -116,6 +118,7 @@ int main(int argc, char** argv) {
         return 1;
     }
     shm.get()->status.map_verified.store(from_file && map.verified ? 1 : 0);
+    shm.get()->status.stop_request.store(0);  // a restart after a crash: the block outlives us
     log_line("Shared memory ready: Local\\HimmelMk2 (" + std::to_string(sizeof(SharedBlock)) + " bytes)");
 
     ControllerConfig cfg;

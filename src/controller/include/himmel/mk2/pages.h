@@ -162,6 +162,10 @@ void draw_audio(Screen& c, const AudioModel& m);
 // Big message on one screen (Tempo latch, "SCENE SAVED", errors).
 void draw_message(Screen& c, int side, std::string_view title, std::string_view big, std::string_view subtitle = {});
 
+// The controller's own farewell (both screens): what the MK2 shows after Himmel
+// let go of it (quit, or mk2_controller stopped by the supervisor).
+void draw_stopped(Screen& c);
+
 // Calibration: a vertical line over each knob centre and the column bounds.
 // Turn a knob: if its line is not right above it, fix kKnobX.
 void draw_knob_align(Screen& c, int highlight = -1);

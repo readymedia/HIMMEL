@@ -116,6 +116,12 @@ this file is MK2 Live (click a control on screen, press the real one).
      every LED report and every screen strip, and emit `Connected`.
 - Never block the reader on the writer or on the consumers. If a ring is full,
   drop the oldest pad-pressure events first, never button/hit events.
+- **Stopping [built 2026-11-17]:** `Status.stop_request` (block v2) is set by the
+  supervisor's stop path (quit, Ctrl+C, window closed). The controller then
+  ends the session, turns **every LED off**, puts the **"stopped" page** on both
+  screens (`ui::draw_stopped`), logs "Stopped" and exits 0 (about 60 ms with the
+  MK2 connected, < 1 s while it waits for one). Ctrl+C in its own console does
+  the same. It clears the flag when it starts.
 
 ### 5.2 Events (module → engine/GUI)
 ```cpp

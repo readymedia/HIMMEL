@@ -21,7 +21,7 @@
 namespace himmel::mk2 {
 
 inline constexpr uint32_t kShmMagic = 0x324B4D48;  // "HMK2"
-inline constexpr uint32_t kShmVersion = 1;
+inline constexpr uint32_t kShmVersion = 2;  // 2 (2026-11-17): Status.stop_request
 inline constexpr uint32_t kRingSize = 4096;  // events, power of two
 inline constexpr int kMaxConsumers = 4;
 inline constexpr const wchar_t* kShmName = L"Local\\HimmelMk2";
@@ -75,6 +75,10 @@ struct Status {
     std::atomic<uint64_t> led_writes;
     std::atomic<uint64_t> strip_writes;
     char message[128];                      // last notable thing (ASCII), for UIs/logs
+    // v2: set to 1 by the supervisor's stop path (Himmel quit / Ctrl+C / window closed).
+    // The controller turns every LED off, puts the "stopped" page on both screens,
+    // logs "Stopped" and exits 0. Cleared by the controller when it starts.
+    std::atomic<uint32_t> stop_request;
 };
 
 // Sequence lock: writer makes seq odd, writes, makes it even. Readers retry while

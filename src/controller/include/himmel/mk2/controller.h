@@ -39,7 +39,10 @@ class Controller {
 public:
     Controller(const Map& map, ControllerConfig cfg, SharedBlock* shm, LogFn log);
     ~Controller();
-    // Blocks until stop becomes true: open, run, watch the heartbeat, reopen.
+    // Blocks until stop becomes true or the shared block's status.stop_request is
+    // set (the supervisor's stop path): open, run, watch the heartbeat, reopen.
+    // On a stop with the MK2 still connected it lets go cleanly first: every LED
+    // off and the "stopped" page (ui::draw_stopped) on both screens.
     void run(const std::atomic<bool>& stop);
 
 private:
@@ -47,6 +50,7 @@ private:
     std::unique_ptr<detail::Device> open(std::string& why);
     void reader_loop(Session& s);
     void writer_loop(Session& s);
+    void farewell(detail::Device& dev);
     void publish(const Event& e);
     void set_message(const std::string& m);
 
