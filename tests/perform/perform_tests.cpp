@@ -1067,6 +1067,51 @@ static void test_screens() {
     CHECK(flash > lit(r.screens[0], 0, 26, 256, 9) + 500);
 }
 
+
+static void test_browse() {
+    std::printf("BROWSE: the catalog on the screens, wheel / knob 1 scroll, push / ENTER load\n");
+    Rig r(40, 3);
+    ready(r);
+    r.layer(1, 0).clip = 5;  // the focused layer (PREVIEW B1) plays clip 5
+    r.press(Button::Browse);
+    CHECK(r.m.browsing() && r.m.browse_selected() == 5);
+    r.ev(EventType::EncoderDelta, 0, 3);  // the wheel scrolls; nothing is crossfaded
+    CHECK(r.m.browse_selected() == 8 && r.sink.count(CommandType::Crossfader) == 0);
+    r.ev(EventType::EncoderDelta, 0, -100);
+    CHECK(r.m.browse_selected() == 0);
+    r.ev(EventType::EncoderDelta, 0, 500);
+    CHECK(r.m.browse_selected() == 39);  // clamped at the end
+    r.ev(EventType::KnobDelta, 0, -100);  // knob 1: one step per 50 units
+    CHECK(r.m.browse_selected() == 37);
+    r.sink.clear();
+    r.press(Button::EncoderPush);  // push = load into the focused layer, no TAKE
+    const Command* c = r.sink.last(CommandType::LayerClip);
+    CHECK(c && c->deck == 1 && c->layer == 0 && c->i == 37 && r.sink.count(CommandType::Take) == 0);
+    CHECK(flash_is(r, "LOADED > B1"));
+    r.press(Button::GroupF);  // a group still sets the target: PROGRAM layer 2
+    r.press(Button::Enter);   // ENTER loads too (no GO while browsing)
+    c = r.sink.last(CommandType::LayerClip);
+    CHECK(c && c->deck == 0 && c->layer == 1 && r.sink.count(CommandType::SceneRecall) == 0);
+    r.press(Button::Play);    // PLAY is still TAKE
+    CHECK(r.sink.count(CommandType::Take) == 1);
+    // Screens: the list on the left, the detail on the right; the BROWSE LED is lit.
+    r.m.set_library(12);
+    r.tick();
+    const mk2::LedSlot br = mk2::led_of(Button::Browse);
+    CHECK(br.kind == 1 && r.leds.buttons[br.index] == 127);
+    CHECK(lit(r.screens[0], 0, 10, 256, 54) > 100 && lit(r.screens[1], 0, 10, 256, 54) > 100);
+    r.press(Button::Browse);  // back to PERFORM: the wheel is the T-bar again
+    CHECK(!r.m.browsing());
+    r.ev(EventType::EncoderDelta, 0, 1);
+    CHECK(r.sink.count(CommandType::Crossfader) == 1);
+    Rig e(0);  // empty catalog: nothing to load
+    ready(e);
+    e.press(Button::Browse);
+    e.press(Button::EncoderPush);
+    e.tick();
+    CHECK(e.sink.count(CommandType::LayerClip) == 0);
+}
+
 // `perform_tests --dump file.pbm` writes a sample of both screens (512x64 PBM) to look at.
 static void dump(const char* path) {
     Rig r(40, 3);
@@ -1098,6 +1143,20 @@ static void dump(const char* path) {
 }
 
 int main(int argc, char** argv) {
+    if (argc == 3 && std::strcmp(argv[1], "--dump-browse") == 0) {
+        Rig r(40, 3);
+        ready(r);
+        r.layer(1, 0).clip = 5;
+        r.layer(0, 0).clip = 6;
+        r.press(Button::Browse);
+        r.m.set_library(12);
+        r.tick();
+        std::ofstream f(argv[2], std::ios::binary);
+        f << "P4\n512 64\n";
+        for (int y = 0; y < 64; ++y)
+            for (int side = 0; side < 2; ++side) f.write(reinterpret_cast<const char*>(r.screens[side] + y * 32), 32);
+        return 0;
+    }
     if (argc == 3 && std::strcmp(argv[1], "--dump") == 0) {
         dump(argv[2]);
         return 0;
@@ -1125,6 +1184,7 @@ int main(int argc, char** argv) {
     test_mute_and_panic();
     test_reset_and_seq();
     test_screens();
+    test_browse();
     std::printf("\nperform_tests: %d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

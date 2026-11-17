@@ -46,6 +46,10 @@ public:
         transport_ = transport;
     }
 
+    // BROWSE (MEDIA M7 follow-up): ready library clips left out of the catalog because it is
+    // full (Local\HimmelLibrary catalog_full, from the renderer's library feed). Per frame.
+    void set_library(uint32_t catalog_full) { catalog_full_ = catalog_full; }
+
     // One MK2 event (from the Local\HimmelMk2 ring). `state` is the engine's
     // latest LiveState / Catalog (the engine passes its own copy).
     void on_event(const mk2::Event& e, const protocol::LiveState& state, const protocol::Catalog& catalog,
@@ -64,6 +68,8 @@ public:
     PadMode pad_mode() const { return pad_mode_; }
     uint8_t pad_target(int pad) const { return pad >= 1 && pad <= 16 ? pad_target_[pad - 1] : 0; }
     const char* flash() const { return flash_; }
+    bool browsing() const { return browse_; }
+    int browse_selected() const { return browse_sel_; }
 
 private:
     // Implementation state (fixed size). CONTROL may change these freely.
@@ -143,6 +149,13 @@ private:
     char flash_[40] = {};            // a short message on the left screen ("3c saved")
     uint64_t flash_until_us_ = 0;
     uint32_t show_msg_seq_ = 0;
+    // BROWSE: the catalog as a list on the screens; the wheel / knob 1 scroll, push / ENTER load.
+    bool browse_ = false;
+    int browse_sel_ = 0;
+    uint32_t catalog_full_ = 0;
+    void browse_load(const protocol::LiveState& s, const protocol::Catalog& cat, CommandSink& sink, uint64_t now_us);
+    void draw_browse(uint64_t now_us, const protocol::LiveState& s, const protocol::Catalog& cat,
+                     uint8_t screens[2][mk2::kScreenBytes]);
 };
 
 }  // namespace himmel::perform

@@ -20,7 +20,7 @@ Chain under test:
   and back: Perform LEDs / screens -> Local\\HimmelMk2 outputs -> controller -> UDP -> SimMk2
 
 Run (it starts and stops its own stack unless --attach):
-  python tools/mk2_e2e.py                 start himmel.exe --sim --no-ui --weapons lightpad -- --no-show-files, test, stop
+  python tools/mk2_e2e.py                 start himmel.exe --sim --no-ui --weapons lightpad,nuvj -- --no-show-files, test, stop
   python tools/mk2_e2e.py --attach        test a Himmel that is already running with --sim
   python tools/mk2_e2e.py --bin DIR       where himmel.exe / himmel_cmd.exe / show_cmd.exe live (default build/bin/Release)
   python tools/mk2_e2e.py --basic         only the basic checks (no song, no latency)
@@ -29,6 +29,7 @@ Run (it starts and stops its own stack unless --attach):
   python tools/mk2_e2e.py --no-lightpad   no Lightpad (M9) stage, and no weapon drivers
   python tools/mk2_e2e.py --lightpad-only only the Lightpad stage
   python tools/mk2_e2e.py --no-osc        skip the OSC in (M13) stage (himmel_osc.exe on UDP 7000)
+  python tools/mk2_e2e.py --no-nuvj       skip the NuVJ (M10) stage (and its driver)
 
 The song needs clips: media/*.mov (python tools/make_test_clips.py makes them).
 --no-show-files: the run never opens or writes the owner's project or autosave.
@@ -275,6 +276,27 @@ def basic(bin_dir, sim, check):
     check(lit > 50, "engine screens reach the simulator", "%d non-empty bytes" % lit)
     leds = sum(1 for v in sim.rx_leds[0x81] if v)
     check(leds > 0, "engine group LEDs reach the simulator", "%d lit" % leds)
+
+
+# ------------------------------------------------------------------------------------- BROWSE
+def browse(bin_dir, sim, check):
+    """MK2 BROWSE: the catalog on the screens, the wheel scrolls (no crossfade), push loads into the focus."""
+    hand = Player(sim)
+    hand.tap("Group A")
+    time.sleep(0.4)
+    st = state(bin_dir)
+    prev = "B" if st["program"] == "A" else "A"
+    x0 = st["xfade"]
+    c0 = st["clips"].get(prev + "1", 0)
+    hand.tap("Browse")
+    hand.wheel(2)
+    want = min(c0 + 2, 3)
+    hand.tap("Master encoder (push)")
+    got = wait_for(lambda: (lambda s: s if s["clips"].get(prev + "1") == want else None)(state(bin_dir)), timeout=2)
+    check(bool(got), "BROWSE: wheel +2, push loads clip %d into %s1" % (want, prev),
+          "" if got else str(state(bin_dir)["clips"]))
+    check(abs(state(bin_dir)["xfade"] - x0) < 0.01, "BROWSE: the wheel did not move the crossfader")
+    hand.tap("Browse")  # back to PERFORM
 
 
 # ------------------------------------------------------------------------------------- the song
@@ -602,6 +624,88 @@ def osc(bin_dir, check):
     print("  " + "\n  ".join(status.splitlines()[:6]))
 
 
+# ------------------------------------------------------------------------------------- the NuVJ (M10)
+def nuvj(bin_dir, check):
+    """The NuVJ as a main weapon (perform.md §5.2) against the simulated NuVJ (weapon_nuvj.exe --sim,
+    UDP 8774): the crossfader decides PROGRAM (soft takeover), INSTA fades, pads, SCRATCH wheel,
+    INSTA BLACK, and the engine's LEDs / LCD reach the NuVJ. Never SysEx 7B."""
+    import nuvj_sim
+    m = nuvj_sim.load_map()
+    dev = nuvj_sim.SimNuVJ(None)
+
+    def send(name, **kw):
+        dev.emit(nuvj_sim.encode(m["controls"][name], **kw))
+        time.sleep(0.12)
+
+    def xf():
+        return state(bin_dir)["xfade"]
+
+    try:
+        if not check(wait_for(dev.engine_active, timeout=10), "weapon_nuvj talks to the simulated NuVJ"):
+            return
+        check(bool(wait_for(lambda: dev.inited, timeout=3)), "the driver sent the NuVJ init (60)")
+        check(bool(wait_for(lambda: any(dev.led_state), timeout=3)), "the engine's LEDs reach the NuVJ (INSTA tally)")
+        check(bool(wait_for(lambda: dev.lcd_text.strip() and "NuVJ" not in dev.lcd_text, timeout=3)),
+              "the engine's LCD text reaches the NuVJ", repr(dev.lcd_text))
+        stores = [e for e in dev.log if e[1].endswith("device") and e[2].replace(" ", "").startswith("f000013f7f207b")]
+        check(not stores, "no SysEx 7B (stored contrast) was ever sent")
+
+        # The crossfader decides PROGRAM, with soft takeover: catch the engine's fader first.
+        x0 = xf()
+        far = 1.0 - x0 if abs(x0 - 0.5) > 0.2 else 0.0
+        send("Crossfader", value=int(round(far * 16383)))
+        check(abs(xf() - x0) < 0.01, "crossfader away from the engine's: nothing moves yet (soft takeover)", "%.3f" % xf())
+        send("Crossfader", value=int(round(x0 * 16383)))
+        send("Crossfader", value=8192)
+        check(bool(wait_for(lambda: abs(xf() - 0.5) < 0.02, timeout=2)), "crossfader caught, then drives the mix (0.50)")
+        for v in (0.7, 0.9, 1.0):
+            send("Crossfader", value=int(round(v * 16383)))
+        check(bool(wait_for(lambda: state(bin_dir)["program"] == "B", timeout=3)), "crossfader all the way to B: PROGRAM = B")
+        for v in (0.6, 0.3, 0.0):
+            send("Crossfader", value=int(round(v * 16383)))
+        check(bool(wait_for(lambda: state(bin_dir)["program"] == "A", timeout=3)), "and back to A: PROGRAM = A")
+
+        # INSTA B at a quick AUTO FADE speed: a TAKE to deck B.
+        send("Auto Fade Speed", value=8)  # ~0.5 s
+        send("Insta B", down=True)
+        send("Insta B", down=False)
+        got = wait_for(lambda: (lambda s: s if s["program"] == "B" and not s["take"] else None)(state(bin_dir)), timeout=4)
+        check(bool(got), "INSTA B fades to deck B")
+
+        # A pad loads a clip on deck A (off air now), the SCRATCH wheel drags its playhead.
+        send("A Pad 2", down=True)
+        send("A Pad 2", down=False)
+        got = wait_for(lambda: (lambda s: s if 1 in [v for k, v in s["clips"].items() if k[0] == "A"] else None)(state(bin_dir)),
+                       timeout=2)
+        check(bool(got), "A pad 2 plays clip 1 on deck A", str(state(bin_dir)["clips"]))
+        send("A Scratch", down=True)
+        send("A Scratch", down=False)
+        check(bool(wait_for(lambda: dev.lcd_text.strip().startswith("SCRATCH"), timeout=2)), "SCRATCH: the LCD names the wheel mode",
+              repr(dev.lcd_text))
+        seen = False
+        end = time.time() + 1.5
+        while time.time() < end and not seen:
+            dev.emit(nuvj_sim.encode(m["controls"]["A Jog"], delta=3))
+            seen = "SCRATCH" in (state(bin_dir) or {"raw": ""})["raw"]
+        check(seen, "turning the wheel holds the playhead (SCRATCH)")
+        time.sleep(0.4)
+        check(bool(wait_for(lambda: "SCRATCH" not in state(bin_dir)["raw"], timeout=2)), "let go: the clip plays on")
+        for _ in range(2):  # FX WHEEL, then BEND again
+            send("A Scratch", down=True)
+            send("A Scratch", down=False)
+
+        send("Insta Black", down=True)
+        send("Insta Black", down=False)
+        check(bool(wait_for(lambda: state(bin_dir)["black"], timeout=2)), "INSTA BLACK = black")
+        send("Insta Black", down=True)
+        send("Insta Black", down=False)
+        check(bool(wait_for(lambda: not state(bin_dir)["black"], timeout=2)), "INSTA BLACK again = picture back")
+        st = state(bin_dir)
+        check(st["rej"] == 0, "no Perform command refused (MK2 + Lightpad + NuVJ)", "rej %d" % st["rej"])
+    finally:
+        dev.close()
+
+
 # ------------------------------------------------------------------------------------- input -> glass
 class Glass:
     """Reads the output window from the composed desktop (GDI StretchBlt of the whole client
@@ -746,7 +850,8 @@ def main():
     if not attach:
         exe = os.path.join(bin_dir, "himmel.exe")
         # --no-show-files: a test run never opens or autosaves the owner's project (SHOW M3, D109)
-        weapons = ["--no-weapons"] if "--no-lightpad" in args else ["--weapons", "lightpad"]
+        wl = [w for w, off in (("lightpad", "--no-lightpad"), ("nuvj", "--no-nuvj")) if off not in args]
+        weapons = ["--weapons", ",".join(wl)] if wl else ["--no-weapons"]
         print("starting", exe, "--sim --no-ui", " ".join(weapons), "-- --no-show-files")
         stack = subprocess.Popen([exe, "--sim", "--no-ui"] + weapons + ["--", "--no-show-files"], cwd=ROOT,
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -773,6 +878,8 @@ def main():
         else:
             print("basic")
             basic(bin_dir, sim, check)
+            print("BROWSE")
+            browse(bin_dir, sim, check)
         if "--basic" not in args:
             print("song (from the MK2 alone)")
             song(bin_dir, sim, check)
@@ -782,6 +889,9 @@ def main():
             if "--no-osc" not in args:
                 print("OSC in (M13)")
                 osc(bin_dir, check)
+            if "--no-nuvj" not in args:
+                print("NuVJ (M10)")
+                nuvj(bin_dir, check)
             if "--no-latency" not in args:
                 print("input -> glass")
                 result = latency(bin_dir, sim, check, runs)

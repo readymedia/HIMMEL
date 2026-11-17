@@ -87,6 +87,7 @@
 #include "himmel/mk2/types.h"
 #include "himmel/perform/lightpad_perform.h"
 #include "himmel/perform/mk2_perform.h"
+#include "himmel/perform/nuvj_perform.h"
 #include "himmel/protocol/commands.h"
 #include "himmel/protocol/outputs.h"
 #include "himmel/protocol/preview.h"
@@ -786,6 +787,7 @@ struct Mk2Link {
 // The first weapon slot (Local\HimmelWeapon<N>, weapon_blocks.exe) whose driver says "lightpad":
 // ring 0 -> himmel::perform::LightpadPerform; its 15 x 15 picture goes back as the slot's pixels.
 struct LightpadLink {
+    const char* weapon = "lightpad";  // CONTROL M10: the same link finds the NuVJ ("nuvj")
     himmel::weapon::SharedMemory shm;
     int slot = 0;                // 1..16 once found
     uint64_t next_try_us = 0;
@@ -800,10 +802,10 @@ struct LightpadLink {
         next_try_us = t + 1000000;
         for (int i = 1; i <= himmel::weapon::kMaxSlots; ++i) {
             if (!shm.open(i)) continue;
-            if (std::strncmp(shm.get()->header.weapon, "lightpad", sizeof(shm.get()->header.weapon)) == 0) {
+            if (std::strncmp(shm.get()->header.weapon, weapon, sizeof(shm.get()->header.weapon)) == 0) {
                 slot = i;
                 shm.get()->rings[himmel::weapon::kEngineRing].attach();
-                LOG("Lightpad found in weapon slot %d (%s%s), listening on ring %d", i, shm.get()->header.driver,
+                LOG("%s found in weapon slot %d (%s%s), listening on ring %d", weapon, i, shm.get()->header.driver,
                     shm.get()->header.simulated ? ", simulated" : "", himmel::weapon::kEngineRing);
                 return;
             }
@@ -1223,6 +1225,13 @@ int main(int argc, char** argv) {
     auto lightpad = std::make_unique<himmel::perform::LightpadPerform>();  // CONTROL M9
     lightpad->set_context(&model->transport());
     LightpadLink lplink;
+    auto nuvj = std::make_unique<himmel::perform::NuvjPerform>();  // CONTROL M10
+    nuvj->set_context(&model->transport());
+    LightpadLink nvlink;
+    nvlink.weapon = "nuvj";
+    himmel::perform::NuvjLcd nv_lcd;
+    uint8_t nv_leds[himmel::weapon::kMaxControls] = {}, nv_leds_last[himmel::weapon::kMaxControls] = {};
+    himmel::weapon::Display nv_disp_last{};
 
     const uint64_t t0 = now_us();
     uint64_t last_frame = t0, stats_start = t0, frames = 0, stat_frames = 0, overlay_next = 0, alive_next = 0;
@@ -1409,6 +1418,20 @@ int main(int argc, char** argv) {
             mk2::Event e;
             for (int k = 0; k < 1024 && ring.pop(e); ++k) lightpad->on_event(e, model->live(), *catalog, sink);
         }
+        // ==== CONTROL M10: the NuVJ (crossfader decides PROGRAM) feeds slot 0 too ====
+        nvlink.poll(t);
+        const bool nv_alive = nvlink.alive(t);
+        if (nv_alive != nvlink.was_alive) {
+            if (nv_alive) nuvj->reset(), nvlink.written = false;
+            LOG("NuVJ %s", nv_alive ? "connected" : "offline");
+            nvlink.was_alive = nv_alive;
+        }
+        if (nvlink.slot) {
+            auto& ring = nvlink.shm.get()->rings[himmel::weapon::kEngineRing];
+            if (!ring.attached.load()) ring.attach();
+            mk2::Event e;
+            for (int k = 0; k < 1024 && ring.pop(e); ++k) nuvj->on_event(e, model->live(), *catalog, sink);
+        }
         auto drain = [&](int slot, proto::CommandRing& ring) {
             proto::Command c;
             for (int k = 0; k < kDrainPerProducer && ring.pop(c); ++k) {
@@ -1583,6 +1606,7 @@ int main(int argc, char** argv) {
 
         // 5. MK2 outputs from the mapper (LEDs on change, screens on change at <= 30 Hz).
         if (mk2_alive) {
+            perform->set_library(library_feed.catalog_full.load(std::memory_order_relaxed));  // CONTROL: MK2 BROWSE
             perform->tick(t, live, *catalog, sink, mk2link.leds, mk2link.screens);
             auto* b = mk2link.shm.get();
             if (!mk2link.written || std::memcmp(&mk2link.leds, &mk2link.leds_last, sizeof(mk2::LedState)) != 0) {
@@ -1609,6 +1633,30 @@ int main(int argc, char** argv) {
                 std::memcpy(lplink.px_last, lplink.px, sizeof(lplink.px));
                 lplink.written = true;
                 lplink.next_out_us = t + 33000;
+            }
+        }
+
+        // 5c. NuVJ LEDs and LCD (on change; the driver resends all of it every 2 s itself).
+        if (nv_alive) {
+            nuvj->tick(t, live, *catalog, sink, nv_leds, nv_lcd);
+            auto* b = nvlink.shm.get();
+            if (t >= nvlink.next_out_us) {
+                if (!nvlink.written || std::memcmp(nv_leds, nv_leds_last, sizeof(nv_leds)) != 0) {
+                    mk2::seq_write(b->outputs.led_seq, b->outputs.led, nv_leds);
+                    std::memcpy(nv_leds_last, nv_leds, sizeof(nv_leds));
+                }
+                himmel::weapon::Display d{};
+                std::memcpy(d.text, nv_lcd.text, sizeof(d.text));
+                std::memcpy(d.alpha, nv_lcd.alpha, sizeof(d.alpha));
+                std::memcpy(d.number, nv_lcd.number, sizeof(d.number));
+                d.bar[0] = nv_lcd.bar[0], d.bar[1] = nv_lcd.bar[1];
+                d.marks = nv_lcd.marks;
+                if (!nvlink.written || std::memcmp(&d, &nv_disp_last, sizeof(d)) != 0) {
+                    mk2::seq_write(b->outputs.display_seq, b->outputs.display, d);
+                    nv_disp_last = d;
+                }
+                nvlink.written = true;
+                nvlink.next_out_us = t + 33000;
             }
         }
 
