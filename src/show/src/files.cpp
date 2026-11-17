@@ -388,23 +388,39 @@ void transport_from_json(const json& o, LayerTransport& t) {  // t holds the def
 }
 
 // ---- look ----
-json clip_to_json(const Look& l, int i, const Catalog& cat) {
-    if (!l.clip_name[i][0]) return nullptr;
+json clip_to_json(const Look& l, int i, const ClipIndex& clips) {
+    if (!ref_used(l.clip_lib[i], l.clip_hash[i], l.clip_name[i])) return nullptr;
     json c = {{"name", l.clip_name[i]}};
+    if (l.clip_lib[i] > 0) c["library_id"] = l.clip_lib[i];
+    if (l.clip_hash[i][0]) c["hash"] = l.clip_hash[i];
     const int id = l.layer[i].clip;
-    if (id >= 0 && id < static_cast<int>(cat.clip_count)) {  // helps relink: size and length of the clip (projects.md §1)
-        c["w"] = cat.clip[id].width;
-        c["h"] = cat.clip[id].height;
-        c["seconds"] = r4(cat.clip[id].seconds);
+    if (clips.valid(id)) {  // helps relink: size and length of the clip (projects.md §1)
+        const ClipIdent& e = clips.at(id);
+        c["w"] = e.width;
+        c["h"] = e.height;
+        c["seconds"] = r4(e.seconds);
     }
     return c;
 }
 
-json look_to_json(const Look& l, const Catalog& cat) {
+// A clip reference from JSON (absent fields = unknown: a version 1 file has the name only).
+void ref_from_json(const json& c, ClipRefView ref) {
+    *ref.library_id = 0;
+    ref.hash[0] = 0;
+    ref.name[0] = 0;
+    if (!c.is_object()) return;
+    copy_str(ref.name, kNameLen, js(c, "name").c_str());
+    if (auto it = c.find("library_id"); it != c.end() && it->is_number_integer() && it->get<int64_t>() > 0)
+        *ref.library_id = it->get<int64_t>();
+    const std::string h = js(c, "hash");
+    if (is_hash(h.c_str())) copy_str(ref.hash, kHashLen, h.c_str());
+}
+
+json look_to_json(const Look& l, const Catalog& cat, const ClipIndex& clips) {
     json layers = json::array();
     for (int i = 0; i < kLayers; ++i) {
         const LayerState& s = l.layer[i];
-        json o = {{"clip", clip_to_json(l, i, cat)},
+        json o = {{"clip", clip_to_json(l, i, clips)},
                   {"opacity", r4(s.opacity)},
                   {"blend", name_of(kBlendNames, s.blend)},
                   {"speed", r4(s.speed)},
@@ -416,7 +432,7 @@ json look_to_json(const Look& l, const Catalog& cat) {
     return {{"layers", layers}, {"fx", fx_list(l.fx, cat, l.fx_react)}};
 }
 
-void look_from_json(const json& o, Look& l, const Catalog& cat, std::vector<std::string>* missing,
+void look_from_json(const json& o, Look& l, const Catalog& cat, const ClipIndex& clips, std::vector<std::string>* missing,
                     std::vector<std::string>* unknown_fx) {
     clear_look(l);
     if (!o.is_object()) return;
@@ -425,7 +441,7 @@ void look_from_json(const json& o, Look& l, const Catalog& cat, std::vector<std:
         const json& L = layers[i];
         if (!L.is_object()) continue;
         LayerState& s = l.layer[i];
-        if (auto c = L.find("clip"); c != L.end() && c->is_object()) copy_str(l.clip_name[i], kNameLen, js(*c, "name").c_str());
+        if (auto c = L.find("clip"); c != L.end()) ref_from_json(*c, layer_ref(l, i));
         s.opacity = std::clamp(jf(L, "opacity", 1.0f), 0.0f, 1.0f);
         s.blend = static_cast<uint8_t>(index_of(kBlendNames, L.value("blend", json()), 0));
         s.mute = L.value("mute", false) ? 1 : 0;
@@ -434,9 +450,10 @@ void look_from_json(const json& o, Look& l, const Catalog& cat, std::vector<std:
         transport_from_json(L.value("transport", json()), l.transport[i]);
     }
     fx_list_from(o.value("fx", json()), l.fx, cat, unknown_fx, l.fx_react);
-    bind_clips(l, cat);
+    bind_clips(l, clips);
     for (int i = 0; i < kLayers; ++i)
-        if (l.clip_name[i][0] && l.layer[i].clip < 0 && missing) missing->push_back(l.clip_name[i]);
+        if (l.layer[i].clip < 0 && ref_used(l.clip_lib[i], l.clip_hash[i], l.clip_name[i]) && missing)
+            missing->push_back(l.clip_name[i][0] ? l.clip_name[i] : l.clip_hash[i]);
 }
 
 // ---- scene ----
@@ -444,6 +461,10 @@ json pad_to_json(const KitPad& p) {
     if (p.kind == static_cast<uint8_t>(PadKind::Empty)) return nullptr;
     json o = {{"kind", name_of(kPadKindNames, p.kind)}, {"target", name_of(kTargetNames, p.target)}};
     if (p.name[0]) o["name"] = p.name;
+    if (p.kind == static_cast<uint8_t>(PadKind::Clip) || p.kind == static_cast<uint8_t>(PadKind::Cue)) {
+        if (p.lib > 0) o["library_id"] = p.lib;
+        if (p.hash[0]) o["hash"] = p.hash;
+    }
     if (p.kind == static_cast<uint8_t>(PadKind::Scene) || p.kind == static_cast<uint8_t>(PadKind::Action) ||
         p.kind == static_cast<uint8_t>(PadKind::Cue))
         o["id"] = p.id;
@@ -451,7 +472,7 @@ json pad_to_json(const KitPad& p) {
     return o;
 }
 
-void pad_from_json(const json& o, KitPad& p, const Catalog& cat, std::vector<std::string>* missing) {
+void pad_from_json(const json& o, KitPad& p, const Catalog& cat, const ClipIndex& clips, std::vector<std::string>* missing) {
     std::memset(&p, 0, sizeof(p));
     p.id = -1;
     p.slot = kNone;
@@ -464,8 +485,9 @@ void pad_from_json(const json& o, KitPad& p, const Catalog& cat, std::vector<std
     switch (static_cast<PadKind>(p.kind)) {
         case PadKind::Clip:
         case PadKind::Cue:
-            p.id = find_clip(cat, p.name);
-            if (p.id < 0 && p.name[0] && missing) missing->push_back(p.name);
+            ref_from_json(o, pad_ref(p));
+            p.id = bind_clip(clips, pad_ref(p));
+            if (p.id < 0 && ref_used(p.lib, p.hash, p.name) && missing) missing->push_back(p.name[0] ? p.name : p.hash);
             if (p.kind == static_cast<uint8_t>(PadKind::Cue)) p.slot = static_cast<uint8_t>(std::clamp(ji(o, "id", 0), 0, 15));
             break;
         case PadKind::Effect: p.id = find_effect(cat, p.name); break;
@@ -505,7 +527,7 @@ void macro_from_json(const json& o, Macro& m) {
     }
 }
 
-json scene_to_json(const ShowData& show, int id, const Catalog& cat, bool with_variations) {
+json scene_to_json(const ShowData& show, int id, const Catalog& cat, const ClipIndex& clips, bool with_variations) {
     const Scene& s = show.scene[id];
     json kit = json::array();
     bool any_pad = false;
@@ -520,7 +542,7 @@ json scene_to_json(const ShowData& show, int id, const Catalog& cat, bool with_v
                {{"kind", name_of(kTransitionNames, s.transition.kind)},
                 {"seconds", r4(s.transition.seconds)},
                 {"on_beat", s.transition.on_beat != 0}}},
-              {"look", look_to_json(s.look, cat)},
+              {"look", look_to_json(s.look, cat, clips)},
               {"macros", macros}};
     if (any_pad) o["kit"] = kit;
     if (with_variations) {
@@ -528,7 +550,7 @@ json scene_to_json(const ShowData& show, int id, const Catalog& cat, bool with_v
         const int n = variations_of(show, id, v);
         if (n > 1) {
             json vars = json::array();
-            for (int k = 1; k < n; ++k) vars.push_back(scene_to_json(show, v[k], cat, false));
+            for (int k = 1; k < n; ++k) vars.push_back(scene_to_json(show, v[k], cat, clips, false));
             o["variations"] = vars;
         }
     }
@@ -537,6 +559,7 @@ json scene_to_json(const ShowData& show, int id, const Catalog& cat, bool with_v
 
 struct LoadCtx {
     const Catalog& cat;
+    const ClipIndex& clips;
     std::vector<std::string> missing;
     std::vector<std::string> unknown_fx;
     bool full = false;
@@ -565,9 +588,9 @@ int scene_from_json(const json& o, ShowData& show, Owner owner, int owner_index,
         s.transition.seconds = std::clamp(jf(*t, "seconds", 2.0f), 0.0f, 60.0f);
         s.transition.on_beat = t->value("on_beat", false) ? 1 : 0;
     }
-    look_from_json(o.value("look", json()), s.look, ctx.cat, &ctx.missing, &ctx.unknown_fx);
+    look_from_json(o.value("look", json()), s.look, ctx.cat, ctx.clips, &ctx.missing, &ctx.unknown_fx);
     if (auto k = o.find("kit"); k != o.end() && k->is_array())
-        for (int p = 0; p < kPads && p < static_cast<int>(k->size()); ++p) pad_from_json((*k)[p], s.kit[p], ctx.cat, &ctx.missing);
+        for (int p = 0; p < kPads && p < static_cast<int>(k->size()); ++p) pad_from_json((*k)[p], s.kit[p], ctx.cat, ctx.clips, &ctx.missing);
     if (auto m = o.find("macros"); m != o.end() && m->is_array())
         for (int i = 0; i < kMacros && i < static_cast<int>(m->size()); ++i) macro_from_json((*m)[i], s.macro[i]);
     if (parent < 0)
@@ -581,10 +604,10 @@ int scene_from_json(const json& o, ShowData& show, Owner owner, int owner_index,
     return id;
 }
 
-json live_to_json(const LiveSnapshot& l, const Catalog& cat) {
+json live_to_json(const LiveSnapshot& l, const Catalog& cat, const ClipIndex& clips) {
     return {{"format", kFormat},
             {"kind", "live"},
-            {"decks", json::array({look_to_json(l.deck[0], cat), look_to_json(l.deck[1], cat)})},
+            {"decks", json::array({look_to_json(l.deck[0], cat, clips), look_to_json(l.deck[1], cat, clips)})},
             {"master_fx", fx_list(l.master_fx, cat, l.master_react)},
             {"crossfader", r4(l.crossfader)},
             {"program_deck", l.program_deck}};
@@ -593,27 +616,27 @@ json live_to_json(const LiveSnapshot& l, const Catalog& cat) {
 void live_from_json(const json& o, LiveSnapshot& l, LoadCtx& ctx) {
     std::memset(&l, 0, sizeof(l));
     const json decks = o.value("decks", json::array());
-    for (int d = 0; d < kDecks; ++d) look_from_json(d < static_cast<int>(decks.size()) ? decks[d] : json(), l.deck[d], ctx.cat, &ctx.missing, &ctx.unknown_fx);
+    for (int d = 0; d < kDecks; ++d) look_from_json(d < static_cast<int>(decks.size()) ? decks[d] : json(), l.deck[d], ctx.cat, ctx.clips, &ctx.missing, &ctx.unknown_fx);
     fx_list_from(o.value("master_fx", json()), l.master_fx, ctx.cat, &ctx.unknown_fx, l.master_react);
     l.crossfader = std::clamp(jf(o, "crossfader", 0.0f), 0.0f, 1.0f);
     l.program_deck = static_cast<uint8_t>(std::clamp(ji(o, "program_deck", 0), 0, 1));
 }
 
-json bank_to_json(const ShowData& show, int b, const Catalog& cat) {
+json bank_to_json(const ShowData& show, int b, const Catalog& cat, const ClipIndex& clips) {
     json pads = json::array();
     for (int p = 0; p < kPads; ++p) {
         const int id = show.bank_pad[b][p];
-        pads.push_back(id >= 0 && show.scene[id].used ? scene_to_json(show, id, cat, true) : json(nullptr));
+        pads.push_back(id >= 0 && show.scene[id].used ? scene_to_json(show, id, cat, clips, true) : json(nullptr));
     }
     return {{"format", kFormat}, {"kind", "bank"}, {"index", b}, {"pads", pads}};
 }
 
-json song_to_json(const ShowData& show, int song, const Catalog& cat) {
+json song_to_json(const ShowData& show, int song, const Catalog& cat, const ClipIndex& clips) {
     const Song& s = show.songs[song];
     json scenes = json::array();
     for (int p = 0; p < kPads; ++p) {
         const int id = s.scene[p];
-        scenes.push_back(id >= 0 && show.scene[id].used ? scene_to_json(show, id, cat, true) : json(nullptr));
+        scenes.push_back(id >= 0 && show.scene[id].used ? scene_to_json(show, id, cat, clips, true) : json(nullptr));
     }
     while (!scenes.empty() && scenes.back().is_null()) scenes.erase(scenes.size() - 1);
     json o = {{"format", kFormat}, {"kind", "song"}, {"name", s.name}, {"scenes", scenes}};
@@ -727,7 +750,8 @@ void song_from_json(const json& o, ShowData& show, LoadCtx& ctx) {
 // ============================================================================
 // documents
 // ============================================================================
-FileSet project_files(const ShowData& show, const LiveSnapshot& live, const Catalog& cat, uint64_t saved_ms) {
+FileSet project_files(const ShowData& show, const LiveSnapshot& live, const Catalog& cat, const ClipIndex& clips,
+                      uint64_t saved_ms) {
     FileSet set;
     json head = project_head(show, saved_ms);
     json banks = json::array(), songs = json::array(), manifest = json::object();
@@ -741,16 +765,16 @@ FileSet project_files(const ShowData& show, const LiveSnapshot& live, const Cata
     for (int b = 0; b < kMaxBanks; ++b)
         if (bank_used(show, b)) {
             banks.push_back(bank_file(b));
-            add(bank_file(b), bank_to_json(show, b, cat));
+            add(bank_file(b), bank_to_json(show, b, cat, clips));
         }
     for (int n = 0; n < show.setlist_count; ++n) {
         const int id = show.setlist[n];
         if (id < 0 || id >= kMaxSongs || !show.songs[id].used) continue;
         const std::string rel = song_file(static_cast<int>(songs.size()));
         songs.push_back(rel);
-        add(rel, song_to_json(show, id, cat));
+        add(rel, song_to_json(show, id, cat, clips));
     }
-    add("live.json", live_to_json(live, cat));
+    add("live.json", live_to_json(live, cat, clips));
     head["banks"] = banks;
     head["setlist"] = songs;
     head["files"] = manifest;
@@ -758,31 +782,37 @@ FileSet project_files(const ShowData& show, const LiveSnapshot& live, const Cata
     return set;
 }
 
-std::string show_document(const ShowData& show, const LiveSnapshot& live, const Catalog& cat, uint64_t saved_ms) {
+std::string show_document(const ShowData& show, const LiveSnapshot& live, const Catalog& cat, const ClipIndex& clips,
+                          uint64_t saved_ms) {
     json doc = project_head(show, saved_ms);
     doc["kind"] = "document";
     json banks = json::array(), songs = json::array();
     for (int b = 0; b < kMaxBanks; ++b)
-        if (bank_used(show, b)) banks.push_back(bank_to_json(show, b, cat));
+        if (bank_used(show, b)) banks.push_back(bank_to_json(show, b, cat, clips));
     for (int n = 0; n < show.setlist_count; ++n) {
         const int id = show.setlist[n];
-        if (id >= 0 && id < kMaxSongs && show.songs[id].used) songs.push_back(song_to_json(show, id, cat));
+        if (id >= 0 && id < kMaxSongs && show.songs[id].used) songs.push_back(song_to_json(show, id, cat, clips));
     }
     doc["banks"] = banks;
     doc["setlist"] = songs;
-    doc["live"] = live_to_json(live, cat);
+    doc["live"] = live_to_json(live, cat, clips);
     return doc.dump() + "\n";
 }
 
-LoadInfo load_document(const std::string& text, ShowData& show, LiveSnapshot& live, const Catalog& cat) {
+LoadInfo load_document(const std::string& text, ShowData& show, LiveSnapshot& live, const Catalog& cat,
+                       const ClipIndex& clips) {
     LoadInfo info;
     json doc = json::parse(text, nullptr, false);
     if (doc.is_discarded() || !doc.is_object() || js(doc, "format") != kFormat) {
         info.error = "not a himmel-show/1 document";
         return info;
     }
+    if (ji(doc, "version", 1) > kFormatVersion) {
+        info.error = "the show was saved by a newer Himmel";
+        return info;
+    }
     clear_show(show);
-    LoadCtx ctx{cat};
+    LoadCtx ctx{cat, clips};
     head_from_json(doc, show, info.saved_ms);
     for (const auto& b : doc.value("banks", json::array()))
         if (b.is_object()) bank_from_json(b, show, ctx);
@@ -796,7 +826,8 @@ LoadInfo load_document(const std::string& text, ShowData& show, LiveSnapshot& li
     return info;
 }
 
-LoadInfo load_project(const fs::path& folder, ShowData& show, LiveSnapshot& live, const Catalog& cat) {
+LoadInfo load_project(const fs::path& folder, ShowData& show, LiveSnapshot& live, const Catalog& cat,
+                      const ClipIndex& clips) {
     LoadInfo info;
     std::string text;
     if (!read_file(folder / "project.json", text)) {
@@ -814,7 +845,7 @@ LoadInfo load_project(const fs::path& folder, ShowData& show, LiveSnapshot& live
         return info;
     }
     clear_show(show);
-    LoadCtx ctx{cat};
+    LoadCtx ctx{cat, clips};
     head_from_json(head, show, info.saved_ms);
     const json manifest = head.value("files", json::object());
     auto load = [&](const std::string& rel, json& out) -> bool {
@@ -850,12 +881,14 @@ LoadInfo load_project(const fs::path& folder, ShowData& show, LiveSnapshot& live
 }
 
 bool save_project(const fs::path& folder, const ShowData& show, const LiveSnapshot& live, const Catalog& cat,
-                  uint64_t saved_ms, std::string* err) {
+                  const ClipIndex& clips, uint64_t saved_ms, std::string* err, const std::function<void()>& between) {
     std::error_code ec;
     fs::create_directories(folder, ec);
-    const FileSet set = project_files(show, live, cat, saved_ms);
-    for (const auto& [rel, text] : set.files)
+    const FileSet set = project_files(show, live, cat, clips, saved_ms);  // `live` may change after this (between)
+    for (const auto& [rel, text] : set.files) {
         if (!write_atomic(folder / from_utf8(rel), text, err)) return false;
+        if (between) between();
+    }
     // Files of a bank / song that no longer exists: remove (the manifest no longer lists them).
     for (const char* sub : {"banks", "songs"}) {
         const fs::path dir = folder / sub;
@@ -876,7 +909,7 @@ bool save_project(const fs::path& folder, const ShowData& show, const LiveSnapsh
 namespace {
 constexpr uint32_t kJournalMagic = 0x4C4E4A48;  // "HJNL"
 constexpr uint32_t kRecordMagic = 0x43455248;   // "HREC"
-constexpr uint32_t kJournalVersion = 2;  // 2: LiveSnapshot + knob reactions (D131); a v1 journal is not restored
+constexpr uint32_t kJournalVersion = 3;  // 3: + clip library id / hash in each look (wave 8)  // 2: LiveSnapshot + knob reactions (D131); a v1 journal is not restored
 struct JournalHeader {
     uint32_t magic, version, header_size, snapshot_size;
     uint64_t created_ms;
@@ -948,7 +981,8 @@ void Journal::close() {
     h_ = nullptr;
 }
 
-bool Journal::read_last(const fs::path& file, const Catalog& cat, LiveSnapshot& out, uint64_t& unix_ms, uint32_t* count) {
+bool Journal::read_last(const fs::path& file, const Catalog& cat, const ClipIndex& clips, LiveSnapshot& out, uint64_t& unix_ms,
+                        uint32_t* count) {
     std::string data;
     if (!read_file(file, data) || data.size() < sizeof(JournalHeader)) return false;
     auto hd = std::make_unique<JournalHeader>();
@@ -982,7 +1016,8 @@ bool Journal::read_last(const fs::path& file, const Catalog& cat, LiveSnapshot& 
             for (auto& f : l.fx) remap_fx(f, map);
         for (auto& f : d.fx) remap_fx(f, map);
         for (auto& nm : d.clip_name) nm[kNameLen - 1] = 0;
-        bind_clips(d, cat);
+        for (auto& h : d.clip_hash) h[kHashLen - 1] = 0;
+        bind_clips(d, clips);
     }
     for (auto& f : out.master_fx) remap_fx(f, map);
     return true;

@@ -77,6 +77,7 @@ enum class Apply : uint8_t { None = 0, IfEmpty = 1, Preview = 2, Full = 3 };
 struct ShowRuntime::Worker {
     RuntimeConfig cfg;
     std::unique_ptr<Catalog> cat;
+    const ClipIndex* clips = nullptr;  // the runtime's (append-only, safe to read here; clips.h)
     ShowBlock* block = nullptr;
     std::unique_ptr<SpscRing<Request, 64>> req = std::make_unique<SpscRing<Request, 64>>();
     std::unique_ptr<SpscRing<Event, 64>> ev = std::make_unique<SpscRing<Event, 64>>();
@@ -169,7 +170,7 @@ struct ShowRuntime::Worker {
         journal.close();
         if (!journal.open_new(autosave() / "journal.bin", *cat, &err)) error(err);
         journal.append(wlive, ms);
-        if (have_wshow) F::write_atomic(autosave() / "show.json", F::show_document(*wshow, wlive, *cat, ms), &err);
+        if (have_wshow) F::write_atomic(autosave() / "show.json", F::show_document(*wshow, wlive, *cat, *clips, ms), &err);
         fstat->autosave_unix = ms / 1000;
     }
     void snapshot(uint64_t now_ms) {
@@ -181,7 +182,7 @@ struct ShowRuntime::Worker {
         char name[64];
         std::strftime(name, sizeof(name), "snap-%Y%m%d-%H%M%S.json", &tm);
         std::string err;
-        F::write_atomic(autosave() / name, F::show_document(*wshow, wlive, *cat, now_ms), &err);
+        F::write_atomic(autosave() / name, F::show_document(*wshow, wlive, *cat, *clips, now_ms), &err);
         std::vector<fs::path> snaps;
         std::error_code ec;
         for (const auto& e : fs::directory_iterator(autosave(), ec)) {
@@ -229,7 +230,7 @@ struct ShowRuntime::Worker {
         if (!wait_load_free()) return false;
         ShowData& s = *load;
         LiveSnapshot lv{};
-        F::LoadInfo info = F::load_project(path, s, lv, *cat);
+        F::LoadInfo info = F::load_project(path, s, lv, *cat, *clips);
         // The autosave: autosave/show.json + the newest journal record (offer files first, see below).
         const fs::path as = path / "autosave";
         auto adoc = std::make_unique<ShowData>();
@@ -240,8 +241,8 @@ struct ShowRuntime::Worker {
         for (const char* pre : {"offer-", ""}) {
             std::string text;
             if (!F::read_file(as / F::from_utf8(std::string(pre) + "show.json"), text)) continue;
-            ainfo = F::load_document(text, *adoc, alive, *cat);
-            have_journal = F::Journal::read_last(as / F::from_utf8(std::string(pre) + "journal.bin"), *cat, jlive, jms);
+            ainfo = F::load_document(text, *adoc, alive, *cat, *clips);
+            have_journal = F::Journal::read_last(as / F::from_utf8(std::string(pre) + "journal.bin"), *cat, *clips, jlive, jms);
             if (ainfo.ok) break;
         }
         const uint64_t auto_ms = std::max<uint64_t>(ainfo.ok ? ainfo.saved_ms : 0, jms);
@@ -308,10 +309,10 @@ struct ShowRuntime::Worker {
         std::string text;
         if (!F::read_file(autosave() / "show.json", text) || !wait_load_free()) return false;
         LiveSnapshot lv{}, jlive{};
-        F::LoadInfo info = F::load_document(text, *load, lv, *cat);
+        F::LoadInfo info = F::load_document(text, *load, lv, *cat, *clips);
         if (!info.ok) return false;
         uint64_t jms = 0;
-        if (F::Journal::read_last(autosave() / "journal.bin", *cat, jlive, jms) && jms >= info.saved_ms) lv = jlive;
+        if (F::Journal::read_last(autosave() / "journal.bin", *cat, *clips, jlive, jms) && jms >= info.saved_ms) lv = jlive;
         *wshow = *load;
         have_wshow = true;
         wlive = lv;
@@ -335,7 +336,8 @@ struct ShowRuntime::Worker {
     bool save_to(const fs::path& path, const Request& r) {
         std::string err;
         const uint64_t now = F::unix_ms_now();
-        if (!F::save_project(path, *wshow, wlive, *cat, now, &err)) {
+        // The files are made from wlive first; journal records may then go in between the writes.
+        if (!F::save_project(path, *wshow, wlive, *cat, *clips, now, &err, [this] { drain_live(); })) {
             fstat->save_ok = 0;
             error(err);
             event(Ev::Failed, 0, 0, "Save failed");
@@ -391,7 +393,7 @@ struct ShowRuntime::Worker {
             }
             case Req::Autosave:
                 if (!take_stage(r)) break;
-                if (F::write_atomic(autosave() / "show.json", F::show_document(*wshow, wlive, *cat, F::unix_ms_now()), &err))
+                if (F::write_atomic(autosave() / "show.json", F::show_document(*wshow, wlive, *cat, *clips, F::unix_ms_now()), &err))
                     fstat->autosave_unix = F::unix_now();
                 else
                     error(err);
@@ -437,7 +439,7 @@ struct ShowRuntime::Worker {
                 if (F::utf8(out.extension()) != F::kExportExt) out += F::kExportExt;
                 const fs::path tmp = app_dir() / "export" / F::from_utf8(base + F::kProjectExt);
                 fs::remove_all(tmp, ec);
-                if (F::save_project(tmp, *wshow, wlive, *cat, F::unix_ms_now(), &err) && F::zip_folder(tmp, out, &err))
+                if (F::save_project(tmp, *wshow, wlive, *cat, *clips, F::unix_ms_now(), &err) && F::zip_folder(tmp, out, &err))
                     event(Ev::Message, 0, 0, "Exported %s", F::utf8(out.filename()).c_str());
                 else
                     error(err), event(Ev::Failed, 0, 0, "Export failed");
@@ -501,6 +503,29 @@ struct ShowRuntime::Worker {
         }
     }
 
+    // Live records -> the journal (and wlive). Also called between the files of a save, so a
+    // live change never waits for a whole save (200 scenes) before it is in the journal.
+    bool drain_live() {
+        LiveRec rec;
+        uint32_t n = 0;
+        uint32_t popped = 0;
+        uint64_t last_ms = 0;
+        while (live->pop(rec)) {
+            ++popped;
+            if (rec.epoch != handed) continue;  // the live state of a show that was replaced
+            wlive = rec.snap;
+            if (journal.is_open()) journal.append(rec.snap, rec.unix_ms);
+            last_ms = rec.unix_ms;
+            ++n;
+        }
+        recs.fetch_add(popped);
+        if (!n) return false;
+        fstat->autosave_unix = last_ms / 1000;
+        fstat->journal_records = journal.records();
+        if (block) seq_write(block->files_seq, block->files, *fstat);
+        return true;
+    }
+
     void run() {
         uint64_t last_flush = 0;
         while (!quit.load()) {
@@ -512,23 +537,7 @@ struct ShowRuntime::Worker {
                 done.fetch_add(1);
                 did = true;
             }
-            LiveRec rec;
-            uint32_t n = 0;
-            uint32_t popped = 0;
-            while (live->pop(rec)) {
-                ++popped;
-                if (rec.epoch != handed) continue;  // the live state of a show that was replaced
-                wlive = rec.snap;
-                if (journal.is_open()) journal.append(rec.snap, rec.unix_ms);
-                ++n;
-            }
-            recs.fetch_add(popped);
-            if (n) {
-                fstat->autosave_unix = rec.unix_ms / 1000;
-                fstat->journal_records = journal.records();
-                if (block) seq_write(block->files_seq, block->files, *fstat);
-                did = true;
-            }
+            if (drain_live()) did = true;
             const uint64_t now_ms = F::unix_ms_now();
             if (have_wshow && now_ms - last_snapshot_ms >= static_cast<uint64_t>(cfg.snapshot_every_s) * 1000) snapshot(now_ms);
             if (now_ms - last_flush >= 1000) journal.flush(), last_flush = now_ms;
@@ -556,7 +565,38 @@ ShowRuntime::ShowRuntime() {
     scratch_ = std::make_unique<CommandList>();
     outbox_ = std::make_unique<CommandList>();
     pending_ = std::make_unique<Request[]>(kPendingData);
+    clips_ = std::make_unique<ClipIndex>();
     for (auto& l : recalled_) clear_look(l);
+}
+
+void ShowRuntime::sync_clips(const engine::DeckModel& m) {
+    if (m.clips()) clips_->sync(*m.clips());
+    else clips_->sync(m.catalog());
+}
+
+int ShowRuntime::bind_look(const engine::DeckModel& m, Look& look, bool* changed) {
+    int missing = 0;
+    for (int l = 0; l < kLayers; ++l) {
+        const int id = look.layer[l].clip;
+        // Fast path: still bound to the clip it names (ids are append-only).
+        if (clips_->valid(id) && clips_->at(id).library_id == look.clip_lib[l] &&
+            (look.clip_lib[l] > 0 || std::strcmp(clips_->at(id).name, look.clip_name[l]) == 0)) {
+            if (m.clips()) clips_->set_state(id, m.clips()->state(id));
+            if (clips_->state(id) == ClipState::Ready || look.clip_lib[l] == 0) continue;
+        }
+        char h[kHashLen], n[kNameLen];
+        std::memcpy(h, look.clip_hash[l], kHashLen);
+        std::memcpy(n, look.clip_name[l], kNameLen);
+        const int64_t lib = look.clip_lib[l];
+        const int found = bind_clip(*clips_, layer_ref(look, l));
+        look.layer[l].clip = static_cast<int16_t>(found);
+        if (found >= 0 && m.clips()) clips_->set_state(found, m.clips()->state(found));
+        if (found < 0 && ref_used(look.clip_lib[l], look.clip_hash[l], look.clip_name[l])) ++missing;
+        if (changed && (lib != look.clip_lib[l] || std::memcmp(h, look.clip_hash[l], kHashLen) != 0 ||
+                        std::strncmp(n, look.clip_name[l], kNameLen) != 0))
+            *changed = true;
+    }
+    return missing;
 }
 
 ShowRuntime::~ShowRuntime() { stop(); }
@@ -565,10 +605,16 @@ bool ShowRuntime::start(const RuntimeConfig& cfg, const Catalog& cat, ShowBlock*
     cfg_ = cfg;
     block_ = block;
     started_ = true;
+    // Wave 8: the clip index (every engine clip id, its library id and hash), complete before
+    // the worker binds the project it opens; the frame keeps it in step afterwards.
+    clips_->set_hash_source(cfg.clip_hash, cfg.clip_hash_ctx);
+    if (cfg.clip_dir) clips_->sync(*cfg.clip_dir, 0);
+    else clips_->sync(cat);
     if (!cfg.disk) return true;
     w_ = std::make_unique<Worker>();
     w_->cfg = cfg;
     w_->cat = std::make_unique<Catalog>(cat);
+    w_->clips = clips_.get();
     w_->block = block;
     w_->stage = bufs_[1].get();
     w_->load = bufs_[2].get();
@@ -651,9 +697,9 @@ void ShowRuntime::flush(engine::DeckModel& m, uint64_t now_us) {
 void ShowRuntime::apply_look(engine::DeckModel& m, int deck, const Look& target, uint64_t now_us, uint32_t mask, bool deck_fx,
                              uint32_t parts) {
     Look cur;
-    look_from_live(m.live(), m.transport(), m.catalog(), deck, cur, &m.reactions());
+    look_from_live(m.live(), m.transport(), *clips_, deck, cur, &m.reactions());
     scratch_->clear();
-    diff_look(cur, target, deck, m.catalog(), *scratch_, parts, mask, deck_fx);
+    diff_look(cur, target, deck, m.catalog(), *scratch_, parts, mask, deck_fx, clips_.get());
     send(m, now_us);
 }
 
@@ -673,7 +719,7 @@ void ShowRuntime::apply_snapshot(engine::DeckModel& m, const LiveSnapshot& s, ui
 }
 
 void ShowRuntime::capture(engine::DeckModel& m, uint64_t now_us) {
-    snapshot_from_live(m.live(), m.transport(), m.catalog(), cur_, &m.reactions());
+    snapshot_from_live(m.live(), m.transport(), *clips_, cur_, &m.reactions());
     if (!have_last_) {
         last_ = cur_;
         have_last_ = true;
@@ -695,7 +741,7 @@ void ShowRuntime::capture(engine::DeckModel& m, uint64_t now_us) {
 }
 
 void ShowRuntime::sync(engine::DeckModel& m) {
-    snapshot_from_live(m.live(), m.transport(), m.catalog(), last_, &m.reactions());
+    snapshot_from_live(m.live(), m.transport(), *clips_, last_, &m.reactions());
     have_last_ = true;
     cur_ = last_;
     ++live_gen_;
@@ -768,8 +814,21 @@ Scene* ShowRuntime::deck_scene_ptr(int deck) {
 
 void ShowRuntime::recall(engine::DeckModel& m, int deck, int scene, float morph_s, uint64_t now_us) {
     Scene& s = front_->scene[scene];
+    // Wave 8: library id, then hash, then name (clips.h). A clip removed and imported again comes
+    // back by its hash; the scene keeps the new library id (saved with the next save).
+    bool relinked = false;
+    bind_look(m, s.look, &relinked);
+    if (relinked) changed();
+    // Missing = not found at all (the layer stays empty), or found but its file is gone / removed
+    // (the layer shows the placeholder). Either way the operator is told which clip.
+    auto gone = [&](const Look& lk, int l) {
+        const int id = lk.layer[l].clip;
+        if (id < 0) return ref_used(lk.clip_lib[l], lk.clip_hash[l], lk.clip_name[l]);
+        return clips_->valid(id) && clips_->state(id) != ClipState::Ready;
+    };
+    int missing = 0;
+    for (int l = 0; l < kLayers; ++l) missing += gone(s.look, l) ? 1 : 0;
     Look target = s.look;
-    bind_clips(target, m.catalog());  // names -> ids for this catalog (a relinked clip comes back)
     drop_outbox();  // a new look replaces whatever was still on its way
     capture(m, now_us);
     push_undo(last_);
@@ -779,16 +838,16 @@ void ShowRuntime::recall(engine::DeckModel& m, int deck, int scene, float morph_
     const uint64_t t0 = steady_us();
     if (morph_s > 0.0f) {
         Look from;
-        look_from_live(m.live(), m.transport(), m.catalog(), deck, from, &m.reactions());
+        look_from_live(m.live(), m.transport(), *clips_, deck, from, &m.reactions());
         start_morph(deck, from, target, morph_s, now_us, 0xF, true);
         tick_morphs(m, now_us);
         last_recall_cmds_ = 0;
     } else {
         morph_[deck].active = false;
         Look cur;
-        look_from_live(m.live(), m.transport(), m.catalog(), deck, cur, &m.reactions());
+        look_from_live(m.live(), m.transport(), *clips_, deck, cur, &m.reactions());
         scratch_->clear();
-        diff_look(cur, target, deck, m.catalog(), *scratch_);
+        diff_look(cur, target, deck, m.catalog(), *scratch_, kDiffAll, 0xF, true, clips_.get());
         last_recall_cmds_ = scratch_->n;
         send(m, now_us);
     }
@@ -799,7 +858,16 @@ void ShowRuntime::recall(engine::DeckModel& m, int deck, int scene, float morph_
     const int pad = pad_of(scene);
     if (pad >= 0) last_pad_ = pad;
     hist_n_[deck] = hist_pos_[deck] = 0;  // a recalled scene starts a new dice history
-    message("%s %c on %c", s.name[0] ? s.name : "Scene", 'a' + s.variation, 'A' + deck);
+    const char* sn = s.name[0] ? s.name : "Scene";
+    if (missing > 0) {  // never silently: the message names the clip that is gone (log + screens)
+        int first = 0;
+        while (first < kLayers - 1 && !gone(target, first)) ++first;
+        const char* nm = target.clip_name[first][0] ? target.clip_name[first] : target.clip_hash[first];
+        if (missing == 1) message("%s %c on %c: clip %s missing", sn, 'a' + s.variation, 'A' + deck, nm);
+        else message("%s %c on %c: %d clips missing (%s, ...)", sn, 'a' + s.variation, 'A' + deck, missing, nm);
+    } else {
+        message("%s %c on %c", sn, 'a' + s.variation, 'A' + deck);
+    }
 }
 
 void ShowRuntime::apply_macro(engine::DeckModel& m, int macro, uint64_t now_us) {
@@ -860,7 +928,7 @@ void ShowRuntime::fill_stage(engine::DeckModel& m) {
     // A memcpy of the show (about 1 MB) when the worker asks for data: saves and
     // the coalesced autosave only, never every frame.
     *w_->stage = *front_;
-    snapshot_from_live(m.live(), m.transport(), m.catalog(), w_->stage_live, &m.reactions());
+    snapshot_from_live(m.live(), m.transport(), *clips_, w_->stage_live, &m.reactions());
 }
 
 // ============================================================================
@@ -887,6 +955,7 @@ Reject ShowRuntime::submit(int producer, const Command& c, uint64_t now_us, engi
 }
 
 Reject ShowRuntime::do_command(int producer, const Command& c, uint64_t now_us, engine::DeckModel& m) {
+    sync_clips(m);  // a clip loaded this frame has its identity before a look is captured
     ShowData& sh = *front_;
     const bool deck_ok = c.deck < kDecks;
     switch (c.type) {
@@ -923,7 +992,7 @@ Reject ShowRuntime::do_command(int producer, const Command& c, uint64_t now_us, 
             if (!deck_ok) return Reject::BadTarget;
             if (c.i < -1 || c.i >= kPads) return Reject::BadTarget;
             Look look;
-            look_from_live(m.live(), m.transport(), m.catalog(), c.deck, look, &m.reactions());
+            look_from_live(m.live(), m.transport(), *clips_, c.deck, look, &m.reactions());
             const Scene* from = deck_scene_ptr(c.deck);
             const int src = deck_scene_[c.deck];
             int id = -1;
@@ -1035,7 +1104,7 @@ Reject ShowRuntime::do_command(int producer, const Command& c, uint64_t now_us, 
             redo_n_ = 0;
             const float glide = c.f[0] > 0.0f ? c.f[0] : static_cast<float>(60.0 / std::max(20.0, m.bpm()));  // 1 beat
             Look from;
-            look_from_live(m.live(), m.transport(), m.catalog(), c.deck, from, &m.reactions());
+            look_from_live(m.live(), m.transport(), *clips_, c.deck, from, &m.reactions());
             const uint32_t mask = c.layer == kNone ? 0xFu : (1u << c.layer);
             start_morph(c.deck, from, recalled_[c.deck], std::min(glide, 60.0f), now_us, mask, c.layer == kNone);
             message(c.layer == kNone ? "Reset scene" : "Reset layer %d", c.layer + 1);
@@ -1077,7 +1146,7 @@ Reject ShowRuntime::do_command(int producer, const Command& c, uint64_t now_us, 
                 return Reject::None;
             }
             Look cur;
-            look_from_live(m.live(), m.transport(), m.catalog(), d, cur, &m.reactions());
+            look_from_live(m.live(), m.transport(), *clips_, d, cur, &m.reactions());
             Look next;
             bool roll = verb == DiceVerb::Roll || verb == DiceVerb::Mutate;
             if (verb == DiceVerb::Back) {
@@ -1093,7 +1162,7 @@ Reject ShowRuntime::do_command(int producer, const Command& c, uint64_t now_us, 
                 scope.layer = c.layer == kNone ? -1 : c.layer;
                 scope.slot = c.slot == kNone ? -1 : c.slot;
                 if (verb == DiceVerb::Mutate) dice_mutate(cur, next, m.catalog(), sh.locks, scope, seed, c.f[0]);
-                else dice_roll(cur, next, m.catalog(), sh.locks, scope, seed);
+                else dice_roll(cur, next, m.catalog(), sh.locks, scope, seed, clips_.get());
                 if (hist_n_[d] == 0) h[hist_n_[d]++] = cur, hist_pos_[d] = 0;  // the look before the first roll
                 hist_n_[d] = hist_pos_[d] + 1;                                 // a roll in the middle drops the forward part
                 if (hist_n_[d] >= kDiceHistory) {                              // full: forget the oldest
@@ -1185,8 +1254,8 @@ Reject ShowRuntime::do_command(int producer, const Command& c, uint64_t now_us, 
             switch (static_cast<PadKind>(c.param)) {
                 case PadKind::Empty: p.id = -1; break;
                 case PadKind::Clip:
-                    if (c.i < 0 || c.i >= static_cast<int>(cat.clip_count)) return Reject::BadId;
-                    copy_str(p.name, kNameLen, cat.clip[c.i].name);
+                    if (!clips_->valid(c.i)) return Reject::BadId;  // any engine clip id (catalog v3)
+                    ref_from_id(*clips_, c.i, pad_ref(p));
                     break;
                 case PadKind::Cue: {  // i = cue 0..15 of the clip of the target layer (its name is kept)
                     if (c.i < 0 || c.i >= kCuePoints) return Reject::BadId;
@@ -1195,6 +1264,8 @@ Reject ShowRuntime::do_command(int producer, const Command& c, uint64_t now_us, 
                     p.slot = static_cast<uint8_t>(c.i);
                     p.id = clip;
                     copy_str(p.name, kNameLen, s->look.clip_name[layer]);
+                    p.lib = s->look.clip_lib[layer];
+                    copy_str(p.hash, kHashLen, s->look.clip_hash[layer]);
                     break;
                 }
                 case PadKind::Effect:
@@ -1309,7 +1380,7 @@ Reject ShowRuntime::do_command(int producer, const Command& c, uint64_t now_us, 
                     s.owner = static_cast<uint8_t>(Owner::Song);
                     s.owner_index = static_cast<uint8_t>(sh.setlist[c.i]);
                     s.pad = static_cast<uint8_t>(pos);
-                    look_from_live(m.live(), m.transport(), m.catalog(), c.deck, s.look, &m.reactions());
+                    look_from_live(m.live(), m.transport(), *clips_, c.deck, s.look, &m.reactions());
                     std::snprintf(s.name, sizeof(s.name), "%.16s %d", so.name, pos + 1);
                     so.scene[pos] = static_cast<int16_t>(id);
                     so.scene_count = static_cast<uint8_t>(std::max<int>(so.scene_count, pos + 1));
@@ -1410,7 +1481,6 @@ void ShowRuntime::write_status(const engine::DeckModel& m, uint64_t now_us) {
     const int so = sh.song >= 0 && sh.song < sh.setlist_count ? sh.setlist[sh.song] : -1;
     copy_str(s.song_name, kSceneNameLen, so >= 0 ? sh.songs[so].name : "");
     s.song_bpm = so >= 0 ? sh.songs[so].bpm : 0.0f;
-    const Catalog& cat = m.catalog();
     for (int p = 0; p < kPads; ++p) {
         ScenePadInfo& pi = s.pad[p];
         std::memset(&pi, 0, sizeof(pi));
@@ -1423,7 +1493,7 @@ void ShowRuntime::write_status(const engine::DeckModel& m, uint64_t now_us) {
         for (int d = 0; d < kDecks; ++d)
             if (deck_scene_[d] >= 0 && main_of(sh, deck_scene_[d]) == id) pi.on_deck |= static_cast<uint8_t>(1u << d);
         const int clip = sh.scene[id].look.layer[0].clip;
-        pi.thumb_rgb = clip >= 0 && clip < static_cast<int>(cat.clip_count) ? cat.clip[clip].thumb_rgb : 0;
+        pi.thumb_rgb = clips_->valid(clip) ? clips_->at(clip).thumb_rgb : 0;
     }
     for (int d = 0; d < kDecks; ++d) {
         DeckSceneInfo& di = s.deck[d];
@@ -1453,6 +1523,7 @@ void ShowRuntime::write_status(const engine::DeckModel& m, uint64_t now_us) {
 }
 
 void ShowRuntime::tick(engine::DeckModel& m, uint64_t now_us) {
+    sync_clips(m);
     if (first_tick_) {
         first_tick_ = false;
         sync(m);

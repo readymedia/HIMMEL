@@ -55,6 +55,13 @@ inline std::unique_ptr<Catalog> make_catalog(int clips, int skip_clip = -1) {
     return c;
 }
 
+// The clip index a show would have for this catalog (ids < 256, names only).
+inline std::unique_ptr<himmel::show::ClipIndex> make_index(const Catalog& cat) {
+    auto ix = std::make_unique<himmel::show::ClipIndex>();
+    ix->sync(cat);
+    return ix;
+}
+
 inline uint64_t now_us() {
     return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
                                      std::chrono::steady_clock::now().time_since_epoch())

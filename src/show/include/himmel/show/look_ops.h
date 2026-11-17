@@ -41,11 +41,14 @@ enum DiffPart : uint32_t {
 
 // Commands that turn `cur` (deck `deck` as it is now) into `target`. A layer
 // mask (bit n = layer n) limits it to some layers; deck FX are included when
-// `with_deck_fx` is set. Clip ids must be valid for `cat` (-1 = empty).
+// `with_deck_fx` is set. Clip ids must be valid for the model (-1 = empty). With `clips`, a
+// library clip that is Ready loads with LayerClipLib (its library id, wave 8), any other with
+// LayerClip (a Missing one shows the placeholder).
 // The knob reactions (FxReact) come last, after every FxSet (which resets a
 // slot's reactions to Default), so the look itself is never held up by them.
 void diff_look(const Look& cur, const Look& target, int deck, const proto::Catalog& cat, CommandList& out,
-               uint32_t parts = kDiffAll, uint32_t layer_mask = 0xF, bool with_deck_fx = true);
+               uint32_t parts = kDiffAll, uint32_t layer_mask = 0xF, bool with_deck_fx = true,
+               const ClipIndex* clips = nullptr);
 
 // The master FX slots (undo covers them).
 void diff_master(const proto::FxSlotState cur[proto::kFxSlots], const ReactRow cur_react[proto::kFxSlots],
@@ -62,10 +65,11 @@ void diff_react(const ReactRow& cur, const ReactRow& want, bool effect_changed, 
 // rest switches at t >= 0.5 (presets-and-shuffle.md §6); reactions switch too.
 void lerp_look(const Look& a, const Look& b, float t, Look& out);
 
-// Bind the clip names of a look to catalog ids (case-insensitive). Returns the
-// number of named clips the catalog does not have (they stay empty, name kept).
-int bind_clips(Look& look, const proto::Catalog& cat);
-int find_clip(const proto::Catalog& cat, const char* name);     // -1 = none
+// Bind a look's clips to engine ids (library id, then hash, then name: bind_clip in
+// clips.h; found references are brought up to date). Returns the number of layers whose
+// clip is missing (they stay empty, the reference is kept). `changed` (optional) is set
+// when a reference was upgraded or relinked (worth saving).
+int bind_clips(Look& look, const ClipIndex& clips, bool* changed = nullptr);
 int find_effect(const proto::Catalog& cat, const char* name);   // -1 = none
 
 }  // namespace himmel::show

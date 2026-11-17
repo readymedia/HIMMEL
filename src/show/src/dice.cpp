@@ -48,6 +48,18 @@ int pick_effect(const Catalog& cat, Rng& r) {
     return -1;
 }
 
+// Wave 8: with the clip index, any Ready clip id (past 256 too); else the catalog's ids.
+int pick_clip(const ClipIndex& ix, Rng& r, int avoid) {
+    const int n = static_cast<int>(ix.count());
+    if (n == 0) return -1;
+    for (int tries = 0; tries < 8; ++tries) {
+        int c = r.below(n);
+        if (c == avoid && n > 1) c = (c + 1 + r.below(n - 1)) % n;
+        if (ix.state(c) == ClipState::Ready) return c;
+    }
+    return -1;
+}
+
 int pick_clip(const Catalog& cat, Rng& r, int avoid) {
     if (cat.clip_count == 0) return -1;
     int c = r.below(static_cast<int>(cat.clip_count));
@@ -88,13 +100,19 @@ void roll_slot(FxSlotState& s, const FxSlotState& cur, const Catalog& cat, uint3
     roll_params(s, cur, cat, locks, r);
 }
 
-void roll_layer(Look& out, const Look& cur, int l, const Catalog& cat, uint32_t locks, Rng& r, bool on) {
+void roll_layer(Look& out, const Look& cur, int l, const Catalog& cat, const ClipIndex* clips, uint32_t locks, Rng& r,
+                bool on) {
     LayerState& o = out.layer[l];
     const LayerState& c = cur.layer[l];
     if (!(locks & kLockClip)) {
-        const int clip = on ? pick_clip(cat, r, c.clip) : -1;
+        const int clip = on ? (clips ? pick_clip(*clips, r, c.clip) : pick_clip(cat, r, c.clip)) : -1;
         o.clip = static_cast<int16_t>(clip);
-        copy_str(out.clip_name[l], kNameLen, clip >= 0 ? cat.clip[clip].name : "");
+        if (clips) {
+            ref_from_id(*clips, clip, layer_ref(out, l));
+        } else {
+            copy_str(out.clip_name[l], kNameLen, clip >= 0 ? cat.clip[clip].name : "");
+            out.clip_lib[l] = 0, out.clip_hash[l][0] = 0;
+        }
     }
     if (!(locks & kLockLayout)) {
         o.opacity = l == 0 ? 1.0f : r.range(0.5f, 1.0f);
@@ -134,7 +152,8 @@ uint32_t param_lock(const char* n) {
 }
 
 namespace {
-void roll(const Look& cur, Look& out, const Catalog& cat, uint32_t locks, DiceScope scope, uint64_t seed) {
+void roll(const Look& cur, Look& out, const Catalog& cat, const ClipIndex* clips, uint32_t locks, DiceScope scope,
+          uint64_t seed) {
     out = cur;
     Rng r{mix64(seed ^ 0xD1CE0000ull)};
     if (scope.layer < 0 && scope.slot >= 0) {  // a deck FX slot
@@ -146,19 +165,20 @@ void roll(const Look& cur, Look& out, const Catalog& cat, uint32_t locks, DiceSc
             roll_slot(out.layer[scope.layer].fx[scope.slot], cur.layer[scope.layer].fx[scope.slot], cat, locks, r, 1.0f);
             return;
         }
-        roll_layer(out, cur, scope.layer, cat, locks, r, true);
+        roll_layer(out, cur, scope.layer, cat, clips, locks, r, true);
         return;
     }
     // DECK: 1-4 layers (GUESS: 2-3 most of the time, until moods set the range), deck FX sometimes.
     static const int kCounts[] = {1, 2, 2, 3, 3, 3, 4};
     const int count = kCounts[r.below(7)];
-    for (int l = 0; l < kLayers; ++l) roll_layer(out, cur, l, cat, locks, r, l < count);
+    for (int l = 0; l < kLayers; ++l) roll_layer(out, cur, l, cat, clips, locks, r, l < count);
     for (int s = 0; s < kFxSlots; ++s) roll_slot(out.fx[s], cur.fx[s], cat, locks, r, s == 0 ? 0.3f : 0.0f);
 }
 }  // namespace
 
-void dice_roll(const Look& cur, Look& out, const Catalog& cat, uint32_t locks, DiceScope scope, uint64_t seed) {
-    roll(cur, out, cat, locks, scope, seed);
+void dice_roll(const Look& cur, Look& out, const Catalog& cat, uint32_t locks, DiceScope scope, uint64_t seed,
+               const ClipIndex* clips) {
+    roll(cur, out, cat, clips, locks, scope, seed);
     reset_changed_react(out, cur);  // a new effect brings its own (Default) reactions, like FxSet (D131)
 }
 

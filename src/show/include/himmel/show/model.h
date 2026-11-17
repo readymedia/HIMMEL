@@ -14,6 +14,7 @@
 #include "himmel/protocol/commands.h"
 #include "himmel/protocol/show.h"
 #include "himmel/protocol/state.h"
+#include "himmel/show/clips.h"
 
 namespace himmel::show {
 
@@ -62,7 +63,14 @@ struct Look {
     char clip_name[kLayers][proto::kNameLen];   // the clip's name ("" = empty); kept when the clip is missing
     ReactRow layer_react[kLayers][proto::kFxSlots];   // = layer[l].fx[s]
     ReactRow fx_react[proto::kFxSlots];               // = fx[s]
+    // Wave 8 (D210): who the clip is, beyond the run-time id - library id, then hash, then
+    // clip_name (clips.h). Kept when the clip is missing; brought up to date when it is found.
+    int64_t clip_lib[kLayers];
+    char clip_hash[kLayers][kHashLen];
 };
+inline ClipRefView layer_ref(Look& l, int layer) {
+    return {&l.clip_lib[layer], l.clip_hash[layer], l.clip_name[layer]};
+}
 
 // What both decks and the master hold: the undo stack, the journal and live.json.
 struct LiveSnapshot {
@@ -82,7 +90,10 @@ struct KitPad {
     uint8_t reserved;
     int32_t id;            // clip id, effect id, scene pad or PadAction (-1 = none)
     char name[proto::kNameLen];   // clip / effect name on disk (kept when missing)
+    int64_t lib;           // Clip / Cue: the clip's library id (wave 8, D210; 0 = none)
+    char hash[kHashLen];   // Clip / Cue: the clip's content hash ("" = unknown)
 };
+inline ClipRefView pad_ref(KitPad& p) { return {&p.lib, p.hash, p.name}; }
 
 struct MacroBind {
     uint8_t used;
@@ -176,11 +187,12 @@ int variations_of(const ShowData& s, int main_scene, int out[kMaxVariations]);
 int main_of(const ShowData& s, int scene);        // the main scene of a variation (or itself)
 int scene_count(const ShowData& s);
 
-// Deck model state -> Look / LiveSnapshot (status fields zeroed, clip names from the catalog).
+// Deck model state -> Look / LiveSnapshot (status fields zeroed; clip library id, hash and
+// name from the clip index, which must cover the model's clip ids: sync it first).
 // `react` = the model's reaction table (nullptr = every knob Default).
-void look_from_live(const proto::LiveState& live, const proto::TransportSection& tr, const proto::Catalog& cat,
+void look_from_live(const proto::LiveState& live, const proto::TransportSection& tr, const ClipIndex& clips,
                     int deck, Look& out, const proto::ReactionSection* react = nullptr);
-void snapshot_from_live(const proto::LiveState& live, const proto::TransportSection& tr, const proto::Catalog& cat,
+void snapshot_from_live(const proto::LiveState& live, const proto::TransportSection& tr, const ClipIndex& clips,
                         LiveSnapshot& out, const proto::ReactionSection* react = nullptr);
 
 // One reaction table entry -> its canonical stored form (ReactKnob).
